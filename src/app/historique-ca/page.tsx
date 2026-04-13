@@ -3,6 +3,7 @@
 import Image from 'next/image'
 import Link from 'next/link'
 import { useEffect, useMemo, useState } from 'react'
+import { useSyncStatus } from '@/lib/sync/useSyncStatus'
 
 type DayRow = {
   date: string // YYYY-MM-DD
@@ -35,6 +36,7 @@ export default function HistoriqueCA() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [progress, setProgress] = useState<{ phase: string; current: number; total: number } | null>(null)
+  const lastSync = useSyncStatus()
 
   const todayIso = useMemo(() => new Date().toISOString().split('T')[0], [])
   const yearStartIso = useMemo(() => `${todayIso.slice(0, 4)}-01-01`, [todayIso])
@@ -177,6 +179,20 @@ export default function HistoriqueCA() {
       timeZone: 'UTC',
     }).format(isoToUtcDate(iso))
 
+  const lastSyncLabel = useMemo(() => {
+    if (!lastSync?.finished_at) return null
+    const d = new Date(lastSync.finished_at)
+    const fmt = new Intl.DateTimeFormat('fr-FR', {
+      weekday: 'short',
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    })
+    return fmt.format(d)
+  }, [lastSync?.finished_at])
+
   if (loading) {
     const pct = Math.round(((progress?.current ?? 0) / Math.max(1, progress?.total ?? 1)) * 100)
     return (
@@ -244,6 +260,11 @@ export default function HistoriqueCA() {
               <p className="mt-1 text-sm text-slate-600">
                 Période: <span className="font-medium">{computed.from}</span> → <span className="font-medium">{computed.to}</span>
               </p>
+              {lastSyncLabel ? (
+                <p className="mt-1 text-sm text-slate-600">
+                  Dernière synchro : <span className="font-semibold text-slate-800">{lastSyncLabel}</span>
+                </p>
+              ) : null}
             </div>
           </div>
 

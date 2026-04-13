@@ -3,6 +3,7 @@
 import Image from 'next/image'
 import Link from 'next/link'
 import { useEffect, useMemo, useState } from 'react'
+import { useSyncStatus } from '@/lib/sync/useSyncStatus'
 
 export default function Home() {
   const [data, setData] = useState<any>(null)
@@ -10,6 +11,7 @@ export default function Home() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [progress, setProgress] = useState<{ phase: string; current: number; total: number } | null>(null)
+  const lastSync = useSyncStatus()
   const maxIso = useMemo(() => new Date().toISOString().split('T')[0], [])
   const formatMAD = useMemo(() => {
     const nf = new Intl.NumberFormat('fr-FR', {
@@ -278,6 +280,20 @@ export default function Home() {
 
   const month = data?.month
 
+  const lastSyncLabel = useMemo(() => {
+    if (!lastSync?.finished_at) return null
+    const d = new Date(lastSync.finished_at)
+    const fmt = new Intl.DateTimeFormat('fr-FR', {
+      weekday: 'short',
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    })
+    return fmt.format(d)
+  }, [lastSync?.finished_at])
+
   return (
     <main className="min-h-[calc(100vh-0px)] bg-gradient-to-br from-emerald-50 via-white to-rose-50 px-6 py-10">
       <div className="mx-auto w-full max-w-5xl">
@@ -303,6 +319,11 @@ export default function Home() {
               <div className="mt-3 text-2xl font-semibold capitalize tracking-tight text-slate-900 sm:text-3xl">
                 {selectedDateLabel}
               </div>
+              {lastSyncLabel ? (
+                <div className="mt-2 text-sm text-slate-600">
+                  Dernière synchro : <span className="font-semibold text-slate-800">{lastSyncLabel}</span>
+                </div>
+              ) : null}
             </div>
           </div>
 
