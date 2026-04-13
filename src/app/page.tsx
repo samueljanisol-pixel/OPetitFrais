@@ -137,13 +137,13 @@ export default function Home() {
       <main className="min-h-[calc(100vh-0px)] flex items-center justify-center bg-gradient-to-br from-emerald-50 via-white to-rose-50 px-6 py-16">
         <div className="w-full max-w-md rounded-2xl border border-emerald-100 bg-white/80 p-6 shadow-sm backdrop-blur">
           <div className="flex items-center gap-3">
-            <div className="relative h-10 w-10 overflow-hidden rounded-xl bg-white shadow-sm ring-1 ring-emerald-100">
+            <div className="relative h-12 w-12 overflow-hidden rounded-xl bg-white shadow-sm ring-1 ring-emerald-100">
               <Image
                 src="/logo-opetitfrais.png"
                 alt="O'petit frais"
                 fill
                 className="object-contain p-1"
-                sizes="40px"
+                sizes="48px"
                 priority
               />
             </div>
@@ -193,13 +193,13 @@ export default function Home() {
       <main className="min-h-[calc(100vh-0px)] flex items-center justify-center bg-gradient-to-br from-emerald-50 via-white to-rose-50 px-6 py-16">
         <div className="w-full max-w-xl rounded-2xl border border-rose-200 bg-white/90 p-6 shadow-sm backdrop-blur">
           <div className="flex items-center gap-3">
-            <div className="relative h-10 w-10 overflow-hidden rounded-xl bg-white shadow-sm ring-1 ring-rose-200">
+            <div className="relative h-12 w-12 overflow-hidden rounded-xl bg-white shadow-sm ring-1 ring-rose-200">
               <Image
                 src="/logo-opetitfrais.png"
                 alt="O'petit frais"
                 fill
                 className="object-contain p-1"
-                sizes="40px"
+                sizes="48px"
                 priority
               />
             </div>
@@ -310,13 +310,13 @@ export default function Home() {
       <div className="mx-auto w-full max-w-5xl">
         <header className="flex flex-col gap-6 sm:flex-row sm:items-end sm:justify-between">
           <div className="flex items-center gap-4">
-            <div className="relative h-14 w-14 overflow-hidden rounded-2xl bg-white shadow-sm ring-1 ring-emerald-100">
+            <div className="relative h-20 w-20 overflow-hidden rounded-3xl bg-white shadow-sm ring-1 ring-emerald-100">
               <Image
                 src="/logo-opetitfrais.png"
                 alt="O'petit frais"
                 fill
                 className="object-contain p-1.5"
-                sizes="56px"
+                sizes="80px"
                 priority
               />
             </div>
