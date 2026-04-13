@@ -17,10 +17,11 @@ export function useSyncStatus(pollMs = 60000) {
     const load = async () => {
       try {
         const res = await fetch("/api/supabase/sync/status", { cache: "no-store" });
-        const json = await res.json().catch(() => null);
+        const json: unknown = await res.json().catch(() => null);
         if (!alive) return;
         if (res.ok && json && typeof json === "object" && "last" in json) {
-          setLast((json as any).last ?? null);
+          const lastVal = (json as { last?: unknown }).last ?? null;
+          setLast(lastVal as SyncRun | null);
         }
       } catch {
         // ignore

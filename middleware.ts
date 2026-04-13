@@ -20,7 +20,7 @@ export async function middleware(req: NextRequest) {
   const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
   if (!url || !anonKey) return NextResponse.next();
 
-  let res = NextResponse.next();
+  const res = NextResponse.next();
   const supabase = createServerClient(url, anonKey, {
     cookies: {
       getAll() {

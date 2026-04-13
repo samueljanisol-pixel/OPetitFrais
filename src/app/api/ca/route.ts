@@ -266,7 +266,7 @@ export async function GET(req: NextRequest) {
           }
         : {}),
     });
-  } catch (error) {
+  } catch {
     return NextResponse.json({ error: "Erreur FTP" }, { status: 500 });
   } finally {
     client.close();

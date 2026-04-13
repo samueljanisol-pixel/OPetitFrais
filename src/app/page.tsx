@@ -5,8 +5,19 @@ import Link from 'next/link'
 import { useEffect, useMemo, useState } from 'react'
 import { useSyncStatus } from '@/lib/sync/useSyncStatus'
 
+type CaResponse = {
+  totalGlobal: number
+  magasins: Record<string, Record<string, number>>
+  month?: { ym: string; totalGlobal: number; magasins: Record<string, number> }
+  compare?: { date: string; j1: { date: string; totalGlobal: number }; j7: { date: string; totalGlobal: number } }
+  topProduits?: { available: boolean; byCa: Array<{ name: string; ca: number; qty: number }>; byQty: Array<{ name: string; ca: number; qty: number }> }
+  error?: string
+}
+
+type ProgressEvent = { phase?: string; current?: number; total?: number }
+
 export default function Home() {
-  const [data, setData] = useState<any>(null)
+  const [data, setData] = useState<CaResponse | null>(null)
   const [date, setDate] = useState(() => new Date().toISOString().split('T')[0]) // YYYY-MM-DD
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -44,6 +55,20 @@ export default function Home() {
     return new Intl.DateTimeFormat('fr-FR', { month: 'long', year: 'numeric', timeZone: 'UTC' }).format(d)
   }, [data?.month?.ym])
 
+  const lastSyncLabel = useMemo(() => {
+    if (!lastSync?.finished_at) return null
+    const d = new Date(lastSync.finished_at)
+    const fmt = new Intl.DateTimeFormat('fr-FR', {
+      weekday: 'short',
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    })
+    return fmt.format(d)
+  }, [lastSync?.finished_at])
+
   useEffect(() => {
     setLoading(true)
     setError(null)
@@ -53,9 +78,9 @@ export default function Home() {
       `/api/ca/stream?date=${encodeURIComponent(date)}&includeCompare=1&includeTop=1`,
     )
 
-    const onProgress = (ev: MessageEvent) => {
+    const onProgress = (ev: MessageEvent<string>) => {
       try {
-        const p = JSON.parse(ev.data) as { phase?: string; current?: number; total?: number }
+        const p = JSON.parse(ev.data) as ProgressEvent
         setProgress({
           phase: p.phase ?? 'Chargement…',
           current: typeof p.current === 'number' ? p.current : 0,
@@ -64,9 +89,9 @@ export default function Home() {
       } catch {}
     }
 
-    const onDone = (ev: MessageEvent) => {
+    const onDone = (ev: MessageEvent<string>) => {
       try {
-        const json = JSON.parse(ev.data)
+        const json = JSON.parse(ev.data) as CaResponse
         setData(json)
       } catch {
         setError('Données invalides')
@@ -78,7 +103,7 @@ export default function Home() {
       }
     }
 
-    const onError = (ev: MessageEvent) => {
+    const onError = (ev: MessageEvent<string>) => {
       try {
         const json = JSON.parse(ev.data) as { error?: string }
         setError(json?.error ?? 'Erreur')
@@ -91,9 +116,9 @@ export default function Home() {
       }
     }
 
-    es.addEventListener('progress', onProgress as any)
-    es.addEventListener('done', onDone as any)
-    es.addEventListener('error', onError as any)
+    es.addEventListener('progress', onProgress as EventListener)
+    es.addEventListener('done', onDone as EventListener)
+    es.addEventListener('error', onError as EventListener)
     es.onerror = () => {
       // Si la connexion SSE tombe (proxy/timeout), on affiche une erreur claire.
       setError('Connexion interrompue')
@@ -239,8 +264,8 @@ export default function Home() {
     return `Caisse ${Number(m[1])}`
   }
 
-  const sortedCaisseEntries = (caisses: any) => {
-    const entries = Object.entries(caisses).filter(([k]) => k !== 'total') as Array<[string, any]>
+  const sortedCaisseEntries = (caisses: Record<string, number>) => {
+    const entries = Object.entries(caisses).filter(([k]) => k !== 'total') as Array<[string, number]>
     entries.sort(([a], [b]) => {
       const na = Number((a.match(/\d+/)?.[0] ?? ''))
       const nb = Number((b.match(/\d+/)?.[0] ?? ''))
@@ -279,20 +304,6 @@ export default function Home() {
   }
 
   const month = data?.month
-
-  const lastSyncLabel = useMemo(() => {
-    if (!lastSync?.finished_at) return null
-    const d = new Date(lastSync.finished_at)
-    const fmt = new Intl.DateTimeFormat('fr-FR', {
-      weekday: 'short',
-      day: '2-digit',
-      month: 'short',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-    })
-    return fmt.format(d)
-  }, [lastSync?.finished_at])
 
   return (
     <main className="min-h-[calc(100vh-0px)] bg-gradient-to-br from-emerald-50 via-white to-rose-50 px-6 py-10">
@@ -431,7 +442,7 @@ export default function Home() {
         </section>
 
         <section className="mt-8 grid gap-5">
-          {Object.entries(data.magasins).map(([mag, caisses]: any) => (
+      {Object.entries(data.magasins).map(([mag, caisses]) => (
             <article
               key={mag}
               className="rounded-2xl border border-emerald-100 bg-white/80 p-5 shadow-sm backdrop-blur"
@@ -465,7 +476,7 @@ export default function Home() {
                   const entries = sortedCaisseEntries(caisses)
                   const onlyOne = entries.length === 1
                   if (onlyOne) return null
-                  return entries.map(([caisse, total]: any) => {
+                  return entries.map(([caisse, total]) => {
                   const pct = percentOfGlobal(total)
                   return (
                     <div
@@ -546,7 +557,7 @@ export default function Home() {
                       </tr>
                     </thead>
                     <tbody>
-                      {data.topProduits.byCa.map((r: any) => (
+                      {data.topProduits.byCa.map(r => (
                         <tr key={`ca-${r.name}`} className="border-t border-slate-100">
                           <td className="px-3 py-2 text-slate-900">{r.name}</td>
                           <td className="px-3 py-2 text-right font-semibold text-slate-900">{formatMAD(r.ca)}</td>
@@ -572,7 +583,7 @@ export default function Home() {
                       </tr>
                     </thead>
                     <tbody>
-                      {data.topProduits.byQty.map((r: any) => (
+                      {data.topProduits.byQty.map(r => (
                         <tr key={`qty-${r.name}`} className="border-t border-slate-100">
                           <td className="px-3 py-2 text-slate-900">{r.name}</td>
                           <td className="px-3 py-2 text-right font-semibold text-slate-900">

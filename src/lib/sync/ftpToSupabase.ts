@@ -69,15 +69,18 @@ export async function syncDateToSupabase(date: string) {
           const raw = await fs.readFile(tempFile, "utf8");
           await fs.unlink(tempFile).catch(() => {});
 
-          let parsed: any = null;
+          let parsed: unknown = null;
           try {
-            parsed = JSON.parse(raw);
+            parsed = JSON.parse(raw) as unknown;
           } catch {
             parsed = null;
           }
 
           if (isDay) {
-            const tj = parsed && typeof parsed.total_jour === "number" ? parsed.total_jour : 0;
+            const tj =
+              parsed && typeof parsed === "object" && "total_jour" in (parsed as Record<string, unknown>)
+                ? asNumber((parsed as Record<string, unknown>).total_jour)
+                : 0;
             dayByMagasin[mag.name] = (dayByMagasin[mag.name] ?? 0) + tj;
 
             const lines = extractProductLines(parsed);

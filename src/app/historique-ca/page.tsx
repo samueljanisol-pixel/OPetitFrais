@@ -19,7 +19,7 @@ type ApiPayload =
       days: DayRow[]
     }
 
-const pad2 = (n: number) => String(n).padStart(2, '0')
+type ProgressEvent = { phase?: string; current?: number; total?: number }
 
 const labelMagasin = (raw: string) => {
   const m = raw.match(/^M(\d+)$/i)
@@ -59,9 +59,9 @@ export default function HistoriqueCA() {
       `/api/ca/historique/stream?from=${encodeURIComponent(yearStartIso)}&to=${encodeURIComponent(todayIso)}`,
     )
 
-    const onProgress = (ev: MessageEvent) => {
+    const onProgress = (ev: MessageEvent<string>) => {
       try {
-        const p = JSON.parse(ev.data) as { phase?: string; current?: number; total?: number }
+        const p = JSON.parse(ev.data) as ProgressEvent
         setProgress({
           phase: p.phase ?? 'Chargement…',
           current: typeof p.current === 'number' ? p.current : 0,
@@ -100,9 +100,9 @@ export default function HistoriqueCA() {
       }
     }
 
-    es.addEventListener('progress', onProgress as any)
-    es.addEventListener('done', onDone as any)
-    es.addEventListener('error', onError as any)
+    es.addEventListener('progress', onProgress as EventListener)
+    es.addEventListener('done', onDone as EventListener)
+    es.addEventListener('error', onError as EventListener)
     es.onerror = () => {
       setError('Connexion interrompue')
       setData({ error: 'Connexion interrompue' })

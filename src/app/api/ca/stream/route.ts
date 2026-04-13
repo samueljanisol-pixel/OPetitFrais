@@ -162,14 +162,17 @@ export async function GET(req: NextRequest) {
               const raw = await fs.readFile(tempFile, "utf8");
               await fs.unlink(tempFile).catch(() => {});
 
-              let parsed: any = null;
+              let parsed: unknown = null;
               try {
-                parsed = JSON.parse(raw);
+                parsed = JSON.parse(raw) as unknown;
               } catch {
                 parsed = null;
               }
 
-              const tj = parsed && typeof parsed.total_jour === "number" ? parsed.total_jour : 0;
+              const tj =
+                parsed && typeof parsed === "object" && "total_jour" in (parsed as Record<string, unknown>)
+                  ? asNumber((parsed as Record<string, unknown>).total_jour)
+                  : 0;
               if (isDate) {
                 totalCaisse += tj;
                 if (includeTop) {
@@ -208,7 +211,7 @@ export async function GET(req: NextRequest) {
             monthTotalGlobal += monthByMagasin[mag] ?? 0;
           }
 
-          const payload: any = {
+          const payload: Record<string, unknown> = {
             totalGlobal,
             magasins: result,
             month: { ym, totalGlobal: monthTotalGlobal, magasins: monthByMagasin },
