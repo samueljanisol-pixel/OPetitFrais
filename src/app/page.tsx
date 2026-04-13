@@ -1,6 +1,7 @@
 'use client'
 
 import Image from 'next/image'
+import Link from 'next/link'
 import { useEffect, useMemo, useState } from 'react'
 
 export default function Home() {
@@ -8,6 +9,7 @@ export default function Home() {
   const [date, setDate] = useState(() => new Date().toISOString().split('T')[0]) // YYYY-MM-DD
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [progress, setProgress] = useState<{ phase: string; current: number; total: number } | null>(null)
   const maxIso = useMemo(() => new Date().toISOString().split('T')[0], [])
   const formatMAD = useMemo(() => {
     const nf = new Intl.NumberFormat('fr-FR', {
@@ -43,25 +45,64 @@ export default function Home() {
   useEffect(() => {
     setLoading(true)
     setError(null)
-    fetch(`/api/ca?date=${encodeURIComponent(date)}&includeCompare=1&includeTop=1`)
-      .then(async res => {
-        const json = await res.json().catch(() => null)
-        if (!res.ok) {
-          const msg =
-            (json && typeof json === 'object' && 'error' in json && typeof (json as any).error === 'string'
-              ? (json as any).error
-              : null) ?? `Erreur API (/api/ca): ${res.status}`
-          setError(msg)
-          setData(json)
-          return
-        }
+    setProgress({ phase: 'Démarrage…', current: 0, total: 1 })
+
+    const es = new EventSource(
+      `/api/ca/stream?date=${encodeURIComponent(date)}&includeCompare=1&includeTop=1`,
+    )
+
+    const onProgress = (ev: MessageEvent) => {
+      try {
+        const p = JSON.parse(ev.data) as { phase?: string; current?: number; total?: number }
+        setProgress({
+          phase: p.phase ?? 'Chargement…',
+          current: typeof p.current === 'number' ? p.current : 0,
+          total: typeof p.total === 'number' ? p.total : 1,
+        })
+      } catch {}
+    }
+
+    const onDone = (ev: MessageEvent) => {
+      try {
+        const json = JSON.parse(ev.data)
         setData(json)
-      })
-      .catch(e => {
-        setError(e instanceof Error ? e.message : 'Erreur réseau')
+      } catch {
+        setError('Données invalides')
         setData(null)
-      })
-      .finally(() => setLoading(false))
+      } finally {
+        setLoading(false)
+        setProgress(null)
+        es.close()
+      }
+    }
+
+    const onError = (ev: MessageEvent) => {
+      try {
+        const json = JSON.parse(ev.data) as { error?: string }
+        setError(json?.error ?? 'Erreur')
+      } catch {
+        setError('Erreur')
+      } finally {
+        setLoading(false)
+        setProgress(null)
+        es.close()
+      }
+    }
+
+    es.addEventListener('progress', onProgress as any)
+    es.addEventListener('done', onDone as any)
+    es.addEventListener('error', onError as any)
+    es.onerror = () => {
+      // Si la connexion SSE tombe (proxy/timeout), on affiche une erreur claire.
+      setError('Connexion interrompue')
+      setLoading(false)
+      setProgress(null)
+      es.close()
+    }
+
+    return () => {
+      es.close()
+    }
   }, [date])
 
   if (loading || !data)
@@ -89,7 +130,25 @@ export default function Home() {
           <div className="mt-6 h-2 w-full overflow-hidden rounded-full bg-emerald-100">
             <div className="h-full w-1/2 animate-pulse rounded-full bg-emerald-500/70" />
           </div>
-          <div className="mt-3 text-sm text-slate-600">Chargement des données…</div>
+          <div className="mt-3 text-sm text-slate-600">
+            {progress?.phase ?? 'Chargement des données…'}
+          </div>
+          <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-rose-100">
+            <div
+              className="h-full rounded-full bg-rose-500/70 transition-[width] duration-300"
+              style={{
+                width: `${Math.round(
+                  ((progress?.current ?? 0) / Math.max(1, progress?.total ?? 1)) * 100,
+                )}%`,
+              }}
+            />
+          </div>
+          <div className="mt-2 flex items-center justify-between text-xs text-slate-600">
+            <span>
+              {progress ? `${progress.current}/${progress.total}` : '—'}
+            </span>
+            <span>{progress ? `${Math.round((progress.current / Math.max(1, progress.total)) * 100)}%` : ''}</span>
+          </div>
         </div>
       </main>
     )
@@ -249,6 +308,12 @@ export default function Home() {
 
           <div className="flex flex-col gap-3 sm:items-end">
             <div className="flex flex-wrap items-center gap-2">
+              <Link
+                href="/historique-ca"
+                className="rounded-xl bg-emerald-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-emerald-700"
+              >
+                Historique
+              </Link>
               <button
                 type="button"
                 onClick={goPrevDay}
@@ -289,9 +354,6 @@ export default function Home() {
                 Total du mois {monthLabel ? `(${monthLabel})` : ''}
               </div>
               <div className="mt-1 text-2xl font-semibold text-slate-900">{formatMAD(month?.totalGlobal)}</div>
-              <div className="mt-2 text-xs text-slate-600">
-                Cumul mensuel calculé depuis <span className="font-medium">{`ventes_${month?.ym ?? 'YYYY-MM'}.json`}</span>
-              </div>
             </div>
           </div>
         </header>
