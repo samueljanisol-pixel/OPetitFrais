@@ -28,8 +28,8 @@ export const metadata: Metadata = {
   },
   themeColor: "#16a34a",
   icons: {
-    icon: [{ url: "/icon.png" }],
-    apple: [{ url: "/icon.png" }],
+    icon: [{ url: "/icons/icon-192.png" }, { url: "/icons/icon-512.png" }],
+    apple: [{ url: "/icons/icon-512.png" }],
   },
 };
 
