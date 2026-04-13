@@ -83,7 +83,7 @@ export async function GET(req: NextRequest) {
   const includeCompare = searchParams.get("includeCompare") === "1";
   const includeTop = searchParams.get("includeTop") === "1";
   const dateJ1 = isoDateMinusDays(date, 1);
-  const dateJ7 = isoDateMinusDays(date, 9);
+  const dateJ7 = isoDateMinusDays(date, 7);
 
   const client = new Client();
 
