@@ -27,6 +27,7 @@ export async function POST(req: Request) {
 
   const supabase = createSupabaseServiceRoleClient();
   const today = isoTodayUtc();
+  const maxDaysPerRun = Math.max(1, Number(process.env.MAX_SYNC_DAYS_PER_RUN ?? 3));
 
   const startedAt = new Date().toISOString();
   let lastSyncedDate: string | null = null;
@@ -65,6 +66,10 @@ export async function POST(req: Request) {
       await syncDateToSupabase(d);
       processedDays += 1;
       lastSyncedDate = d;
+      if (processedDays >= maxDaysPerRun) {
+        message = `Traitement partiel: ${processedDays}/${dates.length} jour(s). Le cron continuera au prochain run.`;
+        break;
+      }
     }
   } catch (e) {
     status = "error";
