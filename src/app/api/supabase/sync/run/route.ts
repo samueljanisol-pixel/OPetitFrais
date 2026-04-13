@@ -17,9 +17,19 @@ function addDaysIso(iso: string, days: number) {
   return `${y}-${m}-${day}`;
 }
 
+export async function GET(req: Request) {
+  return POST(req);
+}
+
 export async function POST(req: Request) {
   const url = new URL(req.url);
-  const token = url.searchParams.get("token") || req.headers.get("x-cron-secret");
+  const auth = req.headers.get("authorization");
+  const bearer =
+    auth?.startsWith("Bearer ") ? auth.slice("Bearer ".length).trim() : null;
+  const token =
+    url.searchParams.get("token") ||
+    req.headers.get("x-cron-secret") ||
+    bearer;
   const expected = process.env.CRON_SECRET || process.env.SYNC_TOKEN;
   if (!expected || token !== expected) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
