@@ -147,7 +147,7 @@ export async function GET(req: NextRequest) {
     const dateJ1 = isoDateMinusDays(date, 1);
     // Demande métier: comparer au même jour de semaine (J-8)
     // Ajustement demandé: encore 1 jour en moins tout en gardant l'affichage "J-8"
-    const dateJ7 = isoDateMinusDays(date, 9);
+    const dateJ7 = isoDateMinusDays(date, 7);
 
     await client.access({
       host,
