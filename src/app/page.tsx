@@ -7,6 +7,7 @@ export default function Home() {
   const [data, setData] = useState<any>(null)
   const [date, setDate] = useState(() => new Date().toISOString().split('T')[0]) // YYYY-MM-DD
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
   const maxIso = useMemo(() => new Date().toISOString().split('T')[0], [])
   const formatMAD = useMemo(() => {
     const nf = new Intl.NumberFormat('fr-FR', {
@@ -41,9 +42,25 @@ export default function Home() {
 
   useEffect(() => {
     setLoading(true)
+    setError(null)
     fetch(`/api/ca?date=${encodeURIComponent(date)}&includeCompare=1&includeTop=1`)
-      .then(res => res.json())
-      .then(setData)
+      .then(async res => {
+        const json = await res.json().catch(() => null)
+        if (!res.ok) {
+          const msg =
+            (json && typeof json === 'object' && 'error' in json && typeof (json as any).error === 'string'
+              ? (json as any).error
+              : null) ?? `Erreur API (/api/ca): ${res.status}`
+          setError(msg)
+          setData(json)
+          return
+        }
+        setData(json)
+      })
+      .catch(e => {
+        setError(e instanceof Error ? e.message : 'Erreur réseau')
+        setData(null)
+      })
       .finally(() => setLoading(false))
   }, [date])
 
@@ -76,6 +93,63 @@ export default function Home() {
         </div>
       </main>
     )
+
+  const dataError =
+    error ??
+    (typeof data?.error === 'string'
+      ? data.error
+      : data && typeof data === 'object' && !data.magasins
+        ? "Données invalides: 'magasins' manquant"
+        : null)
+
+  if (dataError) {
+    return (
+      <main className="min-h-[calc(100vh-0px)] flex items-center justify-center bg-gradient-to-br from-emerald-50 via-white to-rose-50 px-6 py-16">
+        <div className="w-full max-w-xl rounded-2xl border border-rose-200 bg-white/90 p-6 shadow-sm backdrop-blur">
+          <div className="flex items-center gap-3">
+            <div className="relative h-10 w-10 overflow-hidden rounded-xl bg-white shadow-sm ring-1 ring-rose-200">
+              <Image
+                src="/logo-opetitfrais.png"
+                alt="O'petit frais"
+                fill
+                className="object-contain p-1"
+                sizes="40px"
+                priority
+              />
+            </div>
+            <div>
+              <div className="text-sm font-medium text-slate-700">O&apos;petit frais</div>
+              <div className="text-lg font-semibold tracking-tight text-slate-900">Impossible de charger</div>
+            </div>
+          </div>
+          <div className="mt-4 rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-900">
+            {dataError}
+          </div>
+          <div className="mt-4 flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => window.location.reload()}
+              className="rounded-xl bg-rose-600 px-4 py-2 text-sm font-semibold text-white hover:bg-rose-700"
+            >
+              Recharger
+            </button>
+            <button
+              type="button"
+              onClick={() => setDate(new Date().toISOString().split('T')[0])}
+              className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-800 hover:bg-slate-50"
+            >
+              Revenir à aujourd&apos;hui
+            </button>
+          </div>
+          <div className="mt-4 text-xs text-slate-600">
+            Sur Vercel, vérifie les variables d&apos;environnement <span className="font-medium">FTP_HOST</span>,{' '}
+            <span className="font-medium">FTP_USER</span>, <span className="font-medium">FTP_PASSWORD</span> et les logs
+            de la fonction <span className="font-medium">/api/ca</span>.
+          </div>
+        </div>
+      </main>
+    )
+  }
 
   const isoMinusDays = (iso: string, days: number) => {
     const [yy, mm, dd] = iso.split('-').map(x => Number(x))
