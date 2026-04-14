@@ -230,7 +230,7 @@ export default function Home() {
           <div className="mt-4 text-xs text-slate-600">
             Sur Vercel, vérifie les variables d&apos;environnement <span className="font-medium">FTP_HOST</span>,{' '}
             <span className="font-medium">FTP_USER</span>, <span className="font-medium">FTP_PASSWORD</span> et les logs
-            de la fonction <span className="font-medium">/api/ca</span>.
+            de la fonction <span className="font-medium">/api/ca/stream</span>.
           </div>
         </div>
       </main>
