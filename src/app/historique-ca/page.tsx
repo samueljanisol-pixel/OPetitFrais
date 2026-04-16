@@ -252,7 +252,7 @@ export default function HistoriqueCA() {
       <div className="mx-auto w-full max-w-5xl">
         <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
           <div className="flex items-center gap-4">
-            <div className="relative h-20 w-20 overflow-hidden rounded-3xl bg-white shadow-sm ring-1 ring-emerald-100">
+            <div className="relative h-20 w-30 overflow-hidden rounded-3xl bg-white shadow-sm ring-1 ring-emerald-100">
               <Image
                 src="/logo-opetitfrais.png"
                 alt="O' Petit Frais"

@@ -234,8 +234,10 @@ export async function GET(req: NextRequest) {
           send("error", { error: e instanceof Error ? e.message : "Erreur" });
         } finally {
           client.close();
-          closed = true;
-          controller.close();
+          if (!closed && controller) {
+            closed = true
+            controller.close()
+          }
         }
       };
 

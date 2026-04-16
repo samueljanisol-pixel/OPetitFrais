@@ -26,12 +26,15 @@ export const metadata: Metadata = {
   formatDetection: {
     telephone: false,
   },
-  themeColor: "#16a34a",
   icons: {
     icon: [{ url: "/icons/icon-192.png" }, { url: "/icons/icon-512.png" }],
     apple: [{ url: "/icons/icon-512.png" }],
   },
 };
+
+export const viewport = {
+  themeColor: "#16a34a"
+}
 
 export default function RootLayout({
   children,

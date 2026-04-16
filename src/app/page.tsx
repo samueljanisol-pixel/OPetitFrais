@@ -22,6 +22,7 @@ export default function Home() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [progress, setProgress] = useState<{ phase: string; current: number; total: number } | null>(null)
+  const [refreshNonce, setRefreshNonce] = useState(0)
   const lastSync = useSyncStatus()
   const maxIso = useMemo(() => new Date().toISOString().split('T')[0], [])
   const formatMAD = useMemo(() => {
@@ -130,14 +131,14 @@ export default function Home() {
     return () => {
       es.close()
     }
-  }, [date])
+  }, [date, refreshNonce])
 
   if (loading || !data)
     return (
       <main className="min-h-[calc(100vh-0px)] flex items-center justify-center bg-gradient-to-br from-emerald-50 via-white to-rose-50 px-6 py-16">
         <div className="w-full max-w-md rounded-2xl border border-emerald-100 bg-white/80 p-6 shadow-sm backdrop-blur">
           <div className="flex items-center gap-3">
-            <div className="relative h-12 w-12 overflow-hidden rounded-xl bg-white shadow-sm ring-1 ring-emerald-100">
+            <div className="relative h-12 w-24 overflow-hidden rounded-xl bg-white shadow-sm ring-1 ring-emerald-100">
               <Image
                 src="/logo-opetitfrais.png"
                 alt="O'petit frais"
@@ -193,7 +194,7 @@ export default function Home() {
       <main className="min-h-[calc(100vh-0px)] flex items-center justify-center bg-gradient-to-br from-emerald-50 via-white to-rose-50 px-6 py-16">
         <div className="w-full max-w-xl rounded-2xl border border-rose-200 bg-white/90 p-6 shadow-sm backdrop-blur">
           <div className="flex items-center gap-3">
-            <div className="relative h-12 w-12 overflow-hidden rounded-xl bg-white shadow-sm ring-1 ring-rose-200">
+            <div className="relative h-12 w-24 overflow-hidden rounded-xl bg-white shadow-sm ring-1 ring-rose-200">
               <Image
                 src="/logo-opetitfrais.png"
                 alt="O'petit frais"
@@ -310,7 +311,7 @@ export default function Home() {
       <div className="mx-auto w-full max-w-5xl">
         <header className="flex flex-col gap-6 sm:flex-row sm:items-end sm:justify-between">
           <div className="flex items-center gap-4">
-            <div className="relative h-20 w-20 overflow-hidden rounded-3xl bg-white shadow-sm ring-1 ring-emerald-100">
+            <div className="relative h-20 w-30 overflow-hidden rounded-3xl bg-white shadow-sm ring-1 ring-emerald-100">
               <Image
                 src="/logo-opetitfrais.png"
                 alt="O'petit frais"
@@ -352,6 +353,13 @@ export default function Home() {
                 className="rounded-xl border border-emerald-200 bg-white/80 px-3 py-2 text-sm font-medium text-emerald-800 shadow-sm backdrop-blur hover:bg-white"
               >
                 Jour précédent
+              </button>
+              <button
+                type="button"
+                onClick={() => setRefreshNonce(n => n + 1)}
+                className="rounded-xl border border-emerald-200 bg-white/80 px-3 py-2 text-sm font-medium text-emerald-800 shadow-sm backdrop-blur hover:bg-white"
+              >
+                Actualiser
               </button>
               <label className="rounded-xl border border-slate-200 bg-white/80 px-3 py-2 text-sm text-slate-700 shadow-sm backdrop-blur">
                 <span className="mr-2 text-xs font-medium uppercase tracking-wide text-slate-500">Date</span>

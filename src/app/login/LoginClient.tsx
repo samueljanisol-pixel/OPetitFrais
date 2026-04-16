@@ -33,7 +33,7 @@ export default function LoginClient() {
     <main className="min-h-[calc(100vh-0px)] flex items-center justify-center bg-gradient-to-br from-emerald-50 via-white to-rose-50 px-6 py-16">
       <div className="w-full max-w-md rounded-2xl border border-emerald-100 bg-white/80 p-6 shadow-sm backdrop-blur">
         <div className="flex items-center gap-3">
-          <div className="relative h-12 w-12 overflow-hidden rounded-xl bg-white shadow-sm ring-1 ring-emerald-100">
+          <div className="relative h-12 w-24 overflow-hidden rounded-xl bg-white shadow-sm ring-1 ring-emerald-100">
             <Image
               src="/logo-opetitfrais.png"
               alt="O' Petit Frais"
