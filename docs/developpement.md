@@ -43,6 +43,9 @@ La route historique `src/app/api/ca/historique/stream/route.ts` a reçu les mêm
 - **`npm run dev`** : `next dev --webpack` — en Next.js 16, le mode dev **Webpack** est aligné sur le build de production (`next build` / `next start`), ce qui évite les écarts et les instabilités observées avec **Turbopack** sur Windows.
 - **`npm run dev:turbo`** : `next dev` seul (Turbopack par défaut), si besoin de tester ce mode.
 - **`npm run build`** puis **`npm run start`** : comportement de référence proche de la prod (Vercel, etc.).
+- **`npm run sync:day`** : import FTP → Supabase pour **une** date (`scripts/run-sync.ts`, lit `.env.local`) et enregistre une entrée dans **`sync_runs`** (comme le cron `POST /api/supabase/sync/run`).
+- **`npm run sync:all`** : parcourt le FTP, repère **toutes** les dates `YYYY-MM-DD` dans les noms de fichiers sous `/ventes`, puis appelle `syncDateToSupabase` pour chacune (`scripts/run-sync-all.ts`). Filtres optionnels : `npm run sync:all -- 2026-01-01 2026-04-30` ; limite : variable `SYNC_ALL_MAX_DAYS`. À la fin, une ligne est ajoutée dans **`sync_runs`** pour alimenter `/api/supabase/sync/status`.
+- Module partagé **`src/lib/ventesJson.ts`** : extraction `total_jour`, `total_mois`, lignes `ventes`, paniers — utilisé par **`src/lib/sync/ftpToSupabase.ts`**.
 
 ## Flux technique : SSE (`/api/ca/stream`)
 

@@ -4,37 +4,18 @@ import Image from 'next/image'
 import { useEffect, useMemo, useState } from 'react'
 import { Button, Stack, TextField } from '@mui/material'
 import AppLink from '@/components/AppLink'
-import { useSyncStatus } from '@/lib/sync/useSyncStatus'
-
-type PanierMag = { nbPaniers: number; panierMoyen: number | null }
-
-type CaResponse = {
-  totalGlobal: number
-  magasins: Record<string, Record<string, number>>
-  month?: {
-    ym: string
-    totalGlobal: number
-    magasins: Record<string, number>
-    panierMois?: Record<string, PanierMag>
-    panierMoisGlobal?: PanierMag
-  }
-  panierJour?: Record<string, PanierMag>
-  panierJourGlobal?: PanierMag
-  compare?: { date: string; j1: { date: string; totalGlobal: number }; j7: { date: string; totalGlobal: number } }
-  topProduits?: { available: boolean; byCa: Array<{ name: string; ca: number; qty: number }>; byQty: Array<{ name: string; ca: number; qty: number }> }
-  error?: string
-}
-
-type ProgressEvent = { phase?: string; current?: number; total?: number }
+import PaniersHeureHistogram from '@/components/PaniersHeureHistogram'
+import SyncStatusFooter from '@/components/SyncStatusFooter'
+import { fetchCaDashboardFromSupabase } from '@/lib/ca/fromSupabase'
+import type { CaResponse } from '@/lib/ca/types'
+import { createSupabaseBrowserClient } from '@/lib/supabase/client'
 
 export default function Home() {
   const [data, setData] = useState<CaResponse | null>(null)
   const [date, setDate] = useState(() => new Date().toISOString().split('T')[0]) // YYYY-MM-DD
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [progress, setProgress] = useState<{ phase: string; current: number; total: number } | null>(null)
   const [refreshNonce, setRefreshNonce] = useState(0)
-  const lastSync = useSyncStatus()
   const maxIso = useMemo(() => new Date().toISOString().split('T')[0], [])
   const formatMAD = useMemo(() => {
     const nf = new Intl.NumberFormat('fr-FR', {
@@ -76,85 +57,33 @@ export default function Home() {
     return new Intl.DateTimeFormat('fr-FR', { month: 'long', year: 'numeric', timeZone: 'UTC' }).format(d)
   }, [data?.month?.ym])
 
-  const lastSyncLabel = useMemo(() => {
-    if (!lastSync?.finished_at) return null
-    const d = new Date(lastSync.finished_at)
-    const fmt = new Intl.DateTimeFormat('fr-FR', {
-      weekday: 'short',
-      day: '2-digit',
-      month: 'short',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-    })
-    return fmt.format(d)
-  }, [lastSync?.finished_at])
-
   useEffect(() => {
+    let cancelled = false
     setLoading(true)
     setError(null)
-    setProgress({ phase: 'Démarrage…', current: 0, total: 1 })
 
-    /** Évite de traiter `error` après un `done` (fermeture TCP = erreur côté EventSource, reconnexion sinon). */
-    let streamFinished = false
-
-    const es = new EventSource(
-      `/api/ca/stream?date=${encodeURIComponent(date)}&includeCompare=1&includeTop=1`,
-    )
-
-    const onProgress = (ev: MessageEvent<string>) => {
+    ;(async () => {
       try {
-        const p = JSON.parse(ev.data) as ProgressEvent
-        setProgress({
-          phase: p.phase ?? 'Chargement…',
-          current: typeof p.current === 'number' ? p.current : 0,
-          total: typeof p.total === 'number' ? p.total : 1,
-        })
-      } catch {}
-    }
-
-    const onDone = (ev: MessageEvent<string>) => {
-      streamFinished = true
-      es.close()
-      try {
-        const json = JSON.parse(ev.data) as CaResponse
-        setData(json)
-      } catch {
-        setError('Données invalides')
+        const supabase = createSupabaseBrowserClient()
+        const res = await fetchCaDashboardFromSupabase(supabase, date)
+        if (cancelled) return
+        if ('error' in res) {
+          setError(res.error)
+          setData(null)
+        } else {
+          setData(res.data)
+        }
+      } catch (e) {
+        if (cancelled) return
+        setError(e instanceof Error ? e.message : 'Erreur inconnue')
         setData(null)
       } finally {
-        setLoading(false)
-        setProgress(null)
+        if (!cancelled) setLoading(false)
       }
-    }
-
-    /** Même nom d’événement `error` pour erreur applicative SSE et pour coupure réseau — un seul handler. */
-    const onStreamError = (ev: Event) => {
-      if (streamFinished) return
-      streamFinished = true
-      es.close()
-      const msg = ev as MessageEvent
-      if (typeof msg.data === 'string' && msg.data.length > 0) {
-        try {
-          const json = JSON.parse(msg.data) as { error?: string }
-          setError(json?.error ?? 'Erreur')
-        } catch {
-          setError('Erreur')
-        }
-      } else {
-        setError('Connexion interrompue')
-      }
-      setLoading(false)
-      setProgress(null)
-    }
-
-    es.addEventListener('progress', onProgress as EventListener)
-    es.addEventListener('done', onDone as EventListener)
-    es.addEventListener('error', onStreamError)
+    })()
 
     return () => {
-      streamFinished = true
-      es.close()
+      cancelled = true
     }
   }, [date, refreshNonce])
 
@@ -184,25 +113,7 @@ export default function Home() {
           <div className="mt-6 h-2 w-full overflow-hidden rounded-full bg-emerald-100">
             <div className="h-full w-1/2 animate-pulse rounded-full bg-emerald-500/70" />
           </div>
-          <div className="mt-3 text-sm text-slate-600">
-            {progress?.phase ?? 'Chargement des données…'}
-          </div>
-          <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-rose-100">
-            <div
-              className="h-full rounded-full bg-rose-500/70 transition-[width] duration-300"
-              style={{
-                width: `${Math.round(
-                  ((progress?.current ?? 0) / Math.max(1, progress?.total ?? 1)) * 100,
-                )}%`,
-              }}
-            />
-          </div>
-          <div className="mt-2 flex items-center justify-between text-xs text-slate-600">
-            <span>
-              {progress ? `${progress.current}/${progress.total}` : '—'}
-            </span>
-            <span>{progress ? `${Math.round((progress.current / Math.max(1, progress.total)) * 100)}%` : ''}</span>
-          </div>
+          <div className="mt-3 text-sm text-slate-600">Chargement des données…</div>
         </div>
       </main>
     )
@@ -255,9 +166,10 @@ export default function Home() {
             </button>
           </div>
           <div className="mt-4 text-xs text-slate-600">
-            Sur Vercel, vérifie les variables d&apos;environnement <span className="font-medium">FTP_HOST</span>,{' '}
-            <span className="font-medium">FTP_USER</span>, <span className="font-medium">FTP_PASSWORD</span> et les logs
-            de la fonction <span className="font-medium">/api/ca/stream</span>.
+            Vérifie la connexion et les variables{' '}
+            <span className="font-medium">NEXT_PUBLIC_SUPABASE_URL</span> /{' '}
+            <span className="font-medium">NEXT_PUBLIC_SUPABASE_ANON_KEY</span>, ainsi que les politiques RLS pour un
+            utilisateur connecté.
           </div>
         </div>
       </main>
@@ -286,27 +198,6 @@ export default function Home() {
     const m = raw.match(/^M(\d+)$/i)
     if (!m) return raw
     return `Magasin ${Number(m[1])}`
-  }
-
-  const labelCaisse = (raw: string) => {
-    const m = raw.match(/^C(\d+)$/i)
-    if (!m) return raw
-    return `Caisse ${Number(m[1])}`
-  }
-
-  const sortedCaisseEntries = (caisses: Record<string, number>) => {
-    const entries = Object.entries(caisses).filter(([k]) => k !== 'total') as Array<[string, number]>
-    entries.sort(([a], [b]) => {
-      const na = Number((a.match(/\d+/)?.[0] ?? ''))
-      const nb = Number((b.match(/\d+/)?.[0] ?? ''))
-      const aHas = Number.isFinite(na) && !Number.isNaN(na)
-      const bHas = Number.isFinite(nb) && !Number.isNaN(nb)
-      if (aHas && bHas) return na - nb
-      if (aHas) return -1
-      if (bHas) return 1
-      return a.localeCompare(b, 'fr-FR')
-    })
-    return entries
   }
 
   const percentOfGlobal = (value: unknown) => {
@@ -355,16 +246,11 @@ export default function Home() {
                 Chiffre d&apos;affaires
               </h1>
               <p className="mt-1 text-sm text-slate-600">
-                Vue globale + détails par magasin et par caisse.
+                Vue globale et détail par magasin (données Supabase).
               </p>
               <div className="mt-3 text-2xl font-semibold capitalize tracking-tight text-slate-900 sm:text-3xl">
                 {selectedDateLabel}
               </div>
-              {lastSyncLabel ? (
-                <div className="mt-2 text-sm text-slate-600">
-                  Dernière synchro : <span className="font-semibold text-slate-800">{lastSyncLabel}</span>
-                </div>
-              ) : null}
             </div>
           </div>
 
@@ -432,24 +318,26 @@ export default function Home() {
               <div className="mt-1 text-2xl font-semibold text-slate-900">
                 {formatMAD(data.totalGlobal)}
               </div>
-              {data.panierJourGlobal != null ? (
+              {(() => {
+                const g = data.panierJourGlobal
+                if (!g || g.nbPaniers <= 0) return null
+                return (
                 <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 border-t border-emerald-100 pt-3 text-sm text-slate-600">
                   <span>
                     Paniers :{' '}
                     <span className="font-semibold text-slate-800">
-                      {formatCount(data.panierJourGlobal.nbPaniers)}
+                      {formatCount(g.nbPaniers)}
                     </span>
                   </span>
                   <span>
                     Panier moyen :{' '}
                     <span className="font-semibold text-slate-800">
-                      {data.panierJourGlobal.panierMoyen != null
-                        ? formatMAD(data.panierJourGlobal.panierMoyen)
-                        : '—'}
+                      {g.panierMoyen != null ? formatMAD(g.panierMoyen) : '—'}
                     </span>
                   </span>
                 </div>
-              ) : null}
+                )
+              })()}
               <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-rose-100">
                 <div className="h-full w-full rounded-full bg-rose-500/70" />
               </div>
@@ -464,24 +352,26 @@ export default function Home() {
                 Total du mois {monthLabel ? `(${monthLabel})` : ''}
               </div>
               <div className="mt-1 text-2xl font-semibold text-slate-900">{formatMAD(month?.totalGlobal)}</div>
-              {month?.panierMoisGlobal != null ? (
+              {(() => {
+                const g = month?.panierMoisGlobal
+                if (!g || g.nbPaniers <= 0) return null
+                return (
                 <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 border-t border-slate-100 pt-3 text-sm text-slate-600">
                   <span>
                     Paniers :{' '}
                     <span className="font-semibold text-slate-800">
-                      {formatCount(month.panierMoisGlobal.nbPaniers)}
+                      {formatCount(g.nbPaniers)}
                     </span>
                   </span>
                   <span>
                     Panier moyen :{' '}
                     <span className="font-semibold text-slate-800">
-                      {month.panierMoisGlobal.panierMoyen != null
-                        ? formatMAD(month.panierMoisGlobal.panierMoyen)
-                        : '—'}
+                      {g.panierMoyen != null ? formatMAD(g.panierMoyen) : '—'}
                     </span>
                   </span>
                 </div>
-              ) : null}
+                )
+              })()}
             </div>
           </div>
         </header>
@@ -538,7 +428,7 @@ export default function Home() {
         </section>
 
         <section className="mt-8 grid gap-5">
-      {Object.entries(data.magasins).map(([mag, caisses]) => (
+      {Object.entries(data.magasins).map(([mag, magTotals]) => (
             <article
               key={mag}
               className="rounded-2xl border border-emerald-100 bg-white/80 p-5 shadow-sm backdrop-blur"
@@ -546,35 +436,38 @@ export default function Home() {
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div>
                   <h2 className="text-lg font-semibold text-slate-900">{labelMagasin(mag)}</h2>
-                  <div className="mt-1 text-sm text-slate-600">Détail des caisses</div>
+                  <div className="mt-1 text-sm text-slate-600">Total jour</div>
                 </div>
                 <div className="rounded-xl bg-emerald-600 px-4 py-2 text-white shadow-sm">
                   <div className="text-[11px] font-medium uppercase tracking-wide text-white/80">
                     Total magasin
                   </div>
-                  <div className="text-lg font-semibold">{formatMAD(caisses.total)}</div>
+                  <div className="text-lg font-semibold">{formatMAD(magTotals.total)}</div>
                 </div>
               </div>
 
               <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-rose-100">
                 <div
                   className="h-full rounded-full bg-rose-500/70"
-                  style={{ width: `${percentOfGlobal(caisses.total)}%` }}
+                  style={{ width: `${percentOfGlobal(magTotals.total)}%` }}
                 />
               </div>
               <div className="mt-2 flex items-center justify-between text-xs text-slate-600">
-                <span>{formatPercent(percentOfGlobal(caisses.total))} du global</span>
+                <span>{formatPercent(percentOfGlobal(magTotals.total))} du global</span>
                 <span className="font-medium text-slate-700">Part du CA global (jour)</span>
               </div>
 
-              {data.panierJour?.[mag] != null ? (
+              {(() => {
+                const pj = data.panierJour?.[mag]
+                if (!pj || (pj.nbPaniers <= 0 && pj.panierMoyen == null)) return null
+                return (
                 <div className="mt-4 grid gap-3 sm:grid-cols-2">
                   <div className="rounded-xl border border-emerald-100 bg-emerald-50/50 p-4 shadow-sm">
                     <div className="text-xs font-medium uppercase tracking-wide text-emerald-800/80">
                       Paniers (jour)
                     </div>
                     <div className="mt-1 text-lg font-semibold text-slate-900">
-                      {formatCount(data.panierJour[mag].nbPaniers)}
+                      {formatCount(pj.nbPaniers)}
                     </div>
                   </div>
                   <div className="rounded-xl border border-emerald-100 bg-emerald-50/50 p-4 shadow-sm">
@@ -582,50 +475,55 @@ export default function Home() {
                       Panier moyen (jour)
                     </div>
                     <div className="mt-1 text-lg font-semibold text-slate-900">
-                      {data.panierJour[mag].panierMoyen != null
-                        ? formatMAD(data.panierJour[mag].panierMoyen)
-                        : '—'}
+                      {pj.panierMoyen != null ? formatMAD(pj.panierMoyen) : '—'}
                     </div>
                   </div>
                 </div>
-              ) : null}
+                )
+              })()}
 
-              <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                {(() => {
-                  const entries = sortedCaisseEntries(caisses)
-                  const onlyOne = entries.length === 1
-                  if (onlyOne) return null
-                  return entries.map(([caisse, total]) => {
-                  const pct = percentOfGlobal(total)
+              {(() => {
+                const rawHeures = data.panierHeureByMag ?? {}
+                const heuresBuckets =
+                  rawHeures[mag]?.length
+                    ? rawHeures[mag]
+                    : Object.entries(rawHeures).find(
+                        ([k]) => k.trim().toLowerCase() === mag.trim().toLowerCase(),
+                      )?.[1]
+                const nbMag = data.panierJour?.[mag]?.nbPaniers ?? 0
+                if (heuresBuckets?.length)
                   return (
-                    <div
-                      key={caisse}
-                      className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm"
-                    >
-                      <div className="text-xs font-medium uppercase tracking-wide text-slate-500">
-                        {labelCaisse(caisse)}
-                      </div>
-                      <div className="mt-1 text-base font-semibold text-slate-900">
-                        {formatMAD(total)}
-                      </div>
-                      <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-rose-100">
-                        <div
-                          className="h-full rounded-full bg-rose-500/60"
-                          style={{ width: `${pct}%` }}
-                        />
-                      </div>
-                      <div className="mt-2 flex items-center justify-between text-xs text-slate-600">
-                        <span>{formatPercent(pct)}</span>
-                        <span>du global</span>
-                      </div>
+                    <div className="mt-5 w-full min-w-0 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+                      <PaniersHeureHistogram
+                        buckets={heuresBuckets}
+                        title={`${labelMagasin(mag)} — paniers / heure`}
+                      />
                     </div>
                   )
-                  })
-                })()}
-              </div>
+                if (nbMag > 0)
+                  return (
+                    <div className="mt-5 rounded-xl border border-amber-100 bg-amber-50/80 p-4 text-sm text-amber-950">
+                      <strong className="font-semibold">Répartition horaire indisponible</strong>
+                      <p className="mt-1 text-amber-900/90">
+                        Les paniers du jour sont en base ({formatCount(nbMag)}), mais aucune ligne dans{' '}
+                        <span className="font-mono text-xs">ca_panier_hour</span> pour ce magasin. Les JSON
+                        doivent contenir un tableau <span className="font-mono text-xs">panier_heure</span>{' '}
+                        (nombres ou objets avec heure + quantité). Relance{' '}
+                        <span className="font-mono text-xs">npm run sync:all</span> après correction du parseur
+                        ou des fichiers source.
+                      </p>
+                    </div>
+                  )
+                return null
+              })()}
 
               <div
-                className={`mt-4 grid gap-3 ${month?.panierMois?.[mag] != null ? 'sm:grid-cols-2 lg:grid-cols-3' : 'sm:grid-cols-2'}`}
+                className={`mt-4 grid gap-3 ${(() => {
+                  const pm = month?.panierMois?.[mag]
+                  return pm != null && (pm.nbPaniers > 0 || pm.panierMoyen != null)
+                })()
+                  ? 'sm:grid-cols-2 lg:grid-cols-3'
+                  : 'sm:grid-cols-2'}`}
               >
                 <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
                   <div className="text-xs font-medium uppercase tracking-wide text-slate-500">Total mois magasin</div>
@@ -643,14 +541,17 @@ export default function Home() {
                     <span>du mois global</span>
                   </div>
                 </div>
-                {month?.panierMois?.[mag] != null ? (
+                {(() => {
+                  const pm = month?.panierMois?.[mag]
+                  if (!pm || (pm.nbPaniers <= 0 && pm.panierMoyen == null)) return null
+                  return (
                   <>
                     <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
                       <div className="text-xs font-medium uppercase tracking-wide text-slate-500">
                         Paniers (mois)
                       </div>
                       <div className="mt-1 text-base font-semibold text-slate-900">
-                        {formatCount(month.panierMois[mag].nbPaniers)}
+                        {formatCount(pm.nbPaniers)}
                       </div>
                     </div>
                     <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
@@ -658,13 +559,12 @@ export default function Home() {
                         Panier moyen (mois)
                       </div>
                       <div className="mt-1 text-base font-semibold text-slate-900">
-                        {month.panierMois[mag].panierMoyen != null
-                          ? formatMAD(month.panierMois[mag].panierMoyen)
-                          : '—'}
+                        {pm.panierMoyen != null ? formatMAD(pm.panierMoyen) : '—'}
                       </div>
                     </div>
                   </>
-                ) : null}
+                  )
+                })()}
               </div>
             </article>
           ))}
@@ -682,9 +582,8 @@ export default function Home() {
 
           {!data?.topProduits?.available ? (
             <div className="mt-4 rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-800">
-              Les détails “produits” ne sont pas disponibles dans les fichiers JSON actuels (je ne vois que
-              `total_jour`). Si tu me donnes un exemple de fichier JSON (1 caisse, 1 jour), je peux adapter le parseur
-              pour sortir le TOP 10.
+              Aucune ligne produit pour cette date dans Supabase (<span className="font-medium">ca_product_day</span>
+              ).
             </div>
           ) : (
             <div className="mt-5 grid gap-5 lg:grid-cols-2">
@@ -742,6 +641,8 @@ export default function Home() {
             </div>
           )}
         </section>
+
+        <SyncStatusFooter />
       </div>
     </main>
   )

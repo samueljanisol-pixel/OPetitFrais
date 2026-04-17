@@ -5,6 +5,7 @@ create table if not exists public.ca_day (
   date date not null,
   magasin text not null,
   total numeric not null default 0,
+  nb_paniers numeric not null default 0,
   inserted_at timestamptz not null default now(),
   primary key (date, magasin)
 );
@@ -13,8 +14,20 @@ create table if not exists public.ca_month (
   ym text not null, -- "YYYY-MM"
   magasin text not null,
   total numeric not null default 0,
+  nb_paniers numeric not null default 0,
   inserted_at timestamptz not null default now(),
   primary key (ym, magasin)
+);
+
+-- Paniers agrégés par tranche horaire (index = heure 0–23 ou plus si fichiers étendus)
+create table if not exists public.ca_panier_hour (
+  date date not null,
+  magasin text not null,
+  hour smallint not null,
+  nb numeric not null default 0,
+  inserted_at timestamptz not null default now(),
+  primary key (date, magasin, hour),
+  constraint ca_panier_hour_hour_range check (hour >= 0 and hour < 48)
 );
 
 create table if not exists public.ca_product_day (
@@ -40,6 +53,7 @@ create table if not exists public.sync_runs (
 alter table public.ca_day enable row level security;
 alter table public.ca_month enable row level security;
 alter table public.ca_product_day enable row level security;
+alter table public.ca_panier_hour enable row level security;
 alter table public.sync_runs enable row level security;
 
 -- Lecture: utilisateurs authentifiés
@@ -58,6 +72,11 @@ on public.ca_product_day for select
 to authenticated
 using (true);
 
+create policy "read ca_panier_hour (authenticated)"
+on public.ca_panier_hour for select
+to authenticated
+using (true);
+
 create policy "read sync_runs (authenticated)"
 on public.sync_runs for select
 to authenticated
@@ -65,4 +84,11 @@ using (true);
 
 -- Écriture: désactivée côté client (on écrira via service role côté serveur)
 -- (pas de policy insert/update/delete volontairement)
+
+-- --- Mise à jour base déjà créée (sans nb_paniers / sans ca_panier_hour) ---
+-- alter table public.ca_day add column if not exists nb_paniers numeric not null default 0;
+-- alter table public.ca_month add column if not exists nb_paniers numeric not null default 0;
+-- create table if not exists public.ca_panier_hour ( ... comme ci-dessus ... );
+-- alter table public.ca_panier_hour enable row level security;
+-- create policy "read ca_panier_hour (authenticated)" on public.ca_panier_hour for select to authenticated using (true);
 

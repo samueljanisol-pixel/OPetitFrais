@@ -3,39 +3,151 @@ import os from "node:os";
 import path from "node:path";
 import { promises as fs } from "node:fs";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/server";
+import {
+  extractMonthCaFromJson,
+  extractNbPaniers,
+  extractPanierHeureBuckets,
+  extractProductLines,
+  extractTotalJourFromJson,
+  mergePanierHeureBuckets,
+} from "@/lib/ventesJson";
 
-const asNumber = (v: unknown) => {
-  const n = typeof v === "number" ? v : Number(v);
-  return Number.isFinite(n) ? n : 0;
-};
-const pickString = (v: unknown) => (typeof v === "string" && v.trim() ? v.trim() : "");
+function extractIsoDayFromFilename(name: string): string | null {
+  const m = name.match(/\d{4}-\d{2}-\d{2}/);
+  return m ? m[0] : null;
+}
 
-function extractProductLines(payload: unknown) {
-  if (!payload || typeof payload !== "object") return [];
-  const root = payload as Record<string, unknown>;
-  const ventes = root["ventes"];
-  if (!ventes || typeof ventes !== "object" || Array.isArray(ventes)) return [];
-  const out: Array<{ article: string; qty: number; total: number }> = [];
-  for (const v of Object.values(ventes as Record<string, unknown>)) {
-    if (!v || typeof v !== "object") continue;
-    const r = v as Record<string, unknown>;
-    const article = pickString(r.article) || pickString(r.libelle) || pickString(r.designation) || pickString(r.name);
-    if (!article) continue;
-    const qty = asNumber(r.qte) || asNumber(r.qty) || asNumber(r.quantite) || asNumber(r.quantity);
-    const total = asNumber(r.total) || asNumber(r.montant) || asNumber(r.ca) || asNumber(r.amount) || asNumber(r.total_ttc);
-    if (qty === 0 && total === 0) continue;
-    out.push({ article, qty, total });
+function ftpEnv() {
+  const host = process.env.FTP_HOST;
+  const user = process.env.FTP_USER;
+  const password = process.env.FTP_PASSWORD;
+  if (!host || !user || !password) throw new Error("FTP non configuré (FTP_HOST/FTP_USER/FTP_PASSWORD)");
+  return { host, user, password };
+}
+
+/** Alimente `/api/supabase/sync/status` (table `sync_runs`). */
+export async function recordSyncRun(payload: {
+  started_at: string;
+  status: "success" | "error";
+  message: string | null;
+  last_synced_date: string | null;
+  processed_days: number;
+}): Promise<void> {
+  const supabase = createSupabaseServiceRoleClient();
+  const finished_at = new Date().toISOString();
+  const { error } = await supabase.from("sync_runs").insert({
+    started_at: payload.started_at,
+    finished_at,
+    status: payload.status,
+    message: payload.message,
+    last_synced_date: payload.last_synced_date,
+    processed_days: payload.processed_days,
+  });
+  if (error) throw new Error(error.message);
+}
+
+/** Toutes les dates jour (YYYY-MM-DD) trouvées dans les noms de fichiers sous `/ventes`. */
+export async function listDayIsoDatesOnFtp(): Promise<string[]> {
+  const { host, user, password } = ftpEnv();
+  const ftp = new Client();
+  const found = new Set<string>();
+  try {
+    await ftp.access({ host, user, password, secure: false });
+    const magasinsAll = await ftp.list("/ventes");
+    const magasins = magasinsAll.filter((m) => m.isDirectory && m.name !== "M00");
+    for (const mag of magasins) {
+      const magasinPath = `/ventes/${mag.name}`;
+      const caisses = await ftp.list(magasinPath);
+      for (const c of caisses) {
+        if (!c.isDirectory) continue;
+        const caissePath = `${magasinPath}/${c.name}`;
+        const files = await ftp.list(caissePath);
+        for (const f of files) {
+          if (!f.name) continue;
+          const iso = extractIsoDayFromFilename(f.name);
+          if (iso) found.add(iso);
+        }
+      }
+    }
+  } finally {
+    ftp.close();
   }
-  return out;
+  return Array.from(found).sort((a, b) => a.localeCompare(b));
+}
+
+export type SyncDateResult = Awaited<ReturnType<typeof syncDateToSupabase>>;
+
+export type SyncAllProgress = {
+  date: string;
+  index: number;
+  total: number;
+  result?: SyncDateResult;
+};
+
+/**
+ * Synchronise vers Supabase chaque jour présent sur le FTP (fichiers `ventes_…YYYY-MM-DD…json`).
+ * Les mois sont mis à jour à chaque passage comme dans `syncDateToSupabase`.
+ */
+export async function syncAllFtpDatesToSupabase(options?: {
+  from?: string;
+  to?: string;
+  /** Limite optionnelle du nombre de jours traités (après filtre from/to). */
+  maxDays?: number;
+  onProgress?: (p: SyncAllProgress) => void;
+}): Promise<{
+  dates: string[];
+  processed: number;
+  errors: Array<{ date: string; message: string }>;
+}> {
+  let dates = await listDayIsoDatesOnFtp();
+  if (options?.from) dates = dates.filter((d) => d >= options.from!);
+  if (options?.to) dates = dates.filter((d) => d <= options.to!);
+  if (options?.maxDays != null && options.maxDays > 0) dates = dates.slice(0, options.maxDays);
+
+  const started_at = new Date().toISOString();
+  const errors: Array<{ date: string; message: string }> = [];
+  let processed = 0;
+  let lastSuccessDate: string | null = null;
+  const total = dates.length;
+
+  for (let i = 0; i < dates.length; i++) {
+    const date = dates[i];
+    try {
+      const result = await syncDateToSupabase(date);
+      processed += 1;
+      lastSuccessDate = date;
+      options?.onProgress?.({ date, index: i, total, result });
+    } catch (e) {
+      const message = e instanceof Error ? e.message : String(e);
+      errors.push({ date, message });
+      options?.onProgress?.({ date, index: i, total });
+    }
+  }
+
+  try {
+    await recordSyncRun({
+      started_at,
+      status: errors.length ? "error" : "success",
+      message:
+        errors.length > 0
+          ? `${errors.length} jour(s) en erreur (ex. ${errors[0]!.date}: ${errors[0]!.message})`
+          : total === 0
+            ? "Aucune date trouvée sur le FTP"
+            : null,
+      last_synced_date: lastSuccessDate,
+      processed_days: processed,
+    });
+  } catch {
+    /* ne pas masquer le résultat métier si l’historique sync_runs échoue */
+  }
+
+  return { dates, processed, errors };
 }
 
 export async function syncDateToSupabase(date: string) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new Error("date invalide (YYYY-MM-DD)");
 
-  const host = process.env.FTP_HOST;
-  const user = process.env.FTP_USER;
-  const password = process.env.FTP_PASSWORD;
-  if (!host || !user || !password) throw new Error("FTP non configuré (FTP_HOST/FTP_USER/FTP_PASSWORD)");
+  const { host, user, password } = ftpEnv();
 
   const ym = date.slice(0, 7);
   const monthFileName = `ventes_${ym}.json`;
@@ -48,6 +160,9 @@ export async function syncDateToSupabase(date: string) {
 
     const dayByMagasin: Record<string, number> = {};
     const monthByMagasin: Record<string, number> = {};
+    const paniersJourByMag: Record<string, number> = {};
+    const paniersMoisByMag: Record<string, number> = {};
+    const panierHeureByMag: Record<string, number[]> = {};
     const productAgg = new Map<string, { qty: number; total: number }>();
 
     for (const mag of magasins) {
@@ -77,23 +192,29 @@ export async function syncDateToSupabase(date: string) {
           }
 
           if (isDay) {
-            const tj =
-              parsed && typeof parsed === "object" && "total_jour" in (parsed as Record<string, unknown>)
-                ? asNumber((parsed as Record<string, unknown>).total_jour)
-                : 0;
+            const tj = extractTotalJourFromJson(parsed);
             dayByMagasin[mag.name] = (dayByMagasin[mag.name] ?? 0) + tj;
+
+            const buckets = extractPanierHeureBuckets(parsed);
+            let nbJour = extractNbPaniers(parsed);
+            if (!nbJour && buckets.length) nbJour = buckets.reduce((a, b) => a + b, 0);
+            if (nbJour > 0) paniersJourByMag[mag.name] = (paniersJourByMag[mag.name] ?? 0) + nbJour;
+            if (buckets.length) {
+              panierHeureByMag[mag.name] = mergePanierHeureBuckets(panierHeureByMag[mag.name], buckets);
+            }
 
             const lines = extractProductLines(parsed);
             for (const l of lines) {
-              const prev = productAgg.get(l.article) ?? { qty: 0, total: 0 };
-              productAgg.set(l.article, { qty: prev.qty + l.qty, total: prev.total + l.total });
+              const prev = productAgg.get(l.name) ?? { qty: 0, total: 0 };
+              productAgg.set(l.name, { qty: prev.qty + l.qty, total: prev.total + l.ca });
             }
           } else if (isMonth) {
-            const lines = extractProductLines(parsed);
-            if (lines.length) {
-              const sum = lines.reduce((acc, l) => acc + l.total, 0);
-              monthByMagasin[mag.name] = (monthByMagasin[mag.name] ?? 0) + sum;
+            const monthCa = extractMonthCaFromJson(parsed);
+            if (monthCa > 0) {
+              monthByMagasin[mag.name] = (monthByMagasin[mag.name] ?? 0) + monthCa;
             }
+            const nbMois = extractNbPaniers(parsed);
+            if (nbMois > 0) paniersMoisByMag[mag.name] = (paniersMoisByMag[mag.name] ?? 0) + nbMois;
           }
         }
       }
@@ -101,16 +222,40 @@ export async function syncDateToSupabase(date: string) {
 
     const supabase = createSupabaseServiceRoleClient();
 
-    const caDayRows = Object.entries(dayByMagasin).map(([magasin, total]) => ({ date, magasin, total }));
+    const caDayRows = Object.entries(dayByMagasin).map(([magasin, total]) => ({
+      date,
+      magasin,
+      total,
+      nb_paniers: paniersJourByMag[magasin] ?? 0,
+    }));
     if (caDayRows.length) {
       const { error } = await supabase.from("ca_day").upsert(caDayRows);
       if (error) throw new Error(error.message);
     }
 
-    const caMonthRows = Object.entries(monthByMagasin).map(([magasin, total]) => ({ ym, magasin, total }));
+    const caMonthRows = Object.entries(monthByMagasin).map(([magasin, total]) => ({
+      ym,
+      magasin,
+      total,
+      nb_paniers: paniersMoisByMag[magasin] ?? 0,
+    }));
     if (caMonthRows.length) {
       const { error } = await supabase.from("ca_month").upsert(caMonthRows);
       if (error) throw new Error(error.message);
+    }
+
+    const { error: delHourErr } = await supabase.from("ca_panier_hour").delete().eq("date", date);
+    if (delHourErr) throw new Error(delHourErr.message);
+
+    const hourRows: Array<{ date: string; magasin: string; hour: number; nb: number }> = [];
+    for (const [magasin, buckets] of Object.entries(panierHeureByMag)) {
+      buckets.forEach((nb, hour) => {
+        if (nb > 0) hourRows.push({ date, magasin, hour, nb });
+      });
+    }
+    if (hourRows.length) {
+      const { error: hourErr } = await supabase.from("ca_panier_hour").insert(hourRows);
+      if (hourErr) throw new Error(hourErr.message);
     }
 
     const prodRows = Array.from(productAgg.entries()).map(([article, v]) => ({
@@ -127,7 +272,12 @@ export async function syncDateToSupabase(date: string) {
     return {
       date,
       ym,
-      written: { ca_day: caDayRows.length, ca_month: caMonthRows.length, ca_product_day: prodRows.length },
+      written: {
+        ca_day: caDayRows.length,
+        ca_month: caMonthRows.length,
+        ca_product_day: prodRows.length,
+        ca_panier_hour: hourRows.length,
+      },
     };
   } finally {
     ftp.close();

@@ -3,23 +3,12 @@
 import Image from 'next/image'
 import Link from 'next/link'
 import { useEffect, useMemo, useState } from 'react'
-import { useSyncStatus } from '@/lib/sync/useSyncStatus'
+import { fetchHistoriqueFromSupabase } from '@/lib/ca/fromSupabase'
+import type { HistoriqueDayRow, HistoriquePayload } from '@/lib/ca/types'
+import { createSupabaseBrowserClient } from '@/lib/supabase/client'
+import SyncStatusFooter from '@/components/SyncStatusFooter'
 
-type DayRow = {
-  date: string // YYYY-MM-DD
-  totalGlobal: number
-  magasins: Record<string, number>
-}
-
-type ApiPayload =
-  | { error: string }
-  | {
-      from: string
-      to: string
-      days: DayRow[]
-    }
-
-type ProgressEvent = { phase?: string; current?: number; total?: number }
+type DayRow = HistoriqueDayRow
 
 const labelMagasin = (raw: string) => {
   const m = raw.match(/^M(\d+)$/i)
@@ -32,11 +21,9 @@ const isoToUtcDate = (iso: string) => new Date(`${iso}T00:00:00Z`)
 const monthKey = (iso: string) => iso.slice(0, 7) // YYYY-MM
 
 export default function HistoriqueCA() {
-  const [data, setData] = useState<ApiPayload | null>(null)
+  const [data, setData] = useState<HistoriquePayload | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [progress, setProgress] = useState<{ phase: string; current: number; total: number } | null>(null)
-  const lastSync = useSyncStatus()
 
   const todayIso = useMemo(() => new Date().toISOString().split('T')[0], [])
   const yearStartIso = useMemo(() => `${todayIso.slice(0, 4)}-01-01`, [todayIso])
@@ -51,73 +38,33 @@ export default function HistoriqueCA() {
   }, [])
 
   useEffect(() => {
+    let cancelled = false
     setLoading(true)
     setError(null)
-    setProgress({ phase: 'Démarrage…', current: 0, total: 1 })
 
-    let streamFinished = false
-
-    const es = new EventSource(
-      `/api/ca/historique/stream?from=${encodeURIComponent(yearStartIso)}&to=${encodeURIComponent(todayIso)}`,
-    )
-
-    const onProgress = (ev: MessageEvent<string>) => {
+    ;(async () => {
       try {
-        const p = JSON.parse(ev.data) as ProgressEvent
-        setProgress({
-          phase: p.phase ?? 'Chargement…',
-          current: typeof p.current === 'number' ? p.current : 0,
-          total: typeof p.total === 'number' ? p.total : 1,
-        })
-      } catch {}
-    }
-
-    const onDone = (ev: MessageEvent) => {
-      streamFinished = true
-      es.close()
-      try {
-        const json = JSON.parse(ev.data) as ApiPayload
-        if ('error' in json) setError(json.error)
-        setData(json)
-      } catch {
-        setError('Données invalides')
-        setData({ error: 'Données invalides' })
-      } finally {
-        setLoading(false)
-        setProgress(null)
-      }
-    }
-
-    const onStreamError = (ev: Event) => {
-      if (streamFinished) return
-      streamFinished = true
-      es.close()
-      const msg = ev as MessageEvent
-      if (typeof msg.data === 'string' && msg.data.length > 0) {
-        try {
-          const json = JSON.parse(msg.data) as { error?: string }
-          const err = json?.error ?? 'Erreur'
-          setError(err)
-          setData({ error: err })
-        } catch {
-          setError('Erreur')
-          setData({ error: 'Erreur' })
+        const supabase = createSupabaseBrowserClient()
+        const res = await fetchHistoriqueFromSupabase(supabase, yearStartIso, todayIso)
+        if (cancelled) return
+        if ('error' in res) {
+          setError(res.error)
+          setData({ error: res.error })
+        } else {
+          setData(res.data)
         }
-      } else {
-        setError('Connexion interrompue')
-        setData({ error: 'Connexion interrompue' })
+      } catch (e) {
+        if (cancelled) return
+        const msg = e instanceof Error ? e.message : 'Erreur inconnue'
+        setError(msg)
+        setData({ error: msg })
+      } finally {
+        if (!cancelled) setLoading(false)
       }
-      setLoading(false)
-      setProgress(null)
-    }
-
-    es.addEventListener('progress', onProgress as EventListener)
-    es.addEventListener('done', onDone as EventListener)
-    es.addEventListener('error', onStreamError)
+    })()
 
     return () => {
-      streamFinished = true
-      es.close()
+      cancelled = true
     }
   }, [todayIso, yearStartIso])
 
@@ -184,22 +131,7 @@ export default function HistoriqueCA() {
       timeZone: 'UTC',
     }).format(isoToUtcDate(iso))
 
-  const lastSyncLabel = useMemo(() => {
-    if (!lastSync?.finished_at) return null
-    const d = new Date(lastSync.finished_at)
-    const fmt = new Intl.DateTimeFormat('fr-FR', {
-      weekday: 'short',
-      day: '2-digit',
-      month: 'short',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-    })
-    return fmt.format(d)
-  }, [lastSync?.finished_at])
-
   if (loading) {
-    const pct = Math.round(((progress?.current ?? 0) / Math.max(1, progress?.total ?? 1)) * 100)
     return (
       <main className="min-h-[calc(100vh-0px)] flex items-center justify-center bg-gradient-to-br from-emerald-50 via-white to-rose-50 px-6 py-16">
         <div className="w-full max-w-md rounded-2xl border border-emerald-100 bg-white/80 p-6 shadow-sm backdrop-blur">
@@ -215,17 +147,7 @@ export default function HistoriqueCA() {
           <div className="mt-6 h-2 w-full overflow-hidden rounded-full bg-emerald-100">
             <div className="h-full w-1/2 animate-pulse rounded-full bg-emerald-500/70" />
           </div>
-          <div className="mt-3 text-sm text-slate-600">{progress?.phase ?? 'Chargement…'}</div>
-          <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-rose-100">
-            <div
-              className="h-full rounded-full bg-rose-500/70 transition-[width] duration-300"
-              style={{ width: `${pct}%` }}
-            />
-          </div>
-          <div className="mt-2 flex items-center justify-between text-xs text-slate-600">
-            <span>{progress ? `${progress.current}/${progress.total}` : '—'}</span>
-            <span>{progress ? `${pct}%` : ''}</span>
-          </div>
+          <div className="mt-3 text-sm text-slate-600">Chargement…</div>
         </div>
       </main>
     )
@@ -242,6 +164,10 @@ export default function HistoriqueCA() {
         <div className="w-full max-w-xl rounded-2xl border border-rose-200 bg-white/90 p-6 shadow-sm backdrop-blur">
           <div className="text-lg font-semibold text-slate-900">Impossible de charger l’historique</div>
           <div className="mt-3 rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-900">{err}</div>
+          <div className="mt-3 text-xs text-slate-600">
+            Vérifie <span className="font-medium">NEXT_PUBLIC_SUPABASE_URL</span>,{' '}
+            <span className="font-medium">NEXT_PUBLIC_SUPABASE_ANON_KEY</span> et la session (RLS).
+          </div>
           <div className="mt-4">
             <Link className="text-sm font-semibold text-emerald-700 hover:underline" href="/">
               Revenir au tableau de bord
@@ -272,11 +198,6 @@ export default function HistoriqueCA() {
               <p className="mt-1 text-sm text-slate-600">
                 Période: <span className="font-medium">{computed.from}</span> → <span className="font-medium">{computed.to}</span>
               </p>
-              {lastSyncLabel ? (
-                <p className="mt-1 text-sm text-slate-600">
-                  Dernière synchro : <span className="font-semibold text-slate-800">{lastSyncLabel}</span>
-                </p>
-              ) : null}
             </div>
           </div>
 
@@ -357,6 +278,8 @@ export default function HistoriqueCA() {
             ← Retour au tableau de bord
           </Link>
         </div>
+
+        <SyncStatusFooter />
       </div>
     </main>
   )

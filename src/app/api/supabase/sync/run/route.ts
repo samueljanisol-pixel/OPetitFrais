@@ -31,7 +31,16 @@ export async function POST(req: Request) {
     req.headers.get("x-cron-secret") ||
     bearer;
   const expected = process.env.CRON_SECRET || process.env.SYNC_TOKEN;
-  if (!expected || token !== expected) {
+  if (!expected) {
+    return NextResponse.json(
+      {
+        error: "Unauthorized",
+        hint: "Définis CRON_SECRET ou SYNC_TOKEN dans .env.local (puis redémarre next dev).",
+      },
+      { status: 401 },
+    );
+  }
+  if (!token || token !== expected) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
