@@ -1,0 +1,201 @@
+---
+alwaysApply: true
+---
+
+---
+description: N'accéder qu'aux propriétés déclarées dans le type TypeScript
+globs: "**/*.{ts,tsx}"
+alwaysApply: true
+---
+
+# TypeScript — Cohérence type / usage
+
+## Règle critique : Propriétés utilisées = Propriétés du type
+
+Lorsqu'on accède à une propriété sur un objet (ex: `result.message`, `data.error`), cette propriété **doit exister** dans le type déclaré de l'objet. Sinon : erreur de compilation TypeScript.
+
+### ❌ Erreur fréquente
+
+```tsx
+const [result, setResult] = useState<{ success: boolean; error?: string } | null>(null)
+
+// ...
+title={result.error ?? result.message}  // Property 'message' does not exist
+{result.authOnly ? '...' : '...'}         // Property 'authOnly' does not exist
+```
+
+### ✅ Correct
+
+```tsx
+// Utiliser uniquement les propriétés du type
+title={result.error ?? 'Erreur'}
+{result.success ? `✓ ${result.trackId}` : `✗ ${result.error}`}
+```
+
+## Argument `string | undefined` passé où `string` attendu
+
+Quand une fonction attend `string` et qu'on lui passe `string | undefined` (ex: `process.env.X`), TypeScript refuse : `Type 'undefined' is not assignable to type 'string'`.
+
+### ❌ Erreur fréquente
+
+```ts
+const clientId = process.env.GLS_API_CLIENT_ID
+const missing: string[] = []
+if (!clientId) missing.push('GLS_API_CLIENT_ID')
+if (missing.length > 0) return ...
+// clientId reste string | undefined pour TypeScript
+await glsGetToken(clientId, clientSecret, env)  // Erreur
+```
+
+### ✅ Correct
+
+```ts
+if (!clientId || !clientSecret || !contactId) {
+  // ...
+  return
+}
+// Après le return, TypeScript rétrécit le type : clientId, clientSecret, contactId sont string
+await glsGetToken(clientId, clientSecret, env)
+```
+
+## Union discriminée : ne pas construire un objet avec un discriminant union
+
+Quand un type est une union discriminée (ex: `type: 'row' | 'zone'`), il ne faut pas construire un objet intermédiaire avec `type` encore unionné puis essayer de le retourner comme un membre précis de l'union.
+
+Avec `flatMap()` ou `map()`, TypeScript peut en plus inférer un mauvais type commun entre les branches. Si l'inférence devient instable, préférer une accumulation typée (`const items: MyUnion[] = []`) puis `push(...)`.
+
+### ❌ Erreur fréquente
+
+```ts
+const type = raw.type === 'zone' ? 'zone' : 'row'
+
+const base = {
+  type,
+  label,
+}
+
+if (type === 'zone') {
+  return [base] // TypeScript garde `type: 'zone' | 'row'`
+}
+```
+
+### ✅ Correct
+
+```ts
+const type = raw.type === 'zone' ? 'zone' : 'row'
+
+const base = { label }
+
+if (type === 'zone') {
+  return [{ ...base, type: 'zone' as const }]
+}
+
+return [{ ...base, type: 'row' as const, row_key }]
+```
+
+```ts
+const items: StoragePlanElement[] = []
+
+for (const raw of values) {
+  if (isZone(raw)) {
+    items.push({ ...base, type: 'zone' as const })
+    continue
+  }
+
+  items.push({ ...base, type: 'row' as const, row_key })
+}
+
+return items
+```
+
+## Valeur optionnelle capturée dans un callback
+
+Même après un garde (`if (!x) return`), TypeScript peut perdre le narrowing quand la valeur est réutilisée dans un callback imbriqué (`setState`, `map`, `forEach`, `Promise`, etc.).
+
+### ❌ Erreur fréquente
+
+```ts
+if (!json.images) return
+
+setState((prev) => {
+  for (const [key, value] of Object.entries(json.images)) {
+    // Erreur possible: json.images est vu comme undefined ici
+  }
+  return prev
+})
+```
+
+### ✅ Correct
+
+```ts
+if (!json.images) return
+const images = json.images
+
+setState((prev) => {
+  for (const [key, value] of Object.entries(images)) {
+    // OK: la constante locale est déjà rétrécie
+  }
+  return prev
+})
+```
+
+## Relations Supabase imbriquées : souvent des tableaux, pas des objets
+
+Avec Supabase, un `select('relation(col)')` ou `select('relation!inner(col)')` peut être typé comme **tableau de lignes liées**, même si en pratique on pense n'avoir qu'un seul enregistrement. Selon la relation, la version de client ou l'inférence effective du runtime, on peut aussi recevoir **un objet unique**.
+
+Erreur fréquente : annoter le callback de `map()` avec un type plus étroit (`apps?: { code?: string }`) alors que l'élément réel est plutôt `{ apps: { code: string | null }[] }`.
+
+### ❌ Erreur fréquente
+
+```ts
+const codes = (userApps ?? [])
+  .map((row: { apps?: { code?: string } }) => row.apps?.code as string)
+  .filter(Boolean)
+```
+
+### ✅ Correct
+
+```ts
+type UserAppRow = {
+  apps: Array<{ code: string | null }> | null
+}
+
+const codes = ((userApps ?? []) as UserAppRow[]).flatMap((row) =>
+  (row.apps ?? []).flatMap((app) =>
+    typeof app.code === 'string' && app.code.length > 0 ? [app.code] : []
+  )
+)
+```
+
+### ✅ Correct si le runtime peut renvoyer objet **ou** tableau
+
+```ts
+type UserAppRelation = { code: string | null }
+type UserAppRow = {
+  apps: UserAppRelation | UserAppRelation[] | null
+}
+
+const codes = ((userApps ?? []) as UserAppRow[]).flatMap((row) => {
+  const apps = row.apps == null ? [] : Array.isArray(row.apps) ? row.apps : [row.apps]
+  return apps.flatMap((app) =>
+    typeof app.code === 'string' && app.code.length > 0 ? [app.code] : []
+  )
+})
+```
+
+### Règle pratique
+
+- Ne pas supposer qu'une relation Supabase imbriquée est un objet unique.
+- Vérifier si le résultat est un tableau (`T[]`) et utiliser `flatMap()`/`map()` en conséquence.
+- Si le doute existe, normaliser explicitement le runtime (`Array.isArray(...) ? ... : [...]`) avant d'itérer.
+- Ne pas annoter le paramètre du callback avec un type plus étroit que le type inféré de la requête.
+
+## Bonnes pratiques
+
+1. **Définir le type des réponses API** : si l'API retourne `{ success, error?, trackId? }`, typer explicitement et n'utiliser que ces champs.
+2. **Éviter les propriétés "fantômes"** : ne pas référencer `message` si le type n'a que `error`, ni `authOnly` si le type ne l'inclut pas.
+3. **Rétrécir les types avant usage** : pour `process.env.X` ou valeurs optionnelles, faire un early return sur `!x` avant d'appeler une fonction qui attend `string`.
+4. **Figer explicitement le discriminant** : pour une union discriminée, retourner `type: '...' as const` dans chaque branche spécifique.
+5. **Capturer la valeur rétrécie dans une constante** avant de l'utiliser dans un callback imbriqué.
+6. **Modéliser correctement les relations Supabase** : une relation imbriquée peut être un tableau même avec `!inner`; typer et itérer en conséquence.
+7. **Vérifier avant build** : exécuter `npm run build` pour détecter les erreurs TypeScript avant commit.

@@ -54,6 +54,35 @@ function extractProductLines(payload: unknown): Array<{ name: string; ca: number
   return out;
 }
 
+/** Nombre de paniers / tickets en tête de fichier JSON (jour ou mois). */
+function extractNbPaniers(parsed: unknown): number {
+  if (!parsed || typeof parsed !== "object") return 0;
+  const r = parsed as Record<string, unknown>;
+  const n =
+    asNumber(r.nb_paniers) ||
+    asNumber(r.nbPaniers) ||
+    asNumber(r.nombre_paniers) ||
+    asNumber(r.NbrPanier) ||
+    asNumber(r.nbr_panier);
+  return Number.isFinite(n) && n >= 0 ? n : 0;
+}
+
+type PanierMag = { nbPaniers: number; panierMoyen: number | null };
+
+function buildPanierForMags(
+  mags: string[],
+  caByMag: Record<string, number>,
+  nbByMag: Record<string, number>,
+): Record<string, PanierMag> {
+  const out: Record<string, PanierMag> = {};
+  for (const mag of mags) {
+    const nb = nbByMag[mag] ?? 0;
+    const ca = caByMag[mag] ?? 0;
+    out[mag] = { nbPaniers: nb, panierMoyen: nb > 0 ? ca / nb : null };
+  }
+  return out;
+}
+
 function sseEvent(event: string, data: unknown) {
   return `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
 }
@@ -86,14 +115,19 @@ export async function GET(req: NextRequest) {
   const dateJ7 = isoDateMinusDays(date, 7);
 
   const client = new Client();
+  /** Partagé avec `cancel` : le client peut fermer le flux avant la fin du traitement FTP. */
+  const streamState = { closed: false };
 
   const stream = new ReadableStream<Uint8Array>({
     start(controller) {
       const enc = new TextEncoder();
-      let closed = false;
       const send = (event: string, data: unknown) => {
-        if (closed) return;
-        controller.enqueue(enc.encode(sseEvent(event, data)));
+        if (streamState.closed) return;
+        try {
+          controller.enqueue(enc.encode(sseEvent(event, data)));
+        } catch {
+          streamState.closed = true;
+        }
       };
 
       const run = async () => {
@@ -137,6 +171,8 @@ export async function GET(req: NextRequest) {
 
           // Par magasin, on cumulera
           const dayByMag: Record<string, number> = {};
+          const paniersJourByMag: Record<string, number> = {};
+          const paniersMoisByMag: Record<string, number> = {};
 
           for (const item of plan) {
             send("progress", {
@@ -175,6 +211,8 @@ export async function GET(req: NextRequest) {
                   : 0;
               if (isDate) {
                 totalCaisse += tj;
+                const nbPan = extractNbPaniers(parsed);
+                paniersJourByMag[item.mag] = (paniersJourByMag[item.mag] ?? 0) + nbPan;
                 if (includeTop) {
                   const lines = extractProductLines(parsed);
                   if (lines.length) sawAnyProductLine = true;
@@ -184,6 +222,8 @@ export async function GET(req: NextRequest) {
                   }
                 }
               } else if (isMonth) {
+                const nbPanMois = extractNbPaniers(parsed);
+                paniersMoisByMag[item.mag] = (paniersMoisByMag[item.mag] ?? 0) + nbPanMois;
                 const lines = extractProductLines(parsed);
                 if (lines.length) monthTotalCaisse += lines.reduce((acc, l) => acc + (Number.isFinite(l.ca) ? l.ca : 0), 0);
               } else if (isJ1) {
@@ -211,10 +251,34 @@ export async function GET(req: NextRequest) {
             monthTotalGlobal += monthByMagasin[mag] ?? 0;
           }
 
+          const panierJour = buildPanierForMags(Object.keys(result), dayByMag, paniersJourByMag);
+          let nbPaniersJourGlobal = 0;
+          for (const v of Object.values(panierJour)) nbPaniersJourGlobal += v.nbPaniers;
+          const panierJourGlobal: PanierMag = {
+            nbPaniers: nbPaniersJourGlobal,
+            panierMoyen: nbPaniersJourGlobal > 0 ? totalGlobal / nbPaniersJourGlobal : null,
+          };
+
+          const panierMois = buildPanierForMags(Object.keys(result), monthByMagasin, paniersMoisByMag);
+          let nbPaniersMoisGlobal = 0;
+          for (const v of Object.values(panierMois)) nbPaniersMoisGlobal += v.nbPaniers;
+          const panierMoisGlobal: PanierMag = {
+            nbPaniers: nbPaniersMoisGlobal,
+            panierMoyen: nbPaniersMoisGlobal > 0 ? monthTotalGlobal / nbPaniersMoisGlobal : null,
+          };
+
           const payload: Record<string, unknown> = {
             totalGlobal,
             magasins: result,
-            month: { ym, totalGlobal: monthTotalGlobal, magasins: monthByMagasin },
+            month: {
+              ym,
+              totalGlobal: monthTotalGlobal,
+              magasins: monthByMagasin,
+              panierMois,
+              panierMoisGlobal,
+            },
+            panierJour,
+            panierJourGlobal,
             ...(includeCompare ? { compare: { date, j1: { date: dateJ1, totalGlobal: totalJ1 }, j7: { date: dateJ7, totalGlobal: totalJ7 } } } : {}),
           };
 
@@ -231,12 +295,18 @@ export async function GET(req: NextRequest) {
           send("progress", { phase: "Terminé", current: totalSteps, total: totalSteps });
           send("done", payload);
         } catch (e) {
-          send("error", { error: e instanceof Error ? e.message : "Erreur" });
+          try {
+            send("error", { error: e instanceof Error ? e.message : "Erreur" });
+          } catch {
+            /* flux déjà fermé côté client */
+          }
         } finally {
           client.close();
-          if (!closed && controller) {
-            closed = true
-            controller.close()
+          streamState.closed = true;
+          try {
+            controller.close();
+          } catch {
+            /* ReadableStreamDefaultController déjà fermé (abort / fin doublon) */
           }
         }
       };
@@ -253,6 +323,7 @@ export async function GET(req: NextRequest) {
       run().finally(() => clearInterval(ping));
     },
     cancel() {
+      streamState.closed = true;
       client.close();
     },
   });

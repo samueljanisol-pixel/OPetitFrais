@@ -1,14 +1,25 @@
 'use client'
 
 import Image from 'next/image'
-import Link from 'next/link'
 import { useEffect, useMemo, useState } from 'react'
+import { Button, Stack, TextField } from '@mui/material'
+import AppLink from '@/components/AppLink'
 import { useSyncStatus } from '@/lib/sync/useSyncStatus'
+
+type PanierMag = { nbPaniers: number; panierMoyen: number | null }
 
 type CaResponse = {
   totalGlobal: number
   magasins: Record<string, Record<string, number>>
-  month?: { ym: string; totalGlobal: number; magasins: Record<string, number> }
+  month?: {
+    ym: string
+    totalGlobal: number
+    magasins: Record<string, number>
+    panierMois?: Record<string, PanierMag>
+    panierMoisGlobal?: PanierMag
+  }
+  panierJour?: Record<string, PanierMag>
+  panierJourGlobal?: PanierMag
   compare?: { date: string; j1: { date: string; totalGlobal: number }; j7: { date: string; totalGlobal: number } }
   topProduits?: { available: boolean; byCa: Array<{ name: string; ca: number; qty: number }>; byQty: Array<{ name: string; ca: number; qty: number }> }
   error?: string
@@ -36,6 +47,15 @@ export default function Home() {
       return `${nf.format(n)} DH`
     }
   }, [])
+
+  const formatCount = useMemo(
+    () => (value: unknown) => {
+      const n = typeof value === 'number' ? value : Number(value)
+      if (!Number.isFinite(n)) return '—'
+      return new Intl.NumberFormat('fr-FR', { maximumFractionDigits: 0 }).format(n)
+    },
+    [],
+  )
 
   const selectedDateLabel = useMemo(() => {
     const d = new Date(`${date}T00:00:00Z`)
@@ -75,6 +95,9 @@ export default function Home() {
     setError(null)
     setProgress({ phase: 'Démarrage…', current: 0, total: 1 })
 
+    /** Évite de traiter `error` après un `done` (fermeture TCP = erreur côté EventSource, reconnexion sinon). */
+    let streamFinished = false
+
     const es = new EventSource(
       `/api/ca/stream?date=${encodeURIComponent(date)}&includeCompare=1&includeTop=1`,
     )
@@ -91,6 +114,8 @@ export default function Home() {
     }
 
     const onDone = (ev: MessageEvent<string>) => {
+      streamFinished = true
+      es.close()
       try {
         const json = JSON.parse(ev.data) as CaResponse
         setData(json)
@@ -100,40 +125,41 @@ export default function Home() {
       } finally {
         setLoading(false)
         setProgress(null)
-        es.close()
       }
     }
 
-    const onError = (ev: MessageEvent<string>) => {
-      try {
-        const json = JSON.parse(ev.data) as { error?: string }
-        setError(json?.error ?? 'Erreur')
-      } catch {
-        setError('Erreur')
-      } finally {
-        setLoading(false)
-        setProgress(null)
-        es.close()
+    /** Même nom d’événement `error` pour erreur applicative SSE et pour coupure réseau — un seul handler. */
+    const onStreamError = (ev: Event) => {
+      if (streamFinished) return
+      streamFinished = true
+      es.close()
+      const msg = ev as MessageEvent
+      if (typeof msg.data === 'string' && msg.data.length > 0) {
+        try {
+          const json = JSON.parse(msg.data) as { error?: string }
+          setError(json?.error ?? 'Erreur')
+        } catch {
+          setError('Erreur')
+        }
+      } else {
+        setError('Connexion interrompue')
       }
+      setLoading(false)
+      setProgress(null)
     }
 
     es.addEventListener('progress', onProgress as EventListener)
     es.addEventListener('done', onDone as EventListener)
-    es.addEventListener('error', onError as EventListener)
-    es.onerror = () => {
-      // Si la connexion SSE tombe (proxy/timeout), on affiche une erreur claire.
-      setError('Connexion interrompue')
-      setLoading(false)
-      setProgress(null)
-      es.close()
-    }
+    es.addEventListener('error', onStreamError)
 
     return () => {
+      streamFinished = true
       es.close()
     }
   }, [date, refreshNonce])
 
-  if (loading || !data)
+  /* Sans `&& !error` : après échec SSE, `data` reste null → on restait bloqués sur l’écran de chargement au lieu du message d’erreur. */
+  if (loading || (!data && !error))
     return (
       <main className="min-h-[calc(100vh-0px)] flex items-center justify-center bg-gradient-to-br from-emerald-50 via-white to-rose-50 px-6 py-16">
         <div className="w-full max-w-md rounded-2xl border border-emerald-100 bg-white/80 p-6 shadow-sm backdrop-blur">
@@ -238,6 +264,9 @@ export default function Home() {
     )
   }
 
+  /* Après les gardes ci-dessus, `data` est toujours défini ; garde explicite pour TypeScript. */
+  if (!data) return null
+
   const isoMinusDays = (iso: string, days: number) => {
     const [yy, mm, dd] = iso.split('-').map(x => Number(x))
     if (!yy || !mm || !dd) return iso
@@ -340,38 +369,61 @@ export default function Home() {
           </div>
 
           <div className="flex flex-col gap-3 sm:items-end">
-            <div className="flex flex-wrap items-center gap-2">
-              <Link
+            <Stack
+              direction="row"
+              useFlexGap
+              spacing={1}
+              sx={{ flexWrap: 'wrap', alignItems: 'center' }}
+            >
+              <Button
+                component={AppLink}
                 href="/historique-ca"
-                className="rounded-xl bg-emerald-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-emerald-700"
+                variant="contained"
+                color="success"
+                size="medium"
+                sx={{ borderRadius: 3, textTransform: 'none', fontWeight: 600 }}
               >
                 Historique
-              </Link>
-              <button
+              </Button>
+              <Button
                 type="button"
+                variant="outlined"
+                color="success"
+                size="medium"
                 onClick={goPrevDay}
-                className="rounded-xl border border-emerald-200 bg-white/80 px-3 py-2 text-sm font-medium text-emerald-800 shadow-sm backdrop-blur hover:bg-white"
+                sx={{ borderRadius: 3, textTransform: 'none', fontWeight: 600, bgcolor: 'rgba(255,255,255,0.85)' }}
               >
                 Jour précédent
-              </button>
-              <button
+              </Button>
+              <Button
                 type="button"
+                variant="outlined"
+                color="success"
+                size="medium"
                 onClick={() => setRefreshNonce(n => n + 1)}
-                className="rounded-xl border border-emerald-200 bg-white/80 px-3 py-2 text-sm font-medium text-emerald-800 shadow-sm backdrop-blur hover:bg-white"
+                sx={{ borderRadius: 3, textTransform: 'none', fontWeight: 600, bgcolor: 'rgba(255,255,255,0.85)' }}
               >
                 Actualiser
-              </button>
-              <label className="rounded-xl border border-slate-200 bg-white/80 px-3 py-2 text-sm text-slate-700 shadow-sm backdrop-blur">
-                <span className="mr-2 text-xs font-medium uppercase tracking-wide text-slate-500">Date</span>
-                <input
-                  type="date"
-                  value={date}
-                  max={maxIso}
-                  onChange={e => setDate(e.target.value)}
-                  className="bg-transparent text-sm outline-none"
-                />
-              </label>
-            </div>
+              </Button>
+              <TextField
+                label="Date"
+                type="date"
+                value={date}
+                size="small"
+                onChange={e => setDate(e.target.value)}
+                slotProps={{
+                  htmlInput: { max: maxIso },
+                  inputLabel: { shrink: true },
+                }}
+                sx={{
+                  minWidth: 168,
+                  '& .MuiOutlinedInput-root': {
+                    borderRadius: 3,
+                    bgcolor: 'rgba(255,255,255,0.85)',
+                  },
+                }}
+              />
+            </Stack>
 
             <div className="rounded-2xl border border-emerald-100 bg-white/80 px-5 py-4 shadow-sm backdrop-blur">
               <div className="text-xs font-medium uppercase tracking-wide text-emerald-700/80">
@@ -380,6 +432,24 @@ export default function Home() {
               <div className="mt-1 text-2xl font-semibold text-slate-900">
                 {formatMAD(data.totalGlobal)}
               </div>
+              {data.panierJourGlobal != null ? (
+                <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 border-t border-emerald-100 pt-3 text-sm text-slate-600">
+                  <span>
+                    Paniers :{' '}
+                    <span className="font-semibold text-slate-800">
+                      {formatCount(data.panierJourGlobal.nbPaniers)}
+                    </span>
+                  </span>
+                  <span>
+                    Panier moyen :{' '}
+                    <span className="font-semibold text-slate-800">
+                      {data.panierJourGlobal.panierMoyen != null
+                        ? formatMAD(data.panierJourGlobal.panierMoyen)
+                        : '—'}
+                    </span>
+                  </span>
+                </div>
+              ) : null}
               <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-rose-100">
                 <div className="h-full w-full rounded-full bg-rose-500/70" />
               </div>
@@ -394,6 +464,24 @@ export default function Home() {
                 Total du mois {monthLabel ? `(${monthLabel})` : ''}
               </div>
               <div className="mt-1 text-2xl font-semibold text-slate-900">{formatMAD(month?.totalGlobal)}</div>
+              {month?.panierMoisGlobal != null ? (
+                <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 border-t border-slate-100 pt-3 text-sm text-slate-600">
+                  <span>
+                    Paniers :{' '}
+                    <span className="font-semibold text-slate-800">
+                      {formatCount(month.panierMoisGlobal.nbPaniers)}
+                    </span>
+                  </span>
+                  <span>
+                    Panier moyen :{' '}
+                    <span className="font-semibold text-slate-800">
+                      {month.panierMoisGlobal.panierMoyen != null
+                        ? formatMAD(month.panierMoisGlobal.panierMoyen)
+                        : '—'}
+                    </span>
+                  </span>
+                </div>
+              ) : null}
             </div>
           </div>
         </header>
@@ -479,6 +567,29 @@ export default function Home() {
                 <span className="font-medium text-slate-700">Part du CA global (jour)</span>
               </div>
 
+              {data.panierJour?.[mag] != null ? (
+                <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                  <div className="rounded-xl border border-emerald-100 bg-emerald-50/50 p-4 shadow-sm">
+                    <div className="text-xs font-medium uppercase tracking-wide text-emerald-800/80">
+                      Paniers (jour)
+                    </div>
+                    <div className="mt-1 text-lg font-semibold text-slate-900">
+                      {formatCount(data.panierJour[mag].nbPaniers)}
+                    </div>
+                  </div>
+                  <div className="rounded-xl border border-emerald-100 bg-emerald-50/50 p-4 shadow-sm">
+                    <div className="text-xs font-medium uppercase tracking-wide text-emerald-800/80">
+                      Panier moyen (jour)
+                    </div>
+                    <div className="mt-1 text-lg font-semibold text-slate-900">
+                      {data.panierJour[mag].panierMoyen != null
+                        ? formatMAD(data.panierJour[mag].panierMoyen)
+                        : '—'}
+                    </div>
+                  </div>
+                </div>
+              ) : null}
+
               <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                 {(() => {
                   const entries = sortedCaisseEntries(caisses)
@@ -513,7 +624,9 @@ export default function Home() {
                 })()}
               </div>
 
-              <div className="mt-4 grid gap-3 sm:grid-cols-2">
+              <div
+                className={`mt-4 grid gap-3 ${month?.panierMois?.[mag] != null ? 'sm:grid-cols-2 lg:grid-cols-3' : 'sm:grid-cols-2'}`}
+              >
                 <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
                   <div className="text-xs font-medium uppercase tracking-wide text-slate-500">Total mois magasin</div>
                   <div className="mt-1 text-base font-semibold text-slate-900">
@@ -530,6 +643,28 @@ export default function Home() {
                     <span>du mois global</span>
                   </div>
                 </div>
+                {month?.panierMois?.[mag] != null ? (
+                  <>
+                    <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+                      <div className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                        Paniers (mois)
+                      </div>
+                      <div className="mt-1 text-base font-semibold text-slate-900">
+                        {formatCount(month.panierMois[mag].nbPaniers)}
+                      </div>
+                    </div>
+                    <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+                      <div className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                        Panier moyen (mois)
+                      </div>
+                      <div className="mt-1 text-base font-semibold text-slate-900">
+                        {month.panierMois[mag].panierMoyen != null
+                          ? formatMAD(month.panierMois[mag].panierMoyen)
+                          : '—'}
+                      </div>
+                    </div>
+                  </>
+                ) : null}
               </div>
             </article>
           ))}

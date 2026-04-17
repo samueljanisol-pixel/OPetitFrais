@@ -1,5 +1,7 @@
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
+**Documentation projet (CA, SSE, env local, correctifs récents)** : voir [`docs/developpement.md`](docs/developpement.md) (en français).
+
 ## Getting Started
 
 First, run the development server:
@@ -13,6 +15,8 @@ pnpm dev
 # or
 bun dev
 ```
+
+`npm run dev` utilise **Webpack** (Next.js 16) pour se rapprocher du comportement de `next start`. Pour Turbopack : `npm run dev:turbo`.
 
 Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
 

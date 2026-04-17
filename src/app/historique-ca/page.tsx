@@ -55,6 +55,8 @@ export default function HistoriqueCA() {
     setError(null)
     setProgress({ phase: 'Démarrage…', current: 0, total: 1 })
 
+    let streamFinished = false
+
     const es = new EventSource(
       `/api/ca/historique/stream?from=${encodeURIComponent(yearStartIso)}&to=${encodeURIComponent(todayIso)}`,
     )
@@ -71,6 +73,8 @@ export default function HistoriqueCA() {
     }
 
     const onDone = (ev: MessageEvent) => {
+      streamFinished = true
+      es.close()
       try {
         const json = JSON.parse(ev.data) as ApiPayload
         if ('error' in json) setError(json.error)
@@ -81,37 +85,38 @@ export default function HistoriqueCA() {
       } finally {
         setLoading(false)
         setProgress(null)
-        es.close()
       }
     }
 
-    const onError = (ev: MessageEvent) => {
-      try {
-        const json = JSON.parse(ev.data) as { error?: string }
-        setError(json?.error ?? 'Erreur')
-        setData({ error: json?.error ?? 'Erreur' })
-      } catch {
-        setError('Erreur')
-        setData({ error: 'Erreur' })
-      } finally {
-        setLoading(false)
-        setProgress(null)
-        es.close()
+    const onStreamError = (ev: Event) => {
+      if (streamFinished) return
+      streamFinished = true
+      es.close()
+      const msg = ev as MessageEvent
+      if (typeof msg.data === 'string' && msg.data.length > 0) {
+        try {
+          const json = JSON.parse(msg.data) as { error?: string }
+          const err = json?.error ?? 'Erreur'
+          setError(err)
+          setData({ error: err })
+        } catch {
+          setError('Erreur')
+          setData({ error: 'Erreur' })
+        }
+      } else {
+        setError('Connexion interrompue')
+        setData({ error: 'Connexion interrompue' })
       }
+      setLoading(false)
+      setProgress(null)
     }
 
     es.addEventListener('progress', onProgress as EventListener)
     es.addEventListener('done', onDone as EventListener)
-    es.addEventListener('error', onError as EventListener)
-    es.onerror = () => {
-      setError('Connexion interrompue')
-      setData({ error: 'Connexion interrompue' })
-      setLoading(false)
-      setProgress(null)
-      es.close()
-    }
+    es.addEventListener('error', onStreamError)
 
     return () => {
+      streamFinished = true
       es.close()
     }
   }, [todayIso, yearStartIso])

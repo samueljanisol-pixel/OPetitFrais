@@ -1,0 +1,30 @@
+---
+description: Supabase Postgres best practices - optimization, schema design, RLS, indexes
+globs: **/*.sql, **/migrations/**, **/supabase/**, **/actions.ts, **/actions/**
+alwaysApply: true
+---
+# Supabase Postgres Best Practices
+
+When working on SQL queries, Supabase migrations, schema design, RLS policies, indexes, or database configurations, you MUST consult the Supabase Postgres best practices skill.
+
+Chaque migration devra être ajoutée dans /supabase/migration
+
+## Reference Categories (by priority)
+
+| Priority | Category | When to consult | Prefix |
+|----------|----------|-----------------|--------|
+| 1 | Query Performance | Writing/optimizing SELECT, JOIN, WHERE clauses | `query-` |
+| 2 | Connection Management | Pooling, timeouts, scaling | `conn-` |
+| 3 | Security & RLS | RLS policies, GRANT/REVOKE, permissions | `security-` |
+| 4 | Schema Design | CREATE TABLE, data types, primary keys, partitioning | `schema-` |
+| 5 | Concurrency & Locking | Transactions, deadlocks, advisory locks | `lock-` |
+| 6 | Data Access Patterns | Pagination, batch inserts, upserts, N+1 | `data-` |
+| 7 | Monitoring & Diagnostics | EXPLAIN ANALYZE, pg_stat_statements, VACUUM | `monitor-` |
+| 8 | Advanced Features | Full-text search, JSONB indexing | `advanced-` |
+
+## Rules
+
+- Read ONLY the reference files relevant to the current task (on-demand, not all at once).
+- Apply the best practices from the references when writing or reviewing SQL.
+- If a migration or query violates a best practice, flag it and suggest the corrected version.
+- Prioritize CRITICAL categories (query performance, connections, security) over lower-priority ones.

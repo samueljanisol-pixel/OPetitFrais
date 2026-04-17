@@ -74,14 +74,18 @@ export async function GET(req: NextRequest) {
   }
 
   const client = new Client();
+  const streamState = { closed: false };
 
   const stream = new ReadableStream<Uint8Array>({
     start(controller) {
       const enc = new TextEncoder();
-      let closed = false;
       const send = (event: string, data: unknown) => {
-        if (closed) return;
-        controller.enqueue(enc.encode(sseEvent(event, data)));
+        if (streamState.closed) return;
+        try {
+          controller.enqueue(enc.encode(sseEvent(event, data)));
+        } catch {
+          streamState.closed = true;
+        }
       };
 
       const run = async () => {
@@ -150,11 +154,19 @@ export async function GET(req: NextRequest) {
 
           send("done", { from, to, days });
         } catch (e) {
-          send("error", { error: e instanceof Error ? e.message : "Erreur" });
+          try {
+            send("error", { error: e instanceof Error ? e.message : "Erreur" });
+          } catch {
+            /* flux déjà fermé */
+          }
         } finally {
           client.close();
-          closed = true;
-          controller.close();
+          streamState.closed = true;
+          try {
+            controller.close();
+          } catch {
+            /* controller déjà fermé */
+          }
         }
       };
 
@@ -167,6 +179,7 @@ export async function GET(req: NextRequest) {
       run().finally(() => clearInterval(ping));
     },
     cancel() {
+      streamState.closed = true;
       client.close();
     },
   });
