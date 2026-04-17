@@ -1,13 +1,14 @@
 'use client'
 
 import Image from 'next/image'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Button, Stack, TextField } from '@mui/material'
 import AppLink from '@/components/AppLink'
 import PaniersHeureHistogram from '@/components/PaniersHeureHistogram'
 import SyncStatusFooter from '@/components/SyncStatusFooter'
 import { fetchCaDashboardFromSupabase } from '@/lib/ca/fromSupabase'
 import type { CaResponse } from '@/lib/ca/types'
+import { maybeAutoSyncIfStale } from '@/lib/sync/maybeAutoSyncIfStale'
 import { createSupabaseBrowserClient } from '@/lib/supabase/client'
 
 export default function Home() {
@@ -16,6 +17,8 @@ export default function Home() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [refreshNonce, setRefreshNonce] = useState(0)
+  const [loadHint, setLoadHint] = useState('Chargement des données…')
+  const isFirstVisitRef = useRef(true)
   const maxIso = useMemo(() => new Date().toISOString().split('T')[0], [])
   const formatMAD = useMemo(() => {
     const nf = new Intl.NumberFormat('fr-FR', {
@@ -64,6 +67,16 @@ export default function Home() {
 
     ;(async () => {
       try {
+        const shouldAutoSync = isFirstVisitRef.current || refreshNonce > 0
+        isFirstVisitRef.current = false
+
+        if (shouldAutoSync) {
+          setLoadHint('Vérification synchronisation FTP (si > 15 min depuis la dernière)…')
+          await maybeAutoSyncIfStale()
+        }
+        if (cancelled) return
+
+        setLoadHint('Chargement des données…')
         const supabase = createSupabaseBrowserClient()
         const res = await fetchCaDashboardFromSupabase(supabase, date)
         if (cancelled) return
@@ -113,7 +126,7 @@ export default function Home() {
           <div className="mt-6 h-2 w-full overflow-hidden rounded-full bg-emerald-100">
             <div className="h-full w-1/2 animate-pulse rounded-full bg-emerald-500/70" />
           </div>
-          <div className="mt-3 text-sm text-slate-600">Chargement des données…</div>
+          <div className="mt-3 text-sm text-slate-600">{loadHint}</div>
         </div>
       </main>
     )

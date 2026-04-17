@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { useSyncStatus } from '@/lib/sync/useSyncStatus'
 
 function formatFinishedAt(iso: string | null | undefined): string | null {
@@ -22,6 +22,42 @@ function formatFinishedAt(iso: string | null | undefined): string | null {
  */
 export default function SyncStatusFooter() {
   const { last: lastSync, error: fetchError } = useSyncStatus(120_000)
+  const [syncing, setSyncing] = useState(false)
+  const [syncActionError, setSyncActionError] = useState<string | null>(null)
+
+  const triggerSync = async () => {
+    setSyncActionError(null)
+    setSyncing(true)
+    try {
+      const res = await fetch('/api/supabase/sync/trigger', {
+        method: 'POST',
+        credentials: 'include',
+      })
+      const json = (await res.json().catch(() => null)) as {
+        error?: string
+        message?: string
+        ok?: boolean
+      } | null
+      if (!res.ok) {
+        const msg =
+          json?.error ??
+          json?.message ??
+          (res.status === 401 ? 'Connexion requise pour lancer une synchro.' : `Erreur ${res.status}`)
+        setSyncActionError(msg)
+        setSyncing(false)
+        return
+      }
+      if (json && json.ok === false && json.message) {
+        setSyncActionError(json.message)
+        setSyncing(false)
+        return
+      }
+      window.location.reload()
+    } catch (e) {
+      setSyncActionError(e instanceof Error ? e.message : 'Réseau')
+      setSyncing(false)
+    }
+  }
 
   const block = useMemo(() => {
     if (fetchError) {
@@ -96,6 +132,23 @@ export default function SyncStatusFooter() {
           ) : null}
         </div>
       )}
+
+      <div className="mt-4 flex flex-wrap items-center gap-3 border-t border-slate-200/80 pt-4">
+        <button
+          type="button"
+          disabled={syncing || Boolean(fetchError)}
+          onClick={() => void triggerSync()}
+          className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-900 shadow-sm transition hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {syncing ? 'Synchronisation en cours…' : 'Forcer une synchro maintenant'}
+        </button>
+        <span className="text-[11px] text-slate-500">
+          Import FTP (même logique que le cron), puis rechargement de la page.
+        </span>
+      </div>
+      {syncActionError ? (
+        <p className="mt-2 max-w-2xl text-xs font-medium text-rose-700">{syncActionError}</p>
+      ) : null}
     </footer>
   )
 }

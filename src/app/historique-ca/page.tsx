@@ -2,9 +2,10 @@
 
 import Image from 'next/image'
 import Link from 'next/link'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { fetchHistoriqueFromSupabase } from '@/lib/ca/fromSupabase'
 import type { HistoriqueDayRow, HistoriquePayload } from '@/lib/ca/types'
+import { maybeAutoSyncIfStale } from '@/lib/sync/maybeAutoSyncIfStale'
 import { createSupabaseBrowserClient } from '@/lib/supabase/client'
 import SyncStatusFooter from '@/components/SyncStatusFooter'
 
@@ -24,6 +25,8 @@ export default function HistoriqueCA() {
   const [data, setData] = useState<HistoriquePayload | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [loadHint, setLoadHint] = useState('Chargement…')
+  const isFirstVisitRef = useRef(true)
 
   const todayIso = useMemo(() => new Date().toISOString().split('T')[0], [])
   const yearStartIso = useMemo(() => `${todayIso.slice(0, 4)}-01-01`, [todayIso])
@@ -44,6 +47,14 @@ export default function HistoriqueCA() {
 
     ;(async () => {
       try {
+        if (isFirstVisitRef.current) {
+          isFirstVisitRef.current = false
+          setLoadHint('Vérification synchronisation FTP (si > 15 min depuis la dernière)…')
+          await maybeAutoSyncIfStale()
+        }
+        if (cancelled) return
+
+        setLoadHint('Chargement…')
         const supabase = createSupabaseBrowserClient()
         const res = await fetchHistoriqueFromSupabase(supabase, yearStartIso, todayIso)
         if (cancelled) return
@@ -147,7 +158,7 @@ export default function HistoriqueCA() {
           <div className="mt-6 h-2 w-full overflow-hidden rounded-full bg-emerald-100">
             <div className="h-full w-1/2 animate-pulse rounded-full bg-emerald-500/70" />
           </div>
-          <div className="mt-3 text-sm text-slate-600">Chargement…</div>
+          <div className="mt-3 text-sm text-slate-600">{loadHint}</div>
         </div>
       </main>
     )
