@@ -2,7 +2,7 @@ This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-
 
 **Documentation projet (CA, SSE, env local, correctifs récents)** : voir [`docs/developpement.md`](docs/developpement.md) (en français).
 
-## Getting Started
+### Getting Started
 
 First, run the development server:
 
