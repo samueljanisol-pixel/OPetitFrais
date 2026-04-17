@@ -96,22 +96,49 @@ export async function POST(req: Request) {
   }
 
   const finishedAt = new Date().toISOString();
-  await supabase.from("sync_runs").insert({
-    started_at: startedAt,
-    finished_at: finishedAt,
-    status,
-    message,
-    last_synced_date: lastSyncedDate,
-    processed_days: processedDays,
-  });
+  const { data: syncRunRow, error: insertError } = await supabase
+    .from("sync_runs")
+    .insert({
+      started_at: startedAt,
+      finished_at: finishedAt,
+      status,
+      message,
+      last_synced_date: lastSyncedDate,
+      processed_days: processedDays,
+    })
+    .select("id")
+    .maybeSingle();
 
-  if (status === "error") {
+  if (insertError) {
+    console.error("sync_runs insert:", insertError);
     return NextResponse.json(
-      { ok: false, status, message, processedDays, lastSyncedDate },
+      {
+        ok: false,
+        status: "error",
+        message: `Import exécuté mais impossible d’écrire dans sync_runs : ${insertError.message}`,
+        processedDays,
+        lastSyncedDate,
+        code: insertError.code,
+        details: insertError.details,
+        hint: insertError.hint,
+      },
       { status: 500 },
     );
   }
 
-  return NextResponse.json({ ok: true, status, processedDays, lastSyncedDate });
+  if (status === "error") {
+    return NextResponse.json(
+      { ok: false, status, message, processedDays, lastSyncedDate, syncRunId: syncRunRow?.id },
+      { status: 500 },
+    );
+  }
+
+  return NextResponse.json({
+    ok: true,
+    status,
+    processedDays,
+    lastSyncedDate,
+    syncRunId: syncRunRow?.id ?? null,
+  });
 }
 
