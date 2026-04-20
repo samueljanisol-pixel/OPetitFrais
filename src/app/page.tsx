@@ -20,6 +20,29 @@ export default function Home() {
   const [loadHint, setLoadHint] = useState('Chargement des données…')
   const isFirstVisitRef = useRef(true)
   const maxIso = useMemo(() => new Date().toISOString().split('T')[0], [])
+
+  /** Moyenne CA / jour pour le mois affiché : mois passés → jours calendaires ; mois en cours → jours écoulés (aujourd’hui). */
+  const monthAvgPerDay = useMemo(() => {
+    const month = data?.month
+    if (!month) return null
+    const tg =
+      typeof month.totalGlobal === 'number' ? month.totalGlobal : Number(month.totalGlobal)
+    if (!Number.isFinite(tg) || tg <= 0) return null
+    const ym = month.ym
+    if (typeof ym !== 'string' || !/^\d{4}-\d{2}$/.test(ym)) return null
+    const [yy, mm] = ym.split('-').map((x: string) => Number(x))
+    const daysInCalendarMonth = new Date(Date.UTC(yy, mm, 0)).getUTCDate()
+    const curYm = maxIso.slice(0, 7)
+    let denom = daysInCalendarMonth
+    if (ym === curYm) {
+      denom = Math.max(1, Number(maxIso.slice(8, 10)))
+    } else if (ym < curYm) {
+      denom = daysInCalendarMonth
+    } else {
+      denom = Math.max(1, daysInCalendarMonth)
+    }
+    return { value: tg / denom, daysUsed: denom }
+  }, [data?.month, maxIso])
   const formatMAD = useMemo(() => {
     const nf = new Intl.NumberFormat('fr-FR', {
       minimumFractionDigits: 2,
@@ -365,6 +388,13 @@ export default function Home() {
                 Total du mois {monthLabel ? `(${monthLabel})` : ''}
               </div>
               <div className="mt-1 text-2xl font-semibold text-slate-900">{formatMAD(month?.totalGlobal)}</div>
+              {monthAvgPerDay != null ? (
+                <div className="mt-2 text-sm text-slate-600">
+                  Moyenne / jour :{' '}
+                  <span className="font-semibold text-slate-800">{formatMAD(monthAvgPerDay.value)}</span>
+                  <span className="text-slate-500"> ({monthAvgPerDay.daysUsed} jour(s))</span>
+                </div>
+              ) : null}
               {(() => {
                 const g = month?.panierMoisGlobal
                 if (!g || g.nbPaniers <= 0) return null
@@ -602,12 +632,16 @@ export default function Home() {
             <div className="mt-5 grid gap-5 lg:grid-cols-2">
               <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
                 <div className="text-sm font-semibold text-slate-900">Par chiffre d&apos;affaires</div>
+                <p className="mt-0.5 text-xs text-slate-500">
+                  % = part du CA global du jour sélectionné.
+                </p>
                 <div className="mt-3 overflow-hidden rounded-lg border border-slate-200">
                   <table className="w-full text-sm">
                     <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-600">
                       <tr>
                         <th className="px-3 py-2 text-left">Produit</th>
                         <th className="px-3 py-2 text-right">CA</th>
+                        <th className="px-3 py-2 text-right">% jour</th>
                         <th className="px-3 py-2 text-right">Qté</th>
                       </tr>
                     </thead>
@@ -616,6 +650,9 @@ export default function Home() {
                         <tr key={`ca-${r.name}`} className="border-t border-slate-100">
                           <td className="px-3 py-2 text-slate-900">{r.name}</td>
                           <td className="px-3 py-2 text-right font-semibold text-slate-900">{formatMAD(r.ca)}</td>
+                          <td className="px-3 py-2 text-right text-slate-700">
+                            {formatPercent(percentOfGlobal(r.ca))}
+                          </td>
                           <td className="px-3 py-2 text-right text-slate-700">
                             {new Intl.NumberFormat('fr-FR').format(r.qty)}
                           </td>

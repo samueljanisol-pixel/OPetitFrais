@@ -21,6 +21,9 @@ const isoToUtcDate = (iso: string) => new Date(`${iso}T00:00:00Z`)
 
 const monthKey = (iso: string) => iso.slice(0, 7) // YYYY-MM
 
+/** Borne basse de l’historique (inclus), au lieu du 1er janvier de l’année en cours. */
+const HISTORIQUE_FROM_ISO = '2025-05-13'
+
 export default function HistoriqueCA() {
   const [data, setData] = useState<HistoriquePayload | null>(null)
   const [loading, setLoading] = useState(true)
@@ -29,7 +32,6 @@ export default function HistoriqueCA() {
   const isFirstVisitRef = useRef(true)
 
   const todayIso = useMemo(() => new Date().toISOString().split('T')[0], [])
-  const yearStartIso = useMemo(() => `${todayIso.slice(0, 4)}-01-01`, [todayIso])
 
   const formatMAD = useMemo(() => {
     const nf = new Intl.NumberFormat('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
@@ -56,7 +58,7 @@ export default function HistoriqueCA() {
 
         setLoadHint('Chargement…')
         const supabase = createSupabaseBrowserClient()
-        const res = await fetchHistoriqueFromSupabase(supabase, yearStartIso, todayIso)
+        const res = await fetchHistoriqueFromSupabase(supabase, HISTORIQUE_FROM_ISO, todayIso)
         if (cancelled) return
         if ('error' in res) {
           setError(res.error)
@@ -77,7 +79,7 @@ export default function HistoriqueCA() {
     return () => {
       cancelled = true
     }
-  }, [todayIso, yearStartIso])
+  }, [todayIso])
 
   const computed = useMemo(() => {
     if (!data || 'error' in data) return null
