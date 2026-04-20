@@ -11,6 +11,8 @@ import SyncStatusFooter from '@/components/SyncStatusFooter'
 
 type DayRow = HistoriqueDayRow
 
+type PeriodFilter = '2026' | '2025' | 'tous'
+
 const labelMagasin = (raw: string) => {
   const m = raw.match(/^M(\d+)$/i)
   if (!m) return raw
@@ -30,8 +32,16 @@ export default function HistoriqueCA() {
   const [error, setError] = useState<string | null>(null)
   const [loadHint, setLoadHint] = useState('Chargement…')
   const isFirstVisitRef = useRef(true)
+  const [periodFilter, setPeriodFilter] = useState<PeriodFilter>('2026')
 
   const todayIso = useMemo(() => new Date().toISOString().split('T')[0], [])
+
+  const filteredDays = useMemo(() => {
+    if (!data || 'error' in data) return []
+    const days = data.days ?? []
+    if (periodFilter === 'tous') return days
+    return days.filter((d) => d.date.startsWith(periodFilter))
+  }, [data, periodFilter])
 
   const formatMAD = useMemo(() => {
     const nf = new Intl.NumberFormat('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
@@ -84,7 +94,7 @@ export default function HistoriqueCA() {
   const computed = useMemo(() => {
     if (!data || 'error' in data) return null
 
-    const days = data.days ?? []
+    const days = filteredDays
     const totalGlobal = days.reduce((acc, d) => acc + (Number.isFinite(d.totalGlobal) ? d.totalGlobal : 0), 0)
     const avgPerDay = days.length ? totalGlobal / days.length : 0
 
@@ -124,9 +134,25 @@ export default function HistoriqueCA() {
     }
 
     const monthList = Array.from(months.values()).sort((a, b) => b.ym.localeCompare(a.ym))
+    const monthCount = monthList.length
+    const avgPerMonth = monthCount > 0 ? totalGlobal / monthCount : 0
 
-    return { days, totalGlobal, avgPerDay, monthList, from: data.from, to: data.to }
-  }, [data])
+    const sortedDates = [...days].sort((a, b) => a.date.localeCompare(b.date))
+    const from = sortedDates[0]?.date ?? null
+    const to = sortedDates[sortedDates.length - 1]?.date ?? null
+
+    return {
+      days,
+      totalGlobal,
+      avgPerDay,
+      avgPerMonth,
+      monthList,
+      from,
+      to,
+      dataFrom: data.from,
+      dataTo: data.to,
+    }
+  }, [data, filteredDays])
 
   const monthLabel = (ym: string) => {
     if (!/^\d{4}-\d{2}$/.test(ym)) return ym
@@ -209,12 +235,40 @@ export default function HistoriqueCA() {
             <div>
               <h1 className="text-2xl font-semibold tracking-tight text-slate-900 sm:text-3xl">Historique chiffre d’affaires</h1>
               <p className="mt-1 text-sm text-slate-600">
-                Période: <span className="font-medium">{computed.from}</span> → <span className="font-medium">{computed.to}</span>
+                Données chargées : <span className="font-medium">{computed.dataFrom}</span> →{' '}
+                <span className="font-medium">{computed.dataTo}</span>
               </p>
+              <p className="mt-1 text-sm text-slate-600">
+                Période affichée :{' '}
+                {computed.from && computed.to ? (
+                  <>
+                    <span className="font-medium">{computed.from}</span> → <span className="font-medium">{computed.to}</span>
+                  </>
+                ) : (
+                  <span className="font-medium text-slate-500">aucun jour pour ce filtre</span>
+                )}
+              </p>
+              <div className="mt-3 flex flex-wrap items-center gap-2">
+                <span className="text-xs font-medium uppercase tracking-wide text-slate-500">Période</span>
+                {(['2026', '2025', 'tous'] as const).map(key => (
+                  <button
+                    key={key}
+                    type="button"
+                    onClick={() => setPeriodFilter(key)}
+                    className={`rounded-lg border px-3 py-1.5 text-xs font-semibold transition ${
+                      periodFilter === key
+                        ? 'border-emerald-600 bg-emerald-600 text-white shadow-sm'
+                        : 'border-slate-200 bg-white/90 text-slate-700 hover:bg-slate-50'
+                    }`}
+                  >
+                    {key === 'tous' ? 'Tous' : key}
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
 
-          <div className="grid gap-3 sm:grid-cols-2">
+          <div className="grid gap-3 sm:grid-cols-3">
             <div className="rounded-2xl border border-emerald-100 bg-white/80 px-5 py-4 shadow-sm backdrop-blur">
               <div className="text-xs font-medium uppercase tracking-wide text-emerald-700/80">Total global</div>
               <div className="mt-1 text-2xl font-semibold text-slate-900">{formatMAD(computed.totalGlobal)}</div>
@@ -223,10 +277,22 @@ export default function HistoriqueCA() {
               <div className="text-xs font-medium uppercase tracking-wide text-slate-600">Moyenne / jour</div>
               <div className="mt-1 text-2xl font-semibold text-slate-900">{formatMAD(computed.avgPerDay)}</div>
             </div>
+            <div className="rounded-2xl border border-slate-200 bg-white/80 px-5 py-4 shadow-sm backdrop-blur">
+              <div className="text-xs font-medium uppercase tracking-wide text-slate-600">Moyenne / mois</div>
+              <div className="mt-1 text-2xl font-semibold text-slate-900">{formatMAD(computed.avgPerMonth)}</div>
+              <div className="mt-1 text-[11px] text-slate-500">
+                {computed.monthList.length} mois avec données
+              </div>
+            </div>
           </div>
         </header>
 
         <section className="mt-8 grid gap-4">
+          {computed.monthList.length === 0 ? (
+            <div className="rounded-2xl border border-slate-200 bg-white/80 p-6 text-center text-sm text-slate-600">
+              Aucune donnée pour ce filtre de période.
+            </div>
+          ) : null}
           {computed.monthList.map(m => (
             <details
               key={m.ym}
