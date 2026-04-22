@@ -16,6 +16,7 @@ import { createSupabaseBrowserClient } from '@/lib/supabase/client'
 import type { ProductWithRefs, RefRow } from '@/lib/products/types'
 import { useRouter } from 'next/navigation'
 import { SHEET_IMPORT_ENABLED, SheetImportBar } from '@/features/sheet-import'
+import { muiSlotPropsDecimalKeypad } from '@/lib/mui/numericTextFieldProps'
 
 type Row = ProductWithRefs
 
@@ -301,6 +302,7 @@ export default function ProduitsListClient() {
                           if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
                         }}
                         sx={{ width: 100, '& .MuiInputBase-input': { fontSize: 14 } }}
+                        slotProps={muiSlotPropsDecimalKeypad}
                       />
                     </td>
                     <td className="w-9 px-0.5 py-1.5 text-center align-middle" onClick={e => e.stopPropagation()}>

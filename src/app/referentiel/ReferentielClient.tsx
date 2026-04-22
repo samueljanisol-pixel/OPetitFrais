@@ -16,6 +16,7 @@ import {
 import AppLink from '@/components/AppLink'
 import { createSupabaseBrowserClient } from '@/lib/supabase/client'
 import type { RefConditionnementRow, RefRow } from '@/lib/products/types'
+import { muiSlotPropsDecimalKeypad, muiSlotPropsIntegerKeypad } from '@/lib/mui/numericTextFieldProps'
 
 type TabId = 'udv' | 'cat' | 'sup' | 'cond'
 
@@ -295,6 +296,7 @@ export default function ReferentielClient() {
                 size="small"
                 type="number"
                 fullWidth
+                slotProps={muiSlotPropsIntegerKeypad}
               />
               {tab === 'cond' ? (
                 <div className="flex flex-wrap gap-2">
@@ -303,18 +305,21 @@ export default function ReferentielClient() {
                     value={form.h}
                     onChange={e => setForm(f => ({ ...f, h: e.target.value }))}
                     size="small"
+                    slotProps={muiSlotPropsDecimalKeypad}
                   />
                   <TextField
                     label="Largeur (mm)"
                     value={form.w}
                     onChange={e => setForm(f => ({ ...f, w: e.target.value }))}
                     size="small"
+                    slotProps={muiSlotPropsDecimalKeypad}
                   />
                   <TextField
                     label="Profondeur (mm)"
                     value={form.d}
                     onChange={e => setForm(f => ({ ...f, d: e.target.value }))}
                     size="small"
+                    slotProps={muiSlotPropsDecimalKeypad}
                   />
                 </div>
               ) : null}

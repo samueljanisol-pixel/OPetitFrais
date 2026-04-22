@@ -25,6 +25,7 @@ import type {
   RefRow,
 } from '@/lib/products/types'
 import { useRouter } from 'next/navigation'
+import { muiSlotPropsDecimalKeypad } from '@/lib/mui/numericTextFieldProps'
 
 type Props = { productId: string | null }
 
@@ -330,6 +331,7 @@ export default function ProductFormClient({ productId }: Props) {
               setP(x => ({ ...x, price: n != null ? n : 0 }))
             }}
             fullWidth
+            slotProps={muiSlotPropsDecimalKeypad}
           />
           <FormControl fullWidth>
             <InputLabel>Unité de vente</InputLabel>
@@ -382,6 +384,7 @@ export default function ProductFormClient({ productId }: Props) {
               setP(x => ({ ...x, cost_purchase: n }))
             }}
             fullWidth
+            slotProps={muiSlotPropsDecimalKeypad}
           />
           <TextField
             type="text"
@@ -392,6 +395,7 @@ export default function ProductFormClient({ productId }: Props) {
               setP(x => ({ ...x, cost_manufacturing: n }))
             }}
             fullWidth
+            slotProps={muiSlotPropsDecimalKeypad}
           />
           <TextField
             type="text"
@@ -402,6 +406,7 @@ export default function ProductFormClient({ productId }: Props) {
               setP(x => ({ ...x, cost_packaging: n }))
             }}
             fullWidth
+            slotProps={muiSlotPropsDecimalKeypad}
           />
           <div className="flex flex-wrap items-center gap-2">
             <TextField
@@ -413,6 +418,7 @@ export default function ProductFormClient({ productId }: Props) {
                 setP(x => ({ ...x, margin: n }))
               }}
               sx={{ flex: 1, minWidth: 160 }}
+              slotProps={muiSlotPropsDecimalKeypad}
             />
             <Button type="button" variant="outlined" size="small" onClick={applyDefaultMargin} sx={{ textTransform: 'none' }}>
               Remplir (vente − coûts)
@@ -498,6 +504,7 @@ export default function ProductFormClient({ productId }: Props) {
                 value={addQty}
                 onChange={e => setAddQty(e.target.value)}
                 sx={{ width: 100 }}
+                slotProps={muiSlotPropsDecimalKeypad}
               />
               <FormControl size="small" sx={{ minWidth: 120 }}>
                 <InputLabel>UdV</InputLabel>

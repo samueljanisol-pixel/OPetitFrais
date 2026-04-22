@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { Button, CircularProgress, Typography } from '@mui/material'
-import { SHEET_IMPORT_ENABLED, SHEET_JSON_EXPORT_URL } from './config'
+import { SHEET_DB_EXPORT_PATH, SHEET_IMPORT_ENABLED, SHEET_JSON_EXPORT_URL } from './config'
 import { applySheetImport } from './applySheetImport'
 import { parseSheetJsonToRows } from './mapSheetRow'
 import { createSupabaseBrowserClient } from '@/lib/supabase/client'
@@ -76,6 +76,15 @@ export function SheetImportBar({ onDone }: Props) {
           Ouvrir l’export JSON (nouvel onglet)
         </a>
       </div>
+      <p className="text-xs text-amber-900/80 leading-snug">
+        <span className="font-semibold">Export base (même format que l’import, récupérable depuis une autre machine) :</span>{' '}
+        définir <code className="rounded bg-amber-100/80 px-1">SHEET_JSON_EXPORT_TOKEN</code> côté serveur (même valeur que le paramètre{' '}
+        <code className="rounded bg-amber-100/80 px-1">token</code> de l’URL), puis{' '}
+        <code className="rounded bg-amber-100/80 px-1 break-all">
+          GET https://exemple.com{SHEET_DB_EXPORT_PATH}?token=…
+        </code>
+        . Réponse : JSON (fichier <code className="rounded bg-amber-100/80 px-1">produits-export.json</code>).
+      </p>
       {msg ? <p className="text-amber-900/90 leading-snug whitespace-pre-wrap">{msg}</p> : null}
     </div>
   )
