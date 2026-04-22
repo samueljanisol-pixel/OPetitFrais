@@ -234,6 +234,15 @@ export default function HistoriqueCA() {
             </div>
             <div>
               <h1 className="text-2xl font-semibold tracking-tight text-slate-900 sm:text-3xl">Historique chiffre d’affaires</h1>
+              <div className="mt-2 flex flex-wrap gap-2 text-sm">
+                <Link href="/" className="font-medium text-emerald-700 hover:underline">
+                  Accueil
+                </Link>
+                <span className="text-slate-300">|</span>
+                <Link href="/ca" className="font-medium text-emerald-700 hover:underline">
+                  Statistique
+                </Link>
+              </div>
               <p className="mt-1 text-sm text-slate-600">
                 Données chargées : <span className="font-medium">{computed.dataFrom}</span> →{' '}
                 <span className="font-medium">{computed.dataTo}</span>

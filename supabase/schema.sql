@@ -92,3 +92,6 @@ using (true);
 -- alter table public.ca_panier_hour enable row level security;
 -- create policy "read ca_panier_hour (authenticated)" on public.ca_panier_hour for select to authenticated using (true);
 
+-- --- Catalogue produits (référentiels, produit, conditionnements, historique, Storage) : voir
+--     supabase/migrations/20260422130000_product_catalog.sql
+

@@ -1,20 +1,24 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 
-const PROTECTED_PREFIXES = ["/", "/historique-ca"];
 const PUBLIC_PATHS = ["/login", "/api", "/_next", "/favicon.ico", "/manifest.webmanifest", "/sw.js", "/icons", "/icon.png"];
 
 function isPublic(pathname: string) {
   return PUBLIC_PATHS.some((p) => pathname === p || pathname.startsWith(p + "/"));
 }
 
+/** Pages nécessitant une session (hors accès public). */
+function isProtectedPath(pathname: string): boolean {
+  if (pathname === "/") return true;
+  const prefixes = ["/historique-ca", "/ca", "/produits", "/referentiel"];
+  return prefixes.some((p) => pathname === p || pathname.startsWith(p + "/"));
+}
+
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
   if (isPublic(pathname)) return NextResponse.next();
 
-  // Protéger uniquement les pages UI (pas les assets)
-  const shouldProtect = PROTECTED_PREFIXES.some((p) => pathname === p || pathname.startsWith(p + "/"));
-  if (!shouldProtect) return NextResponse.next();
+  if (!isProtectedPath(pathname)) return NextResponse.next();
 
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
