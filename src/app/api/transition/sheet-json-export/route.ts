@@ -8,7 +8,7 @@ export const revalidate = 0
 /**
  * Export produits (JSON, mêmes clés que l’import Google Sheet).
  * Accès : `GET /api/transition/sheet-json-export?token=VOTRE_SECRET` (défini par `SHEET_JSON_EXPORT_TOKEN` côté serveur).
- * Permet de récupérer le JSON depuis une autre machine (curl, script, signet) sans session navigateur.
+ * S’affiche dans l’onglet du navigateur (comme le proxy import) ; pas de téléchargement forcé. Autre machine : curl, script, signet.
  */
 export async function GET(req: NextRequest) {
   const expected = process.env.SHEET_JSON_EXPORT_TOKEN
@@ -39,7 +39,6 @@ export async function GET(req: NextRequest) {
       headers: {
         'Content-Type': 'application/json; charset=utf-8',
         'Cache-Control': 'no-store',
-        'Content-Disposition': 'attachment; filename="produits-export.json"',
       },
     })
   } catch (e) {
