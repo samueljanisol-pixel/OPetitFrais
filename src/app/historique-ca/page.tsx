@@ -2,6 +2,7 @@
 
 import Image from 'next/image'
 import Link from 'next/link'
+import BackNavButton from '@/components/BackNavButton'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { fetchHistoriqueFromSupabase } from '@/lib/ca/fromSupabase'
 import type { HistoriqueDayRow, HistoriquePayload } from '@/lib/ca/types'
@@ -208,9 +209,9 @@ export default function HistoriqueCA() {
             <span className="font-medium">NEXT_PUBLIC_SUPABASE_ANON_KEY</span> et la session (RLS).
           </div>
           <div className="mt-4">
-            <Link className="text-sm font-semibold text-emerald-700 hover:underline" href="/">
+            <BackNavButton href="/" size="small" variant="outlined">
               Revenir au tableau de bord
-            </Link>
+            </BackNavButton>
           </div>
         </div>
       </main>
@@ -234,12 +235,17 @@ export default function HistoriqueCA() {
             </div>
             <div>
               <h1 className="text-2xl font-semibold tracking-tight text-slate-900 sm:text-3xl">Historique chiffre d’affaires</h1>
-              <div className="mt-2 flex flex-wrap gap-2 text-sm">
-                <Link href="/" className="font-medium text-emerald-700 hover:underline">
+              <div className="mt-2 flex flex-wrap items-center gap-2 text-sm">
+                <BackNavButton href="/" size="small">
                   Accueil
-                </Link>
-                <span className="text-slate-300">|</span>
-                <Link href="/ca" className="font-medium text-emerald-700 hover:underline">
+                </BackNavButton>
+                <span className="text-slate-300" aria-hidden>
+                  |
+                </span>
+                <Link
+                  href="/ca"
+                  className="inline-flex min-h-10 items-center rounded-lg border-2 border-emerald-200 bg-white px-3 py-1.5 text-sm font-bold text-emerald-800 shadow-sm transition hover:border-emerald-400 hover:bg-emerald-50"
+                >
                   Statistique
                 </Link>
               </div>
@@ -361,10 +367,10 @@ export default function HistoriqueCA() {
           ))}
         </section>
 
-        <div className="mt-8 text-sm">
-          <Link className="font-semibold text-emerald-700 hover:underline" href="/">
-            ← Retour au tableau de bord
-          </Link>
+        <div className="mt-8">
+          <BackNavButton href="/" size="small" variant="outlined">
+            Retour au tableau de bord
+          </BackNavButton>
         </div>
 
         <SyncStatusFooter />

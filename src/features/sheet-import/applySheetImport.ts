@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
+import { insertProductPriceHistoryRow } from '@/lib/products/priceHistory'
 import type { RefRow } from '@/lib/products/types'
 import type { SheetRowParsed } from './mapSheetRow'
 
@@ -120,7 +121,12 @@ export async function applySheetImport(
       (codeNorm && byCode.get(codeNorm)) || (!codeNorm && byName.get(norm(row.nom))) || null
 
     if (id) {
-      const { error: e0 } = await supabase
+      const { data: before } = await supabase
+        .from('product')
+        .select('price, cost_purchase')
+        .eq('id', id)
+        .single()
+      const { data: upd, error: e0 } = await supabase
         .from('product')
         .update(
           {
@@ -129,8 +135,28 @@ export async function applySheetImport(
           } as never,
         )
         .eq('id', id)
+        .select('price, cost_purchase')
+        .single()
       if (e0) errors.push(`Mise à jour « ${row.nom} » : ${e0.message}`)
-      else updated += 1
+      else {
+        updated += 1
+        if (upd) {
+          const snap = upd as { price: number; cost_purchase: number | null }
+          const bef = before as { price: number; cost_purchase: number | null } | null
+          const priceOrCostChanged =
+            bef == null ||
+            Number(bef.price) !== Number(snap.price) ||
+            (bef.cost_purchase ?? null) !== (snap.cost_purchase ?? null)
+          if (priceOrCostChanged) {
+            const { error: hErr } = await insertProductPriceHistoryRow(supabase, {
+              product_id: id,
+              price: Number(snap.price),
+              cost_purchase: snap.cost_purchase ?? null,
+            })
+            if (hErr) errors.push(`Historique « ${row.nom} » : ${hErr.message}`)
+          }
+        }
+      }
     } else {
       const insert: Record<string, unknown> = {
         ...base,
@@ -152,6 +178,12 @@ export async function applySheetImport(
       else {
         created += 1
         if (ins?.id) {
+          const { error: hIns } = await insertProductPriceHistoryRow(supabase, {
+            product_id: (ins as { id: string }).id,
+            price: row.prix,
+            cost_purchase: null,
+          })
+          if (hIns) errors.push(`Historique « ${row.nom} » : ${hIns.message}`)
           if (ins.code) byCode.set(norm(String(ins.code)), String(ins.id))
           if (ins.name) byName.set(norm(String(ins.name)), String(ins.id))
         }

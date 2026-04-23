@@ -13,7 +13,7 @@ import {
   TextField,
   Typography,
 } from '@mui/material'
-import AppLink from '@/components/AppLink'
+import BackNavButton from '@/components/BackNavButton'
 import { createSupabaseBrowserClient } from '@/lib/supabase/client'
 import type { RefConditionnementRow, RefRow } from '@/lib/products/types'
 import { muiSlotPropsDecimalKeypad, muiSlotPropsIntegerKeypad } from '@/lib/mui/numericTextFieldProps'
@@ -42,13 +42,13 @@ function RefTable<T extends { id: string; code: string; label: string; sort_orde
 }) {
   return (
     <div>
-      <Typography variant="subtitle1" sx={{ mb: 1, fontWeight: 600 }}>
+      <Typography variant="subtitle1" className="text-slate-900" sx={{ mb: 1, fontWeight: 600 }}>
         {title}
       </Typography>
       <div className="overflow-auto border border-slate-200 rounded-lg">
-        <table className="w-full text-sm">
+        <table className="w-full text-sm text-slate-900">
           <thead>
-            <tr className="bg-slate-50 text-left text-xs uppercase text-slate-600">
+            <tr className="bg-slate-100 text-left text-xs font-semibold uppercase text-slate-800">
               <th className="p-2">Code</th>
               <th className="p-2">Libellé</th>
               <th className="p-2">Tri</th>
@@ -59,10 +59,10 @@ function RefTable<T extends { id: string; code: string; label: string; sort_orde
           <tbody>
             {rows.map(r => (
               <tr key={r.id} className="border-t border-slate-100">
-                <td className="p-2 font-mono text-xs">{r.code}</td>
-                <td className="p-2">{r.label}</td>
-                <td className="p-2">{r.sort_order}</td>
-                {extra ? <td className="p-2 text-xs text-slate-600">{extra(r)}</td> : null}
+                <td className="p-2 font-mono text-sm text-slate-900 tabular-nums">{r.code}</td>
+                <td className="p-2 text-slate-900">{r.label}</td>
+                <td className="p-2 text-slate-900 tabular-nums">{r.sort_order}</td>
+                {extra ? <td className="p-2 text-sm text-slate-800">{extra(r)}</td> : null}
                 <td className="p-2 text-right">
                   <Button size="small" onClick={() => onEdit(r)} sx={{ textTransform: 'none' }}>
                     Modifier
@@ -238,12 +238,12 @@ export default function ReferentielClient() {
     <div className="min-h-screen bg-gradient-to-br from-emerald-50 via-white to-rose-50 p-4 md:p-8">
       <div className="mx-auto max-w-4xl">
         <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-          <Typography variant="h4" className="!font-semibold" component="h1">
+          <Typography variant="h4" component="h1" sx={{ fontWeight: 600, color: '#0f172a' }}>
             Référentiel
           </Typography>
-          <Button component={AppLink} href="/" size="small" sx={{ textTransform: 'none' }}>
+          <BackNavButton href="/" size="small">
             Accueil
-          </Button>
+          </BackNavButton>
         </div>
         {err ? <div className="mb-2 rounded border border-rose-200 bg-rose-50 p-2 text-sm text-rose-800">{err}</div> : null}
         <Tabs

@@ -11,12 +11,14 @@ import {
   TextField,
   Typography,
 } from '@mui/material'
+import BackNavButton from '@/components/BackNavButton'
 import AppLink from '@/components/AppLink'
 import { createSupabaseBrowserClient } from '@/lib/supabase/client'
 import type { ProductWithRefs, RefRow } from '@/lib/products/types'
 import { useRouter } from 'next/navigation'
 import { SHEET_IMPORT_ENABLED, SheetImportBar } from '@/features/sheet-import'
 import { muiSlotPropsDecimalKeypad } from '@/lib/mui/numericTextFieldProps'
+import { insertProductPriceHistoryRow } from '@/lib/products/priceHistory'
 
 type Row = ProductWithRefs
 
@@ -151,6 +153,15 @@ export default function ProduitsListClient() {
       setError(e2.message)
       return
     }
+    const { error: hErr } = await insertProductPriceHistoryRow(supabase, {
+      product_id: r.id,
+      price: n,
+      cost_purchase: r.cost_purchase ?? null,
+    })
+    if (hErr) {
+      setError(hErr.message)
+      return
+    }
     setRows(prev => prev.map(p => (p.id === r.id ? { ...p, price: n } : p)))
     setEditing(s => {
       const c = { ...s }
@@ -171,12 +182,14 @@ export default function ProduitsListClient() {
       <div className="mx-auto max-w-6xl">
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
           <div>
-            <Typography variant="h4" className="!font-semibold !text-slate-900" component="h1">
+            <Typography variant="h4" component="h1" sx={{ fontWeight: 600, color: '#0f172a' }}>
               Produits
             </Typography>
-            <Button component={AppLink} href="/" size="small" sx={{ mt: 0.5, textTransform: 'none' }}>
-              Accueil
-            </Button>
+            <div className="mt-1.5">
+              <BackNavButton href="/" size="small">
+                Accueil
+              </BackNavButton>
+            </div>
           </div>
           <Button component={AppLink} href="/produits/nouveau" variant="contained" color="success" sx={{ borderRadius: 2, textTransform: 'none' }}>
             Nouveau produit
@@ -230,14 +243,14 @@ export default function ProduitsListClient() {
         </div>
 
         <Box sx={{ overflow: 'auto', border: '1px solid', borderColor: 'divider', borderRadius: 2, bgcolor: 'background.paper' }}>
-          <table className="w-full min-w-[720px] text-sm">
+          <table className="w-full min-w-[720px] text-sm text-slate-900">
             <thead>
-              <tr className="border-b border-slate-200 bg-slate-50 text-left text-xs uppercase text-slate-600">
+              <tr className="border-b border-slate-200 bg-slate-100 text-left text-xs font-semibold uppercase text-slate-800">
                 <th className="px-3 py-2">
                   <button
                     type="button"
                     onClick={() => toggleSort('code')}
-                    className="inline-flex items-center gap-0.5 font-semibold text-slate-600 hover:text-emerald-800"
+                    className="inline-flex items-center gap-0.5 text-slate-800 hover:text-emerald-800"
                     title="Trier par code (numérique)"
                   >
                     Code
@@ -259,7 +272,7 @@ export default function ProduitsListClient() {
                   <button
                     type="button"
                     onClick={() => toggleSort('price')}
-                    className="inline-flex items-center gap-0.5 font-semibold text-slate-600 hover:text-emerald-800"
+                    className="inline-flex items-center gap-0.5 text-slate-800 hover:text-emerald-800"
                     title="Trier par prix"
                   >
                     Prix (DH)
@@ -331,9 +344,9 @@ export default function ProduitsListClient() {
                         </Button>
                       ) : null}
                     </td>
-                    <td className="px-3 py-2 text-slate-700">{(r.ref_sales_unit as RefRow | null)?.label ?? '—'}</td>
-                    <td className="px-3 py-2 text-slate-700">{(r.ref_category as RefRow | null)?.label ?? '—'}</td>
-                    <td className="px-3 py-2 text-slate-700">{(r.ref_supplier as RefRow | null)?.label ?? '—'}</td>
+                    <td className="px-3 py-2 text-slate-900">{(r.ref_sales_unit as RefRow | null)?.label ?? '—'}</td>
+                    <td className="px-3 py-2 text-slate-900">{(r.ref_category as RefRow | null)?.label ?? '—'}</td>
+                    <td className="px-3 py-2 text-slate-900">{(r.ref_supplier as RefRow | null)?.label ?? '—'}</td>
                     <td className="px-3 py-2" onClick={e => e.stopPropagation()}>
                       <Button size="small" href={`/produits/${r.id}`} component={AppLink} sx={{ textTransform: 'none' }}>
                         Fiche

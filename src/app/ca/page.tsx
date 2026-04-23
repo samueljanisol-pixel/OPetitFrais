@@ -3,6 +3,7 @@
 import Image from 'next/image'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Button, Stack, TextField } from '@mui/material'
+import BackNavButton from '@/components/BackNavButton'
 import AppLink from '@/components/AppLink'
 import PaniersHeureHistogram from '@/components/PaniersHeureHistogram'
 import SyncStatusFooter from '@/components/SyncStatusFooter'
@@ -297,16 +298,9 @@ export default function CaDashboardPage() {
               spacing={1}
               sx={{ flexWrap: 'wrap', alignItems: 'center' }}
             >
-              <Button
-                component={AppLink}
-                href="/"
-                variant="outlined"
-                color="success"
-                size="medium"
-                sx={{ borderRadius: 3, textTransform: 'none', fontWeight: 600, bgcolor: 'rgba(255,255,255,0.85)' }}
-              >
+              <BackNavButton href="/" size="medium">
                 Accueil
-              </Button>
+              </BackNavButton>
               <Button
                 component={AppLink}
                 href="/historique-ca"

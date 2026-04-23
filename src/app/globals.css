@@ -2,7 +2,8 @@
 
 :root {
   --background: #ffffff;
-  --foreground: #171717;
+  /* Texte par défaut lisible sur fonds clairs (cartes, pastels) */
+  --foreground: #0f172a;
 }
 
 @theme inline {
@@ -12,10 +13,12 @@
   --font-mono: var(--font-geist-mono);
 }
 
+/* L’app utilise des surfaces claires (cartes, pastels) : ne pas inverser le texte
+   selon le thème système, sinon héritage pâle illisible sur mobile (souvent en dark). */
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+    --background: #ffffff;
+    --foreground: #0f172a;
   }
 }
 

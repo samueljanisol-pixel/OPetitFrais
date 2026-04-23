@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   Box,
   Button,
@@ -13,7 +13,7 @@ import {
   TextField,
   Typography,
 } from '@mui/material'
-import AppLink from '@/components/AppLink'
+import BackNavButton from '@/components/BackNavButton'
 import { createSupabaseBrowserClient } from '@/lib/supabase/client'
 import { defaultMargin } from '@/lib/products/margin'
 import { productPhotoPublicUrl, removeProductPhoto, uploadProductPhoto } from '@/lib/products/storage'
@@ -26,6 +26,7 @@ import type {
 } from '@/lib/products/types'
 import { useRouter } from 'next/navigation'
 import { muiSlotPropsDecimalKeypad } from '@/lib/mui/numericTextFieldProps'
+import { insertProductPriceHistoryRow } from '@/lib/products/priceHistory'
 
 type Props = { productId: string | null }
 
@@ -33,6 +34,8 @@ type PackagingLine = ProductPackagingRow & {
   ref_conditionnement: RefConditionnementRow | null
   ref_sales_unit: RefRow | null
 }
+
+const HIST_PAGE = 10
 
 const num = (s: string) => {
   const n = Number(s.replace(',', '.'))
@@ -66,10 +69,16 @@ export default function ProductFormClient({ productId }: Props) {
   const [imageUrl, setImageUrl] = useState<string | null>(null)
   const [packs, setPacks] = useState<PackagingLine[]>([])
   const [hist, setHist] = useState<ProductPriceHistoryRow[]>([])
+  const [histError, setHistError] = useState<string | null>(null)
+  const [histHasMore, setHistHasMore] = useState(false)
+  const [histLoadingMore, setHistLoadingMore] = useState(false)
 
   const [addCond, setAddCond] = useState('')
   const [addQty, setAddQty] = useState('1')
   const [addUnit, setAddUnit] = useState('')
+
+  /** Derniers prix enregistrés en base (pour n’ajouter une ligne d’historique que si vente/achat change). */
+  const lastPriceDbRef = useRef<{ price: number; cost_purchase: number | null } | null>(null)
 
   const loadRefs = useCallback(async () => {
     const [u, c, s, co] = await Promise.all([
@@ -100,6 +109,7 @@ export default function ProductFormClient({ productId }: Props) {
   const loadProduct = useCallback(async () => {
     if (!productId) return
     setLoading(true)
+    setHistLoadingMore(false)
     setErr(null)
     const { data, error: e0 } = await supabase
       .from('product')
@@ -113,13 +123,21 @@ export default function ProductFormClient({ productId }: Props) {
     }
     const row = data as ProductRow
     setP(row)
+    lastPriceDbRef.current = {
+      price: Number(row.price),
+      cost_purchase: row.cost_purchase ?? null,
+    }
     setImageUrl(productPhotoPublicUrl(supabase, row.image_path))
-    const { data: ph } = await supabase
+    const { data: ph, error: phErr } = await supabase
       .from('product_price_history')
       .select('*')
       .eq('product_id', productId)
       .order('valid_from', { ascending: false })
-    setHist((ph as ProductPriceHistoryRow[]) ?? [])
+      .range(0, HIST_PAGE - 1)
+    setHistError(phErr?.message ?? null)
+    const hRows = (ph as ProductPriceHistoryRow[]) ?? []
+    setHist(hRows)
+    setHistHasMore(!phErr && hRows.length === HIST_PAGE)
     const { data: pg } = await supabase
       .from('product_packaging')
       .select('*, ref_conditionnement(*), ref_sales_unit(*)')
@@ -127,6 +145,28 @@ export default function ProductFormClient({ productId }: Props) {
     setPacks((pg as PackagingLine[]) ?? [])
     setLoading(false)
   }, [supabase, productId])
+
+  const loadMoreHistory = useCallback(async () => {
+    if (!productId || histLoadingMore) return
+    setHistLoadingMore(true)
+    setHistError(null)
+    const from = hist.length
+    const { data: ph, error: phErr } = await supabase
+      .from('product_price_history')
+      .select('*')
+      .eq('product_id', productId)
+      .order('valid_from', { ascending: false })
+      .range(from, from + HIST_PAGE - 1)
+    if (phErr) {
+      setHistError(phErr.message)
+      setHistLoadingMore(false)
+      return
+    }
+    const next = (ph as ProductPriceHistoryRow[]) ?? []
+    setHist(prev => [...prev, ...next])
+    setHistHasMore(next.length === HIST_PAGE)
+    setHistLoadingMore(false)
+  }, [supabase, productId, hist.length, histLoadingMore])
 
   useEffect(() => {
     void loadRefs()
@@ -204,6 +244,16 @@ export default function ProductFormClient({ productId }: Props) {
         return
       }
       const newId = (data as { id: string }).id
+      const { error: h1 } = await insertProductPriceHistoryRow(supabase, {
+        product_id: newId,
+        price: Number(p.price) || 0,
+        cost_purchase: p.cost_purchase ?? null,
+      })
+      if (h1) {
+        setErr(h1.message)
+        setSaving(false)
+        return
+      }
       router.replace(`/produits/${newId}`)
       setSaving(false)
       return
@@ -213,6 +263,26 @@ export default function ProductFormClient({ productId }: Props) {
       setErr(e2.message)
       setSaving(false)
       return
+    }
+    const nextPrice = Number(p.price) || 0
+    const nextCost = p.cost_purchase ?? null
+    const prev = lastPriceDbRef.current
+    const priceOrCostChanged =
+      !prev ||
+      prev.price !== nextPrice ||
+      (prev.cost_purchase ?? null) !== (nextCost ?? null)
+    if (priceOrCostChanged) {
+      const { error: h2 } = await insertProductPriceHistoryRow(supabase, {
+        product_id: productId!,
+        price: nextPrice,
+        cost_purchase: nextCost,
+      })
+      if (h2) {
+        setErr(h2.message)
+        setSaving(false)
+        return
+      }
+      lastPriceDbRef.current = { price: nextPrice, cost_purchase: nextCost }
     }
     await loadProduct()
     setSaving(false)
@@ -293,12 +363,12 @@ export default function ProductFormClient({ productId }: Props) {
     <div className="min-h-screen bg-gradient-to-br from-emerald-50 via-white to-rose-50 p-4 md:p-8">
       <div className="mx-auto max-w-3xl">
         <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-          <Typography variant="h4" className="!font-semibold" component="h1">
+          <Typography variant="h4" component="h1" sx={{ fontWeight: 600, color: '#0f172a' }}>
             {isNew ? 'Nouveau produit' : p.name?.trim() || (p.code != null ? `Produit ${p.code}` : 'Fiche produit')}
           </Typography>
-          <Button component={AppLink} href="/produits" size="small" sx={{ textTransform: 'none' }}>
+          <BackNavButton href="/produits" size="small">
             Liste produits
-          </Button>
+          </BackNavButton>
         </div>
         {err ? (
           <div className="mb-3 rounded border border-rose-200 bg-rose-50 p-2 text-sm text-rose-900">{err}</div>
@@ -551,37 +621,66 @@ export default function ProductFormClient({ productId }: Props) {
           </Box>
         ) : null}
 
-        {!isNew && hist.length > 0 ? (
+        {!isNew && productId ? (
           <Box sx={{ mt: 4 }}>
-            <Typography variant="h6" sx={{ mb: 1 }}>
+            <Typography variant="h6" sx={{ mb: 1, color: '#0f172a' }}>
               Historique des prix
             </Typography>
-            <table className="w-full text-sm border border-slate-200">
-              <thead>
-                <tr className="bg-slate-50 text-left text-xs text-slate-600">
-                  <th className="p-2">Date</th>
-                  <th className="p-2">Prix vente</th>
-                  <th className="p-2">Prix achat</th>
-                </tr>
-              </thead>
-              <tbody>
-                {hist.map(h => (
-                  <tr key={h.id} className="border-t">
-                    <td className="p-2">
-                      {new Date(h.valid_from).toLocaleString('fr-FR', { timeZone: 'UTC' })}
-                    </td>
-                    <td className="p-2">
-                      {new Intl.NumberFormat('fr-FR', { maximumFractionDigits: 2 }).format(h.price)} DH
-                    </td>
-                    <td className="p-2">
-                      {h.cost_purchase != null
-                        ? `${new Intl.NumberFormat('fr-FR', { maximumFractionDigits: 2 }).format(h.cost_purchase)} DH`
-                        : '—'}
-                    </td>
+            <Typography variant="body2" sx={{ mb: 1, color: 'text.secondary' }}>
+              Une ligne est ajoutée à chaque enregistrement qui modifie le prix de vente ou le prix d’achat.
+            </Typography>
+            {histError ? (
+              <p className="rounded border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-900">
+                Impossible de charger l’historique : {histError}
+              </p>
+            ) : null}
+            {!histError && hist.length === 0 ? (
+              <p className="rounded border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-800">
+                Aucune ligne pour l’instant. Enregistrez un changement de prix de vente ou d’achat : il apparaîtra ici.
+              </p>
+            ) : null}
+            {!histError && hist.length > 0 ? (
+              <table className="w-full text-sm border border-slate-200 text-slate-900">
+                <thead>
+                  <tr className="bg-slate-100 text-left text-xs font-semibold text-slate-800">
+                    <th className="p-2">Date</th>
+                    <th className="p-2">Prix vente</th>
+                    <th className="p-2">Prix achat</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {hist.map(h => (
+                    <tr key={h.id} className="border-t border-slate-100">
+                      <td className="p-2">
+                        {new Date(h.valid_from).toLocaleString('fr-FR', { timeZone: 'UTC' })}
+                      </td>
+                      <td className="p-2 tabular-nums">
+                        {new Intl.NumberFormat('fr-FR', { maximumFractionDigits: 2 }).format(h.price)} DH
+                      </td>
+                      <td className="p-2 tabular-nums">
+                        {h.cost_purchase != null
+                          ? `${new Intl.NumberFormat('fr-FR', { maximumFractionDigits: 2 }).format(h.cost_purchase)} DH`
+                          : '—'}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            ) : null}
+            {!histError && hist.length > 0 && histHasMore ? (
+              <div className="mt-2">
+                <Button
+                  type="button"
+                  variant="outlined"
+                  size="small"
+                  disabled={histLoadingMore}
+                  onClick={() => void loadMoreHistory()}
+                  sx={{ textTransform: 'none' }}
+                >
+                  {histLoadingMore ? 'Chargement…' : 'Voir plus (10 suivantes)'}
+                </Button>
+              </div>
+            ) : null}
           </Box>
         ) : null}
       </div>
