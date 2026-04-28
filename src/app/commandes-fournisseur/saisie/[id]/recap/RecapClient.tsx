@@ -1,10 +1,33 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { Fragment, useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Button, TextField, Typography, List, ListItem, Divider, IconButton } from "@mui/material";
+import {
+  Button,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
+  TextField,
+  Typography,
+  List,
+  ListItem,
+  Divider,
+  IconButton,
+} from "@mui/material";
+import { alpha } from "@mui/material/styles";
+import ChevronLeftIcon from "@mui/icons-material/ChevronLeft";
 import DeleteOutlineOutlinedIcon from "@mui/icons-material/DeleteOutlineOutlined";
 import AppLink from "@/components/AppLink";
+import CommandeFournisseurProductPicker, {
+  type ProductPickRow,
+} from "@/features/commandes-fournisseur/CommandeFournisseurProductPicker";
+import {
+  ParcoursProductQuantityPanel,
+  packArray,
+  parcoursShapeFromPickRow,
+  useSingleProductParcoursQuantity,
+} from "@/features/commandes-fournisseur/parcours-product-quantity";
 
 type Ligne = {
   id: string;
@@ -19,6 +42,8 @@ type Ligne = {
   condTitre?: string | null;
   /** Quantité contenu par conditionnement (product_packaging.quantity), pour le calcul Soit. */
   packContentQty?: number | null;
+  /** Libellé catégorie (pour regroupement récap) ; absent avant rechargement après ajout ponctuel. */
+  categoryLabel?: string | null;
 };
 
 type Commande = {
@@ -36,11 +61,30 @@ function supplierLabel(c: Commande): string {
   return (x as { label?: string })?.label ?? "—";
 }
 
+/** Libellés affichés pour les statuts métier (éviter en_saisie brut). */
+function formatStatutCommande(status: string): string {
+  const labels: Record<string, string> = {
+    en_saisie: "En saisie",
+    validee: "Validée",
+    integree: "Intégrée",
+  };
+  if (labels[status]) {
+    return labels[status]!;
+  }
+  return status
+    .split("_")
+    .map((w) => (w.length > 0 ? w.charAt(0).toUpperCase() + w.slice(1).toLowerCase() : w))
+    .join(" ");
+}
+
 function formatSoit(n: number): string {
   if (!Number.isFinite(n)) return "0";
   if (Number.isInteger(n)) return String(n);
   return n.toLocaleString("fr-FR", { maximumFractionDigits: 4 });
 }
+
+/** Largeur fixe pour quantité + unité : toutes les lignes s’alignent (9rem ≈ 144px). */
+const QTE_UNITE_W = "w-[9rem] shrink-0";
 
 function StepQte({
   value,
@@ -59,10 +103,17 @@ function StepQte({
       <Button size="small" variant="outlined" onClick={() => onChange(Math.max(0, value - 1))} disabled={value < 1}>
         -1
       </Button>
-      <div className="flex min-w-0 items-baseline justify-center gap-1">
-        <Typography className="shrink-0 min-w-[1.5rem] text-center font-medium">{value}</Typography>
+      <div
+        className={`flex shrink-0 items-baseline justify-center gap-1 ${QTE_UNITE_W} tabular-nums`}
+      >
+        <Typography className="shrink-0 text-center font-medium tabular-nums">{value}</Typography>
         {hideUnit ? null : (
-          <Typography variant="caption" color="text.secondary" className="shrink-0">
+          <Typography
+            variant="caption"
+            color="text.secondary"
+            className="min-w-0 shrink truncate text-left"
+            title={uniteVente}
+          >
             {uniteVente}
           </Typography>
         )}
@@ -82,6 +133,15 @@ export default function RecapClient({ commandeId }: { commandeId: string }) {
   const [err, setErr] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [condDialogOpen, setCondDialogOpen] = useState(false);
+  const [pendingProduct, setPendingProduct] = useState<ProductPickRow | null>(null);
+
+  const parcoursPending = pendingProduct ? parcoursShapeFromPickRow(pendingProduct) : null;
+  const { snapshot: condSnapshot, panelProps: condPanelProps } = useSingleProductParcoursQuantity(
+    parcoursPending,
+    condDialogOpen,
+  );
 
   const load = useCallback(async () => {
     setErr(null);
@@ -229,6 +289,69 @@ export default function RecapClient({ commandeId }: { commandeId: string }) {
     [editable, lignes, load, putLignes],
   );
 
+  const addLineFromProduct = useCallback(
+    async (p: ProductPickRow, productPackagingId: string | null, qte: number) => {
+      if (!editable || !commande) {
+        return;
+      }
+      const newLine: Ligne = {
+        id: `tmp-${globalThis.crypto?.randomUUID?.() ?? String(Date.now())}`,
+        product_id: p.id,
+        product_packaging_id: productPackagingId,
+        qte,
+        line_comment: null,
+        hors_fournisseur: false,
+        product: { name: p.name, code: p.code },
+      };
+      setErr(null);
+      setSaving(true);
+      try {
+        await putLignes([...lignes, newLine]);
+        await load();
+      } catch (e) {
+        setErr(e instanceof Error ? e.message : "Erreur");
+      } finally {
+        setSaving(false);
+      }
+    },
+    [commande, editable, lignes, load, putLignes],
+  );
+
+  const handleProductPicked = useCallback(
+    (p: ProductPickRow) => {
+      if (!editable || !commande) {
+        return;
+      }
+      setPickerOpen(false);
+      const packs = packArray(parcoursShapeFromPickRow(p).product_packaging);
+      if (packs.length > 0) {
+        setPendingProduct(p);
+        setCondDialogOpen(true);
+        return;
+      }
+      void addLineFromProduct(p, null, 1);
+    },
+    [addLineFromProduct, commande, editable],
+  );
+
+  const handleCondDialogConfirm = useCallback(() => {
+    if (!pendingProduct || !condSnapshot) {
+      return;
+    }
+    void addLineFromProduct(
+      pendingProduct,
+      condSnapshot.product_packaging_id,
+      condSnapshot.qte,
+    );
+    setCondDialogOpen(false);
+    setPendingProduct(null);
+  }, [addLineFromProduct, condSnapshot, pendingProduct]);
+
+  const handleCondDialogClose = useCallback(() => {
+    setCondDialogOpen(false);
+    setPendingProduct(null);
+  }, []);
+
   if (loading) {
     return <p className="px-4 py-4">Chargement…</p>;
   }
@@ -247,16 +370,190 @@ export default function RecapClient({ commandeId }: { commandeId: string }) {
 
   return (
     <main className="mx-auto w-full max-w-lg px-4 py-4">
+      <Button
+        component={AppLink}
+        href="/commandes-fournisseur/saisie"
+        color="inherit"
+        size="small"
+        startIcon={<ChevronLeftIcon fontSize="small" />}
+        sx={{
+          textTransform: "none",
+          mb: 1,
+          alignSelf: "flex-start",
+          pl: 0,
+          minHeight: 36,
+          fontWeight: 500,
+        }}
+      >
+        Liste des commandes
+      </Button>
       <Typography variant="h5" className="!mb-1" sx={{ fontWeight: 600 }}>
         Récapitulatif
       </Typography>
-      <Typography variant="body2" color="text.secondary" className="!mb-4">
-        {supplierLabel(commande)} — {commande.status}
-      </Typography>
+      <div className="!mb-4 flex flex-col gap-1">
+        <Typography variant="subtitle1" sx={{ fontWeight: 600 }} component="p" className="!m-0">
+          Fournisseur : {supplierLabel(commande)}
+        </Typography>
+        <Typography variant="subtitle1" color="primary" sx={{ fontWeight: 700 }} component="p" className="!m-0">
+          {formatStatutCommande(commande.status)}
+        </Typography>
+      </div>
 
       {err ? (
         <Typography color="error" className="!mb-2" variant="body2">
           {err}
+        </Typography>
+      ) : null}
+
+      {editable ? (
+        <div className="!mb-2 flex flex-row flex-wrap items-center justify-between gap-2">
+          <Button
+            component={AppLink}
+            href={`/commandes-fournisseur/saisie/${commandeId}/parcours`}
+            variant="outlined"
+            size="small"
+            sx={{ textTransform: "none" }}
+          >
+            Parcours produits
+          </Button>
+          <Button
+            type="button"
+            variant="outlined"
+            size="small"
+            onClick={() => setPickerOpen(true)}
+            disabled={saving}
+            sx={{ textTransform: "none" }}
+          >
+            Ajouter un produit
+          </Button>
+        </div>
+      ) : null}
+      <List dense disablePadding>
+        {lignes.map((l, i) => {
+          const u = l.uniteVente ?? "—";
+          const isCond = Boolean(l.product_packaging_id);
+          const pq = l.packContentQty;
+          const soitCond =
+            isCond && pq != null && Number.isFinite(pq) && l.qte > 0
+              ? `Soit ${formatSoit(l.qte * pq)} ${u}`
+              : null;
+          const catKey = (l.categoryLabel ?? "").trim() || "Sans catégorie";
+          const prevCat =
+            i > 0 ? ((lignes[i - 1]!.categoryLabel ?? "").trim() || "Sans catégorie") : null;
+          const showCategoryHeader = i === 0 || catKey !== prevCat;
+          return (
+            <Fragment key={l.id}>
+              {showCategoryHeader ? (
+                <ListItem
+                  component="li"
+                  disableGutters
+                  className={`!flex-col !items-stretch ${i > 0 ? "!mt-2" : "!mt-0"} !mb-1`}
+                  sx={{
+                    borderRadius: 1,
+                    px: 1.25,
+                    py: 0.75,
+                    bgcolor: (t) =>
+                      t.palette.mode === "dark"
+                        ? alpha(t.palette.success.main, 0.18)
+                        : alpha(t.palette.success.main, 0.1),
+                  }}
+                >
+                  <Typography
+                    variant="subtitle2"
+                    component="div"
+                    color="success"
+                    className="w-full"
+                    sx={{ fontWeight: 700, letterSpacing: "0.02em" }}
+                  >
+                    {catKey}
+                  </Typography>
+                </ListItem>
+              ) : null}
+              <ListItem disableGutters className="!flex-col !items-stretch !mb-2">
+              <div className="flex w-full items-start justify-between gap-2">
+                <div className="min-w-0 flex-1 pr-1">
+                  <Typography variant="body2" className="!font-medium">
+                    {l.product?.name ?? l.product_id}
+                  </Typography>
+                  {l.condTitre ? (
+                    <Typography variant="caption" color="text.secondary" className="!mt-0.5 block">
+                      {l.condTitre}
+                    </Typography>
+                  ) : null}
+                </div>
+                <div className="flex shrink-0 flex-col items-end gap-0.5">
+                  {editable ? (
+                    <div className="flex items-start gap-0.5">
+                      <div className="flex flex-col items-end gap-0.5">
+                        <StepQte
+                          value={l.qte}
+                          uniteVente={u}
+                          hideUnit={isCond}
+                          onChange={(q) => setLigneQte(i, q)}
+                        />
+                        {isCond && soitCond ? (
+                          <Typography
+                            variant="body2"
+                            color="text.secondary"
+                            component="p"
+                            className={`block text-center tabular-nums ${QTE_UNITE_W} self-center`}
+                          >
+                            {soitCond}
+                          </Typography>
+                        ) : null}
+                      </div>
+                      <IconButton
+                        type="button"
+                        size="small"
+                        color="error"
+                        aria-label="Supprimer la ligne"
+                        onClick={() => void onDeleteLigne(i)}
+                        disabled={saving}
+                        className="!mt-0.5"
+                      >
+                        <DeleteOutlineOutlinedIcon fontSize="small" />
+                      </IconButton>
+                    </div>
+                  ) : (
+                    <div className="flex flex-col items-end pr-0.5">
+                      <div
+                        className={`flex items-baseline justify-center gap-1 tabular-nums ${QTE_UNITE_W}`}
+                      >
+                        <Typography variant="body2" className="shrink-0 font-medium tabular-nums">
+                          {l.qte}
+                        </Typography>
+                        {isCond ? null : (
+                          <Typography variant="body2" color="text.secondary" className="min-w-0 truncate">
+                            {u}
+                          </Typography>
+                        )}
+                      </div>
+                      {isCond && soitCond ? (
+                        <Typography
+                          variant="body2"
+                          color="text.secondary"
+                          component="p"
+                          className={`block text-center tabular-nums ${QTE_UNITE_W} self-center`}
+                        >
+                          {soitCond}
+                        </Typography>
+                      ) : null}
+                    </div>
+                  )}
+                </div>
+              </div>
+              <Divider className="!my-2" />
+            </ListItem>
+            </Fragment>
+          );
+        })}
+      </List>
+
+      {lignes.length === 0 ? (
+        <Typography variant="body2" color="text.secondary" className="!mb-4">
+          {editable
+            ? "Aucune ligne. Utilisez le parcours produits ou « Ajouter un produit »."
+            : "Aucune ligne. Passez par le parcours produits."}
         </Typography>
       ) : null}
 
@@ -272,110 +569,14 @@ export default function RecapClient({ commandeId }: { commandeId: string }) {
         }}
         disabled={!editable}
         size="small"
-        className="!mb-4"
+        className="!mb-4 !mt-4"
       />
 
-      <Typography variant="subtitle2" className="!mb-2">
-        Lignes
-      </Typography>
-      <List dense disablePadding>
-        {lignes.map((l, i) => {
-          const u = l.uniteVente ?? "—";
-          const isCond = Boolean(l.product_packaging_id);
-          const pq = l.packContentQty;
-          const soitCond =
-            isCond && pq != null && Number.isFinite(pq) && l.qte > 0
-              ? `Soit ${formatSoit(l.qte * pq)} ${u}`
-              : null;
-          return (
-            <ListItem key={l.id} disableGutters className="!flex-col !items-stretch !mb-2">
-              <div className="flex w-full items-start justify-between gap-2">
-                <div className="min-w-0 flex-1 pr-1">
-                  <Typography variant="body2" className="!font-medium">
-                    {l.product?.name ?? l.product_id}
-                  </Typography>
-                  {l.condTitre ? (
-                    <Typography variant="caption" color="text.secondary" className="!mt-0.5 block">
-                      {l.condTitre}
-                    </Typography>
-                  ) : null}
-                </div>
-                <div className="flex shrink-0 flex-col items-end gap-0.5">
-                  {editable ? (
-                    <>
-                      <div className="flex items-center gap-0.5">
-                        <StepQte
-                          value={l.qte}
-                          uniteVente={u}
-                          hideUnit={isCond}
-                          onChange={(q) => setLigneQte(i, q)}
-                        />
-                        <IconButton
-                          type="button"
-                          size="small"
-                          color="error"
-                          aria-label="Supprimer la ligne"
-                          onClick={() => void onDeleteLigne(i)}
-                          disabled={saving}
-                        >
-                          <DeleteOutlineOutlinedIcon fontSize="small" />
-                        </IconButton>
-                      </div>
-                      {isCond && soitCond ? (
-                        <Typography variant="body2" color="text.secondary" className="!pr-7">
-                          {soitCond}
-                        </Typography>
-                      ) : null}
-                    </>
-                  ) : (
-                    <div className="flex flex-col items-end pr-0.5">
-                      <div className="flex items-baseline gap-1">
-                        <Typography variant="body2" className="font-medium">
-                          {l.qte}
-                        </Typography>
-                        {isCond ? null : (
-                          <Typography variant="body2" color="text.secondary">
-                            {u}
-                          </Typography>
-                        )}
-                      </div>
-                      {isCond && soitCond ? (
-                        <Typography variant="body2" color="text.secondary">
-                          {soitCond}
-                        </Typography>
-                      ) : null}
-                    </div>
-                  )}
-                </div>
-              </div>
-              <Divider className="!my-2" />
-            </ListItem>
-          );
-        })}
-      </List>
-
-      {lignes.length === 0 ? (
-        <Typography variant="body2" color="text.secondary" className="!mb-4">
-          Aucune ligne. Passez par le parcours produits.
-        </Typography>
-      ) : null}
-
-      <div className="!mt-4 flex flex-col gap-2">
+      <div className="flex flex-col gap-2">
         {editable ? (
-          <>
-            <Button
-              component={AppLink}
-              href={`/commandes-fournisseur/saisie/${commandeId}/parcours`}
-              variant="outlined"
-              fullWidth
-              sx={{ textTransform: "none" }}
-            >
-              Parcours produits
-            </Button>
-            <Button variant="contained" color="success" fullWidth onClick={() => void onValidate()} disabled={saving} sx={{ textTransform: "none" }}>
-              {saving ? "…" : "Valider la commande"}
-            </Button>
-          </>
+          <Button variant="contained" color="success" fullWidth onClick={() => void onValidate()} disabled={saving} sx={{ textTransform: "none" }}>
+            {saving ? "…" : "Valider la commande"}
+          </Button>
         ) : null}
 
         {commande.status === "validee" ? (
@@ -389,11 +590,46 @@ export default function RecapClient({ commandeId }: { commandeId: string }) {
             Cette commande a été prise en compte par le gestionnaire. Modification impossible.
           </Typography>
         ) : null}
-
-        <Button component={AppLink} href="/commandes-fournisseur/saisie" color="inherit" fullWidth sx={{ textTransform: "none" }}>
-          Liste des commandes
-        </Button>
       </div>
+
+      {commande ? (
+        <CommandeFournisseurProductPicker
+          open={pickerOpen}
+          onClose={() => setPickerOpen(false)}
+          supplierId={commande.supplier_id}
+          existingProductIds={lignes.map((l) => l.product_id)}
+          onSelect={handleProductPicked}
+        />
+      ) : null}
+
+      <Dialog open={condDialogOpen} onClose={handleCondDialogClose} fullWidth maxWidth="sm">
+        <DialogTitle sx={{ pb: 0.5 }}>Quantité et conditionnement</DialogTitle>
+        <DialogContent>
+          {pendingProduct ? (
+            <>
+              <Typography variant="subtitle2" className="!mb-2 !font-semibold">
+                {pendingProduct.name}
+              </Typography>
+              {condPanelProps ? <ParcoursProductQuantityPanel {...condPanelProps} /> : null}
+            </>
+          ) : null}
+        </DialogContent>
+        <DialogActions className="!px-3 !pb-2">
+          <Button type="button" color="inherit" onClick={handleCondDialogClose} sx={{ textTransform: "none" }}>
+            Annuler
+          </Button>
+          <Button
+            type="button"
+            variant="contained"
+            color="success"
+            disabled={saving || !condSnapshot}
+            onClick={handleCondDialogConfirm}
+            sx={{ textTransform: "none" }}
+          >
+            Ajouter
+          </Button>
+        </DialogActions>
+      </Dialog>
     </main>
   );
 }

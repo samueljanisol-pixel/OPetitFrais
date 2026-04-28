@@ -92,7 +92,7 @@ export default function CommandesFournisseurLandingClient() {
             fullWidth
             sx={{ borderRadius: 2, textTransform: "none" }}
           >
-            Validation commande fournisseur
+            Validation
           </Button>
         ) : null}
         {canCommandesFournisseurAchat || isFullAccess ? (

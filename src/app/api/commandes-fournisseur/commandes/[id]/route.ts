@@ -73,14 +73,52 @@ export async function GET(_req: Request, ctx: Ctx) {
     return n.toLocaleString("fr-FR", { maximumFractionDigits: 4 });
   }
 
-  type ProductRow = { id: string; name: string; code: string; ref_sales_unit: unknown };
+  type ProductRow = {
+    id: string;
+    name: string;
+    code: string;
+    ref_sales_unit: unknown;
+    ref_category?: unknown;
+  };
   let productMap: Record<string, ProductRow> = {};
   if (pids.length > 0) {
     const { data: prods } = await supabase
       .from("product")
-      .select("id, name, code, ref_sales_unit(label)")
+      .select("id, name, code, ref_sales_unit(label), ref_category(label, sort_order)")
       .in("id", pids);
     productMap = Object.fromEntries((prods ?? []).map((p) => [p.id, p as ProductRow]));
+  }
+
+  type CatSort = { label: string; sort_order: number | null };
+  function parseCategory(raw: unknown): CatSort {
+    const c = (Array.isArray(raw) ? raw[0] : raw) as { label?: string; sort_order?: number | null } | null | undefined;
+    if (!c || typeof c !== "object") {
+      return { label: "", sort_order: null };
+    }
+    const lb = typeof c.label === "string" ? c.label.trim() : "";
+    return { label: lb, sort_order: c.sort_order ?? null };
+  }
+
+  function lignesOrderedByCategory(
+    ligneRows: typeof rawLignes,
+    prods: Record<string, ProductRow>,
+  ): typeof ligneRows {
+    const out = [...ligneRows];
+    out.sort((a, b) => {
+      const pa = prods[a.product_id as string];
+      const pb = prods[b.product_id as string];
+      const ca = pa ? parseCategory(pa.ref_category) : { label: "", sort_order: null };
+      const cb = pb ? parseCategory(pb.ref_category) : { label: "", sort_order: null };
+      const oa = ca.sort_order ?? 0;
+      const ob = cb.sort_order ?? 0;
+      if (oa !== ob) return oa - ob;
+      const lc = ca.label.localeCompare(cb.label, "fr");
+      if (lc !== 0) return lc;
+      const na = (pa?.name ?? "").localeCompare(pb?.name ?? "", "fr");
+      if (na !== 0) return na;
+      return String(a.id).localeCompare(String(b.id));
+    });
+    return out;
   }
 
   type PackRow = {
@@ -98,9 +136,11 @@ export async function GET(_req: Request, ctx: Ctx) {
     packMap = Object.fromEntries((packs ?? []).map((pk) => [pk.id, pk as PackRow]));
   }
 
+  const lignesSorted = lignesOrderedByCategory(rawLignes, productMap);
+
   return NextResponse.json({
     commande: cmd,
-    lignes: rawLignes.map((l) => {
+    lignes: lignesSorted.map((l) => {
       const product = productMap[l.product_id as string] ?? null;
       const packId = l.product_packaging_id as string | null;
       const uniteVente = product ? labelFromRef(product.ref_sales_unit) : "—";
@@ -112,12 +152,15 @@ export async function GET(_req: Request, ctx: Ctx) {
         pr && pr.id
           ? `${condN !== "—" ? condN : "Colis"} (${formatPackQty(packQty)} ${packUs})`
           : null;
+      const cat = product ? parseCategory(product.ref_category) : { label: "", sort_order: null };
+      const categoryLabel = cat.label.length > 0 ? cat.label : "Sans catégorie";
       return {
         ...l,
         product: product ? { id: product.id, name: product.name, code: product.code } : null,
         uniteVente,
         condTitre,
         packContentQty: pr && pr.id && Number.isFinite(packQty) ? packQty : null,
+        categoryLabel,
       };
     }),
   });

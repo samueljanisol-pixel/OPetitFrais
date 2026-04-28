@@ -16,7 +16,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex min-h-full flex-1 flex-col">
       <header
-        className="sticky top-0 z-30 flex shrink-0 items-center gap-3 border-b border-emerald-100/80 bg-white/95 px-4 py-2.5 shadow-sm backdrop-blur-sm"
+        className="sticky top-0 z-30 flex shrink-0 items-center gap-2 border-b border-emerald-100/80 bg-white/95 px-4 py-2.5 shadow-sm backdrop-blur-sm"
         role="banner"
         aria-label={loading ? "Profil" : `Profil : ${displayName}`}
       >
@@ -26,13 +26,13 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         >
           O&apos; Petit Frais
         </Link>
-        <div className="flex min-w-0 max-w-[min(100%,28rem)] items-center gap-2 border-l border-emerald-100/90 pl-3">
+
+        <div className="ml-auto flex min-w-0 max-w-[min(100%,20rem)] shrink-0 items-center gap-2">
           <AccountCircleOutlinedIcon className="!h-7 !w-7 shrink-0 text-emerald-700" aria-hidden />
           <span className="min-w-0 truncate text-sm font-medium text-slate-800" title={displayName}>
-            {loading ? "Chargement…" : displayName || "Utilisateur"}
+            {loading ? "Chargement…" : displayName || "—"}
           </span>
         </div>
-        <div className="min-w-0 flex-1" aria-hidden />
       </header>
       <div className="flex min-h-0 flex-1 flex-col">{children}</div>
     </div>

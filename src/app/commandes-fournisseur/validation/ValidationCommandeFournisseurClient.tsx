@@ -165,7 +165,7 @@ export default function ValidationCommandeFournisseurClient() {
   return (
     <main className="mx-auto w-full max-w-3xl px-4 py-6">
       <Typography variant="h5" className="!mb-1" sx={{ fontWeight: 600 }} component="h1">
-        Validation commande fournisseur
+        Validation Commandes Fournisseur
       </Typography>
       <Typography variant="body2" color="text.secondary" className="!mb-4">
         Regroupez des commandes magasins <strong>validées</strong> (même fournisseur) pour constituer un lot

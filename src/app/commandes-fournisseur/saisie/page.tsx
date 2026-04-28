@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button, List, ListItem, ListItemButton, ListItemText, Typography } from "@mui/material";
 import AddIcon from "@mui/icons-material/Add";
+import ChevronLeftIcon from "@mui/icons-material/ChevronLeft";
 import AppLink from "@/components/AppLink";
 import { useSessionPermissions } from "@/lib/auth/useSessionPermissions";
 import { useMagasinSaisie } from "./MagasinSaisieContext";
@@ -91,6 +92,23 @@ export default function SaisieIndexPage() {
 
   return (
     <main className="mx-auto w-full max-w-lg px-4 py-4">
+      <Button
+        component={AppLink}
+        href="/commandes-fournisseur"
+        color="inherit"
+        size="small"
+        startIcon={<ChevronLeftIcon fontSize="small" />}
+        sx={{
+          textTransform: "none",
+          mb: 1,
+          alignSelf: "flex-start",
+          pl: 0,
+          minHeight: 36,
+          fontWeight: 500,
+        }}
+      >
+        Retour commandes
+      </Button>
       <SaisieMagasinStrip className="!mb-4" />
       <div className="!mb-4 flex flex-row items-center justify-between">
         <div>
@@ -142,10 +160,6 @@ export default function SaisieIndexPage() {
           ))}
         </List>
       )}
-
-      <Button component={AppLink} href="/commandes-fournisseur" color="inherit" className="!mt-6" fullWidth>
-        Retour commandes
-      </Button>
     </main>
   );
 }

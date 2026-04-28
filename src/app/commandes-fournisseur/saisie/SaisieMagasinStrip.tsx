@@ -35,7 +35,7 @@ export default function SaisieMagasinStrip({ className }: Props) {
             >
               {magasins.map((m) => (
                 <MenuItem key={m.id} value={m.id}>
-                  {m.nom} ({m.code})
+                  {m.nom.trim() || m.code}
                 </MenuItem>
               ))}
             </Select>

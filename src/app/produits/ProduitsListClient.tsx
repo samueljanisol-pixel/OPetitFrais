@@ -280,7 +280,9 @@ export default function ProduitsListClient() {
           ) : null}
         </div>
 
-        {SHEET_IMPORT_ENABLED ? <SheetImportBar onDone={() => void load()} /> : null}
+        {SHEET_IMPORT_ENABLED ? (
+          <SheetImportBar onDone={() => void load()} canWriteProducts={canWriteProducts} />
+        ) : null}
 
         {error ? (
           <div className="mb-4 rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-800">{error}</div>

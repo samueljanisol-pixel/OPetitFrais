@@ -17,4 +17,6 @@ export type SessionPayload = {
   permissions: string[];
   /** Magasins : tous pour le rôle « administrateur », sinon profile_magasins. */
   magasins: SessionMagasin[];
+  /** Libellé unique pour l’en-tête (pré-calculé côté API session). */
+  displayLabel: string;
 };

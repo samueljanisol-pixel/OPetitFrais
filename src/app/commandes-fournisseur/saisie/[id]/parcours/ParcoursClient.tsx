@@ -2,142 +2,27 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import Image from "next/image";
 import { Button, Typography } from "@mui/material";
 import ChevronLeftIcon from "@mui/icons-material/ChevronLeft";
 import ChevronRightIcon from "@mui/icons-material/ChevronRight";
 import AppLink from "@/components/AppLink";
+import {
+  type PackRoute,
+  type ParcoursProductForQty,
+  ParcoursProductQuantityPanel,
+  packArray,
+  parseCategoryLabel,
+  pKeyForProduct,
+  uKeyForProduct,
+} from "@/features/commandes-fournisseur/parcours-product-quantity";
 
-type PPack = {
-  id: string;
-  conditionnement_id: string;
-  quantity: string | number;
-  ref_conditionnement?: unknown;
-  ref_sales_unit?: unknown;
-};
-type Product = {
-  id: string;
+type Product = ParcoursProductForQty & {
   name: string;
   code: string;
   ref_category: unknown;
-  ref_sales_unit?: unknown;
-  product_packaging: PPack[] | PPack | null;
+  photoUrl?: string | null;
 };
-
-type PackRoute = "unit" | string;
-
-function refLabel(raw: unknown): string {
-  const o = (Array.isArray(raw) ? raw[0] : raw) as { label?: string } | null | undefined;
-  return o?.label?.trim() ? String(o.label) : "—";
-}
-
-function formatQtyDisplay(n: number): string {
-  if (!Number.isFinite(n)) return "0";
-  if (Number.isInteger(n)) return String(n);
-  return n.toLocaleString("fr-FR", { maximumFractionDigits: 4 });
-}
-
-function packQtyValue(pkg: PPack): number {
-  return typeof pkg.quantity === "string" ? parseFloat(pkg.quantity) : Number(pkg.quantity);
-}
-
-function parseCategoryLabel(raw: unknown): string {
-  const c = (Array.isArray(raw) ? raw[0] : raw) as { label?: string } | null | undefined;
-  return c?.label?.trim() ? String(c.label) : "—";
-}
-
-function packArray(p: Product["product_packaging"]): PPack[] {
-  if (!p) return [];
-  return Array.isArray(p) ? p : [p];
-}
-
-function UnitQteControl({
-  unitLabel,
-  value,
-  onChange,
-}: {
-  unitLabel: string;
-  value: number;
-  onChange: (n: number) => void;
-}) {
-  const step = (d: number) => () => onChange(Math.max(0, value + d));
-  return (
-    <div className="flex flex-col gap-1">
-      <div className="flex items-center justify-between gap-1">
-        <div className="flex gap-0.5">
-          <Button size="small" variant="outlined" onClick={step(-10)} disabled={value < 10}>
-            -10
-          </Button>
-          <Button size="small" variant="outlined" onClick={step(-1)} disabled={value < 1}>
-            -1
-          </Button>
-        </div>
-        <div className="flex min-w-0 items-baseline justify-center gap-1">
-          <Typography variant="h6" className="shrink-0 text-center">
-            {value}
-          </Typography>
-          <Typography variant="body2" color="text.secondary" className="shrink-0">
-            {unitLabel}
-          </Typography>
-        </div>
-        <div className="flex gap-0.5">
-          <Button size="small" variant="outlined" onClick={step(1)}>
-            +1
-          </Button>
-          <Button size="small" variant="outlined" onClick={step(10)}>
-            +10
-          </Button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function PackQteControl({
-  condWithPackSpec,
-  soitLine,
-  value,
-  onChange,
-}: {
-  condWithPackSpec: string;
-  soitLine: string | null;
-  value: number;
-  onChange: (n: number) => void;
-}) {
-  const step = (d: number) => () => onChange(Math.max(0, value + d));
-  return (
-    <div className="flex flex-col gap-1">
-      <Typography variant="body2" className="!font-medium leading-snug" component="p">
-        {condWithPackSpec}
-      </Typography>
-      <div className="flex items-center justify-between gap-1">
-        <div className="flex gap-0.5">
-          <Button size="small" variant="outlined" onClick={step(-10)} disabled={value < 10}>
-            -10
-          </Button>
-          <Button size="small" variant="outlined" onClick={step(-1)} disabled={value < 1}>
-            -1
-          </Button>
-        </div>
-        <Typography variant="h6" className="min-w-[2.5rem] shrink-0 text-center">
-          {value}
-        </Typography>
-        <div className="flex gap-0.5">
-          <Button size="small" variant="outlined" onClick={step(1)}>
-            +1
-          </Button>
-          <Button size="small" variant="outlined" onClick={step(10)}>
-            +10
-          </Button>
-        </div>
-      </div>
-      {soitLine ? (
-        <Typography variant="body2" color="text.secondary" className="!mt-0.5 text-right">
-          {soitLine}
-        </Typography>
-      ) : null}
-    </div>
-  );
-}
 
 type LigneIn = { product_id: string; product_packaging_id: string | null; qte: number };
 
@@ -154,8 +39,8 @@ export default function ParcoursClient({ commandeId }: { commandeId: string }) {
   const n = products.length;
   const current = n > 0 && index < n ? products[index] : null;
 
-  const uKey = useCallback((pid: string) => `u:${pid}`, []);
-  const pKey = useCallback((pid: string, pk: string) => `p:${pid}:${pk}`, []);
+  const uKey = useCallback((pid: string) => uKeyForProduct(pid), []);
+  const pKey = useCallback((pid: string, pk: string) => pKeyForProduct(pid, pk), []);
 
   const getQ = useCallback(
     (k: string) => qtes[k] ?? 0,
@@ -285,7 +170,7 @@ export default function ParcoursClient({ commandeId }: { commandeId: string }) {
         setLoading(false);
       }
     })();
-  }, [commandeId, router]);
+  }, [commandeId, router, pKey, uKey]);
 
   const buildLignesPayload = useCallback(() => {
     const out: {
@@ -346,84 +231,16 @@ export default function ParcoursClient({ commandeId }: { commandeId: string }) {
   const currentBlocks = useMemo(() => {
     if (!current) return null;
     const p = current;
-    const packs = packArray(p.product_packaging);
-    const productUnit = refLabel(p.ref_sales_unit);
-    const route = getRoute(p);
-
-    if (packs.length === 0) {
-      return (
-        <UnitQteControl
-          unitLabel={productUnit}
-          value={getQ(uKey(p.id))}
-          onChange={(v) => setQForKey(p, uKey(p.id), v)}
-        />
-      );
-    }
-
     return (
-      <div className="flex flex-col gap-3">
-        <div className="flex flex-wrap gap-1.5">
-          <Button
-            type="button"
-            size="small"
-            variant={route === "unit" ? "contained" : "outlined"}
-            color="success"
-            onClick={() => selectRoute(p, "unit")}
-            sx={{ textTransform: "none" }}
-          >
-            À l’unité ({productUnit})
-          </Button>
-          {packs.map((pkg) => {
-            const cond = refLabel(pkg.ref_conditionnement);
-            const pq = packQtyValue(pkg);
-            const pkUnit = refLabel(pkg.ref_sales_unit);
-            const shortT = cond !== "—" ? cond : "Colis";
-            const spec = `(${formatQtyDisplay(pq)} ${pkUnit})`;
-            return (
-              <Button
-                key={pkg.id}
-                type="button"
-                size="small"
-                variant={route === pkg.id ? "contained" : "outlined"}
-                color="success"
-                onClick={() => selectRoute(p, pkg.id)}
-                sx={{ textTransform: "none" }}
-              >
-                {shortT} {spec}
-              </Button>
-            );
-          })}
-        </div>
-        {route === "unit" ? (
-          <UnitQteControl
-            unitLabel={productUnit}
-            value={getQ(uKey(p.id))}
-            onChange={(v) => setQForKey(p, uKey(p.id), v)}
-          />
-        ) : (() => {
-          const pkg = packs.find((x) => x.id === route);
-          if (!pkg) return null;
-          const cond = refLabel(pkg.ref_conditionnement);
-          const condName = cond !== "—" ? cond : "Colis";
-          const pq = packQtyValue(pkg);
-          const pkUnit = refLabel(pkg.ref_sales_unit);
-          const v = getQ(pKey(p.id, pkg.id));
-          const total = v * pq;
-          const productUnitL = productUnit;
-          const condWithPackSpec = `${condName} (${formatQtyDisplay(pq)} ${pkUnit})`;
-          const soitLine = v > 0 ? `Soit ${formatQtyDisplay(total)} ${productUnitL}` : null;
-          return (
-            <PackQteControl
-              condWithPackSpec={condWithPackSpec}
-              soitLine={soitLine}
-              value={v}
-              onChange={(n) => setQForKey(p, pKey(p.id, pkg.id), n)}
-            />
-          );
-        })()}
-      </div>
+      <ParcoursProductQuantityPanel
+        product={p}
+        route={getRoute(p)}
+        onSelectRoute={(route) => selectRoute(p, route)}
+        getQ={getQ}
+        setQuantityForKey={(key, value) => setQForKey(p, key, value)}
+      />
     );
-  }, [current, getQ, getRoute, packRoute, pKey, selectRoute, setQForKey, uKey]);
+  }, [current, getQ, getRoute, selectRoute, setQForKey]);
 
   if (loading) {
     return <p className="px-4 py-4 text-slate-600">Chargement du parcours…</p>;
@@ -463,10 +280,34 @@ export default function ParcoursClient({ commandeId }: { commandeId: string }) {
         <span className="w-16" />
       </div>
 
-      <Typography variant="caption" color="text.secondary" className="!mb-0.5 block">
+      <Typography
+        variant="body2"
+        color="text.secondary"
+        className="!mb-1 block w-full text-center !text-[0.9375rem] sm:!text-base"
+        component="span"
+        sx={{ fontWeight: 600 }}
+      >
         {catLabel}
       </Typography>
-      <Typography variant="h6" component="h1" className="!mb-3 !text-base" sx={{ fontWeight: 600 }}>
+      {typeof current.photoUrl === "string" && current.photoUrl.length > 0 ? (
+        <div className="mb-3 flex w-full justify-center">
+          <div className="relative h-36 w-full max-w-[6rem]">
+            <Image
+              src={current.photoUrl}
+              alt=""
+              fill
+              className="object-contain object-center"
+              sizes="(max-width: 448px) 100vw, 12rem"
+            />
+          </div>
+        </div>
+      ) : null}
+      <Typography
+        variant="h6"
+        component="h1"
+        className="!mb-3 !text-base text-center"
+        sx={{ fontWeight: 600 }}
+      >
         {current.name}
       </Typography>
 
@@ -480,8 +321,9 @@ export default function ParcoursClient({ commandeId }: { commandeId: string }) {
             onClick={() => setIndex((i) => Math.max(0, i - 1))}
             disabled={index <= 0}
             startIcon={<ChevronLeftIcon />}
+            sx={{ textTransform: "none" }}
           >
-            Préc.
+            Précédent
           </Button>
           <Button
             type="button"

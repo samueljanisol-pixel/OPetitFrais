@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useLayoutEffect, useState } from "react";
 import type { SessionPayload } from "@/lib/auth/session-types";
+import { buildSessionDisplayLabel } from "@/lib/auth/display-label";
 import { readSessionSnapshot, writeSessionSnapshot } from "@/lib/auth/session-display-cache";
 
 export function useSessionPermissions() {
@@ -51,13 +52,7 @@ export function useSessionPermissions() {
 
   const displayName = (() => {
     if (!session) return "";
-    const n = `${session.prenom ?? ""} ${session.nom ?? ""}`.trim();
-    if (n) return n;
-    if (session.login) return session.login;
-    const em = session.email?.trim();
-    if (em && !em.endsWith("@internal.opf")) return em;
-    if (session.roleName) return session.roleName;
-    return "Utilisateur";
+    return buildSessionDisplayLabel(session, null);
   })();
 
   return {

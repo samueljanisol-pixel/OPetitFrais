@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type { SessionPayload } from "@/lib/auth/session-types";
+import { buildSessionDisplayLabel } from "@/lib/auth/display-label";
 import { loadMagasinsForUser } from "@/lib/magasins/load-magasins-for-user";
 
 export async function GET() {
@@ -43,6 +44,18 @@ export async function GET() {
       role,
     );
 
+    const displayLabel = buildSessionDisplayLabel(
+      {
+        userId: user.id,
+        email: user.email ?? null,
+        login,
+        prenom,
+        nom,
+        roleName: role?.name ?? null,
+      },
+      meta,
+    );
+
     const payload: SessionPayload = {
       userId: user.id,
       email: user.email ?? null,
@@ -55,6 +68,7 @@ export async function GET() {
       isFullAccess: role?.is_full_access ?? false,
       permissions,
       magasins,
+      displayLabel,
     };
 
     return NextResponse.json({ session: payload });

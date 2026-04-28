@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { requireApiPermission } from "@/lib/auth/require-permission-api";
+import { productPhotoPublicUrl } from "@/lib/products/storage";
 
 /**
  * Liste ordonnée des produits actifs d'un fournisseur (parcours caissier i/N).
@@ -22,7 +23,7 @@ export async function GET(req: Request) {
   const { data: products, error } = await supabase
     .from("product")
     .select(
-      "id, code, name, category_id, supplier_id, ref_category(label, sort_order), ref_sales_unit(label, code), product_packaging(id, conditionnement_id, quantity, ref_conditionnement(label, code), ref_sales_unit(label, code))",
+      "id, code, name, category_id, supplier_id, image_path, ref_category(label, sort_order), ref_sales_unit(label, code), product_packaging(id, conditionnement_id, quantity, ref_conditionnement(label, code), ref_sales_unit(label, code))",
     )
     .eq("supplier_id", supplierId)
     .eq("active", true)
@@ -54,5 +55,11 @@ export async function GET(req: Request) {
     return (a as { name: string }).name.localeCompare((b as { name: string }).name, "fr");
   });
 
-  return NextResponse.json({ products: sorted, total: sorted.length });
+  const withPhotos = sorted.map((row) => {
+    const image_path = (row as { image_path?: string | null }).image_path;
+    const photoUrl = productPhotoPublicUrl(supabase, image_path ?? null);
+    return { ...(row as object), photoUrl };
+  });
+
+  return NextResponse.json({ products: withPhotos, total: withPhotos.length });
 }

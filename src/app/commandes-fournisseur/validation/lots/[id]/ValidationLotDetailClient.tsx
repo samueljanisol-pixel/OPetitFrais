@@ -17,6 +17,9 @@ import DeleteOutlineOutlinedIcon from "@mui/icons-material/DeleteOutlineOutlined
 import AppLink from "@/components/AppLink";
 import { useSessionPermissions } from "@/lib/auth/useSessionPermissions";
 import { buildLotProductDisplayInfo, buildSoitLine } from "@/lib/commandes-fournisseur/product-display";
+import CommandeFournisseurProductPicker, {
+  type ProductPickRow,
+} from "@/features/commandes-fournisseur/CommandeFournisseurProductPicker";
 
 type ProductE = {
   id: string;
@@ -42,6 +45,7 @@ type LotLigne = {
 
 type Lot = {
   id: string;
+  supplier_id: string;
   status: string;
   commentaire: string | null;
   created_at: string;
@@ -93,6 +97,7 @@ export default function ValidationLotDetailClient({ lotId }: { lotId: string }) 
   const [saving, setSaving] = useState(false);
   const [rowSaving, setRowSaving] = useState<string | null>(null);
   const [dataLoading, setDataLoading] = useState(true);
+  const [pickerOpen, setPickerOpen] = useState(false);
   /** Quantité par cellule au focus : enregistrement seulement si la valeur a changé au blur. */
   const cellFocusBaseline = useRef<Record<string, number>>({});
 
@@ -224,6 +229,35 @@ export default function ValidationLotDetailClient({ lotId }: { lotId: string }) 
     }
   };
 
+  const handleProductPickedForLot = useCallback(
+    async (picked: ProductPickRow) => {
+      if (!lot || lot.status !== "brouillon") {
+        return;
+      }
+      setErr(null);
+      setSaving(true);
+      try {
+        const res = await fetch(`/api/commandes-fournisseur/validation/lots/${lotId}/produits`, {
+          method: "POST",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ productId: picked.id }),
+        });
+        const j = (await res.json()) as { error?: string };
+        if (!res.ok) {
+          setErr(j.error ?? "Erreur");
+          return;
+        }
+        await load();
+      } catch (e) {
+        setErr(e instanceof Error ? e.message : "Erreur");
+      } finally {
+        setSaving(false);
+      }
+    },
+    [lot, lotId, load],
+  );
+
   const onDeleteLigne = async (lineId: string) => {
     if (!lot || lot.status !== "brouillon") {
       return;
@@ -335,8 +369,11 @@ export default function ValidationLotDetailClient({ lotId }: { lotId: string }) 
                     {m.label}
                   </TableCell>
                 ))}
-                <TableCell align="right" sx={{ fontWeight: 600, minWidth: 72 }}>
+                <TableCell align="right" sx={{ fontWeight: 600, minWidth: 56 }}>
                   Total
+                </TableCell>
+                <TableCell align="left" sx={{ fontWeight: 600, minWidth: 148 }}>
+                  Unité
                 </TableCell>
                 {editable ? (
                   <TableCell align="center" width={48} padding="checkbox">
@@ -368,19 +405,6 @@ export default function ValidationLotDetailClient({ lotId }: { lotId: string }) 
                       <Typography variant="body2" className="!font-medium">
                         {productName(p)}
                       </Typography>
-                      {display.condTitre ? (
-                        <Typography variant="caption" color="text.secondary" className="!mt-0.5 block">
-                          {display.condTitre}
-                        </Typography>
-                      ) : null}
-                      <Typography variant="caption" color="text.secondary" className="!mt-0.5 block">
-                        Unité de vente : {display.uniteVente}
-                      </Typography>
-                      {soitLine ? (
-                        <Typography variant="body2" color="text.secondary" className="!mt-0.5">
-                          {soitLine}
-                        </Typography>
-                      ) : null}
                     </TableCell>
                     {magasinColumns.map((col, i) => {
                       const v = mags[i] ?? 0;
@@ -420,8 +444,68 @@ export default function ValidationLotDetailClient({ lotId }: { lotId: string }) 
                         </TableCell>
                       );
                     })}
-                    <TableCell align="right" sx={{ fontWeight: 600 }}>
-                      {tot}
+                    <TableCell align="right" sx={{ verticalAlign: "middle" }}>
+                      <Typography variant="body2" component="span" sx={{ fontWeight: 700 }}>
+                        {tot}
+                      </Typography>
+                    </TableCell>
+                    <TableCell
+                      align="left"
+                      sx={{
+                        verticalAlign: "middle",
+                        textAlign: "left",
+                      }}
+                    >
+                      {display.condTitre ? (
+                        <>
+                          <Typography
+                            variant="caption"
+                            color="text.secondary"
+                            component="span"
+                            sx={{
+                              display: "block",
+                              whiteSpace: "nowrap",
+                              lineHeight: 1.35,
+                              overflow: "hidden",
+                              textOverflow: "ellipsis",
+                              maxWidth: "min(260px, 40vw)",
+                            }}
+                            title={display.condTitre}
+                          >
+                            {display.condTitre}
+                          </Typography>
+                          {soitLine ? (
+                            <Typography
+                              variant="body2"
+                              color="text.secondary"
+                              sx={{ mt: 0.5, display: "block", lineHeight: 1.35, textAlign: "left" }}
+                            >
+                              {soitLine}
+                            </Typography>
+                          ) : null}
+                        </>
+                      ) : (
+                        <>
+                          {display.uniteVente && display.uniteVente !== "—" ? (
+                            <Typography
+                              variant="caption"
+                              color="text.secondary"
+                              sx={{ display: "block", lineHeight: 1.35, textAlign: "left" }}
+                            >
+                              {display.uniteVente}
+                            </Typography>
+                          ) : null}
+                          {soitLine ? (
+                            <Typography
+                              variant="body2"
+                              color="text.secondary"
+                              sx={{ mt: 0.5, display: "block", lineHeight: 1.35, textAlign: "left" }}
+                            >
+                              {soitLine}
+                            </Typography>
+                          ) : null}
+                        </>
+                      )}
                     </TableCell>
                     {editable ? (
                       <TableCell align="center" padding="checkbox">
@@ -470,6 +554,15 @@ export default function ValidationLotDetailClient({ lotId }: { lotId: string }) 
           Hub commandes
         </Button>
       </div>
+
+      <CommandeFournisseurProductPicker
+        open={pickerOpen}
+        onClose={() => setPickerOpen(false)}
+        supplierId={lot.supplier_id}
+        existingProductIds={lignes.map((l) => l.product_id)}
+        alreadyPresentLabel="Déjà dans le lot"
+        onSelect={(p) => void handleProductPickedForLot(p)}
+      />
     </main>
   );
 }
