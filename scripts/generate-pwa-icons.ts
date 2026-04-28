@@ -1,5 +1,5 @@
 /**
- * Icônes PWA / Android : compose le logo sur fond vert brand (#16a34a).
+ * Icônes PWA / Android : logo centré sur canvas carré à fond transparent.
  * Si le PNG n’a pas d’alpha mais un fond noir uniforme (export courant), les pixels
  * très sombres « neutres » sont rendus transparents avant composition.
  *
@@ -13,8 +13,7 @@ const ROOT = process.cwd();
 const LOGO = resolve(ROOT, "public/logo-opetitfrais.png");
 const OUT_DIR = resolve(ROOT, "public/icons");
 
-/** #16a34a — aligné sur `theme_color` / `background_color` du manifeste */
-const BRAND_BG = { r: 22, g: 163, b: 74, alpha: 1 };
+const TRANSPARENT = { r: 0, g: 0, b: 0, alpha: 0 };
 
 /** Détecte un fond opaque quasi noir sans découper les rouges/verts du logo */
 function shouldKeyOutBlackBackground(r: number, g: number, b: number): boolean {
@@ -72,7 +71,7 @@ async function makeSquareIcon(logoPng: Buffer, size: number, logoMax: number, ou
       width: size,
       height: size,
       channels: 4,
-      background: BRAND_BG,
+      background: TRANSPARENT,
     },
   })
     .composite([{ input: resized, left, top }])
