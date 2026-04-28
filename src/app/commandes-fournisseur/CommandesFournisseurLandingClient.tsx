@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button, Typography } from "@mui/material";
+import ChevronLeftIcon from "@mui/icons-material/ChevronLeft";
 import AppLink from "@/components/AppLink";
 import { useSessionPermissions } from "@/lib/auth/useSessionPermissions";
 
@@ -62,6 +63,23 @@ export default function CommandesFournisseurLandingClient() {
 
   return (
     <main className="mx-auto w-full max-w-md px-4 py-8">
+      <Button
+        component={AppLink}
+        href="/"
+        color="inherit"
+        size="small"
+        startIcon={<ChevronLeftIcon fontSize="small" />}
+        sx={{
+          textTransform: "none",
+          mb: 1,
+          alignSelf: "flex-start",
+          pl: 0,
+          minHeight: 36,
+          fontWeight: 500,
+        }}
+      >
+        Retour accueil
+      </Button>
       <Typography variant="h5" component="h1" className="!mb-1" sx={{ fontWeight: 600 }}>
         Commandes fournisseur
       </Typography>
@@ -108,9 +126,6 @@ export default function CommandesFournisseurLandingClient() {
             Achat
           </Button>
         ) : null}
-        <Button component={AppLink} href="/" color="inherit" fullWidth sx={{ textTransform: "none", mt: 1 }}>
-          Retour accueil
-        </Button>
       </div>
     </main>
   );

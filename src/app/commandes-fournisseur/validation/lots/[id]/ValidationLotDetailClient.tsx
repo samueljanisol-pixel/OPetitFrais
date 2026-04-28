@@ -13,6 +13,7 @@ import {
   TextField,
   Typography,
 } from "@mui/material";
+import ChevronLeftIcon from "@mui/icons-material/ChevronLeft";
 import DeleteOutlineOutlinedIcon from "@mui/icons-material/DeleteOutlineOutlined";
 import AppLink from "@/components/AppLink";
 import { useSessionPermissions } from "@/lib/auth/useSessionPermissions";
@@ -314,6 +315,23 @@ export default function ValidationLotDetailClient({ lotId }: { lotId: string }) 
 
   return (
     <main className="mx-auto w-full max-w-5xl overflow-x-auto px-4 py-6">
+      <Button
+        component={AppLink}
+        href="/commandes-fournisseur/validation"
+        color="inherit"
+        size="small"
+        startIcon={<ChevronLeftIcon fontSize="small" />}
+        sx={{
+          textTransform: "none",
+          mb: 1,
+          alignSelf: "flex-start",
+          pl: 0,
+          minHeight: 36,
+          fontWeight: 500,
+        }}
+      >
+        Liste des commandes
+      </Button>
       <Typography variant="h5" className="!mb-1" sx={{ fontWeight: 600 }} component="h1">
         Lot — {supplierName}
       </Typography>
@@ -529,31 +547,18 @@ export default function ValidationLotDetailClient({ lotId }: { lotId: string }) 
         </div>
       )}
 
-      <div className="flex flex-col gap-2 sm:flex-row">
-        {lot.status === "brouillon" ? (
-          <Button
-            type="button"
-            variant="contained"
-            color="success"
-            disabled={saving}
-            onClick={() => void onPrete()}
-            sx={{ textTransform: "none" }}
-          >
-            {saving ? "…" : "Marquer prêt pour l’achat"}
-          </Button>
-        ) : null}
+      {lot.status === "brouillon" ? (
         <Button
-          component={AppLink}
-          href="/commandes-fournisseur/validation"
-          variant="outlined"
+          type="button"
+          variant="contained"
+          color="success"
+          disabled={saving}
+          onClick={() => void onPrete()}
           sx={{ textTransform: "none" }}
         >
-          Retour validation
+          {saving ? "…" : "Marquer prêt pour l’achat"}
         </Button>
-        <Button component={AppLink} href="/commandes-fournisseur" color="inherit" sx={{ textTransform: "none" }}>
-          Hub commandes
-        </Button>
-      </div>
+      ) : null}
 
       <CommandeFournisseurProductPicker
         open={pickerOpen}

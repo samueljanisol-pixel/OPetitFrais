@@ -12,6 +12,7 @@ import {
   Select,
   Typography,
 } from "@mui/material";
+import ChevronLeftIcon from "@mui/icons-material/ChevronLeft";
 import AppLink from "@/components/AppLink";
 import { useSessionPermissions } from "@/lib/auth/useSessionPermissions";
 
@@ -164,6 +165,23 @@ export default function ValidationCommandeFournisseurClient() {
 
   return (
     <main className="mx-auto w-full max-w-3xl px-4 py-6">
+      <Button
+        component={AppLink}
+        href="/commandes-fournisseur"
+        color="inherit"
+        size="small"
+        startIcon={<ChevronLeftIcon fontSize="small" />}
+        sx={{
+          textTransform: "none",
+          mb: 1,
+          alignSelf: "flex-start",
+          pl: 0,
+          minHeight: 36,
+          fontWeight: 500,
+        }}
+      >
+        Retour
+      </Button>
       <Typography variant="h5" className="!mb-1" sx={{ fontWeight: 600 }} component="h1">
         Validation Commandes Fournisseur
       </Typography>
@@ -271,10 +289,6 @@ export default function ValidationCommandeFournisseurClient() {
           </ul>
         )}
       </section>
-
-      <Button component={AppLink} href="/commandes-fournisseur" variant="outlined" fullWidth sx={{ textTransform: "none" }}>
-        Retour
-      </Button>
     </main>
   );
 }

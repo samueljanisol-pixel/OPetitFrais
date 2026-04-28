@@ -83,8 +83,8 @@ function formatSoit(n: number): string {
   return n.toLocaleString("fr-FR", { maximumFractionDigits: 4 });
 }
 
-/** Largeur fixe pour quantité + unité : toutes les lignes s’alignent (9rem ≈ 144px). */
-const QTE_UNITE_W = "w-[9rem] shrink-0";
+/** Largeur quantité + unité : plus étroit sur mobile pour ne pas pousser les boutons ± sur le libellé. */
+const QTE_UNITE_W = "min-w-0 w-[6rem] sm:w-[9rem] shrink-0";
 
 function StepQte({
   value,
@@ -99,13 +99,19 @@ function StepQte({
   hideUnit?: boolean;
 }) {
   return (
-    <div className="flex items-center gap-1">
-      <Button size="small" variant="outlined" onClick={() => onChange(Math.max(0, value - 1))} disabled={value < 1}>
+    <div className="flex max-w-[100%] shrink-0 items-center gap-0.5 sm:gap-1">
+      <Button
+        size="small"
+        variant="outlined"
+        className="!min-w-[2.35rem] !px-1 sm:!min-w-[40px] sm:!px-2"
+        sx={{ py: 0.5 }}
+        onClick={() => onChange(Math.max(0, value - 1))}
+        disabled={value <= 1}
+        aria-label={value <= 1 ? "Quantité minimale (1), supprimez la ligne pour retirer le produit" : "Diminuer de 1"}
+      >
         -1
       </Button>
-      <div
-        className={`flex shrink-0 items-baseline justify-center gap-1 ${QTE_UNITE_W} tabular-nums`}
-      >
+      <div className={`flex items-baseline justify-center gap-0.5 sm:gap-1 ${QTE_UNITE_W} tabular-nums`}>
         <Typography className="shrink-0 text-center font-medium tabular-nums">{value}</Typography>
         {hideUnit ? null : (
           <Typography
@@ -118,7 +124,13 @@ function StepQte({
           </Typography>
         )}
       </div>
-      <Button size="small" variant="outlined" onClick={() => onChange(value + 1)}>
+      <Button
+        size="small"
+        variant="outlined"
+        className="!min-w-[2.35rem] !px-1 sm:!min-w-[40px] sm:!px-2"
+        sx={{ py: 0.5 }}
+        onClick={() => onChange(value + 1)}
+      >
         +1
       </Button>
     </div>
@@ -470,8 +482,8 @@ export default function RecapClient({ commandeId }: { commandeId: string }) {
                 </ListItem>
               ) : null}
               <ListItem disableGutters className="!flex-col !items-stretch !mb-2">
-              <div className="flex w-full items-start justify-between gap-2">
-                <div className="min-w-0 flex-1 pr-1">
+              <div className="flex w-full min-w-0 items-start justify-between gap-1.5 sm:gap-2">
+                <div className="min-w-0 flex-1 overflow-hidden pr-0 sm:pr-1">
                   <Typography variant="body2" className="!font-medium">
                     {l.product?.name ?? l.product_id}
                   </Typography>

@@ -34,20 +34,19 @@ export default function HomePage() {
   return (
     <main className="relative min-h-[calc(100vh-0px)] bg-gradient-to-br from-emerald-50 via-white to-rose-50 px-6 py-16">
       <div className="mx-auto flex w-full max-w-md flex-col items-center">
-        <div className="relative mb-6 h-24 w-48 overflow-hidden rounded-3xl bg-white shadow-sm ring-1 ring-emerald-100">
-          <Image
-            src="/logo-opetitfrais.png"
-            alt="O&apos; Petit Frais"
-            fill
-            className="object-contain p-2"
-            sizes="192px"
-            priority
-          />
+        <div className="relative mb-5 flex w-full justify-center px-2">
+          <div className="relative h-32 w-full max-w-[16.5rem] overflow-hidden rounded-3xl bg-white shadow-sm ring-1 ring-emerald-100 sm:h-36 sm:max-w-[18rem]">
+            <Image
+              src="/logo-opetitfrais.png"
+              alt="O&apos; Petit Frais — accueil"
+              fill
+              className="object-contain p-1.5 sm:p-2"
+              sizes="(max-width: 640px) min(264px, 90vw), 288px"
+              priority
+            />
+          </div>
         </div>
-        <Typography variant="h4" className="!font-semibold !tracking-tight !text-slate-900" component="h1">
-          O&apos; Petit Frais
-        </Typography>
-        <Typography variant="body2" className="!mt-2 !text-slate-600" align="center">
+        <Typography variant="body2" className="!mt-2 !text-slate-600" align="center" component="h1">
           Choisissez une section
         </Typography>
         <Stack className="!mt-8 w-full" spacing={1.5}>
