@@ -2,31 +2,51 @@
 
 import Image from "next/image";
 import { useSearchParams, useRouter } from "next/navigation";
-import { useMemo, useState } from "react";
-import { createSupabaseBrowserClient } from "@/lib/supabase/client";
+import { useState } from "react";
+import type { SessionPayload } from "@/lib/auth/session-types";
+import { writeSessionSnapshot } from "@/lib/auth/session-display-cache";
 
 export default function LoginClient() {
   const sp = useSearchParams();
   const router = useRouter();
   const redirectTo = sp.get("redirectTo") || "/";
 
-  const supabase = useMemo(() => createSupabaseBrowserClient(), []);
-
-  const [email, setEmail] = useState("");
+  const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const signIn = async () => {
+    if (loading || !identifier.trim() || !password) return;
     setLoading(true);
     setError(null);
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
-    setLoading(false);
-    if (error) {
-      setError(error.message);
-      return;
+    try {
+      const res = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ identifier: identifier.trim(), password }),
+      });
+      const json = (await res.json().catch(() => ({}))) as { error?: string };
+      if (!res.ok) {
+        setError(json.error ?? "Connexion impossible");
+        setLoading(false);
+        return;
+      }
+      try {
+        const sRes = await fetch("/api/auth/session", { credentials: "include" });
+        const sJson = (await sRes.json()) as { session: SessionPayload | null };
+        writeSessionSnapshot(sJson.session);
+      } catch {
+        /* l’en-tête rechargera la session au prochain écran */
+      }
+      router.replace(redirectTo);
+      router.refresh();
+      /* Laisser le bouton en « Connexion en cours… » jusqu’à la navigation. */
+    } catch {
+      setError("Erreur réseau");
+      setLoading(false);
     }
-    router.replace(redirectTo);
   };
 
   return (
@@ -49,16 +69,26 @@ export default function LoginClient() {
           </div>
         </div>
 
-        <div className="mt-6 grid gap-3">
+        <p className="mt-3 text-xs text-slate-600">
+          Utilisez votre <strong>adresse e-mail</strong> ou votre <strong>identifiant</strong> (login magasin).
+        </p>
+
+        <form
+          className="mt-6 grid gap-3"
+          onSubmit={(e) => {
+            e.preventDefault();
+            void signIn();
+          }}
+        >
           <label className="grid gap-1">
-            <span className="text-xs font-medium uppercase tracking-wide text-slate-500">Email</span>
+            <span className="text-xs font-medium uppercase tracking-wide text-slate-500">E-mail ou identifiant</span>
             <input
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              type="email"
-              autoComplete="email"
+              value={identifier}
+              onChange={(e) => setIdentifier(e.target.value)}
+              type="text"
+              autoComplete="username"
               className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-emerald-300"
-              placeholder="ex: toi@exemple.com"
+              placeholder="ex: moi@exemple.com ou caisse1"
             />
           </label>
 
@@ -79,16 +109,14 @@ export default function LoginClient() {
           ) : null}
 
           <button
-            type="button"
-            onClick={signIn}
-            disabled={loading || !email || !password}
+            type="submit"
+            disabled={loading || !identifier.trim() || !password}
             className="mt-1 rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            {loading ? "Connexion…" : "Se connecter"}
+            {loading ? "Connexion en cours…" : "Se connecter"}
           </button>
-        </div>
+        </form>
       </div>
     </main>
   );
 }
-

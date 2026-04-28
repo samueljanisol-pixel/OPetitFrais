@@ -27,6 +27,7 @@ import type {
 import { useRouter } from 'next/navigation'
 import { muiSlotPropsDecimalKeypad } from '@/lib/mui/numericTextFieldProps'
 import { insertProductPriceHistoryRow } from '@/lib/products/priceHistory'
+import { useSessionPermissions } from '@/lib/auth/useSessionPermissions'
 
 type Props = { productId: string | null }
 
@@ -46,6 +47,8 @@ export default function ProductFormClient({ productId }: Props) {
   const isNew = productId == null
   const supabase = useMemo(() => createSupabaseBrowserClient(), [])
   const router = useRouter()
+  const { canWriteProducts, loading: permLoading } = useSessionPermissions()
+  const readOnly = !canWriteProducts
   const [loading, setLoading] = useState(!isNew)
   const [saving, setSaving] = useState(false)
   const [err, setErr] = useState<string | null>(null)
@@ -192,6 +195,7 @@ export default function ProductFormClient({ productId }: Props) {
   }, [isNew, loading, p.name, p.code])
 
   const applyDefaultMargin = () => {
+    if (readOnly) return
     const price = p.price != null ? Number(p.price) : 0
     setP(x => ({
       ...x,
@@ -205,6 +209,7 @@ export default function ProductFormClient({ productId }: Props) {
   }
 
   const save = async () => {
+    if (readOnly) return
     if (!p.name?.trim()) {
       setErr('Le nom est obligatoire')
       return
@@ -289,6 +294,7 @@ export default function ProductFormClient({ productId }: Props) {
   }
 
   const onFile = async (f: File | null) => {
+    if (readOnly) return
     if (!f || !productId) {
       if (!f && p.image_path) {
         await removeProductPhoto(supabase, p.image_path)
@@ -316,6 +322,7 @@ export default function ProductFormClient({ productId }: Props) {
   }
 
   const addPackaging = async () => {
+    if (readOnly) return
     if (!productId) {
       setErr('Enregistrez le produit avant d’ajouter un conditionnement.')
       return
@@ -344,6 +351,7 @@ export default function ProductFormClient({ productId }: Props) {
   }
 
   const removePack = async (id: string) => {
+    if (readOnly) return
     const { error: e1 } = await supabase.from('product_packaging').delete().eq('id', id)
     if (e1) {
       setErr(e1.message)
@@ -352,7 +360,7 @@ export default function ProductFormClient({ productId }: Props) {
     setPacks(prev => prev.filter(x => x.id !== id))
   }
 
-  if (loading)
+  if (loading || permLoading)
     return (
       <div className="p-6">
         <p className="text-slate-600">Chargement…</p>
@@ -373,7 +381,13 @@ export default function ProductFormClient({ productId }: Props) {
         {err ? (
           <div className="mb-3 rounded border border-rose-200 bg-rose-50 p-2 text-sm text-rose-900">{err}</div>
         ) : null}
+        {readOnly && !isNew ? (
+          <div className="mb-3 rounded border border-slate-200 bg-slate-50 p-2 text-sm text-slate-800">
+            Lecture seule — vous n&apos;avez pas la permission de modifier ce produit.
+          </div>
+        ) : null}
 
+        <fieldset disabled={readOnly} className="m-0 min-w-0 border-0 p-0 disabled:opacity-80">
         <div className="flex flex-col gap-4">
           {!isNew ? (
             <TextField size="small" label="Code" value={p.code ?? ''} disabled fullWidth />
@@ -540,16 +554,17 @@ export default function ProductFormClient({ productId }: Props) {
             type="button"
             variant="contained"
             color="success"
-            disabled={saving}
+            disabled={saving || readOnly}
             onClick={() => void save()}
             sx={{ alignSelf: 'flex-start', textTransform: 'none' }}
           >
             {saving ? 'Enregistrement…' : 'Enregistrer'}
           </Button>
         </div>
+        </fieldset>
 
         {!isNew && productId ? (
-          <Box sx={{ mt: 4 }}>
+          <Box sx={{ mt: 4 }} component="fieldset" disabled={readOnly} className="m-0 min-w-0 border-0 p-0 disabled:opacity-80">
             <Typography variant="h6" sx={{ mb: 1 }}>
               Conditionnements
             </Typography>

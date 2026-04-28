@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useSessionPermissions } from '@/lib/auth/useSessionPermissions'
 import {
   Box,
   Button,
@@ -17,14 +18,16 @@ import BackNavButton from '@/components/BackNavButton'
 import { createSupabaseBrowserClient } from '@/lib/supabase/client'
 import type { RefConditionnementRow, RefRow } from '@/lib/products/types'
 import { muiSlotPropsDecimalKeypad, muiSlotPropsIntegerKeypad } from '@/lib/mui/numericTextFieldProps'
+import MagasinsAdminPanel from './MagasinsAdminPanel'
 
-type TabId = 'udv' | 'cat' | 'sup' | 'cond'
+type TabId = 'udv' | 'cat' | 'sup' | 'cond' | 'comptes'
 
 const tabLabels: Record<TabId, string> = {
   udv: 'Unités de vente',
   cat: 'Catégories',
   sup: 'Fournisseurs',
   cond: 'Conditionnements',
+  comptes: 'Administration',
 }
 
 function RefTable<T extends { id: string; code: string; label: string; sort_order: number }>({
@@ -82,6 +85,13 @@ function RefTable<T extends { id: string; code: string; label: string; sort_orde
 
 export default function ReferentielClient() {
   const supabase = useMemo(() => createSupabaseBrowserClient(), [])
+  const { isAdministrator, canAdminUsers, canAdminRoles, canAdminMagasins } = useSessionPermissions()
+  const showComptesTab = isAdministrator
+  const tabOrder = useMemo(() => {
+    const base: TabId[] = ['udv', 'cat', 'sup', 'cond']
+    if (showComptesTab) base.push('comptes')
+    return base
+  }, [showComptesTab])
   const [tab, setTab] = useState<TabId>('udv')
   const [udv, setUdv] = useState<RefRow[]>([])
   const [cat, setCat] = useState<RefRow[]>([])
@@ -122,6 +132,10 @@ export default function ReferentielClient() {
     void load()
   }, [load])
 
+  useEffect(() => {
+    if (!showComptesTab && tab === 'comptes') setTab('udv')
+  }, [showComptesTab, tab])
+
   const openNew = () => {
     setIsNew(true)
     setEditing({ id: '', code: '', label: '', sort_order: 0, created_at: '' } as RefRow)
@@ -147,11 +161,12 @@ export default function ReferentielClient() {
     if (t === 'udv') return 'ref_sales_unit'
     if (t === 'cat') return 'ref_category'
     if (t === 'sup') return 'ref_supplier'
-    return 'ref_conditionnement'
+    if (t === 'cond') return 'ref_conditionnement'
+    return 'ref_sales_unit'
   }
 
   const save = async () => {
-    if (!editing) return
+    if (!editing || tab === 'comptes') return
     const sn = parseInt(form.sort_order, 10) || 0
     setErr(null)
     if (tab === 'cond') {
@@ -219,6 +234,7 @@ export default function ReferentielClient() {
   }
 
   const del = async (id: string) => {
+    if (tab === 'comptes') return
     if (!confirm('Supprimer cette entrée ?')) return
     setErr(null)
     const t = tableName(tab)
@@ -239,7 +255,7 @@ export default function ReferentielClient() {
       <div className="mx-auto max-w-4xl">
         <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
           <Typography variant="h4" component="h1" sx={{ fontWeight: 600, color: '#0f172a' }}>
-            Référentiel
+            Paramètres
           </Typography>
           <BackNavButton href="/" size="small">
             Accueil
@@ -247,20 +263,51 @@ export default function ReferentielClient() {
         </div>
         {err ? <div className="mb-2 rounded border border-rose-200 bg-rose-50 p-2 text-sm text-rose-800">{err}</div> : null}
         <Tabs
-          value={tab}
+          value={tabOrder.includes(tab) ? tab : 'udv'}
           onChange={(_, v) => {
             setTab(v as TabId)
             setErr(null)
           }}
           sx={{ mb: 2, borderBottom: 1, borderColor: 'divider' }}
         >
-          {(Object.keys(tabLabels) as TabId[]).map(k => (
+          {tabOrder.map(k => (
             <Tab key={k} value={k} label={tabLabels[k]} />
           ))}
         </Tabs>
-        <Button variant="contained" color="success" onClick={openNew} sx={{ mb: 2, textTransform: 'none' }}>
-          Ajouter — {tabLabels[tab]}
-        </Button>
+        {tab !== 'comptes' ? (
+          <Button variant="contained" color="success" onClick={openNew} sx={{ mb: 2, textTransform: 'none' }}>
+            Ajouter — {tabLabels[tab]}
+          </Button>
+        ) : null}
+        {tab === 'comptes' ? (
+          <>
+            <Box className="mb-4 rounded-lg border border-slate-200 bg-white/90 p-4 shadow-sm">
+              <Typography variant="body2" className="!mb-3 !text-slate-600">
+                Gestion des comptes utilisateurs et des rôles d&apos;accès à l&apos;application.
+              </Typography>
+              <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+                {canAdminUsers ? (
+                  <Button href="/admin/utilisateurs" variant="outlined" color="success" sx={{ textTransform: 'none' }}>
+                    Utilisateurs
+                  </Button>
+                ) : null}
+                {canAdminRoles ? (
+                  <Button href="/admin/roles" variant="outlined" color="success" sx={{ textTransform: 'none' }}>
+                    Rôles & accès
+                  </Button>
+                ) : null}
+              </div>
+            </Box>
+            {canAdminMagasins ? (
+              <Box className="mb-4 rounded-lg border border-slate-200 bg-white/90 p-4 shadow-sm">
+                <Typography variant="subtitle1" className="!mb-2 !font-semibold !text-slate-900">
+                  Magasins & caisses
+                </Typography>
+                <MagasinsAdminPanel />
+              </Box>
+            ) : null}
+          </>
+        ) : null}
         {tab === 'udv' && <RefTable title="Unités" rows={udv} onEdit={openRow} onDelete={del} />}
         {tab === 'cat' && <RefTable title="Catégories" rows={cat} onEdit={openRow} onDelete={del} />}
         {tab === 'sup' && <RefTable title="Fournisseurs" rows={sup} onEdit={openRow} onDelete={del} />}

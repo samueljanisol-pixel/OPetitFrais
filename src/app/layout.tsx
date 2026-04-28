@@ -3,6 +3,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import { AppRouterCacheProvider } from "@mui/material-nextjs/v16-appRouter";
 import "./globals.css";
 import SwRegister from "./swRegister";
+import AppShell from "@/components/AppShell";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -47,10 +48,10 @@ export default function RootLayout({
       lang="en"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col">
+      <body className="flex min-h-full flex-col">
         <AppRouterCacheProvider options={{ enableCssLayer: true }}>
           <SwRegister />
-          {children}
+          <AppShell>{children}</AppShell>
         </AppRouterCacheProvider>
       </body>
     </html>

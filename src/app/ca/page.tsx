@@ -11,8 +11,10 @@ import { fetchCaDashboardFromSupabase } from '@/lib/ca/fromSupabase'
 import type { CaResponse } from '@/lib/ca/types'
 import { maybeAutoSyncIfStale } from '@/lib/sync/maybeAutoSyncIfStale'
 import { createSupabaseBrowserClient } from '@/lib/supabase/client'
+import { useSessionPermissions } from '@/lib/auth/useSessionPermissions'
 
 export default function CaDashboardPage() {
+  const { session, loading: sessionLoading } = useSessionPermissions()
   const [data, setData] = useState<CaResponse | null>(null)
   const [date, setDate] = useState(() => new Date().toISOString().split('T')[0]) // YYYY-MM-DD
   const [loading, setLoading] = useState(true)
@@ -84,7 +86,16 @@ export default function CaDashboardPage() {
     return new Intl.DateTimeFormat('fr-FR', { month: 'long', year: 'numeric', timeZone: 'UTC' }).format(d)
   }, [data?.month?.ym])
 
+  const caissierMagKey =
+    session?.roleSlug === 'caissier'
+      ? (session.magasins ?? [])
+          .map((m) => m.code)
+          .sort()
+          .join(',')
+      : ''
+
   useEffect(() => {
+    if (sessionLoading) return
     let cancelled = false
     setLoading(true)
     setError(null)
@@ -102,7 +113,11 @@ export default function CaDashboardPage() {
 
         setLoadHint('Chargement des données…')
         const supabase = createSupabaseBrowserClient()
-        const res = await fetchCaDashboardFromSupabase(supabase, date)
+        const caOpts =
+          session?.roleSlug === 'caissier'
+            ? { magasinCodes: (session.magasins ?? []).map((m) => m.code) }
+            : undefined
+        const res = await fetchCaDashboardFromSupabase(supabase, date, caOpts)
         if (cancelled) return
         if ('error' in res) {
           setError(res.error)
@@ -122,7 +137,7 @@ export default function CaDashboardPage() {
     return () => {
       cancelled = true
     }
-  }, [date, refreshNonce])
+  }, [date, refreshNonce, sessionLoading, session?.roleSlug, caissierMagKey])
 
   /* Sans `&& !error` : après échec SSE, `data` reste null → on restait bloqués sur l’écran de chargement au lieu du message d’erreur. */
   if (loading || (!data && !error))

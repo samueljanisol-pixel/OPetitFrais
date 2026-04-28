@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   Box,
   Button,
+  Checkbox,
   FormControl,
   InputLabel,
   MenuItem,
@@ -11,6 +12,18 @@ import {
   TextField,
   Typography,
 } from '@mui/material'
+
+/** Sélection stable avec nouveau Set pour le rendu React. */
+function toggleIds(ids: string[], selected: Set<string>, mode: 'add' | 'remove') {
+  const next = new Set(selected)
+  for (const id of ids) {
+    if (mode === 'add') next.add(id)
+    else next.delete(id)
+  }
+  return next
+}
+
+const BULK_PROMPT = '__bulk_prompt__' as const
 import BackNavButton from '@/components/BackNavButton'
 import AppLink from '@/components/AppLink'
 import { createSupabaseBrowserClient } from '@/lib/supabase/client'
@@ -19,11 +32,15 @@ import { useRouter } from 'next/navigation'
 import { SHEET_IMPORT_ENABLED, SheetImportBar } from '@/features/sheet-import'
 import { muiSlotPropsDecimalKeypad } from '@/lib/mui/numericTextFieldProps'
 import { insertProductPriceHistoryRow } from '@/lib/products/priceHistory'
+import { useSessionPermissions } from '@/lib/auth/useSessionPermissions'
 
 type Row = ProductWithRefs
 
 type SortKey = 'code' | 'name' | 'price'
 type SortDir = 'asc' | 'desc'
+
+/** Filtre « Actif » : par défaut uniquement les produits actifs ; « Tous » sans filtre sur ce champ. */
+type ActiveFilter = 'active' | 'inactive' | 'all'
 
 function codeToNum(code: string): number {
   const n = Number.parseInt(String(code).replace(/\D/g, ''), 10)
@@ -44,6 +61,7 @@ function priceDiffers(a: number, b: number) {
 export default function ProduitsListClient() {
   const supabase = useMemo(() => createSupabaseBrowserClient(), [])
   const router = useRouter()
+  const { canWriteProducts } = useSessionPermissions()
   const [rows, setRows] = useState<Row[]>([])
   const [categories, setCategories] = useState<RefRow[]>([])
   const [suppliers, setSuppliers] = useState<RefRow[]>([])
@@ -52,9 +70,13 @@ export default function ProduitsListClient() {
   const [qName, setQName] = useState('')
   const [catId, setCatId] = useState<string>('')
   const [suppId, setSuppId] = useState<string>('')
+  const [activeFilter, setActiveFilter] = useState<ActiveFilter>('active')
   const [editing, setEditing] = useState<Record<string, string>>({})
   const [sortKey, setSortKey] = useState<SortKey>('code')
   const [sortDir, setSortDir] = useState<SortDir>('asc')
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set())
+  const [bulkBusy, setBulkBusy] = useState(false)
+  const [bulkMenuNonce, setBulkMenuNonce] = useState(0)
 
   const load = useCallback(async () => {
     setError(null)
@@ -70,6 +92,7 @@ export default function ProduitsListClient() {
       return
     }
     setRows((data as Row[]) ?? [])
+    setSelectedIds(new Set())
 
     const { data: cats } = await supabase.from('ref_category').select('*').order('sort_order')
     const { data: sups } = await supabase.from('ref_supplier').select('*').order('sort_order')
@@ -84,6 +107,8 @@ export default function ProduitsListClient() {
 
   const filtered = useMemo(() => {
     return rows.filter(r => {
+      if (activeFilter === 'active' && !r.active) return false
+      if (activeFilter === 'inactive' && r.active) return false
       if (catId && r.category_id !== catId) return false
       if (suppId && r.supplier_id !== suppId) return false
       if (qName.trim()) {
@@ -92,7 +117,7 @@ export default function ProduitsListClient() {
       }
       return true
     })
-  }, [rows, catId, suppId, qName])
+  }, [rows, activeFilter, catId, suppId, qName])
 
   const sortedFiltered = useMemo(() => {
     const list = [...filtered]
@@ -104,6 +129,62 @@ export default function ProduitsListClient() {
     })
     return list
   }, [filtered, sortKey, sortDir])
+
+  const visibleIds = useMemo(() => sortedFiltered.map(r => r.id), [sortedFiltered])
+
+  const headerSelectState = useMemo(() => {
+    const n = visibleIds.length
+    if (n === 0) return { checked: false, indeterminate: false }
+    let c = 0
+    for (const id of visibleIds) {
+      if (selectedIds.has(id)) c++
+    }
+    return { checked: c === n, indeterminate: c > 0 && c < n }
+  }, [visibleIds, selectedIds])
+
+  const selectedInViewCount = useMemo(() => {
+    let n = 0
+    for (const r of sortedFiltered) {
+      if (selectedIds.has(r.id)) n++
+    }
+    return n
+  }, [sortedFiltered, selectedIds])
+
+  const selectedHiddenCount = selectedIds.size - selectedInViewCount
+
+  const toggleSelectRow = (id: string) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  const toggleSelectAllVisible = () => {
+    const ids = visibleIds
+    if (ids.length === 0) return
+    const allOn = ids.every(id => selectedIds.has(id))
+    setSelectedIds(prev => toggleIds(ids, prev, allOn ? 'remove' : 'add'))
+  }
+
+  const runBulkAction = async (action: string) => {
+    if (!canWriteProducts || !action || selectedIds.size === 0) return
+    const ids = [...selectedIds]
+    const active = action === 'activate'
+    if (action !== 'activate' && action !== 'deactivate') return
+    setBulkBusy(true)
+    setError(null)
+    const { error: e0 } = await supabase.from('product').update({ active }).in('id', ids)
+    setBulkBusy(false)
+    if (e0) {
+      setError(e0.message)
+      return
+    }
+    setRows(prev => prev.map(r => (ids.includes(r.id) ? { ...r, active } : r)))
+    setSelectedIds(new Set())
+    setBulkMenuNonce(n => n + 1)
+  }
 
   const toggleSort = (key: SortKey) => {
     if (sortKey === key) setSortDir(d => (d === 'asc' ? 'desc' : 'asc'))
@@ -131,6 +212,7 @@ export default function ProduitsListClient() {
   }
 
   const onPriceCommit = async (r: Row, raw: string) => {
+    if (!canWriteProducts) return
     const n = Number(raw.replace(',', '.'))
     if (!Number.isFinite(n) || n < 0) {
       setEditing(s => {
@@ -191,9 +273,11 @@ export default function ProduitsListClient() {
               </BackNavButton>
             </div>
           </div>
-          <Button component={AppLink} href="/produits/nouveau" variant="contained" color="success" sx={{ borderRadius: 2, textTransform: 'none' }}>
-            Nouveau produit
-          </Button>
+          {canWriteProducts ? (
+            <Button component={AppLink} href="/produits/nouveau" variant="contained" color="success" sx={{ borderRadius: 2, textTransform: 'none' }}>
+              Nouveau produit
+            </Button>
+          ) : null}
         </div>
 
         {SHEET_IMPORT_ENABLED ? <SheetImportBar onDone={() => void load()} /> : null}
@@ -203,6 +287,19 @@ export default function ProduitsListClient() {
         ) : null}
 
         <div className="mb-2 flex flex-col flex-wrap gap-2 sm:flex-row">
+          <FormControl size="small" sx={{ minWidth: 140 }}>
+            <InputLabel id="produits-filter-actif-label">Actif</InputLabel>
+            <Select
+              labelId="produits-filter-actif-label"
+              label="Actif"
+              value={activeFilter}
+              onChange={e => setActiveFilter(e.target.value as ActiveFilter)}
+            >
+              <MenuItem value="active">Actifs</MenuItem>
+              <MenuItem value="inactive">Inactifs</MenuItem>
+              <MenuItem value="all">Tous</MenuItem>
+            </Select>
+          </FormControl>
           <TextField
             size="small"
             label="Recherche (nom)"
@@ -243,9 +340,21 @@ export default function ProduitsListClient() {
         </div>
 
         <Box sx={{ overflow: 'auto', border: '1px solid', borderColor: 'divider', borderRadius: 2, bgcolor: 'background.paper' }}>
-          <table className="w-full min-w-[720px] text-sm text-slate-900">
+          <table className="w-full min-w-[780px] text-sm text-slate-900">
             <thead>
               <tr className="border-b border-slate-200 bg-slate-100 text-left text-xs font-semibold uppercase text-slate-800">
+                <th className="w-11 px-2 py-2">
+                  {canWriteProducts ? (
+                    <Checkbox
+                      size="small"
+                      checked={headerSelectState.checked}
+                      indeterminate={headerSelectState.indeterminate}
+                      onChange={() => toggleSelectAllVisible()}
+                      slotProps={{ input: { 'aria-label': 'Sélectionner toutes les lignes affichées' } }}
+                      sx={{ p: 0.5 }}
+                    />
+                  ) : null}
+                </th>
                 <th className="px-3 py-2">
                   <button
                     type="button"
@@ -298,10 +407,21 @@ export default function ProduitsListClient() {
                     }`}
                     onClick={ev => {
                       const t = ev.target as HTMLElement
-                      if (t.closest('input,button,a')) return
+                      if (t.closest('input,button,a,[role="checkbox"]')) return
                       router.push(`/produits/${r.id}`)
                     }}
                   >
+                    <td className="px-2 py-1.5 align-middle" onClick={e => e.stopPropagation()}>
+                      {canWriteProducts ? (
+                        <Checkbox
+                          size="small"
+                          checked={selectedIds.has(r.id)}
+                          onChange={() => toggleSelectRow(r.id)}
+                          slotProps={{ input: { 'aria-label': `Sélectionner ${r.name}` } }}
+                          sx={{ p: 0.5 }}
+                        />
+                      ) : null}
+                    </td>
                     <td className="px-3 py-2 font-mono text-slate-800">{r.code}</td>
                     <td className="px-3 py-2 text-slate-900">{r.name}</td>
                     <td className="px-3 py-1.5 align-middle" onClick={e => e.stopPropagation()}>
@@ -314,12 +434,13 @@ export default function ProduitsListClient() {
                         onKeyDown={e => {
                           if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
                         }}
+                        disabled={!canWriteProducts}
                         sx={{ width: 100, '& .MuiInputBase-input': { fontSize: 14 } }}
                         slotProps={muiSlotPropsDecimalKeypad}
                       />
                     </td>
                     <td className="w-9 px-0.5 py-1.5 text-center align-middle" onClick={e => e.stopPropagation()}>
-                      {dirty ? (
+                      {dirty && canWriteProducts ? (
                         <Button
                           type="button"
                           size="small"
@@ -358,6 +479,68 @@ export default function ProduitsListClient() {
             </tbody>
           </table>
         </Box>
+
+        {sortedFiltered.length > 0 ? (
+          <div className="mt-3 flex flex-col gap-3 border-t border-slate-200 pt-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
+            <div className="text-sm leading-relaxed text-slate-800">
+              <span className="font-semibold text-slate-900">{sortedFiltered.length}</span> produit
+              {sortedFiltered.length > 1 ? 's' : ''} affiché{sortedFiltered.length > 1 ? 's' : ''}
+              {rows.length !== sortedFiltered.length ? (
+                <>
+                  {' '}
+                  <span className="text-slate-500">·</span> {rows.length} au total catalogue
+                </>
+              ) : null}
+              <br className="sm:hidden" aria-hidden />
+              <span className="font-semibold text-emerald-800">
+                {' '}
+                <span className="font-normal text-slate-500">·</span> {selectedIds.size} sélectionné
+                {selectedIds.size > 1 ? 's' : ''}
+              </span>
+              {selectedHiddenCount > 0 ? (
+                <span className="text-slate-600">
+                  {' '}
+                  ({selectedInViewCount} dans cette liste, +{selectedHiddenCount} hors filtres actuels)
+                </span>
+              ) : null}
+            </div>
+            {canWriteProducts ? (
+              <FormControl size="small" sx={{ minWidth: 260 }} aria-label="Actions groupées sur la sélection">
+                <Select
+                  key={bulkMenuNonce}
+                  variant="outlined"
+                  defaultValue={BULK_PROMPT}
+                  disabled={bulkBusy || selectedIds.size === 0}
+                  displayEmpty
+                  renderValue={selected => {
+                    const s = String(selected)
+                    if (bulkBusy || s === 'activate' || s === 'deactivate') {
+                      return <span className="text-slate-700">Traitement…</span>
+                    }
+                    if (selectedIds.size === 0) {
+                      return <span className="text-slate-500">Sélectionnez des lignes</span>
+                    }
+                    return <span className="font-semibold text-slate-800">Actions groupées</span>
+                  }}
+                  onChange={e => {
+                    const v = e.target.value as string
+                    if (v === 'activate' || v === 'deactivate') void runBulkAction(v as 'activate' | 'deactivate')
+                  }}
+                  sx={{
+                    bgcolor: 'background.paper',
+                    '& .MuiSelect-select': { py: 1.25 },
+                  }}
+                >
+                  <MenuItem value={BULK_PROMPT} sx={{ display: 'none' }} aria-hidden tabIndex={-1}>
+                    —
+                  </MenuItem>
+                  <MenuItem value="activate">Activer</MenuItem>
+                  <MenuItem value="deactivate">Désactiver</MenuItem>
+                </Select>
+              </FormControl>
+            ) : null}
+          </div>
+        ) : null}
 
         {sortedFiltered.length === 0 ? (
           <p className="mt-4 text-slate-600 text-sm">Aucun produit. Créez-en un ou ajustez les filtres.</p>

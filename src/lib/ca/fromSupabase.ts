@@ -86,18 +86,37 @@ function alignPanierHeureByMag(
 export async function fetchCaDashboardFromSupabase(
   supabase: SupabaseClient,
   date: string,
+  opts?: { magasinCodes?: string[] },
 ): Promise<{ data: CaResponse } | { error: string }> {
+  const codes = opts?.magasinCodes;
+  const magIn = codes === undefined ? undefined : codes.length === 0 ? ["__none__"] : codes;
+
   const ym = date.slice(0, 7);
   const dateJ1 = isoDateMinusDays(date, 1);
   const dateJ7 = isoDateMinusDays(date, 7);
 
+  let dayQb = supabase.from("ca_day").select("magasin,total,nb_paniers").eq("date", date);
+  let j1Qb = supabase.from("ca_day").select("magasin,total").eq("date", dateJ1);
+  let j7Qb = supabase.from("ca_day").select("magasin,total").eq("date", dateJ7);
+  let monthQb = supabase.from("ca_month").select("magasin,total,nb_paniers").eq("ym", ym);
+  let hourQb = supabase.from("ca_panier_hour").select("magasin,hour,nb").eq("date", date);
+  if (magIn) {
+    dayQb = dayQb.in("magasin", magIn);
+    j1Qb = j1Qb.in("magasin", magIn);
+    j7Qb = j7Qb.in("magasin", magIn);
+    monthQb = monthQb.in("magasin", magIn);
+    hourQb = hourQb.in("magasin", magIn);
+  }
+
   const [dayQ, j1Q, j7Q, monthQ, prodQ, hourQ] = await Promise.all([
-    supabase.from("ca_day").select("magasin,total,nb_paniers").eq("date", date),
-    supabase.from("ca_day").select("magasin,total").eq("date", dateJ1),
-    supabase.from("ca_day").select("magasin,total").eq("date", dateJ7),
-    supabase.from("ca_month").select("magasin,total,nb_paniers").eq("ym", ym),
-    supabase.from("ca_product_day").select("article,qty,total").eq("date", date),
-    supabase.from("ca_panier_hour").select("magasin,hour,nb").eq("date", date),
+    dayQb,
+    j1Qb,
+    j7Qb,
+    monthQb,
+    codes !== undefined
+      ? Promise.resolve({ data: [] as { article: string; qty: number; total: number }[], error: null })
+      : supabase.from("ca_product_day").select("article,qty,total").eq("date", date),
+    hourQb,
   ]);
 
   const firstErr =
@@ -210,13 +229,14 @@ export async function fetchHistoriqueFromSupabase(
   supabase: SupabaseClient,
   from: string,
   to: string,
+  opts?: { magasinCodes?: string[] },
 ): Promise<{ data: HistoriquePayload } | { error: string }> {
-  const { data: rows, error } = await supabase
-    .from("ca_day")
-    .select("date,magasin,total")
-    .gte("date", from)
-    .lte("date", to)
-    .order("date", { ascending: true });
+  const codes = opts?.magasinCodes;
+  let hq = supabase.from("ca_day").select("date,magasin,total").gte("date", from).lte("date", to);
+  if (codes !== undefined) {
+    hq = codes.length === 0 ? hq.in("magasin", ["__none__"]) : hq.in("magasin", codes);
+  }
+  const { data: rows, error } = await hq.order("date", { ascending: true });
 
   if (error) return { error: error.message };
 

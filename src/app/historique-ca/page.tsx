@@ -9,6 +9,7 @@ import type { HistoriqueDayRow, HistoriquePayload } from '@/lib/ca/types'
 import { maybeAutoSyncIfStale } from '@/lib/sync/maybeAutoSyncIfStale'
 import { createSupabaseBrowserClient } from '@/lib/supabase/client'
 import SyncStatusFooter from '@/components/SyncStatusFooter'
+import { useSessionPermissions } from '@/lib/auth/useSessionPermissions'
 
 type DayRow = HistoriqueDayRow
 
@@ -28,6 +29,7 @@ const monthKey = (iso: string) => iso.slice(0, 7) // YYYY-MM
 const HISTORIQUE_FROM_ISO = '2025-05-13'
 
 export default function HistoriqueCA() {
+  const { session, loading: sessionLoading } = useSessionPermissions()
   const [data, setData] = useState<HistoriquePayload | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -36,6 +38,14 @@ export default function HistoriqueCA() {
   const [periodFilter, setPeriodFilter] = useState<PeriodFilter>('2026')
 
   const todayIso = useMemo(() => new Date().toISOString().split('T')[0], [])
+
+  const caissierMagKey =
+    session?.roleSlug === 'caissier'
+      ? (session.magasins ?? [])
+          .map((m) => m.code)
+          .sort()
+          .join(',')
+      : ''
 
   const filteredDays = useMemo(() => {
     if (!data || 'error' in data) return []
@@ -54,6 +64,7 @@ export default function HistoriqueCA() {
   }, [])
 
   useEffect(() => {
+    if (sessionLoading) return
     let cancelled = false
     setLoading(true)
     setError(null)
@@ -69,7 +80,11 @@ export default function HistoriqueCA() {
 
         setLoadHint('Chargement…')
         const supabase = createSupabaseBrowserClient()
-        const res = await fetchHistoriqueFromSupabase(supabase, HISTORIQUE_FROM_ISO, todayIso)
+        const caOpts =
+          session?.roleSlug === 'caissier'
+            ? { magasinCodes: (session.magasins ?? []).map((m) => m.code) }
+            : undefined
+        const res = await fetchHistoriqueFromSupabase(supabase, HISTORIQUE_FROM_ISO, todayIso, caOpts)
         if (cancelled) return
         if ('error' in res) {
           setError(res.error)
@@ -90,7 +105,7 @@ export default function HistoriqueCA() {
     return () => {
       cancelled = true
     }
-  }, [todayIso])
+  }, [todayIso, sessionLoading, session?.roleSlug, caissierMagKey])
 
   const computed = useMemo(() => {
     if (!data || 'error' in data) return null

@@ -1,0 +1,382 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import {
+  Box,
+  Button,
+  Checkbox,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
+  FormControl,
+  InputLabel,
+  ListItemText,
+  MenuItem,
+  OutlinedInput,
+  Paper,
+  Select,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableRow,
+  TextField,
+  Typography,
+} from "@mui/material";
+import { useSessionPermissions } from "@/lib/auth/useSessionPermissions";
+
+type RoleRow = { id: string; name: string; slug: string };
+type MagasinOpt = { id: string; code: string; nom: string };
+type ProfileRow = {
+  user_id: string;
+  email: string;
+  login: string | null;
+  prenom: string;
+  nom: string;
+  role_id: string;
+  roles: RoleRow | null;
+  magasins: MagasinOpt[];
+};
+
+export default function AdminUsersClient() {
+  const { canAdminMagasins } = useSessionPermissions();
+  const [roles, setRoles] = useState<RoleRow[]>([]);
+  const [profiles, setProfiles] = useState<ProfileRow[]>([]);
+  const [allMagasins, setAllMagasins] = useState<MagasinOpt[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const [email, setEmail] = useState("");
+  const [login, setLogin] = useState("");
+  const [password, setPassword] = useState("");
+  const [prenom, setPrenom] = useState("");
+  const [nom, setNom] = useState("");
+  const [roleId, setRoleId] = useState("");
+
+  const [editOpen, setEditOpen] = useState(false);
+  const [editUserId, setEditUserId] = useState<string | null>(null);
+  const [editPrenom, setEditPrenom] = useState("");
+  const [editNom, setEditNom] = useState("");
+  const [editLogin, setEditLogin] = useState("");
+  const [editPassword, setEditPassword] = useState("");
+  const [editSaving, setEditSaving] = useState(false);
+  const [editMagasinIds, setEditMagasinIds] = useState<string[]>([]);
+
+  const loadMagasins = async () => {
+    if (!canAdminMagasins) return;
+    try {
+      const res = await fetch("/api/admin/magasins", { credentials: "include" });
+      const j = await res.json().catch(() => ({}));
+      if (!res.ok) return;
+      const list = (j as { magasins?: Array<{ id: string; code: string; nom: string }> }).magasins ?? [];
+      setAllMagasins(list.map((m) => ({ id: m.id, code: m.code, nom: m.nom })));
+    } catch {
+      /* ignore */
+    }
+  };
+
+  const load = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const [rRes, pRes] = await Promise.all([
+        fetch("/api/admin/roles", { credentials: "include" }),
+        fetch("/api/admin/profiles", { credentials: "include" }),
+      ]);
+      if (!rRes.ok) {
+        const j = await rRes.json().catch(() => ({}));
+        throw new Error((j as { error?: string }).error ?? "Erreur rôles");
+      }
+      if (!pRes.ok) {
+        const j = await pRes.json().catch(() => ({}));
+        throw new Error((j as { error?: string }).error ?? "Erreur utilisateurs");
+      }
+      const rJson = (await rRes.json()) as { roles: RoleRow[] };
+      const pJson = (await pRes.json()) as { profiles: ProfileRow[] };
+      setRoles(rJson.roles ?? []);
+      setProfiles(
+        (pJson.profiles ?? []).map((p) => ({
+          ...p,
+          magasins: p.magasins ?? [],
+        })),
+      );
+      setRoleId((prev) => prev || rJson.roles?.[0]?.id || "");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Erreur");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    void load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- chargement initial uniquement
+  }, []);
+
+  useEffect(() => {
+    void loadMagasins();
+  }, [canAdminMagasins]);
+
+  const openEdit = (p: ProfileRow) => {
+    setEditUserId(p.user_id);
+    setEditPrenom(p.prenom ?? "");
+    setEditNom(p.nom ?? "");
+    setEditLogin(p.login ?? "");
+    setEditPassword("");
+    setEditMagasinIds((p.magasins ?? []).map((m) => m.id));
+    setEditOpen(true);
+    setError(null);
+  };
+
+  const saveEdit = async () => {
+    if (!editUserId) return;
+    setEditSaving(true);
+    setError(null);
+    const payload: Record<string, unknown> = {
+      prenom: editPrenom.trim(),
+      nom: editNom.trim(),
+      login: editLogin.trim() || null,
+    };
+    if (editPassword.trim().length > 0) {
+      payload.password = editPassword;
+    }
+    const edited = profiles.find((x) => x.user_id === editUserId);
+    if (canAdminMagasins && edited?.roles?.slug === "caissier") {
+      payload.magasin_ids = editMagasinIds;
+    }
+    const res = await fetch(`/api/admin/profiles/${editUserId}`, {
+      method: "PATCH",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    const j = await res.json().catch(() => ({}));
+    setEditSaving(false);
+    if (!res.ok) {
+      setError((j as { error?: string }).error ?? "Enregistrement impossible");
+      return;
+    }
+    setEditOpen(false);
+    setEditUserId(null);
+    await load();
+  };
+
+  const createUser = async () => {
+    setError(null);
+    const res = await fetch("/api/admin/profiles", {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        email: email.trim() || undefined,
+        login: login.trim() || undefined,
+        password,
+        prenom: prenom.trim(),
+        nom: nom.trim(),
+        role_id: roleId,
+      }),
+    });
+    const j = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      setError((j as { error?: string }).error ?? "Création impossible");
+      return;
+    }
+    setEmail("");
+    setLogin("");
+    setPassword("");
+    setPrenom("");
+    setNom("");
+    await load();
+  };
+
+  const changeRole = async (userId: string, newRoleId: string) => {
+    const res = await fetch(`/api/admin/profiles/${userId}`, {
+      method: "PATCH",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ role_id: newRoleId }),
+    });
+    if (!res.ok) {
+      const j = await res.json().catch(() => ({}));
+      setError((j as { error?: string }).error ?? "Mise à jour impossible");
+      return;
+    }
+    await load();
+  };
+
+  if (loading && !profiles.length) {
+    return <Typography>Chargement…</Typography>;
+  }
+
+  return (
+    <div className="flex flex-col gap-6">
+      <Typography variant="h6" className="!font-semibold">
+        Utilisateurs
+      </Typography>
+      {error ? (
+        <Paper className="!border-rose-200 !bg-rose-50 !p-3">
+          <Typography color="error">{error}</Typography>
+        </Paper>
+      ) : null}
+
+      <Paper className="!p-4">
+        <Typography variant="subtitle2" className="!mb-2 !font-semibold">
+          Nouvel utilisateur
+        </Typography>
+        <Typography variant="caption" className="!mb-2 !block !text-slate-600">
+          Renseignez un e-mail <strong>ou</strong> un identifiant de connexion (login). Sans e-mail, un compte technique
+          interne est créé pour permettre l&apos;accès aux données.
+        </Typography>
+        <div className="flex max-w-xl flex-col gap-2">
+          <TextField label="E-mail (optionnel)" type="email" value={email} onChange={(e) => setEmail(e.target.value)} size="small" fullWidth />
+          <TextField label="Identifiant / login (optionnel)" value={login} onChange={(e) => setLogin(e.target.value)} size="small" fullWidth />
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <TextField label="Prénom" value={prenom} onChange={(e) => setPrenom(e.target.value)} size="small" fullWidth />
+            <TextField label="Nom" value={nom} onChange={(e) => setNom(e.target.value)} size="small" fullWidth />
+          </div>
+          <TextField
+            label="Mot de passe initial"
+            type="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            size="small"
+            fullWidth
+            helperText="Minimum 6 caractères"
+          />
+          <FormControl size="small" fullWidth>
+            <InputLabel>Rôle</InputLabel>
+            <Select label="Rôle" value={roleId} onChange={(e) => setRoleId(e.target.value)}>
+              {roles.map((r) => (
+                <MenuItem key={r.id} value={r.id}>
+                  {r.name}
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+          <Button variant="contained" color="success" onClick={() => void createUser()} sx={{ textTransform: "none", alignSelf: "flex-start" }}>
+            Créer
+          </Button>
+        </div>
+      </Paper>
+
+      <Paper className="!overflow-x-auto">
+        <Table size="small">
+          <TableHead>
+            <TableRow>
+              <TableCell>Nom</TableCell>
+              <TableCell>E-mail / login</TableCell>
+              <TableCell>Rôle</TableCell>
+              <TableCell align="right">Actions</TableCell>
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            {profiles.map((p) => (
+              <TableRow key={p.user_id}>
+                <TableCell>
+                  {p.prenom} {p.nom}
+                </TableCell>
+                <TableCell>
+                  <Box className="text-xs">
+                    {p.email}
+                    {p.login ? (
+                      <>
+                        <br />
+                        <span className="text-slate-600">login: {p.login}</span>
+                      </>
+                    ) : null}
+                  </Box>
+                </TableCell>
+                <TableCell sx={{ minWidth: 160 }}>
+                  <Select
+                    size="small"
+                    fullWidth
+                    value={p.role_id}
+                    onChange={(e) => void changeRole(p.user_id, e.target.value)}
+                  >
+                    {roles.map((r) => (
+                      <MenuItem key={r.id} value={r.id}>
+                        {r.name}
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </TableCell>
+                <TableCell align="right">
+                  <Button size="small" onClick={() => openEdit(p)} sx={{ textTransform: "none" }}>
+                    Modifier
+                  </Button>
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </Paper>
+
+      <Dialog open={editOpen} onClose={() => !editSaving && setEditOpen(false)} fullWidth maxWidth="sm">
+        <DialogTitle>Modifier l&apos;utilisateur</DialogTitle>
+        <DialogContent>
+          <div className="mt-2 flex flex-col gap-2">
+            <TextField label="Prénom" value={editPrenom} onChange={(e) => setEditPrenom(e.target.value)} size="small" fullWidth />
+            <TextField label="Nom" value={editNom} onChange={(e) => setEditNom(e.target.value)} size="small" fullWidth />
+            <TextField
+              label="Identifiant / login"
+              value={editLogin}
+              onChange={(e) => setEditLogin(e.target.value)}
+              size="small"
+              fullWidth
+              helperText="Laisser vide pour retirer le login (connexion par e-mail uniquement si e-mail connu)"
+            />
+            <TextField
+              label="Nouveau mot de passe"
+              type="password"
+              value={editPassword}
+              onChange={(e) => setEditPassword(e.target.value)}
+              size="small"
+              fullWidth
+              helperText="Laisser vide pour ne pas changer. Minimum 6 caractères si renseigné."
+            />
+            {canAdminMagasins &&
+            profiles.find((x) => x.user_id === editUserId)?.roles?.slug === "caissier" ? (
+              <FormControl size="small" fullWidth>
+                <InputLabel id="edit-magasins-label">Magasins (caissier)</InputLabel>
+                <Select
+                  labelId="edit-magasins-label"
+                  multiple
+                  value={editMagasinIds}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    setEditMagasinIds(typeof v === "string" ? v.split(",") : (v as string[]));
+                  }}
+                  input={<OutlinedInput label="Magasins (caissier)" />}
+                  renderValue={(selected) =>
+                    (selected as string[])
+                      .map((id) => {
+                        const m = allMagasins.find((x) => x.id === id);
+                        return m ? `${m.nom} (${m.code})` : id;
+                      })
+                      .join(", ")
+                  }
+                >
+                  {allMagasins.map((m) => (
+                    <MenuItem key={m.id} value={m.id}>
+                      <Checkbox checked={editMagasinIds.includes(m.id)} />
+                      <ListItemText primary={`${m.nom} (${m.code})`} />
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            ) : null}
+          </div>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setEditOpen(false)} disabled={editSaving}>
+            Annuler
+          </Button>
+          <Button variant="contained" onClick={() => void saveEdit()} disabled={editSaving} color="success">
+            {editSaving ? "Enregistrement…" : "Enregistrer"}
+          </Button>
+        </DialogActions>
+      </Dialog>
+    </div>
+  );
+}
