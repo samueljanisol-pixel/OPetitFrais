@@ -12,13 +12,16 @@ import {
   Select,
   Typography,
 } from "@mui/material";
+import { alpha } from "@mui/material/styles";
 import ChevronLeftIcon from "@mui/icons-material/ChevronLeft";
 import AppLink from "@/components/AppLink";
 import { useSessionPermissions } from "@/lib/auth/useSessionPermissions";
+import { useStatusLabels } from "@/lib/statusLabels/useStatusLabels";
 
 type PendingCmd = {
   id: string;
   created_at: string;
+  validated_at?: string | null;
   magasin_id: string;
   supplier_id: string;
   lineCount: number;
@@ -26,6 +29,16 @@ type PendingCmd = {
   ref_supplier: { label: string } | { label: string }[] | null;
   magasins: { id: string; code: string; nom: string } | { id: string; code: string; nom: string }[] | null;
 };
+
+function formatCmdDateTime(c: PendingCmd): string {
+  const iso = c.validated_at ?? c.created_at;
+  if (!iso) return "—";
+  return new Date(iso).toLocaleString("fr-FR", { dateStyle: "short", timeStyle: "short" });
+}
+
+function produitsLabel(n: number): string {
+  return `${n} produit${n > 1 ? "s" : ""}`;
+}
 
 type LotRow = {
   id: string;
@@ -53,6 +66,7 @@ function oneMag(
 
 export default function ValidationCommandeFournisseurClient() {
   const router = useRouter();
+  const { labelFor } = useStatusLabels();
   const { loading, can } = useSessionPermissions();
   const [commandes, setCommandes] = useState<PendingCmd[]>([]);
   const [lots, setLots] = useState<LotRow[]>([]);
@@ -182,12 +196,8 @@ export default function ValidationCommandeFournisseurClient() {
       >
         Retour
       </Button>
-      <Typography variant="h5" className="!mb-1" sx={{ fontWeight: 600 }} component="h1">
+      <Typography variant="h5" className="!mb-4" sx={{ fontWeight: 600 }} component="h1">
         Validation Commandes Fournisseur
-      </Typography>
-      <Typography variant="body2" color="text.secondary" className="!mb-4">
-        Regroupez des commandes magasins <strong>validées</strong> (même fournisseur) pour constituer un lot
-        d&apos;achat. Les totaux par produit et par magasin sont calculés automatiquement.
       </Typography>
 
       {err ? (
@@ -251,8 +261,8 @@ export default function ValidationCommandeFournisseurClient() {
                     }
                     label={
                       <span className="text-sm">
-                        <strong>{oneLabel(c.ref_supplier)}</strong> — {oneMag(c.magasins)} — {c.lineCount} ligne
-                        {c.lineCount > 1 ? "s" : ""}, {c.qteTotal} unités
+                        <strong>{oneLabel(c.ref_supplier)}</strong> — {oneMag(c.magasins)} —{" "}
+                        {formatCmdDateTime(c)} — {produitsLabel(c.lineCount)}
                       </span>
                     }
                   />
@@ -265,7 +275,7 @@ export default function ValidationCommandeFournisseurClient() {
 
       <section className="!mb-6">
         <Typography variant="subtitle1" className="!mb-2" sx={{ fontWeight: 600 }}>
-          Lots récents
+          Lots en cours
         </Typography>
         {lots.length === 0 ? (
           <Typography color="text.secondary" variant="body2">
@@ -273,19 +283,42 @@ export default function ValidationCommandeFournisseurClient() {
           </Typography>
         ) : (
           <ul className="space-y-1">
-            {lots.map((l) => (
-              <li key={l.id}>
-                <Button
-                  component={AppLink}
-                  href={`/commandes-fournisseur/validation/lots/${l.id}`}
-                  size="small"
-                  color="inherit"
-                  sx={{ textTransform: "none", justifyContent: "flex-start", textAlign: "left" }}
-                >
-                  {oneLabel(l.ref_supplier)} — {l.status} — {new Date(l.created_at).toLocaleString("fr-FR")}
-                </Button>
-              </li>
-            ))}
+            {lots.map((l) => {
+              const isDraft = l.status === "brouillon";
+              return (
+                <li key={l.id}>
+                  <Button
+                    component={AppLink}
+                    href={`/commandes-fournisseur/validation/lots/${l.id}`}
+                    size="small"
+                    color={isDraft ? "warning" : "inherit"}
+                    variant={isDraft ? "outlined" : "text"}
+                    sx={(theme) => ({
+                      width: "100%",
+                      maxWidth: "100%",
+                      textTransform: "none",
+                      justifyContent: "flex-start",
+                      textAlign: "left",
+                      fontWeight: isDraft ? 600 : 400,
+                      ...(isDraft
+                        ? {
+                            py: 0.75,
+                            px: 1.25,
+                            borderWidth: 2,
+                            bgcolor: alpha(theme.palette.warning.main, 0.12),
+                            "&:hover": {
+                              bgcolor: alpha(theme.palette.warning.main, 0.2),
+                            },
+                          }
+                        : {}),
+                    })}
+                  >
+                    {oneLabel(l.ref_supplier)} — {labelFor("commande_fournisseur_lot", l.status)} —{" "}
+                    {new Date(l.created_at).toLocaleString("fr-FR")}
+                  </Button>
+                </li>
+              );
+            })}
           </ul>
         )}
       </section>

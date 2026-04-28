@@ -1,7 +1,9 @@
 'use client'
 
-import Image from 'next/image'
+import ChevronLeftIcon from '@mui/icons-material/ChevronLeft'
+import { Button } from '@mui/material'
 import Link from 'next/link'
+import AppLink from '@/components/AppLink'
 import BackNavButton from '@/components/BackNavButton'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { fetchHistoriqueFromSupabase } from '@/lib/ca/fromSupabase'
@@ -190,14 +192,9 @@ export default function HistoriqueCA() {
     return (
       <main className="min-h-[calc(100vh-0px)] flex items-center justify-center bg-gradient-to-br from-emerald-50 via-white to-rose-50 px-6 py-16">
         <div className="w-full max-w-md rounded-2xl border border-emerald-100 bg-white/80 p-6 shadow-sm backdrop-blur">
-          <div className="flex items-center gap-3">
-            <div className="relative h-10 w-10 overflow-hidden rounded-xl bg-white shadow-sm ring-1 ring-emerald-100">
-              <Image src="/logo-opetitfrais.png" alt="O' Petit Frais" fill className="object-contain p-1" sizes="40px" priority />
-            </div>
-            <div>
-              <div className="text-sm font-medium text-emerald-900/80">O&apos; Petit Frais</div>
-              <div className="text-lg font-semibold tracking-tight text-slate-900">Historique CA</div>
-            </div>
+          <div>
+            <div className="text-sm font-medium text-emerald-900/80">O&apos; Petit Frais</div>
+            <div className="text-lg font-semibold tracking-tight text-slate-900">Historique CA</div>
           </div>
           <div className="mt-6 h-2 w-full overflow-hidden rounded-full bg-emerald-100">
             <div className="h-full w-1/2 animate-pulse rounded-full bg-emerald-500/70" />
@@ -236,81 +233,89 @@ export default function HistoriqueCA() {
   return (
     <main className="min-h-[calc(100vh-0px)] bg-gradient-to-br from-emerald-50 via-white to-rose-50 px-6 py-10">
       <div className="mx-auto w-full max-w-5xl">
-        <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-          <div className="flex items-center gap-4">
-            <div className="relative h-20 w-30 overflow-hidden rounded-3xl bg-white shadow-sm ring-1 ring-emerald-100">
-              <Image
-                src="/logo-opetitfrais.png"
-                alt="O' Petit Frais"
-                fill
-                className="object-contain p-1.5"
-                sizes="80px"
-                priority
-              />
+        <header className="flex w-full flex-col gap-5">
+          <div className="w-full min-w-0">
+            <Button
+              component={AppLink}
+              href="/"
+              color="inherit"
+              size="small"
+              startIcon={<ChevronLeftIcon fontSize="small" />}
+              sx={{
+                textTransform: 'none',
+                mb: 1,
+                pl: 0,
+                minHeight: 36,
+                fontWeight: 500,
+              }}
+            >
+              Accueil
+            </Button>
+            <h1 className="w-full text-2xl font-semibold tracking-tight text-slate-900 sm:text-3xl">
+              Historique chiffre d’affaires
+            </h1>
+            <div className="mt-2 flex flex-wrap items-center gap-2 text-sm">
+              <Link
+                href="/ca"
+                className="inline-flex min-h-10 items-center rounded-lg border-2 border-emerald-200 bg-white px-3 py-1.5 text-sm font-bold text-emerald-800 shadow-sm transition hover:border-emerald-400 hover:bg-emerald-50"
+              >
+                Statistique
+              </Link>
             </div>
-            <div>
-              <h1 className="text-2xl font-semibold tracking-tight text-slate-900 sm:text-3xl">Historique chiffre d’affaires</h1>
-              <div className="mt-2 flex flex-wrap items-center gap-2 text-sm">
-                <BackNavButton href="/" size="small">
-                  Accueil
-                </BackNavButton>
-                <span className="text-slate-300" aria-hidden>
-                  |
-                </span>
-                <Link
-                  href="/ca"
-                  className="inline-flex min-h-10 items-center rounded-lg border-2 border-emerald-200 bg-white px-3 py-1.5 text-sm font-bold text-emerald-800 shadow-sm transition hover:border-emerald-400 hover:bg-emerald-50"
+            <p className="mt-1 text-sm text-slate-600">
+              Données chargées : <span className="font-medium">{computed.dataFrom}</span> →{' '}
+              <span className="font-medium">{computed.dataTo}</span>
+            </p>
+            <p className="mt-1 text-sm text-slate-600">
+              Période affichée :{' '}
+              {computed.from && computed.to ? (
+                <>
+                  <span className="font-medium">{computed.from}</span> → <span className="font-medium">{computed.to}</span>
+                </>
+              ) : (
+                <span className="font-medium text-slate-500">aucun jour pour ce filtre</span>
+              )}
+            </p>
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <span className="text-xs font-medium uppercase tracking-wide text-slate-500">Période</span>
+              {(['2026', '2025', 'tous'] as const).map(key => (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => setPeriodFilter(key)}
+                  className={`rounded-lg border px-3 py-1.5 text-xs font-semibold transition ${
+                    periodFilter === key
+                      ? 'border-emerald-600 bg-emerald-600 text-white shadow-sm'
+                      : 'border-slate-200 bg-white/90 text-slate-700 hover:bg-slate-50'
+                  }`}
                 >
-                  Statistique
-                </Link>
-              </div>
-              <p className="mt-1 text-sm text-slate-600">
-                Données chargées : <span className="font-medium">{computed.dataFrom}</span> →{' '}
-                <span className="font-medium">{computed.dataTo}</span>
-              </p>
-              <p className="mt-1 text-sm text-slate-600">
-                Période affichée :{' '}
-                {computed.from && computed.to ? (
-                  <>
-                    <span className="font-medium">{computed.from}</span> → <span className="font-medium">{computed.to}</span>
-                  </>
-                ) : (
-                  <span className="font-medium text-slate-500">aucun jour pour ce filtre</span>
-                )}
-              </p>
-              <div className="mt-3 flex flex-wrap items-center gap-2">
-                <span className="text-xs font-medium uppercase tracking-wide text-slate-500">Période</span>
-                {(['2026', '2025', 'tous'] as const).map(key => (
-                  <button
-                    key={key}
-                    type="button"
-                    onClick={() => setPeriodFilter(key)}
-                    className={`rounded-lg border px-3 py-1.5 text-xs font-semibold transition ${
-                      periodFilter === key
-                        ? 'border-emerald-600 bg-emerald-600 text-white shadow-sm'
-                        : 'border-slate-200 bg-white/90 text-slate-700 hover:bg-slate-50'
-                    }`}
-                  >
-                    {key === 'tous' ? 'Tous' : key}
-                  </button>
-                ))}
-              </div>
+                  {key === 'tous' ? 'Tous' : key}
+                </button>
+              ))}
             </div>
           </div>
 
-          <div className="grid gap-3 sm:grid-cols-3">
-            <div className="rounded-2xl border border-emerald-100 bg-white/80 px-5 py-4 shadow-sm backdrop-blur">
-              <div className="text-xs font-medium uppercase tracking-wide text-emerald-700/80">Total global</div>
-              <div className="mt-1 text-2xl font-semibold text-slate-900">{formatMAD(computed.totalGlobal)}</div>
+          <div className="grid w-full min-w-0 grid-cols-3 gap-2 sm:gap-3">
+            <div className="min-w-0 rounded-2xl border border-emerald-100 bg-white/80 px-3 py-4 shadow-sm backdrop-blur sm:px-5">
+              <div className="text-[10px] font-medium uppercase tracking-wide text-emerald-700/80 sm:text-xs">
+                Total global
+              </div>
+              <div className="mt-1 break-words text-lg font-semibold text-slate-900 sm:text-2xl">
+                {formatMAD(computed.totalGlobal)}
+              </div>
             </div>
-            <div className="rounded-2xl border border-slate-200 bg-white/80 px-5 py-4 shadow-sm backdrop-blur">
-              <div className="text-xs font-medium uppercase tracking-wide text-slate-600">Moyenne / jour</div>
-              <div className="mt-1 text-2xl font-semibold text-slate-900">{formatMAD(computed.avgPerDay)}</div>
+            <div className="min-w-0 rounded-2xl border border-slate-200 bg-white/80 px-3 py-4 shadow-sm backdrop-blur sm:px-5">
+              <div className="text-[10px] font-medium uppercase tracking-wide text-slate-600 sm:text-xs">Moyenne / jour</div>
+              <div className="mt-1 break-words text-lg font-semibold text-slate-900 sm:text-2xl">
+                {formatMAD(computed.avgPerDay)}
+              </div>
             </div>
-            <div className="rounded-2xl border border-slate-200 bg-white/80 px-5 py-4 shadow-sm backdrop-blur">
-              <div className="text-xs font-medium uppercase tracking-wide text-slate-600">Moyenne / mois</div>
-              <div className="mt-1 text-2xl font-semibold text-slate-900">{formatMAD(computed.avgPerMonth)}</div>
-              <div className="mt-1 text-[11px] text-slate-500">
+            <div className="min-w-0 rounded-2xl border border-slate-200 bg-white/80 px-3 py-4 shadow-sm backdrop-blur sm:px-5">
+              <div className="text-[10px] font-medium uppercase tracking-wide text-slate-600 sm:text-xs">Moyenne / mois</div>
+              <div className="mt-1 break-words text-lg font-semibold text-slate-900 sm:text-2xl">
+                {formatMAD(computed.avgPerMonth)}
+              </div>
+              <div className="mt-1 text-[10px] leading-tight text-slate-500 sm:text-[11px]">
                 {computed.monthList.length} mois avec données
               </div>
             </div>
@@ -381,12 +386,6 @@ export default function HistoriqueCA() {
             </details>
           ))}
         </section>
-
-        <div className="mt-8">
-          <BackNavButton href="/" size="small" variant="outlined">
-            Retour au tableau de bord
-          </BackNavButton>
-        </div>
 
         <SyncStatusFooter />
       </div>

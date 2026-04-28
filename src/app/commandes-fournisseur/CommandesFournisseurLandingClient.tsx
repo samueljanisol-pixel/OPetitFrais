@@ -78,7 +78,7 @@ export default function CommandesFournisseurLandingClient() {
           fontWeight: 500,
         }}
       >
-        Retour accueil
+        Accueil
       </Button>
       <Typography variant="h5" component="h1" className="!mb-1" sx={{ fontWeight: 600 }}>
         Commandes fournisseur
@@ -95,20 +95,20 @@ export default function CommandesFournisseurLandingClient() {
             color="success"
             size="large"
             fullWidth
-            sx={{ borderRadius: 2, textTransform: "none" }}
+            sx={{ borderRadius: 2, textTransform: "none", py: 1.25 }}
           >
-            Saisie magasins
+            Saisie
           </Button>
         ) : null}
         {canCommandesFournisseurConsolidation || isFullAccess ? (
           <Button
             component={AppLink}
             href="/commandes-fournisseur/validation"
-            variant="outlined"
+            variant="contained"
             color="success"
             size="large"
             fullWidth
-            sx={{ borderRadius: 2, textTransform: "none" }}
+            sx={{ borderRadius: 2, textTransform: "none", py: 1.25 }}
           >
             Validation
           </Button>
@@ -117,11 +117,11 @@ export default function CommandesFournisseurLandingClient() {
           <Button
             component={AppLink}
             href="/commandes-fournisseur/achat"
-            variant="outlined"
+            variant="contained"
             color="success"
             size="large"
             fullWidth
-            sx={{ borderRadius: 2, textTransform: "none" }}
+            sx={{ borderRadius: 2, textTransform: "none", py: 1.25 }}
           >
             Achat
           </Button>

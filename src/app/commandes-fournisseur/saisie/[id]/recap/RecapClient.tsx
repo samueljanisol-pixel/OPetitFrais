@@ -28,6 +28,7 @@ import {
   parcoursShapeFromPickRow,
   useSingleProductParcoursQuantity,
 } from "@/features/commandes-fournisseur/parcours-product-quantity";
+import { useStatusLabels } from "@/lib/statusLabels/useStatusLabels";
 
 type Ligne = {
   id: string;
@@ -59,22 +60,6 @@ function supplierLabel(c: Commande): string {
   if (!r) return "—";
   const x = Array.isArray(r) ? r[0] : r;
   return (x as { label?: string })?.label ?? "—";
-}
-
-/** Libellés affichés pour les statuts métier (éviter en_saisie brut). */
-function formatStatutCommande(status: string): string {
-  const labels: Record<string, string> = {
-    en_saisie: "En saisie",
-    validee: "Validée",
-    integree: "Intégrée",
-  };
-  if (labels[status]) {
-    return labels[status]!;
-  }
-  return status
-    .split("_")
-    .map((w) => (w.length > 0 ? w.charAt(0).toUpperCase() + w.slice(1).toLowerCase() : w))
-    .join(" ");
 }
 
 function formatSoit(n: number): string {
@@ -139,6 +124,7 @@ function StepQte({
 
 export default function RecapClient({ commandeId }: { commandeId: string }) {
   const router = useRouter();
+  const { labelFor } = useStatusLabels();
   const [commande, setCommande] = useState<Commande | null>(null);
   const [lignes, setLignes] = useState<Ligne[]>([]);
   const [comment, setComment] = useState("");
@@ -147,6 +133,7 @@ export default function RecapClient({ commandeId }: { commandeId: string }) {
   const [saving, setSaving] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [condDialogOpen, setCondDialogOpen] = useState(false);
+  const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
   const [pendingProduct, setPendingProduct] = useState<ProductPickRow | null>(null);
 
   const parcoursPending = pendingProduct ? parcoursShapeFromPickRow(pendingProduct) : null;
@@ -249,6 +236,28 @@ export default function RecapClient({ commandeId }: { commandeId: string }) {
       setSaving(false);
     }
   }, [commandeId, editable, load, persistLignes, router, saveComment]);
+
+  const executeCancelOrder = useCallback(async () => {
+    setCancelDialogOpen(false);
+    setErr(null);
+    setSaving(true);
+    try {
+      const res = await fetch(`/api/commandes-fournisseur/commandes/${commandeId}/cancel`, {
+        method: "POST",
+        credentials: "include",
+      });
+      const j = (await res.json()) as { error?: string };
+      if (!res.ok) {
+        throw new Error(j.error ?? "Annulation");
+      }
+      void router.refresh();
+      await load();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Erreur");
+    } finally {
+      setSaving(false);
+    }
+  }, [commandeId, load, router]);
 
   const onRouvrir = useCallback(async () => {
     setErr(null);
@@ -407,7 +416,7 @@ export default function RecapClient({ commandeId }: { commandeId: string }) {
           Fournisseur : {supplierLabel(commande)}
         </Typography>
         <Typography variant="subtitle1" color="primary" sx={{ fontWeight: 700 }} component="p" className="!m-0">
-          {formatStatutCommande(commande.status)}
+          {labelFor("commande_fournisseur", commande.status)}
         </Typography>
       </div>
 
@@ -602,6 +611,26 @@ export default function RecapClient({ commandeId }: { commandeId: string }) {
             Cette commande a été prise en compte par le gestionnaire. Modification impossible.
           </Typography>
         ) : null}
+
+        {(commande.status === "en_saisie" || commande.status === "validee") ? (
+          <Button
+            type="button"
+            variant="outlined"
+            color="error"
+            fullWidth
+            onClick={() => setCancelDialogOpen(true)}
+            disabled={saving}
+            sx={{ textTransform: "none" }}
+          >
+            Annuler la commande
+          </Button>
+        ) : null}
+
+        {commande.status === "annulee" ? (
+          <Typography variant="body2" color="text.secondary">
+            Cette commande a été annulée. Aucune modification n&apos;est possible.
+          </Typography>
+        ) : null}
       </div>
 
       {commande ? (
@@ -613,6 +642,37 @@ export default function RecapClient({ commandeId }: { commandeId: string }) {
           onSelect={handleProductPicked}
         />
       ) : null}
+
+      <Dialog open={cancelDialogOpen} onClose={() => setCancelDialogOpen(false)} fullWidth maxWidth="sm">
+        <DialogTitle sx={{ pb: 0.5 }}>Confirmer l&apos;annulation</DialogTitle>
+        <DialogContent>
+          <Typography variant="body2" color="text.secondary">
+            Cette action est définitive : la commande passera au statut «{" "}
+            {labelFor("commande_fournisseur", "annulee")} » et ne pourra plus être modifiée.
+          </Typography>
+        </DialogContent>
+        <DialogActions className="!px-3 !pb-2">
+          <Button
+            type="button"
+            color="inherit"
+            onClick={() => setCancelDialogOpen(false)}
+            sx={{ textTransform: "none" }}
+            disabled={saving}
+          >
+            Retour
+          </Button>
+          <Button
+            type="button"
+            variant="contained"
+            color="error"
+            disabled={saving}
+            onClick={() => void executeCancelOrder()}
+            sx={{ textTransform: "none" }}
+          >
+            {saving ? "…" : "Confirmer l'annulation"}
+          </Button>
+        </DialogActions>
+      </Dialog>
 
       <Dialog open={condDialogOpen} onClose={handleCondDialogClose} fullWidth maxWidth="sm">
         <DialogTitle sx={{ pb: 0.5 }}>Quantité et conditionnement</DialogTitle>

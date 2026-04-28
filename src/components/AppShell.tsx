@@ -29,9 +29,9 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         >
           <Image
             src="/logo-opetitfrais.png"
-            alt="O' Petit Frais"
+            alt=""
             fill
-            className="object-contain p-0"
+            className="object-contain p-0.5"
             sizes="152px"
             priority
           />

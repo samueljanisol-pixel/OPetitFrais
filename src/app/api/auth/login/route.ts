@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { createServerClient } from "@supabase/ssr";
+import { authErrorMessageFr } from "@/lib/auth/auth-error-fr";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/server";
 
 function looksLikeEmail(s: string): boolean {
@@ -75,7 +76,7 @@ export async function POST(req: Request) {
 
   const { error } = await supabase.auth.signInWithPassword({ email, password });
   if (error) {
-    return NextResponse.json({ error: error.message }, { status: 401 });
+    return NextResponse.json({ error: authErrorMessageFr(error.message) }, { status: 401 });
   }
 
   return NextResponse.json({ ok: true });

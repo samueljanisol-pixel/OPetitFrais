@@ -19,6 +19,7 @@ import { createSupabaseBrowserClient } from '@/lib/supabase/client'
 import type { RefConditionnementRow, RefRow } from '@/lib/products/types'
 import { muiSlotPropsDecimalKeypad, muiSlotPropsIntegerKeypad } from '@/lib/mui/numericTextFieldProps'
 import MagasinsAdminPanel from './MagasinsAdminPanel'
+import StatusLabelsAdminPanel from './StatusLabelsAdminPanel'
 
 type TabId = 'udv' | 'cat' | 'sup' | 'cond' | 'comptes'
 
@@ -306,6 +307,7 @@ export default function ReferentielClient() {
                 <MagasinsAdminPanel />
               </Box>
             ) : null}
+            {isAdministrator ? <StatusLabelsAdminPanel /> : null}
           </>
         ) : null}
         {tab === 'udv' && <RefTable title="Unités" rows={udv} onEdit={openRow} onDelete={del} />}

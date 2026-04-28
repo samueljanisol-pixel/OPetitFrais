@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { fallbackStatusLabel } from "@/lib/statusLabels/defaults";
 
 /**
  * Crée un lot, rattache les commandes validées, agrège les lignes (par produit + par magasin),
@@ -32,7 +33,9 @@ export async function createValidationLot(
   }
   for (const c of commandes) {
     if (c.status !== "validee") {
-      return { error: "Seules les commandes au statut « Validée » peuvent entrer dans un lot" };
+      return {
+        error: `Seules les commandes au statut « ${fallbackStatusLabel("commande_fournisseur", "validee")} » peuvent entrer dans un lot`,
+      };
     }
     if (c.lot_id) {
       return { error: "Une commande est déjà rattachée à un lot" };

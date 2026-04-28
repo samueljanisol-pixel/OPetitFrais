@@ -1,6 +1,5 @@
 "use client";
 
-import Image from "next/image";
 import { useSearchParams, useRouter } from "next/navigation";
 import { useState } from "react";
 import type { SessionPayload } from "@/lib/auth/session-types";
@@ -52,21 +51,9 @@ export default function LoginClient() {
   return (
     <main className="min-h-[calc(100vh-0px)] flex items-center justify-center bg-gradient-to-br from-emerald-50 via-white to-rose-50 px-6 py-16">
       <div className="w-full max-w-md rounded-2xl border border-emerald-100 bg-white/80 p-6 shadow-sm backdrop-blur">
-        <div className="flex items-center gap-3">
-          <div className="relative h-12 w-24 overflow-hidden rounded-xl bg-white shadow-sm ring-1 ring-emerald-100">
-            <Image
-              src="/logo-opetitfrais.png"
-              alt="O' Petit Frais"
-              fill
-              className="object-contain p-1"
-              sizes="48px"
-              priority
-            />
-          </div>
-          <div>
-            <div className="text-sm font-medium text-emerald-900/80">O&apos; Petit Frais</div>
-            <div className="text-lg font-semibold tracking-tight text-slate-900">Connexion</div>
-          </div>
+        <div>
+          <div className="text-sm font-medium text-emerald-900/80">O&apos; Petit Frais</div>
+          <div className="text-lg font-semibold tracking-tight text-slate-900">Connexion</div>
         </div>
 
         <p className="mt-3 text-xs text-slate-600">

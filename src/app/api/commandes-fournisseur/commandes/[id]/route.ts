@@ -19,7 +19,7 @@ export async function GET(_req: Request, ctx: Ctx) {
   const { data: cmd, error } = await supabase
     .from("commande_fournisseur")
     .select(
-      "id, magasin_id, supplier_id, status, commentaire, lot_id, validated_at, created_at, updated_at, ref_supplier(id, code, label), magasins(id, code, nom)",
+      "id, magasin_id, supplier_id, status, commentaire, lot_id, validated_at, cancelled_at, cancelled_by, created_at, updated_at, ref_supplier(id, code, label), magasins(id, code, nom)",
     )
     .eq("id", id)
     .maybeSingle();
@@ -194,6 +194,10 @@ export async function PATCH(req: Request, ctx: Ctx) {
     return NextResponse.json({ error: re?.message ?? "Introuvable" }, { status: re ? 500 : 404 });
   }
 
+  if (current.status === "annulee") {
+    return NextResponse.json({ error: "Commande annulée" }, { status: 409 });
+  }
+
   const { data: keysRaw } = await supabase.rpc("get_my_permission_keys");
   const keys = new Set((keysRaw as string[]) ?? []);
   const isSaisie = keys.has("commandes_fournisseur.saisie");
@@ -217,6 +221,12 @@ export async function PATCH(req: Request, ctx: Ctx) {
     payload.commentaire = body.commentaire;
   }
   if (body.status !== undefined) {
+    if (body.status === "annulee") {
+      return NextResponse.json(
+        { error: "Utilisez POST /api/commandes-fournisseur/commandes/:id/cancel pour annuler" },
+        { status: 400 },
+      );
+    }
     if (["en_saisie", "validee", "integree"].includes(body.status)) {
       payload.status = body.status;
       if (body.status === "validee") {

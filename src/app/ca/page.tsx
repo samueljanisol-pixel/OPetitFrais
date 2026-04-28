@@ -1,15 +1,13 @@
 'use client'
 
-import Image from 'next/image'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+import ChevronLeftIcon from '@mui/icons-material/ChevronLeft'
 import { Button, Stack, TextField } from '@mui/material'
-import BackNavButton from '@/components/BackNavButton'
 import AppLink from '@/components/AppLink'
 import PaniersHeureHistogram from '@/components/PaniersHeureHistogram'
 import SyncStatusFooter from '@/components/SyncStatusFooter'
 import { fetchCaDashboardFromSupabase } from '@/lib/ca/fromSupabase'
 import type { CaResponse } from '@/lib/ca/types'
-import { maybeAutoSyncIfStale } from '@/lib/sync/maybeAutoSyncIfStale'
 import { createSupabaseBrowserClient } from '@/lib/supabase/client'
 import { useSessionPermissions } from '@/lib/auth/useSessionPermissions'
 
@@ -20,8 +18,6 @@ export default function CaDashboardPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [refreshNonce, setRefreshNonce] = useState(0)
-  const [loadHint, setLoadHint] = useState('Chargement des données…')
-  const isFirstVisitRef = useRef(true)
   const maxIso = useMemo(() => new Date().toISOString().split('T')[0], [])
 
   /** Moyenne CA / jour pour le mois affiché : mois passés → jours calendaires ; mois en cours → jours écoulés (aujourd’hui). */
@@ -102,16 +98,6 @@ export default function CaDashboardPage() {
 
     ;(async () => {
       try {
-        const shouldAutoSync = isFirstVisitRef.current || refreshNonce > 0
-        isFirstVisitRef.current = false
-
-        if (shouldAutoSync) {
-          setLoadHint('Vérification synchronisation FTP (si > 15 min depuis la dernière)…')
-          await maybeAutoSyncIfStale()
-        }
-        if (cancelled) return
-
-        setLoadHint('Chargement des données…')
         const supabase = createSupabaseBrowserClient()
         const caOpts =
           session?.roleSlug === 'caissier'
@@ -144,28 +130,16 @@ export default function CaDashboardPage() {
     return (
       <main className="min-h-[calc(100vh-0px)] flex items-center justify-center bg-gradient-to-br from-emerald-50 via-white to-rose-50 px-6 py-16">
         <div className="w-full max-w-md rounded-2xl border border-emerald-100 bg-white/80 p-6 shadow-sm backdrop-blur">
-          <div className="flex items-center gap-3">
-            <div className="relative h-12 w-24 overflow-hidden rounded-xl bg-white shadow-sm ring-1 ring-emerald-100">
-              <Image
-                src="/logo-opetitfrais.png"
-                alt="O'petit frais"
-                fill
-                className="object-contain p-1"
-                sizes="48px"
-                priority
-              />
-            </div>
-            <div>
-              <div className="text-sm font-medium text-emerald-900/80">O&apos;petit frais</div>
-              <div className="text-lg font-semibold tracking-tight text-slate-900">
-                Chiffre d&apos;affaires
-              </div>
+          <div>
+            <div className="text-sm font-medium text-emerald-900/80">O&apos;petit frais</div>
+            <div className="text-lg font-semibold tracking-tight text-slate-900">
+              Chiffre d&apos;affaires
             </div>
           </div>
           <div className="mt-6 h-2 w-full overflow-hidden rounded-full bg-emerald-100">
             <div className="h-full w-1/2 animate-pulse rounded-full bg-emerald-500/70" />
           </div>
-          <div className="mt-3 text-sm text-slate-600">{loadHint}</div>
+          <div className="mt-3 text-sm text-slate-600">Chargement des données…</div>
         </div>
       </main>
     )
@@ -182,21 +156,9 @@ export default function CaDashboardPage() {
     return (
       <main className="min-h-[calc(100vh-0px)] flex items-center justify-center bg-gradient-to-br from-emerald-50 via-white to-rose-50 px-6 py-16">
         <div className="w-full max-w-xl rounded-2xl border border-rose-200 bg-white/90 p-6 shadow-sm backdrop-blur">
-          <div className="flex items-center gap-3">
-            <div className="relative h-12 w-24 overflow-hidden rounded-xl bg-white shadow-sm ring-1 ring-rose-200">
-              <Image
-                src="/logo-opetitfrais.png"
-                alt="O'petit frais"
-                fill
-                className="object-contain p-1"
-                sizes="48px"
-                priority
-              />
-            </div>
-            <div>
-              <div className="text-sm font-medium text-slate-700">O&apos;petit frais</div>
-              <div className="text-lg font-semibold tracking-tight text-slate-900">Impossible de charger</div>
-            </div>
+          <div>
+            <div className="text-sm font-medium text-slate-700">O&apos;petit frais</div>
+            <div className="text-lg font-semibold tracking-tight text-slate-900">Impossible de charger</div>
           </div>
           <div className="mt-4 rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-900">
             {dataError}
@@ -281,91 +243,99 @@ export default function CaDashboardPage() {
   return (
     <main className="min-h-[calc(100vh-0px)] bg-gradient-to-br from-emerald-50 via-white to-rose-50 px-6 py-10">
       <div className="mx-auto w-full max-w-5xl">
-        <header className="flex flex-col gap-6 sm:flex-row sm:items-end sm:justify-between">
-          <div className="flex items-center gap-4">
-            <div className="relative h-20 w-30 overflow-hidden rounded-3xl bg-white shadow-sm ring-1 ring-emerald-100">
-              <Image
-                src="/logo-opetitfrais.png"
-                alt="O'petit frais"
-                fill
-                className="object-contain p-1.5"
-                sizes="80px"
-                priority
-              />
-            </div>
-            <div>
-              <h1 className="text-2xl font-semibold tracking-tight text-slate-900 sm:text-3xl">
-                Chiffre d&apos;affaires
-              </h1>
-              <p className="mt-1 text-sm text-slate-600">
-                Vue globale et détail par magasin (données Supabase).
-              </p>
-              <div className="mt-3 text-2xl font-semibold capitalize tracking-tight text-slate-900 sm:text-3xl">
-                {selectedDateLabel}
-              </div>
+        <header className="flex w-full flex-col gap-5">
+          <div className="w-full">
+            <Button
+              component={AppLink}
+              href="/"
+              color="inherit"
+              size="small"
+              startIcon={<ChevronLeftIcon fontSize="small" />}
+              sx={{
+                textTransform: 'none',
+                mb: 1,
+                pl: 0,
+                minHeight: 36,
+                fontWeight: 500,
+              }}
+            >
+              Accueil
+            </Button>
+            <h1 className="text-2xl font-semibold tracking-tight text-slate-900 sm:text-3xl">
+              Chiffre d&apos;affaires
+            </h1>
+            <div className="mt-3 text-2xl font-semibold capitalize tracking-tight text-slate-900 sm:text-3xl">
+              {selectedDateLabel}
             </div>
           </div>
 
-          <div className="flex flex-col gap-3 sm:items-end">
-            <Stack
-              direction="row"
-              useFlexGap
-              spacing={1}
-              sx={{ flexWrap: 'wrap', alignItems: 'center' }}
+          <Stack
+            direction="row"
+            useFlexGap
+            spacing={1}
+            sx={{ flexWrap: 'wrap', alignItems: 'center' }}
+          >
+            <Button
+              component={AppLink}
+              href="/historique-ca"
+              variant="contained"
+              color="success"
+              size="medium"
+              sx={{ borderRadius: 3, textTransform: 'none', fontWeight: 600 }}
             >
-              <BackNavButton href="/" size="medium">
-                Accueil
-              </BackNavButton>
-              <Button
-                component={AppLink}
-                href="/historique-ca"
-                variant="contained"
-                color="success"
-                size="medium"
-                sx={{ borderRadius: 3, textTransform: 'none', fontWeight: 600 }}
-              >
-                Historique
-              </Button>
-              <Button
-                type="button"
-                variant="outlined"
-                color="success"
-                size="medium"
-                onClick={goPrevDay}
-                sx={{ borderRadius: 3, textTransform: 'none', fontWeight: 600, bgcolor: 'rgba(255,255,255,0.85)' }}
-              >
-                Jour précédent
-              </Button>
-              <Button
-                type="button"
-                variant="outlined"
-                color="success"
-                size="medium"
-                onClick={() => setRefreshNonce(n => n + 1)}
-                sx={{ borderRadius: 3, textTransform: 'none', fontWeight: 600, bgcolor: 'rgba(255,255,255,0.85)' }}
-              >
-                Actualiser
-              </Button>
-              <TextField
-                label="Date"
-                type="date"
-                value={date}
-                size="small"
-                onChange={e => setDate(e.target.value)}
-                slotProps={{
-                  htmlInput: { max: maxIso },
-                  inputLabel: { shrink: true },
-                }}
-                sx={{
-                  minWidth: 168,
-                  '& .MuiOutlinedInput-root': {
-                    borderRadius: 3,
-                    bgcolor: 'rgba(255,255,255,0.85)',
-                  },
-                }}
-              />
-            </Stack>
+              Historique
+            </Button>
+            <Button
+              type="button"
+              variant="outlined"
+              color="success"
+              size="medium"
+              onClick={goPrevDay}
+              sx={{
+                borderRadius: 3,
+                textTransform: 'none',
+                fontWeight: 600,
+                bgcolor: 'rgba(255,255,255,0.85)',
+              }}
+            >
+              Jour précédent
+            </Button>
+            <Button
+              type="button"
+              variant="outlined"
+              color="success"
+              size="medium"
+              onClick={() => setRefreshNonce(n => n + 1)}
+              sx={{
+                borderRadius: 3,
+                textTransform: 'none',
+                fontWeight: 600,
+                bgcolor: 'rgba(255,255,255,0.85)',
+              }}
+            >
+              Actualiser
+            </Button>
+            <TextField
+              label="Date"
+              type="date"
+              value={date}
+              size="small"
+              onChange={e => setDate(e.target.value)}
+              slotProps={{
+                htmlInput: { max: maxIso },
+                inputLabel: { shrink: true },
+              }}
+              sx={{
+                minWidth: 168,
+                '& .MuiOutlinedInput-root': {
+                  borderRadius: 3,
+                  bgcolor: 'rgba(255,255,255,0.85)',
+                },
+              }}
+            />
+          </Stack>
 
+          <div className="grid gap-3 md:grid-cols-2">
             <div className="rounded-2xl border border-emerald-100 bg-white/80 px-5 py-4 shadow-sm backdrop-blur">
               <div className="text-xs font-medium uppercase tracking-wide text-emerald-700/80">
                 Total global

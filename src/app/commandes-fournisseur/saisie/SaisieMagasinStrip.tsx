@@ -7,7 +7,7 @@ import { useMagasinSaisie } from "./MagasinSaisieContext";
 type Props = { className?: string };
 
 export default function SaisieMagasinStrip({ className }: Props) {
-  const { loading, canCommandesFournisseurSaisie, displayName } = useSessionPermissions();
+  const { loading, canCommandesFournisseurSaisie } = useSessionPermissions();
   const { magasins, currentMagasin, setMagasinId } = useMagasinSaisie();
 
   if (loading || !canCommandesFournisseurSaisie || magasins.length === 0) {
@@ -16,10 +16,7 @@ export default function SaisieMagasinStrip({ className }: Props) {
 
   return (
     <div className={`border-b border-emerald-100/90 bg-emerald-50/50 px-4 py-2 ${className ?? ""}`}>
-      <div className="flex flex-row flex-wrap items-center justify-between gap-4">
-        <Typography variant="body2" color="text.secondary">
-          {displayName}
-        </Typography>
+      <div className="flex flex-row flex-wrap items-center justify-start gap-4">
         {magasins.length === 1 ? (
           <Typography variant="body2" sx={{ fontWeight: 600 }}>
             Magasin actif : {currentMagasin?.nom ?? currentMagasin?.code}

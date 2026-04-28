@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { requireApiPermission } from "@/lib/auth/require-permission-api";
 import { userHasMagasin } from "@/lib/commandes-fournisseur/api-helpers";
+import { fallbackStatusLabel } from "@/lib/statusLabels/defaults";
 
 type LigneIn = {
   productId: string;
@@ -45,7 +46,12 @@ export async function PUT(req: Request, ctx: Ctx) {
   }
 
   if (current.status !== "en_saisie") {
-    return NextResponse.json({ error: "Modification réservée au statut En saisie" }, { status: 409 });
+    return NextResponse.json(
+      {
+        error: `Modification réservée au statut « ${fallbackStatusLabel("commande_fournisseur", "en_saisie")} »`,
+      },
+      { status: 409 },
+    );
   }
 
   const okM = await userHasMagasin(supabase, gate.userId, current.magasin_id as string);

@@ -4,6 +4,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   Button,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
   IconButton,
   Table,
   TableBody,
@@ -17,6 +21,7 @@ import ChevronLeftIcon from "@mui/icons-material/ChevronLeft";
 import DeleteOutlineOutlinedIcon from "@mui/icons-material/DeleteOutlineOutlined";
 import AppLink from "@/components/AppLink";
 import { useSessionPermissions } from "@/lib/auth/useSessionPermissions";
+import { useStatusLabels } from "@/lib/statusLabels/useStatusLabels";
 import { buildLotProductDisplayInfo, buildSoitLine } from "@/lib/commandes-fournisseur/product-display";
 import CommandeFournisseurProductPicker, {
   type ProductPickRow,
@@ -91,6 +96,7 @@ function normalizeProduct(raw: ProductE | unknown): ProductE {
 
 export default function ValidationLotDetailClient({ lotId }: { lotId: string }) {
   const router = useRouter();
+  const { labelFor } = useStatusLabels();
   const { loading, can } = useSessionPermissions();
   const [lot, setLot] = useState<Lot | null>(null);
   const [lignes, setLignes] = useState<LotLigne[]>([]);
@@ -99,6 +105,7 @@ export default function ValidationLotDetailClient({ lotId }: { lotId: string }) 
   const [rowSaving, setRowSaving] = useState<string | null>(null);
   const [dataLoading, setDataLoading] = useState(true);
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [cancelLotDialogOpen, setCancelLotDialogOpen] = useState(false);
   /** Quantité par cellule au focus : enregistrement seulement si la valeur a changé au blur. */
   const cellFocusBaseline = useRef<Record<string, number>>({});
 
@@ -202,6 +209,32 @@ export default function ValidationLotDetailClient({ lotId }: { lotId: string }) 
     },
     [],
   );
+
+  const executeCancelLot = useCallback(async () => {
+    if (!lot || lot.status !== "brouillon") {
+      setCancelLotDialogOpen(false);
+      return;
+    }
+    setCancelLotDialogOpen(false);
+    setErr(null);
+    setSaving(true);
+    try {
+      const res = await fetch(`/api/commandes-fournisseur/validation/lots/${lotId}/cancel`, {
+        method: "POST",
+        credentials: "include",
+      });
+      const j = (await res.json()) as { error?: string };
+      if (!res.ok) {
+        setErr(j.error ?? "Erreur");
+        return;
+      }
+      void router.push("/commandes-fournisseur/validation");
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Erreur");
+    } finally {
+      setSaving(false);
+    }
+  }, [lot, lotId, router]);
 
   const onPrete = async () => {
     if (!lot || lot.status !== "brouillon") {
@@ -336,7 +369,7 @@ export default function ValidationLotDetailClient({ lotId }: { lotId: string }) 
         Lot — {supplierName}
       </Typography>
       <Typography variant="body2" color="text.secondary" className="!mb-4">
-        Statut : <strong>{lot.status}</strong>
+        Statut : <strong>{labelFor("commande_fournisseur_lot", lot.status)}</strong>
         {lot.marque_prete_at ? ` — prêt le ${new Date(lot.marque_prete_at).toLocaleString("fr-FR")}` : null}
       </Typography>
 
@@ -363,7 +396,10 @@ export default function ValidationLotDetailClient({ lotId }: { lotId: string }) 
           }
           return (
             <li key={cf.id}>
-              {magLabel(cf.magasins)} <span className="text-slate-500">({cf.status})</span>
+              {magLabel(cf.magasins)}{" "}
+              <span className="text-slate-500">
+                ({labelFor("commande_fournisseur", cf.status)})
+              </span>
             </li>
           );
         })}
@@ -548,17 +584,60 @@ export default function ValidationLotDetailClient({ lotId }: { lotId: string }) 
       )}
 
       {lot.status === "brouillon" ? (
-        <Button
-          type="button"
-          variant="contained"
-          color="success"
-          disabled={saving}
-          onClick={() => void onPrete()}
-          sx={{ textTransform: "none" }}
-        >
-          {saving ? "…" : "Marquer prêt pour l’achat"}
-        </Button>
+        <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+          <Button
+            type="button"
+            variant="outlined"
+            color="warning"
+            disabled={saving}
+            onClick={() => setCancelLotDialogOpen(true)}
+            sx={{ textTransform: "none" }}
+          >
+            Annuler le lot
+          </Button>
+          <Button
+            type="button"
+            variant="contained"
+            color="success"
+            disabled={saving}
+            onClick={() => void onPrete()}
+            sx={{ textTransform: "none" }}
+          >
+            {saving ? "…" : "Marquer prêt pour l’achat"}
+          </Button>
+        </div>
       ) : null}
+
+      <Dialog open={cancelLotDialogOpen} onClose={() => setCancelLotDialogOpen(false)} fullWidth maxWidth="sm">
+        <DialogTitle sx={{ pb: 0.5 }}>Confirmer l&apos;annulation du lot</DialogTitle>
+        <DialogContent>
+          <Typography variant="body2" color="text.secondary">
+            Les commandes incluses redeviennent « {labelFor("commande_fournisseur", "validee")} » hors lot. Le lot
+            brouillon sera supprimé. Cette action ne peut pas être annulée ici.
+          </Typography>
+        </DialogContent>
+        <DialogActions className="!px-3 !pb-2">
+          <Button
+            type="button"
+            color="inherit"
+            onClick={() => setCancelLotDialogOpen(false)}
+            sx={{ textTransform: "none" }}
+            disabled={saving}
+          >
+            Retour
+          </Button>
+          <Button
+            type="button"
+            variant="contained"
+            color="warning"
+            disabled={saving}
+            onClick={() => void executeCancelLot()}
+            sx={{ textTransform: "none" }}
+          >
+            {saving ? "…" : "Confirmer l'annulation du lot"}
+          </Button>
+        </DialogActions>
+      </Dialog>
 
       <CommandeFournisseurProductPicker
         open={pickerOpen}
