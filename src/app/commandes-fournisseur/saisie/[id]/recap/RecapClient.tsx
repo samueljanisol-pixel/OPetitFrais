@@ -19,6 +19,7 @@ import { alpha } from "@mui/material/styles";
 import ChevronLeftIcon from "@mui/icons-material/ChevronLeft";
 import DeleteOutlineOutlinedIcon from "@mui/icons-material/DeleteOutlineOutlined";
 import AppLink from "@/components/AppLink";
+import ProductArabicSubtitle from "@/components/ProductArabicSubtitle";
 import CommandeFournisseurProductPicker, {
   type ProductPickRow,
 } from "@/features/commandes-fournisseur/CommandeFournisseurProductPicker";
@@ -37,7 +38,7 @@ type Ligne = {
   qte: number;
   line_comment: string | null;
   hors_fournisseur: boolean;
-  product: { name: string; code: string } | null;
+  product: { name: string; code: string; name_ar?: string | null } | null;
   /** Unité de vente du produit (réf. produit) : à l’unité et « Soit » pour conditionnements. */
   uniteVente?: string;
   condTitre?: string | null;
@@ -140,6 +141,7 @@ export default function RecapClient({ commandeId }: { commandeId: string }) {
   const { snapshot: condSnapshot, panelProps: condPanelProps } = useSingleProductParcoursQuantity(
     parcoursPending,
     condDialogOpen,
+    commande?.supplier_id ?? null,
   );
 
   const load = useCallback(async () => {
@@ -322,7 +324,11 @@ export default function RecapClient({ commandeId }: { commandeId: string }) {
         qte,
         line_comment: null,
         hors_fournisseur: false,
-        product: { name: p.name, code: p.code },
+        product: {
+          name: p.name,
+          code: p.code,
+          name_ar: p.name_ar ?? null,
+        },
       };
       setErr(null);
       setSaving(true);
@@ -496,6 +502,7 @@ export default function RecapClient({ commandeId }: { commandeId: string }) {
                   <Typography variant="body2" className="!font-medium">
                     {l.product?.name ?? l.product_id}
                   </Typography>
+                  <ProductArabicSubtitle nameAr={l.product?.name_ar} variant="caption" />
                   {l.condTitre ? (
                     <Typography variant="caption" color="text.secondary" className="!mt-0.5 block">
                       {l.condTitre}
@@ -682,6 +689,7 @@ export default function RecapClient({ commandeId }: { commandeId: string }) {
               <Typography variant="subtitle2" className="!mb-2 !font-semibold">
                 {pendingProduct.name}
               </Typography>
+              <ProductArabicSubtitle nameAr={pendingProduct.name_ar} variant="body2" />
               {condPanelProps ? <ParcoursProductQuantityPanel {...condPanelProps} /> : null}
             </>
           ) : null}

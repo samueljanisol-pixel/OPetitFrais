@@ -32,8 +32,11 @@ export type ProductDisplayInfo = {
 };
 
 /**
- * Infos d’affichage pour un produit de lot (agrégé) : 1er conditionnement s’il existe,
- * comme repère visuel (les quantités lot sont des sommes de lignes commande).
+ * Infos d’affichage pour une ligne de lot agrégée.
+ *
+ * @param ligneProductPackagingId — FK `commande_fournisseur_lot_ligne.product_packaging_id` :
+ *   valeur absente / `null` signifie achat à **l’unité de vente** (pas de ligne « Soit » colis) ;
+ *   sinon quantités et « Soit » sont exprimées pour ce conditionnement précis.
  */
 export function buildLotProductDisplayInfo(
   product:
@@ -43,13 +46,22 @@ export function buildLotProductDisplayInfo(
       }
     | null
     | undefined,
+  ligneProductPackagingId: string | null,
 ): ProductDisplayInfo {
   if (!product) {
     return { uniteVente: "—", condTitre: null, packContentQty: null, isCond: false };
   }
   const uniteVente = labelFromRef(product.ref_sales_unit);
   const packs = packArray(product.product_packaging as PPack | PPack[] | null | undefined);
-  const pr = packs[0] ?? null;
+  if (packs.length === 0) {
+    return { uniteVente, condTitre: null, packContentQty: null, isCond: false };
+  }
+  /** Quantités matrices « à l’unité » (référence vente), sans colis préféré. */
+  if (ligneProductPackagingId == null || ligneProductPackagingId === "") {
+    return { uniteVente, condTitre: null, packContentQty: null, isCond: false };
+  }
+  const pr =
+    packs.find((p) => p.id === ligneProductPackagingId) ?? packs[0] ?? null;
   if (!pr) {
     return { uniteVente, condTitre: null, packContentQty: null, isCond: false };
   }

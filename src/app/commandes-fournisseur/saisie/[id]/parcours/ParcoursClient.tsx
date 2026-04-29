@@ -7,18 +7,21 @@ import { Button, Typography } from "@mui/material";
 import ChevronLeftIcon from "@mui/icons-material/ChevronLeft";
 import ChevronRightIcon from "@mui/icons-material/ChevronRight";
 import AppLink from "@/components/AppLink";
+import ProductArabicSubtitle from "@/components/ProductArabicSubtitle";
 import {
   type PackRoute,
   type ParcoursProductForQty,
   ParcoursProductQuantityPanel,
   packArray,
   parseCategoryLabel,
+  preferredPackRoute,
   pKeyForProduct,
   uKeyForProduct,
 } from "@/features/commandes-fournisseur/parcours-product-quantity";
 
 type Product = ParcoursProductForQty & {
   name: string;
+  name_ar?: string | null;
   code: string;
   ref_category: unknown;
   photoUrl?: string | null;
@@ -34,6 +37,7 @@ export default function ParcoursClient({ commandeId }: { commandeId: string }) {
   const [index, setIndex] = useState(0);
   const [qtes, setQtes] = useState<Record<string, number>>({});
   const [packRoute, setPackRoute] = useState<Record<string, PackRoute>>({});
+  const [commandeSupplierId, setCommandeSupplierId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
   const n = products.length;
@@ -52,9 +56,9 @@ export default function ParcoursClient({ commandeId }: { commandeId: string }) {
       const pr = packRoute[product.id];
       if (pr !== undefined) return pr;
       const packs = packArray(product.product_packaging);
-      return packs.length > 0 ? packs[0]!.id : "unit";
+      return preferredPackRoute(packs, commandeSupplierId);
     },
-    [packRoute],
+    [packRoute, commandeSupplierId],
   );
 
   const selectRoute = useCallback(
@@ -123,6 +127,7 @@ export default function ParcoursClient({ commandeId }: { commandeId: string }) {
           setErr("Fournisseur manquant");
           return;
         }
+        setCommandeSupplierId(sid);
         const r2 = await fetch(
           `/api/commandes-fournisseur/parcours-produits?supplierId=${encodeURIComponent(sid)}`,
           { credentials: "include" },
@@ -158,7 +163,7 @@ export default function ParcoursClient({ commandeId }: { commandeId: string }) {
               nextQ[uKey(p.id)] = withQty.qte;
             }
           } else {
-            nextRoute[p.id] = packs.length > 0 ? packs[0]!.id : "unit";
+            nextRoute[p.id] = preferredPackRoute(packs, sid);
           }
         }
         setPackRoute(nextRoute);
@@ -270,14 +275,33 @@ export default function ParcoursClient({ commandeId }: { commandeId: string }) {
 
   return (
     <main className="mx-auto w-full max-w-md px-3 py-3">
-      <div className="!mb-2 flex flex-row items-center justify-between">
-        <Button component={AppLink} href={`/commandes-fournisseur/saisie/${commandeId}/recap`} size="small" color="inherit" sx={{ textTransform: "none" }}>
-          Récap
+      <div className="relative !mb-2 flex min-h-[36px] items-center">
+        <Button
+          component={AppLink}
+          href={`/commandes-fournisseur/saisie/${commandeId}/recap`}
+          size="small"
+          color="inherit"
+          startIcon={<ChevronLeftIcon fontSize="small" />}
+          sx={{
+            textTransform: "none",
+            pl: 0,
+            position: "absolute",
+            left: 0,
+            top: "50%",
+            transform: "translateY(-50%)",
+            zIndex: 1,
+          }}
+        >
+          Récapitulatif
         </Button>
-        <Typography variant="body2" sx={{ fontWeight: 600 }}>
+        <Typography
+          variant="body2"
+          component="p"
+          className="w-full text-center tabular-nums !text-[0.9375rem] sm:!text-base"
+          sx={{ fontWeight: 600 }}
+        >
           {posLabel}
         </Typography>
-        <span className="w-16" />
       </div>
 
       <Typography
@@ -305,11 +329,12 @@ export default function ParcoursClient({ commandeId }: { commandeId: string }) {
       <Typography
         variant="h6"
         component="h1"
-        className="!mb-3 !text-base text-center"
+        className="!mb-1 !text-base text-center"
         sx={{ fontWeight: 600 }}
       >
         {current.name}
       </Typography>
+      <ProductArabicSubtitle nameAr={current.name_ar} centered className="!mb-3" />
 
       <div className="!mb-4 flex flex-col gap-3">{currentBlocks}</div>
 

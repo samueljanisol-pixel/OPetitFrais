@@ -49,7 +49,7 @@ export async function GET(req: Request) {
   let qb = supabase
     .from("product")
     .select(
-      "id, code, name, category_id, supplier_id, ref_supplier(code, label), ref_category(label, sort_order), ref_sales_unit(label, code), product_packaging(id, conditionnement_id, quantity, ref_conditionnement(label, code), ref_sales_unit(label, code))",
+      "id, code, name, name_ar, category_id, supplier_id, ref_supplier(code, label), ref_category(label, sort_order), ref_sales_unit(label, code), product_packaging(id, conditionnement_id, quantity, ref_conditionnement(label, code, supplier_id), ref_sales_unit(label, code))",
     )
     .eq("active", true);
 

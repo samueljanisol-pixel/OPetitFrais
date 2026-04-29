@@ -2,6 +2,11 @@ import { NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { requireAnyApiPermission, requireApiPermission } from "@/lib/auth/require-permission-api";
 import { userHasMagasin } from "@/lib/commandes-fournisseur/api-helpers";
+import {
+  categoryDisplayLabel,
+  compareByCategoryThenProductName,
+  parseCategoryFromRef,
+} from "@/lib/commandes-fournisseur/ligne-category-order";
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -76,6 +81,7 @@ export async function GET(_req: Request, ctx: Ctx) {
   type ProductRow = {
     id: string;
     name: string;
+    name_ar: string | null;
     code: string;
     ref_sales_unit: unknown;
     ref_category?: unknown;
@@ -84,19 +90,9 @@ export async function GET(_req: Request, ctx: Ctx) {
   if (pids.length > 0) {
     const { data: prods } = await supabase
       .from("product")
-      .select("id, name, code, ref_sales_unit(label), ref_category(label, sort_order)")
+      .select("id, name, name_ar, code, ref_sales_unit(label), ref_category(label, sort_order)")
       .in("id", pids);
     productMap = Object.fromEntries((prods ?? []).map((p) => [p.id, p as ProductRow]));
-  }
-
-  type CatSort = { label: string; sort_order: number | null };
-  function parseCategory(raw: unknown): CatSort {
-    const c = (Array.isArray(raw) ? raw[0] : raw) as { label?: string; sort_order?: number | null } | null | undefined;
-    if (!c || typeof c !== "object") {
-      return { label: "", sort_order: null };
-    }
-    const lb = typeof c.label === "string" ? c.label.trim() : "";
-    return { label: lb, sort_order: c.sort_order ?? null };
   }
 
   function lignesOrderedByCategory(
@@ -107,16 +103,16 @@ export async function GET(_req: Request, ctx: Ctx) {
     out.sort((a, b) => {
       const pa = prods[a.product_id as string];
       const pb = prods[b.product_id as string];
-      const ca = pa ? parseCategory(pa.ref_category) : { label: "", sort_order: null };
-      const cb = pb ? parseCategory(pb.ref_category) : { label: "", sort_order: null };
-      const oa = ca.sort_order ?? 0;
-      const ob = cb.sort_order ?? 0;
-      if (oa !== ob) return oa - ob;
-      const lc = ca.label.localeCompare(cb.label, "fr");
-      if (lc !== 0) return lc;
-      const na = (pa?.name ?? "").localeCompare(pb?.name ?? "", "fr");
-      if (na !== 0) return na;
-      return String(a.id).localeCompare(String(b.id));
+      const ca = pa ? parseCategoryFromRef(pa.ref_category) : { label: "", sort_order: null };
+      const cb = pb ? parseCategoryFromRef(pb.ref_category) : { label: "", sort_order: null };
+      return compareByCategoryThenProductName(
+        ca,
+        cb,
+        pa?.name ?? "",
+        pb?.name ?? "",
+        String(a.id),
+        String(b.id),
+      );
     });
     return out;
   }
@@ -152,11 +148,13 @@ export async function GET(_req: Request, ctx: Ctx) {
         pr && pr.id
           ? `${condN !== "—" ? condN : "Colis"} (${formatPackQty(packQty)} ${packUs})`
           : null;
-      const cat = product ? parseCategory(product.ref_category) : { label: "", sort_order: null };
-      const categoryLabel = cat.label.length > 0 ? cat.label : "Sans catégorie";
+      const cat = product ? parseCategoryFromRef(product.ref_category) : { label: "", sort_order: null };
+      const categoryLabel = categoryDisplayLabel(cat);
       return {
         ...l,
-        product: product ? { id: product.id, name: product.name, code: product.code } : null,
+        product: product
+          ? { id: product.id, name: product.name, code: product.code, name_ar: product.name_ar }
+          : null,
         uniteVente,
         condTitre,
         packContentQty: pr && pr.id && Number.isFinite(packQty) ? packQty : null,

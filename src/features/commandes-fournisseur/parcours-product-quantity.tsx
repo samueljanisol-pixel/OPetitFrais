@@ -47,6 +47,37 @@ export function packQtyValue(pkg: PPack): number {
   return typeof pkg.quantity === "string" ? parseFloat(pkg.quantity) : Number(pkg.quantity);
 }
 
+/** UUID fournisseur rattaché au conditionnement référentiel, si défini */
+export function conditionnementSupplierId(ref: unknown): string | null {
+  const o = (Array.isArray(ref) ? ref[0] : ref) as { supplier_id?: string | null } | null | undefined;
+  const id = o?.supplier_id;
+  return typeof id === "string" && id.length > 0 ? id : null;
+}
+
+/**
+ * Choisit le conditionnement par défaut parmi les `product_packaging` :
+ * si un conditionnement référencé est explicitement lié au fournisseur de la commande, on le prend ;
+ * sinon le premier conditionnement disponible (« à l’unité » hors de ce tableau).
+ */
+export function preferredPackRoute(
+  packs: PPack[],
+  commandSupplierId: string | null | undefined,
+): PackRoute {
+  if (packs.length === 0) {
+    return "unit";
+  }
+  if (!commandSupplierId) {
+    return packs[0]!.id;
+  }
+  for (const pkg of packs) {
+    const sid = conditionnementSupplierId(pkg.ref_conditionnement);
+    if (sid === commandSupplierId) {
+      return pkg.id;
+    }
+  }
+  return packs[0]!.id;
+}
+
 export function packArray(p: ParcoursProductForQty["product_packaging"]): PPack[] {
   if (!p) return [];
   return Array.isArray(p) ? p : [p];
@@ -179,6 +210,8 @@ export type ParcoursProductQuantityPanelProps = {
   onSelectRoute: (route: PackRoute) => void;
   getQ: (key: string) => number;
   setQuantityForKey: (key: string, value: number) => void;
+  /** Si true : masque les contrôles ± (lot consolidé ; quantités saisies par magasin dans la matrice). */
+  hideQuantityControls?: boolean;
 };
 
 /**
@@ -190,6 +223,7 @@ export function ParcoursProductQuantityPanel({
   onSelectRoute,
   getQ,
   setQuantityForKey,
+  hideQuantityControls = false,
 }: ParcoursProductQuantityPanelProps) {
   const p = product;
   const packs = packArray(p.product_packaging);
@@ -197,6 +231,13 @@ export function ParcoursProductQuantityPanel({
   const uk = uKeyForProduct(p.id);
 
   if (packs.length === 0) {
+    if (hideQuantityControls) {
+      return (
+        <Typography variant="body2" color="text.secondary">
+          Les quantités se saisissent par magasin dans la matrice du lot.
+        </Typography>
+      );
+    }
     return (
       <UnitQteControl
         unitLabel={productUnit}
@@ -240,7 +281,11 @@ export function ParcoursProductQuantityPanel({
           );
         })}
       </div>
-      {route === "unit" ? (
+      {hideQuantityControls ? (
+        <Typography variant="body2" color="text.secondary">
+          Les quantités se saisissent par magasin dans la matrice.
+        </Typography>
+      ) : route === "unit" ? (
         <UnitQteControl
           unitLabel={productUnit}
           value={getQ(uk)}
@@ -274,9 +319,12 @@ export function ParcoursProductQuantityPanel({
 export function useSingleProductParcoursQuantity(
   product: ParcoursProductForQty | null,
   open: boolean,
+  /** Fournisseur de la commande : conditionnement préféré si-lié dans le référentiel. */
+  commandSupplierId: string | null = null,
 ): {
   snapshot: ParcoursProductQtySnapshot | null;
   panelProps: ParcoursProductQuantityPanelProps | null;
+  packRoute: PackRoute;
 } {
   const [packRoute, setPackRoute] = useState<PackRoute>("unit");
   const [qtes, setQtes] = useState<Record<string, number>>({});
@@ -286,9 +334,9 @@ export function useSingleProductParcoursQuantity(
       return;
     }
     const pArr = packArray(product.product_packaging);
-    setPackRoute(pArr.length > 0 ? pArr[0]!.id : "unit");
+    setPackRoute(preferredPackRoute(pArr, commandSupplierId ?? null));
     setQtes({});
-  }, [product?.id, open]);
+  }, [product?.id, open, commandSupplierId]);
 
   const selectRoute = useCallback(
     (route: PackRoute) => {
@@ -362,5 +410,5 @@ export function useSingleProductParcoursQuantity(
     };
   }, [product, packRoute, selectRoute, getQ, setQForKey]);
 
-  return { snapshot, panelProps };
+  return { snapshot, panelProps, packRoute };
 }

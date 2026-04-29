@@ -9,6 +9,10 @@ import {
   DialogActions,
   DialogContent,
   DialogTitle,
+  FormControl,
+  InputLabel,
+  MenuItem,
+  Select,
   Tab,
   Tabs,
   TextField,
@@ -36,13 +40,13 @@ function RefTable<T extends { id: string; code: string; label: string; sort_orde
   rows,
   onEdit,
   onDelete,
-  extra,
+  extras,
 }: {
   title: string
   rows: T[]
   onEdit: (r: T) => void
   onDelete: (id: string) => void
-  extra?: (r: T) => ReactNode
+  extras?: Array<{ header: string; render: (r: T) => ReactNode }>
 }) {
   return (
     <div>
@@ -56,7 +60,11 @@ function RefTable<T extends { id: string; code: string; label: string; sort_orde
               <th className="p-2">Code</th>
               <th className="p-2">Libellé</th>
               <th className="p-2">Tri</th>
-              {extra ? <th className="p-2">Détails</th> : null}
+              {extras?.map((col, i) => (
+                <th key={`${col.header}-${i}`} className="p-2">
+                  {col.header}
+                </th>
+              ))}
               <th className="p-2" />
             </tr>
           </thead>
@@ -66,7 +74,11 @@ function RefTable<T extends { id: string; code: string; label: string; sort_orde
                 <td className="p-2 font-mono text-sm text-slate-900 tabular-nums">{r.code}</td>
                 <td className="p-2 text-slate-900">{r.label}</td>
                 <td className="p-2 text-slate-900 tabular-nums">{r.sort_order}</td>
-                {extra ? <td className="p-2 text-sm text-slate-800">{extra(r)}</td> : null}
+                {extras?.map((col, i) => (
+                  <td key={`${col.header}-${i}`} className="p-2 text-sm text-slate-800">
+                    {col.render(r)}
+                  </td>
+                ))}
                 <td className="p-2 text-right">
                   <Button size="small" onClick={() => onEdit(r)} sx={{ textTransform: 'none' }}>
                     Modifier
@@ -110,6 +122,7 @@ export default function ReferentielClient() {
     h: '',
     w: '',
     d: '',
+    supplier_id: '',
   })
 
   const load = useCallback(async () => {
@@ -119,9 +132,10 @@ export default function ReferentielClient() {
       supabase.from('ref_sales_unit').select('*').order('sort_order'),
       supabase.from('ref_category').select('*').order('sort_order'),
       supabase.from('ref_supplier').select('*').order('sort_order'),
-      supabase.from('ref_conditionnement').select('*').order('sort_order'),
+      supabase.from('ref_conditionnement').select('*, ref_supplier(id, code, label)').order('sort_order'),
     ])
-    if (a.error) setErr(a.error.message)
+    const firstErr = a.error ?? b.error ?? c.error ?? d.error
+    if (firstErr) setErr(firstErr.message)
     setUdv((a.data as RefRow[]) ?? [])
     setCat((b.data as RefRow[]) ?? [])
     setSup((c.data as RefRow[]) ?? [])
@@ -140,7 +154,7 @@ export default function ReferentielClient() {
   const openNew = () => {
     setIsNew(true)
     setEditing({ id: '', code: '', label: '', sort_order: 0, created_at: '' } as RefRow)
-    setForm({ code: '', label: '', sort_order: '0', h: '', w: '', d: '' })
+    setForm({ code: '', label: '', sort_order: '0', h: '', w: '', d: '', supplier_id: '' })
     setOpen(true)
   }
 
@@ -154,6 +168,7 @@ export default function ReferentielClient() {
       h: 'height_mm' in r && r.height_mm != null ? String(r.height_mm) : '',
       w: 'width_mm' in r && r.width_mm != null ? String(r.width_mm) : '',
       d: 'depth_mm' in r && r.depth_mm != null ? String(r.depth_mm) : '',
+      supplier_id: 'supplier_id' in r && r.supplier_id ? r.supplier_id : '',
     })
     setOpen(true)
   }
@@ -174,6 +189,7 @@ export default function ReferentielClient() {
       const h = form.h ? Number(form.h) : null
       const w = form.w ? Number(form.w) : null
       const d = form.d ? Number(form.d) : null
+      const supplierId = form.supplier_id.trim() || null
       if (isNew) {
         const { error: e0 } = await supabase.from('ref_conditionnement').insert({
           code: form.code.trim().toLowerCase().replace(/\s+/g, '_'),
@@ -182,6 +198,7 @@ export default function ReferentielClient() {
           height_mm: h,
           width_mm: w,
           depth_mm: d,
+          supplier_id: supplierId,
         } as never)
         if (e0) {
           setErr(e0.message)
@@ -197,6 +214,7 @@ export default function ReferentielClient() {
             height_mm: h,
             width_mm: w,
             depth_mm: d,
+            supplier_id: supplierId,
           } as never)
           .eq('id', editing.id)
         if (e0) {
@@ -254,13 +272,13 @@ export default function ReferentielClient() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-emerald-50 via-white to-rose-50 p-4 md:p-8">
       <div className="mx-auto max-w-4xl">
-        <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-          <Typography variant="h4" component="h1" sx={{ fontWeight: 600, color: '#0f172a' }}>
-            Paramètres
-          </Typography>
+        <div className="mb-2 flex flex-col gap-1">
           <BackNavButton href="/" size="small">
             Accueil
           </BackNavButton>
+          <Typography variant="h4" component="h1" sx={{ fontWeight: 600, color: '#0f172a' }}>
+            Paramètres
+          </Typography>
         </div>
         {err ? <div className="mb-2 rounded border border-rose-200 bg-rose-50 p-2 text-sm text-rose-800">{err}</div> : null}
         <Tabs
@@ -319,9 +337,22 @@ export default function ReferentielClient() {
             rows={cond}
             onEdit={openRow}
             onDelete={del}
-            extra={r =>
-              `${(r as RefConditionnementRow).height_mm ?? '—'} × ${(r as RefConditionnementRow).width_mm ?? '—'} × ${(r as RefConditionnementRow).depth_mm ?? '—'}`
-            }
+            extras={[
+              {
+                header: 'Dimensions (mm)',
+                render: r =>
+                  `${(r as RefConditionnementRow).height_mm ?? '—'} × ${(r as RefConditionnementRow).width_mm ?? '—'} × ${(r as RefConditionnementRow).depth_mm ?? '—'}`,
+              },
+              {
+                header: 'Fournisseur',
+                render: r => {
+                  const row = r as RefConditionnementRow
+                  const s = row.ref_supplier
+                  if (s && typeof s === 'object' && 'label' in s) return (s as RefRow).label
+                  return '—'
+                },
+              },
+            ]}
           />
         )}
 
@@ -348,29 +379,49 @@ export default function ReferentielClient() {
                 slotProps={muiSlotPropsIntegerKeypad}
               />
               {tab === 'cond' ? (
-                <div className="flex flex-wrap gap-2">
-                  <TextField
-                    label="Hauteur (mm)"
-                    value={form.h}
-                    onChange={e => setForm(f => ({ ...f, h: e.target.value }))}
-                    size="small"
-                    slotProps={muiSlotPropsDecimalKeypad}
-                  />
-                  <TextField
-                    label="Largeur (mm)"
-                    value={form.w}
-                    onChange={e => setForm(f => ({ ...f, w: e.target.value }))}
-                    size="small"
-                    slotProps={muiSlotPropsDecimalKeypad}
-                  />
-                  <TextField
-                    label="Profondeur (mm)"
-                    value={form.d}
-                    onChange={e => setForm(f => ({ ...f, d: e.target.value }))}
-                    size="small"
-                    slotProps={muiSlotPropsDecimalKeypad}
-                  />
-                </div>
+                <>
+                  <FormControl size="small" fullWidth>
+                    <InputLabel id="cond-supplier-label">Fournisseur (optionnel)</InputLabel>
+                    <Select
+                      labelId="cond-supplier-label"
+                      label="Fournisseur (optionnel)"
+                      value={form.supplier_id}
+                      onChange={e => setForm(f => ({ ...f, supplier_id: e.target.value as string }))}
+                    >
+                      <MenuItem value="">
+                        <em>Aucun</em>
+                      </MenuItem>
+                      {sup.map(s => (
+                        <MenuItem key={s.id} value={s.id}>
+                          {s.label}
+                        </MenuItem>
+                      ))}
+                    </Select>
+                  </FormControl>
+                  <div className="flex flex-wrap gap-2">
+                    <TextField
+                      label="Hauteur (mm)"
+                      value={form.h}
+                      onChange={e => setForm(f => ({ ...f, h: e.target.value }))}
+                      size="small"
+                      slotProps={muiSlotPropsDecimalKeypad}
+                    />
+                    <TextField
+                      label="Largeur (mm)"
+                      value={form.w}
+                      onChange={e => setForm(f => ({ ...f, w: e.target.value }))}
+                      size="small"
+                      slotProps={muiSlotPropsDecimalKeypad}
+                    />
+                    <TextField
+                      label="Profondeur (mm)"
+                      value={form.d}
+                      onChange={e => setForm(f => ({ ...f, d: e.target.value }))}
+                      size="small"
+                      slotProps={muiSlotPropsDecimalKeypad}
+                    />
+                  </div>
+                </>
               ) : null}
             </div>
           </DialogContent>

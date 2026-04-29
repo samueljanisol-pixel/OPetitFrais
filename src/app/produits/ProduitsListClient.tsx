@@ -262,16 +262,14 @@ export default function ProduitsListClient() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-emerald-50 via-white to-rose-50 p-4 md:p-8">
       <div className="mx-auto max-w-6xl">
-        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-          <div>
+        <div className="mb-3 flex flex-wrap items-start justify-between gap-2">
+          <div className="flex min-w-0 flex-1 flex-col gap-1">
+            <BackNavButton href="/" size="small">
+              Accueil
+            </BackNavButton>
             <Typography variant="h4" component="h1" sx={{ fontWeight: 600, color: '#0f172a' }}>
               Produits
             </Typography>
-            <div className="mt-1.5">
-              <BackNavButton href="/" size="small">
-                Accueil
-              </BackNavButton>
-            </div>
           </div>
           {canWriteProducts ? (
             <Button component={AppLink} href="/produits/nouveau" variant="contained" color="success" sx={{ borderRadius: 2, textTransform: 'none' }}>

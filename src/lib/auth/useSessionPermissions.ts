@@ -77,5 +77,6 @@ export function useSessionPermissions() {
     canCommandesFournisseurSaisie: can("commandes_fournisseur.saisie"),
     canCommandesFournisseurConsolidation: can("commandes_fournisseur.consolidation"),
     canCommandesFournisseurAchat: can("commandes_fournisseur.achat"),
+    canCommandesFournisseurVendeursRenommer: can("commandes_fournisseur.vendeurs_renommer"),
   };
 }

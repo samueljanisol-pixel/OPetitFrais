@@ -14,15 +14,23 @@ export async function POST(req: Request, ctx: Ctx) {
     return NextResponse.json({ error: gate.error }, { status: gate.status });
   }
 
-  let body: { productId?: string };
+  let body: { productId?: string; productPackagingId?: string | null };
   try {
-    body = (await req.json()) as { productId?: string };
+    body = (await req.json()) as { productId?: string; productPackagingId?: string | null };
   } catch {
     return NextResponse.json({ error: "JSON invalide" }, { status: 400 });
   }
   const productId = body.productId?.trim();
   if (!productId) {
     return NextResponse.json({ error: "productId requis" }, { status: 400 });
+  }
+
+  let packagingId: string | null = null;
+  if (body.productPackagingId !== undefined && body.productPackagingId !== null) {
+    const raw = String(body.productPackagingId).trim();
+    if (raw.length > 0) {
+      packagingId = raw;
+    }
   }
 
   const supabase = await createSupabaseServerClient();
@@ -57,6 +65,22 @@ export async function POST(req: Request, ctx: Ctx) {
   if (!(product as { active: boolean }).active) {
     return NextResponse.json({ error: "Produit inactif" }, { status: 400 });
   }
+
+  if (packagingId) {
+    const { data: row, error: pkgE } = await supabase
+      .from("product_packaging")
+      .select("id")
+      .eq("id", packagingId)
+      .eq("product_id", productId)
+      .maybeSingle();
+    if (pkgE) {
+      return NextResponse.json({ error: pkgE.message }, { status: 500 });
+    }
+    if (!row) {
+      return NextResponse.json({ error: "Conditionnement invalide pour ce produit" }, { status: 400 });
+    }
+  }
+
   const { data: dup, error: dupE } = await supabase
     .from("commande_fournisseur_lot_ligne")
     .select("id")
@@ -94,6 +118,7 @@ export async function POST(req: Request, ctx: Ctx) {
     .insert({
       lot_id: lotId,
       product_id: productId,
+      product_packaging_id: packagingId,
       qte_achat: 0,
     })
     .select("id")

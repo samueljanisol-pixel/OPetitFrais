@@ -370,13 +370,13 @@ export default function ProductFormClient({ productId }: Props) {
   return (
     <div className="min-h-screen bg-gradient-to-br from-emerald-50 via-white to-rose-50 p-4 md:p-8">
       <div className="mx-auto max-w-3xl">
-        <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-          <Typography variant="h4" component="h1" sx={{ fontWeight: 600, color: '#0f172a' }}>
-            {isNew ? 'Nouveau produit' : p.name?.trim() || (p.code != null ? `Produit ${p.code}` : 'Fiche produit')}
-          </Typography>
+        <div className="mb-2 flex flex-col gap-1">
           <BackNavButton href="/produits" size="small">
             Liste produits
           </BackNavButton>
+          <Typography variant="h4" component="h1" sx={{ fontWeight: 600, color: '#0f172a' }}>
+            {isNew ? 'Nouveau produit' : p.name?.trim() || (p.code != null ? `Produit ${p.code}` : 'Fiche produit')}
+          </Typography>
         </div>
         {err ? (
           <div className="mb-3 rounded border border-rose-200 bg-rose-50 p-2 text-sm text-rose-900">{err}</div>

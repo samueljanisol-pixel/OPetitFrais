@@ -22,11 +22,14 @@ import {
   TextField,
   Typography,
 } from "@mui/material";
+import ProductArabicSubtitle from "@/components/ProductArabicSubtitle";
 
 export type ProductPickRow = {
   id: string;
   code: string;
   name: string;
+  /** Nom en arabe (réf. produit). */
+  name_ar?: string | null;
   category_id?: string | null;
   supplier_id?: string;
   ref_category?: unknown;
@@ -275,15 +278,18 @@ export default function CommandeFournisseurProductPicker({
                   <ListItemButton key={p.id} disabled={present} onClick={() => (present ? undefined : onPick(p))}>
                     <ListItemText
                       primary={
-                        <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                          <span className="font-medium">{p.name}</span>
-                          <span className="text-slate-500">({p.code})</span>
-                          {sup ? (
-                            <Chip label={sup} size="small" variant="outlined" sx={{ ml: 0.5 }} />
-                          ) : null}
-                          {present ? (
-                            <Chip label={alreadyPresentLabel} size="small" color="default" sx={{ ml: 0.5 }} />
-                          ) : null}
+                        <span className="flex flex-col items-stretch gap-0.5">
+                          <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                            <span className="font-medium">{p.name}</span>
+                            <span className="text-slate-500">({p.code})</span>
+                            {sup ? (
+                              <Chip label={sup} size="small" variant="outlined" sx={{ ml: 0.5 }} />
+                            ) : null}
+                            {present ? (
+                              <Chip label={alreadyPresentLabel} size="small" color="default" sx={{ ml: 0.5 }} />
+                            ) : null}
+                          </span>
+                          <ProductArabicSubtitle nameAr={p.name_ar} variant="caption" />
                         </span>
                       }
                     />

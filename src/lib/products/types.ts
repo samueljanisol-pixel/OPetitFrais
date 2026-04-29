@@ -12,6 +12,8 @@ export type RefConditionnementRow = RefRow & {
   height_mm: number | null
   width_mm: number | null
   depth_mm: number | null
+  supplier_id: string | null
+  ref_supplier?: RefRow | null
 }
 
 export type ProductRow = {

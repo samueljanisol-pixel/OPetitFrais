@@ -285,21 +285,23 @@ export default function ValidationCommandeFournisseurClient() {
           <ul className="space-y-1">
             {lots.map((l) => {
               const isDraft = l.status === "brouillon";
+              const isPrete = l.status === "prete";
+              const isEmphasized = isDraft || isPrete;
               return (
                 <li key={l.id}>
                   <Button
                     component={AppLink}
                     href={`/commandes-fournisseur/validation/lots/${l.id}`}
                     size="small"
-                    color={isDraft ? "warning" : "inherit"}
-                    variant={isDraft ? "outlined" : "text"}
+                    color={isDraft ? "warning" : isPrete ? "success" : "inherit"}
+                    variant={isEmphasized ? "outlined" : "text"}
                     sx={(theme) => ({
                       width: "100%",
                       maxWidth: "100%",
                       textTransform: "none",
                       justifyContent: "flex-start",
                       textAlign: "left",
-                      fontWeight: isDraft ? 600 : 400,
+                      fontWeight: isEmphasized ? 600 : 400,
                       ...(isDraft
                         ? {
                             py: 0.75,
@@ -310,7 +312,17 @@ export default function ValidationCommandeFournisseurClient() {
                               bgcolor: alpha(theme.palette.warning.main, 0.2),
                             },
                           }
-                        : {}),
+                        : isPrete
+                          ? {
+                              py: 0.75,
+                              px: 1.25,
+                              borderWidth: 2,
+                              bgcolor: alpha(theme.palette.success.main, 0.12),
+                              "&:hover": {
+                                bgcolor: alpha(theme.palette.success.main, 0.2),
+                              },
+                            }
+                          : {}),
                     })}
                   >
                     {oneLabel(l.ref_supplier)} — {labelFor("commande_fournisseur_lot", l.status)} —{" "}

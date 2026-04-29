@@ -23,7 +23,7 @@ export async function GET(req: Request) {
   const { data: products, error } = await supabase
     .from("product")
     .select(
-      "id, code, name, category_id, supplier_id, image_path, ref_category(label, sort_order), ref_sales_unit(label, code), product_packaging(id, conditionnement_id, quantity, ref_conditionnement(label, code), ref_sales_unit(label, code))",
+      "id, code, name, name_ar, category_id, supplier_id, image_path, ref_category(label, sort_order), ref_sales_unit(label, code), product_packaging(id, conditionnement_id, quantity, ref_conditionnement(label, code, supplier_id), ref_sales_unit(label, code))",
     )
     .eq("supplier_id", supplierId)
     .eq("active", true)
