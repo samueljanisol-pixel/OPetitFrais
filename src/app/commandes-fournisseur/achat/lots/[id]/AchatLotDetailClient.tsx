@@ -28,6 +28,16 @@ import ChevronLeftIcon from "@mui/icons-material/ChevronLeft";
 import DeleteOutlineOutlinedIcon from "@mui/icons-material/DeleteOutlineOutlined";
 import EditOutlinedIcon from "@mui/icons-material/EditOutlined";
 import AppLink from "@/components/AppLink";
+import ProductArabicSubtitle from "@/components/ProductArabicSubtitle";
+import CommandeFournisseurProductPicker, {
+  type ProductPickRow,
+} from "@/features/commandes-fournisseur/CommandeFournisseurProductPicker";
+import {
+  ParcoursProductQuantityPanel,
+  packArray,
+  parcoursShapeFromPickRow,
+  useSingleProductParcoursQuantity,
+} from "@/features/commandes-fournisseur/parcours-product-quantity";
 import { useRouter } from "next/navigation";
 import { useSessionPermissions } from "@/lib/auth/useSessionPermissions";
 import {
@@ -54,6 +64,7 @@ type NestedProduct = {
 
 type LotLineApi = {
   id: string;
+  product_id: string;
   product_packaging_id: string | null;
   qte_achat: number | string | null;
   qte_besoin_fige?: number | string | null;
@@ -310,7 +321,7 @@ function etiquetteUdvCourte(uniteVenteBrute: string): string {
   return "Unité";
 }
 
-/** Ligne récap besoin (compact) : « Besoin : n », UdV/colissage tout de suite après ; puis « Soit … » sous le bloc si applicable. */
+/** Ligne récap besoin (compact) : « Besoin : n », puis UdV/colissage ; « Soit … » résolument sous ces lignes pour rester lisible. */
 function BesoinEtUdVCoteACote({
   besoinN,
   display,
@@ -323,31 +334,21 @@ function BesoinEtUdVCoteACote({
   const soitLigneBesoin = qtePourSoit > 0 ? buildSoitLine(display, qtePourSoit) : null;
 
   return (
-    <Box sx={{ width: "100%", textAlign: "left" }}>
-      <Box
-        sx={{
-          display: "flex",
-          flexWrap: "wrap",
-          alignItems: "baseline",
-          columnGap: 0.375,
-          rowGap: 0.25,
-        }}
-      >
-        <Typography variant="caption" color="text.secondary" component="span" sx={{ fontWeight: 500 }}>
-          {`Besoin : ${besoinN}`}
+    <Box sx={{ width: "100%", textAlign: "left", display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 0.35 }}>
+      <Typography variant="caption" color="text.secondary" component="div" sx={{ fontWeight: 500, lineHeight: 1.3 }}>
+        {`Besoin : ${besoinN}`}
+      </Typography>
+      {display.isCond && display.condTitre ? (
+        <Typography variant="caption" color="text.secondary" component="div" sx={{ lineHeight: 1.3 }}>
+          {display.condTitre}
         </Typography>
-        {display.isCond && display.condTitre ? (
-          <Typography variant="caption" color="text.secondary" component="span" sx={{ lineHeight: 1.3 }}>
-            {display.condTitre}
-          </Typography>
-        ) : (
-          <Typography variant="caption" color="text.secondary" component="span">
-            {etiquetteUdvCourte(display.uniteVente)}
-          </Typography>
-        )}
-      </Box>
+      ) : (
+        <Typography variant="caption" color="text.secondary" component="div">
+          {etiquetteUdvCourte(display.uniteVente)}
+        </Typography>
+      )}
       {display.isCond && display.condTitre && soitLigneBesoin ? (
-        <Typography variant="caption" color="text.secondary" component="div" sx={{ mt: 0.35, lineHeight: 1.3 }}>
+        <Typography variant="caption" color="text.secondary" component="div" sx={{ lineHeight: 1.3 }}>
           {soitLigneBesoin}
         </Typography>
       ) : null}
@@ -355,16 +356,19 @@ function BesoinEtUdVCoteACote({
   );
 }
 
-/** Colonne UdV : unité courte seule ; si conditionnement, libellé colis + Soit … (récap saisie). */
+/** Colonne UdV : unité courte seule ; si conditionnement, libellé colis (+ « Soit » conversion si showConversionSoit). */
 function CelluleUdV({
   display,
   qtePourSoit,
+  showConversionSoit = true,
 }: {
   display: ProductDisplayInfo;
   /** Quantité « ligne » au même sens que buildSoitLine (colis ou UdV selon display). */
   qtePourSoit: number;
+  /** Faux lorsque « Soit … » pour la qté achat est affiché sous le champ qté (écrans ≥ sm). */
+  showConversionSoit?: boolean;
 }) {
-  const soitLigne = qtePourSoit > 0 ? buildSoitLine(display, qtePourSoit) : null;
+  const soitLigne = showConversionSoit && qtePourSoit > 0 ? buildSoitLine(display, qtePourSoit) : null;
 
   if (display.isCond && display.condTitre) {
     return (
@@ -469,6 +473,20 @@ export default function AchatLotDetailClient({ lotId }: { lotId: string }) {
   const [selectedSansVendeur, setSelectedSansVendeur] = useState<Set<string>>(() => new Set());
   const [bulkVendeurId, setBulkVendeurId] = useState("");
 
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [condDialogOpen, setCondDialogOpen] = useState(false);
+  const [pendingProduct, setPendingProduct] = useState<ProductPickRow | null>(null);
+  const [productPickerBusy, setProductPickerBusy] = useState(false);
+
+  const parcoursPending = pendingProduct ? parcoursShapeFromPickRow(pendingProduct) : null;
+  const { panelProps: condPanelProps, packRoute } = useSingleProductParcoursQuantity(
+    parcoursPending,
+    condDialogOpen,
+    lot?.supplier_id ?? null,
+  );
+
+  const editable = Boolean(lot && lot.status === "prete");
+
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const saveSeq = useRef(0);
 
@@ -505,6 +523,65 @@ export default function AchatLotDetailClient({ lotId }: { lotId: string }) {
     return true;
   }, [applyPayload, lotId]);
 
+  const postAchatLotProduct = useCallback(
+    async (productId: string, productPackagingId: string | null) => {
+      if (!editable) return;
+      setErr(null);
+      setProductPickerBusy(true);
+      try {
+        const res = await fetch(
+          `/api/commandes-fournisseur/achat/lots/${encodeURIComponent(lotId)}/produits`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ productId, productPackagingId }),
+          },
+        );
+        const j = (await res.json()) as { error?: string };
+        if (!res.ok) {
+          setErr(typeof j.error === "string" ? j.error : "Erreur");
+          return;
+        }
+        await reloadFromServer();
+      } catch {
+        setErr("Réseau indisponible.");
+      } finally {
+        setProductPickerBusy(false);
+      }
+    },
+    [editable, lotId, reloadFromServer],
+  );
+
+  const handleProductChosenFromPicker = useCallback(
+    (picked: ProductPickRow) => {
+      if (!editable) return;
+      const packs = packArray(parcoursShapeFromPickRow(picked).product_packaging);
+      if (packs.length > 0) {
+        setPendingProduct(picked);
+        setCondDialogOpen(true);
+        return;
+      }
+      void postAchatLotProduct(picked.id, null);
+    },
+    [editable, postAchatLotProduct],
+  );
+
+  const handleCondLotDialogConfirm = useCallback(() => {
+    const p = pendingProduct;
+    if (!p) {
+      return;
+    }
+    const packagingId = packRoute === "unit" ? null : packRoute;
+    setCondDialogOpen(false);
+    setPendingProduct(null);
+    void postAchatLotProduct(p.id, packagingId);
+  }, [pendingProduct, packRoute, postAchatLotProduct]);
+
+  const handleCondLotDialogClose = useCallback(() => {
+    setCondDialogOpen(false);
+    setPendingProduct(null);
+  }, []);
+
   useEffect(() => {
     if (permLoading) return;
     if (!can("commandes_fournisseur.achat")) return;
@@ -530,8 +607,6 @@ export default function AchatLotDetailClient({ lotId }: { lotId: string }) {
       cancelled = true;
     };
   }, [permLoading, can, lotId, applyPayload]);
-
-  const editable = Boolean(lot && lot.status === "prete");
 
   /** Recalcul chaque rendu avec la baseline réelle ( évite staleness après autosave sans setState draft ). */
   const ligneUpdatesDirty = computeDirtyPatches(lignes, draftByLine, baselineRef.current);
@@ -1028,21 +1103,39 @@ export default function AchatLotDetailClient({ lotId }: { lotId: string }) {
             </Button>
           </Box>
 
-          <Typography variant="h6" className="!mb-2" sx={{ fontWeight: 700 }}>
-            Produits sans vendeur
-          </Typography>
+          <Box className="!mb-2 flex flex-row flex-wrap items-center justify-between gap-2">
+            <Typography variant="h6" sx={{ fontWeight: 700, mb: 0 }}>
+              Produits sans vendeur
+            </Typography>
+            {editable ? (
+              <Button
+                type="button"
+                variant="outlined"
+                size="small"
+                disabled={saving || closing || productPickerBusy}
+                onClick={() => setPickerOpen(true)}
+                sx={{ textTransform: "none" }}
+              >
+                Ajouter un produit
+              </Button>
+            ) : null}
+          </Box>
 
-          <div className="-mx-1 mb-6 overflow-x-auto">
+          <div className="mb-6 min-w-0 w-full">
             <Table
               size="small"
               sx={{
                 width: "100%",
-                minWidth: compactTable ? "min(100%, 100vw - 24px)" : 520,
+                minWidth: 0,
+                tableLayout: "fixed",
               }}
             >
               <TableHead>
                 <TableRow>
-                  <TableCell padding="checkbox" sx={{ width: 40, py: { xs: 0.75, sm: 1 }, px: { xs: 0.5, sm: 1 } }}>
+                  <TableCell
+                    padding="checkbox"
+                    sx={{ width: "8%", py: { xs: 0.75, sm: 1 }, px: { xs: 0.5, sm: 1 }, minWidth: 40, maxWidth: 48 }}
+                  >
                     <Checkbox
                       size="small"
                       disabled={!editable || lignesSansVendeurSorted.length === 0}
@@ -1061,13 +1154,21 @@ export default function AchatLotDetailClient({ lotId }: { lotId: string }) {
                       }}
                     />
                   </TableCell>
-                  <TableCell sx={{ py: { xs: 0.75, sm: 1 }, fontSize: { xs: "0.8rem", sm: "inherit" } }}>
+                  <TableCell
+                    sx={{
+                      py: { xs: 0.75, sm: 1 },
+                      fontSize: { xs: "0.8rem", sm: "inherit" },
+                      width: "56%",
+                      minWidth: 0,
+                      overflow: "hidden",
+                    }}
+                  >
                     Produit
                   </TableCell>
-                  <TableCell align="center" sx={{ py: { xs: 0.75, sm: 1 }, whiteSpace: "nowrap" }}>
+                  <TableCell align="center" sx={{ py: { xs: 0.75, sm: 1 }, whiteSpace: "nowrap", width: "18%" }}>
                     Qté
                   </TableCell>
-                  <TableCell align="center" sx={{ py: { xs: 0.75, sm: 1 }, whiteSpace: "nowrap" }}>
+                  <TableCell align="center" sx={{ py: { xs: 0.75, sm: 1 }, whiteSpace: "nowrap", width: "18%" }}>
                     UdV
                   </TableCell>
                 </TableRow>
@@ -1138,8 +1239,8 @@ export default function AchatLotDetailClient({ lotId }: { lotId: string }) {
                               onChange={() => toggleSelectSans(lid)}
                             />
                           </TableCell>
-                          <TableCell sx={{ py: { xs: 0.5, sm: 1 }, maxWidth: { xs: "48vw", sm: "none" } }}>
-                            <Typography variant="body2" className="!font-medium" sx={{ lineHeight: 1.25 }}>
+                          <TableCell sx={{ py: { xs: 0.5, sm: 1 }, minWidth: 0, overflow: "hidden" }}>
+                            <Typography variant="body2" className="!font-medium" sx={{ lineHeight: 1.25, wordBreak: "break-word", overflowWrap: "anywhere" }}>
                               {productName(pr)}
                             </Typography>
                           </TableCell>
@@ -1265,12 +1366,13 @@ export default function AchatLotDetailClient({ lotId }: { lotId: string }) {
                 <Typography variant="body2" color="text.secondary" className="!mb-2">
                   Total achats : {formatDh(totauxAchat.parVendeur[vid] ?? 0)}
                 </Typography>
-                <div className="-mx-1 mb-6 overflow-x-auto">
+                <div className="mb-6 min-w-0 w-full">
                   <Table
                     size="small"
                     sx={{
                       width: "100%",
-                      minWidth: compactTable ? "min(100%, 100vw - 24px)" : 880,
+                      minWidth: 0,
+                      tableLayout: "fixed",
                       "& td, & th": {
                         px: { xs: 0.55, sm: 1 },
                         py: { xs: 0.45, sm: 0.65 },
@@ -1279,21 +1381,41 @@ export default function AchatLotDetailClient({ lotId }: { lotId: string }) {
                   >
                     <TableHead>
                       <TableRow>
-                        <TableCell sx={{ minWidth: { xs: 100, sm: 120 } }}>
+                        <TableCell
+                          sx={{
+                            width: { xs: "36%", sm: "28%" },
+                            minWidth: 0,
+                            overflow: "hidden",
+                          }}
+                        >
                           Produit
                         </TableCell>
                         <TableCell
                           align="right"
-                          sx={{ display: { xs: "none", sm: "table-cell" }, whiteSpace: "nowrap" }}
+                          sx={{
+                            display: { xs: "none", sm: "table-cell" },
+                            whiteSpace: "nowrap",
+                            width: { sm: "9%" },
+                          }}
                         >
                           Qté besoin
                         </TableCell>
-                        <TableCell sx={{ display: { xs: "none", sm: "table-cell" } }}>UdV</TableCell>
-                        <TableCell sx={{ whiteSpace: "nowrap" }}>Qté ach.</TableCell>
-                        <TableCell sx={{ whiteSpace: "nowrap", maxWidth: { xs: 72, sm: 120 } }}>
+                        <TableCell
+                          sx={{
+                            display: { xs: "none", sm: "table-cell" },
+                            width: { sm: "10%" },
+                            overflow: "hidden",
+                          }}
+                        >
+                          UdV
+                        </TableCell>
+                        <TableCell sx={{ whiteSpace: "nowrap", width: { xs: "18%", sm: "12%" } }}>
+                          Qté ach.
+                        </TableCell>
+                        <TableCell sx={{ whiteSpace: "nowrap", width: { xs: "20%", sm: "14%" } }}>
                           Prix achat
                         </TableCell>
-                        <TableCell align="center" sx={{ whiteSpace: "nowrap" }}>
+                        <TableCell align="center" sx={{ whiteSpace: "nowrap", width: { xs: "13%", sm: "14%" } }}>
                           Total
                         </TableCell>
                         <TableCell
@@ -1301,7 +1423,7 @@ export default function AchatLotDetailClient({ lotId }: { lotId: string }) {
                           sx={{
                             whiteSpace: "nowrap",
                             px: { xs: 0.35, sm: 1 },
-                            minWidth: { xs: 52, sm: 72 },
+                            width: { xs: "13%", sm: "13%" },
                           }}
                         >
                           Retirer
@@ -1334,8 +1456,10 @@ export default function AchatLotDetailClient({ lotId }: { lotId: string }) {
                         const puNum = parsePuText(dRow?.puText ?? "");
                         const qtyBaseGuess = qtyBaseFromLotLine(qa, display);
                         const montantGuess = montantLigneFromPu(puNum, qtyBaseGuess);
-                        const soitAchatSiDifferent =
-                          compactTable && qa !== besoinN && qa > 0 ? buildSoitLine(display, qa) : null;
+                        const soitCaptionAchat = qa > 0 ? buildSoitLine(display, qa) : null;
+                        const afficherSoitSsQteAchat = Boolean(
+                          soitCaptionAchat && (!compactTable || qa !== besoinN),
+                        );
 
                         return (
                           <Fragment key={lid}>
@@ -1375,13 +1499,19 @@ export default function AchatLotDetailClient({ lotId }: { lotId: string }) {
                                 sx={{
                                   verticalAlign: "middle",
                                   textAlign: "left",
-                                  maxWidth: { xs: "46vw", sm: "none" },
+                                  minWidth: 0,
+                                  overflow: "hidden",
                                 }}
                               >
                                 <Typography
                                   variant="body2"
                                   className="!font-medium"
-                                  sx={{ lineHeight: 1.25, textAlign: "left" }}
+                                  sx={{
+                                    lineHeight: 1.25,
+                                    textAlign: "left",
+                                    wordBreak: "break-word",
+                                    overflowWrap: "anywhere",
+                                  }}
                                 >
                                   {productName(pr)}
                                 </Typography>
@@ -1402,14 +1532,13 @@ export default function AchatLotDetailClient({ lotId }: { lotId: string }) {
                                   verticalAlign: "top",
                                 }}
                               >
-                                <CelluleUdV display={display} qtePourSoit={qa} />
+                                <CelluleUdV
+                                  display={display}
+                                  qtePourSoit={qa}
+                                  showConversionSoit={compactTable}
+                                />
                               </TableCell>
-                              <TableCell
-                                sx={{
-                                  maxWidth: { xs: 80, sm: 110 },
-                                  verticalAlign: "top",
-                                }}
-                              >
+                              <TableCell sx={{ minWidth: 0, verticalAlign: "top" }}>
                                 <Box sx={{ display: "flex", flexDirection: "column", alignItems: "stretch", gap: 0 }}>
                                   <TextField
                                     size="small"
@@ -1425,19 +1554,19 @@ export default function AchatLotDetailClient({ lotId }: { lotId: string }) {
                                     }
                                     sx={{ "& .MuiInputBase-input": { py: 0.65, px: 0.85, fontSize: "0.85rem" } }}
                                   />
-                                  {soitAchatSiDifferent ? (
+                                  {afficherSoitSsQteAchat && soitCaptionAchat ? (
                                     <Typography
                                       variant="caption"
                                       color="text.secondary"
                                       component="div"
                                       sx={{ mt: 0.5, fontSize: "0.65rem", lineHeight: 1.25 }}
                                     >
-                                      {soitAchatSiDifferent}
+                                      {soitCaptionAchat}
                                     </Typography>
                                   ) : null}
                                 </Box>
                               </TableCell>
-                              <TableCell sx={{ maxWidth: { xs: 78, sm: 115 }, verticalAlign: "top" }}>
+                              <TableCell sx={{ minWidth: 0, verticalAlign: "top" }}>
                                 <TextField
                                   size="small"
                                   fullWidth
@@ -1694,6 +1823,53 @@ export default function AchatLotDetailClient({ lotId }: { lotId: string }) {
               </Typography>
             </Box>
           </Box>
+        </>
+      ) : null}
+
+      {lot ? (
+        <>
+          <CommandeFournisseurProductPicker
+            open={pickerOpen}
+            onClose={() => setPickerOpen(false)}
+            supplierId={lot.supplier_id}
+            existingProductIds={lignes.map((l) => l.product_id)}
+            alreadyPresentLabel="Déjà dans le lot"
+            onSelect={handleProductChosenFromPicker}
+          />
+          <Dialog open={condDialogOpen} onClose={handleCondLotDialogClose} fullWidth maxWidth="sm">
+            <DialogTitle sx={{ pb: 0.5 }}>Conditionnement</DialogTitle>
+            <DialogContent>
+              {pendingProduct ? (
+                <>
+                  <Typography variant="subtitle2" className="!mb-2 !font-semibold">
+                    {pendingProduct.name}
+                  </Typography>
+                  <ProductArabicSubtitle nameAr={pendingProduct.name_ar} variant="body2" />
+                  <Typography variant="body2" color="text.secondary" className="!mb-3">
+                    Pré-sélection comme à la validation ; vous pouvez choisir à l&apos;unité ou un autre conditionnement.
+                  </Typography>
+                  {condPanelProps ? (
+                    <ParcoursProductQuantityPanel {...condPanelProps} hideQuantityControls />
+                  ) : null}
+                </>
+              ) : null}
+            </DialogContent>
+            <DialogActions className="!px-3 !pb-2">
+              <Button type="button" color="inherit" onClick={handleCondLotDialogClose} sx={{ textTransform: "none" }}>
+                Annuler
+              </Button>
+              <Button
+                type="button"
+                variant="contained"
+                color="success"
+                disabled={productPickerBusy}
+                onClick={() => void handleCondLotDialogConfirm()}
+                sx={{ textTransform: "none" }}
+              >
+                Ajouter au lot
+              </Button>
+            </DialogActions>
+          </Dialog>
         </>
       ) : null}
 

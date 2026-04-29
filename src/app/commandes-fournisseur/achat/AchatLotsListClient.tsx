@@ -5,12 +5,12 @@ import {
   Alert,
   Button,
   CircularProgress,
+  Paper,
   ToggleButton,
   ToggleButtonGroup,
   Typography,
 } from "@mui/material";
 import AppLink from "@/components/AppLink";
-import ChevronLeftIcon from "@mui/icons-material/ChevronLeft";
 import { useRouter } from "next/navigation";
 import { useSessionPermissions } from "@/lib/auth/useSessionPermissions";
 
@@ -94,10 +94,9 @@ export default function AchatLotsListClient() {
     <main className="mx-auto w-full max-w-3xl px-4 py-6">
       <Button
         component={AppLink}
-        href="/commandes-fournisseur"
+        href="/"
         color="inherit"
         size="small"
-        startIcon={<ChevronLeftIcon fontSize="small" />}
         sx={{
           textTransform: "none",
           mb: 1,
@@ -107,7 +106,7 @@ export default function AchatLotsListClient() {
           fontWeight: 500,
         }}
       >
-        Retour hub
+        {"< Accueil"}
       </Button>
       <Typography variant="h5" className="!mb-1" sx={{ fontWeight: 600 }}>
         Achat — lots
@@ -154,9 +153,16 @@ export default function AchatLotsListClient() {
       ) : (
         <div className="flex flex-col gap-3">
           {lots.map((l) => (
-            <div
+            <Paper
               key={l.id}
-              className="rounded-lg border border-slate-200 bg-white px-3 py-2.5 shadow-sm dark:border-slate-700 dark:bg-slate-950"
+              variant="outlined"
+              sx={{
+                px: 1.5,
+                py: 2.5,
+                borderRadius: 2,
+                bgcolor: "background.paper",
+                borderColor: "divider",
+              }}
             >
               <div className="flex flex-wrap items-start justify-between gap-2">
                 <div className="min-w-0">
@@ -185,7 +191,7 @@ export default function AchatLotsListClient() {
                   Ouvrir
                 </Button>
               </div>
-            </div>
+            </Paper>
           ))}
         </div>
       )}
