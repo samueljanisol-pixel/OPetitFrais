@@ -10,6 +10,7 @@ import {
   montantLigneFromPu,
   qtyBaseFromLotLine,
 } from "@/lib/commandes-fournisseur/achat-pricing";
+import { clampQtyToApiRange } from "@/lib/commandes-fournisseur/qty-parse";
 import { buildLotProductDisplayInfo } from "@/lib/commandes-fournisseur/product-display";
 
 type Ctx = { params: Promise<{ id: string }> };
@@ -231,9 +232,20 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
     }
   }
 
+  let fraisApresPatch:
+    | Array<{
+        id: string;
+        type_code: string;
+        label: string | null;
+        montant: number | string | null;
+        vendeur_id: string | null;
+      }>
+    | undefined;
+
   if (hasFrais) {
     const frac = await applyFraisUpserts(supabase, id, body.fraisDeleteIds, body.fraisUpserts);
     if (frac.error) return frac.error;
+    fraisApresPatch = frac.frais;
   }
 
   if (hasClose) {
@@ -256,10 +268,44 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
       }
       return NextResponse.json({ error: out.error }, { status: out.status ?? 400 });
     }
-    return NextResponse.json({ ok: true, cloturee: true });
+    return NextResponse.json({
+      ok: true,
+      cloturee: true,
+      ...(fraisApresPatch ? { frais: fraisApresPatch } : {}),
+    });
   }
 
-  return NextResponse.json({ ok: true });
+  return NextResponse.json({
+    ok: true,
+    ...(fraisApresPatch ? { frais: fraisApresPatch } : {}),
+  });
+}
+
+type FraisGlobauxApiRow = {
+  id: string;
+  type_code: string;
+  label: string | null;
+  montant: number | string | null;
+  vendeur_id: string | null;
+};
+
+async function fetchFraisGlobauxPourLot(
+  supabase: Awaited<ReturnType<typeof createSupabaseServerClient>>,
+  lotId: string,
+): Promise<{ error: NextResponse | null; frais?: FraisGlobauxApiRow[] }> {
+  const { data, error } = await supabase
+    .from("commande_fournisseur_lot_frais")
+    .select("id, type_code, label, montant, vendeur_id")
+    .eq("lot_id", lotId)
+    .order("created_at", { ascending: true });
+
+  if (error) {
+    return { error: NextResponse.json({ error: error.message }, { status: 500 }) };
+  }
+  const fraisGlobaux = (data ?? []).filter(
+    (r): r is FraisGlobauxApiRow => r.vendeur_id == null,
+  );
+  return { error: null, frais: fraisGlobaux };
 }
 
 async function applyFraisUpserts(
@@ -267,7 +313,7 @@ async function applyFraisUpserts(
   lotId: string,
   fraisDeleteIds: PatchBody["fraisDeleteIds"],
   fraisUpserts: PatchBody["fraisUpserts"],
-): Promise<{ error: NextResponse | null }> {
+): Promise<{ error: NextResponse | null; frais?: FraisGlobauxApiRow[] }> {
   if (fraisDeleteIds && fraisDeleteIds.length > 0) {
     for (const fid of fraisDeleteIds) {
       if (typeof fid !== "string" || fid.trim().length === 0) {
@@ -287,7 +333,7 @@ async function applyFraisUpserts(
   }
 
   if (!fraisUpserts || fraisUpserts.length === 0) {
-    return { error: null };
+    return fetchFraisGlobauxPourLot(supabase, lotId);
   }
 
   for (const u of fraisUpserts) {
@@ -327,7 +373,7 @@ async function applyFraisUpserts(
     }
   }
 
-  return { error: null };
+  return fetchFraisGlobauxPourLot(supabase, lotId);
 }
 
 async function applyLineUpdates(
@@ -391,7 +437,7 @@ async function applyLineUpdates(
 
     let qteAchat =
       u.qte_achat !== undefined
-        ? Math.max(0, Math.floor(u.qte_achat))
+        ? clampQtyToApiRange(u.qte_achat)
         : Number((ligne as { qte_achat?: number }).qte_achat) || 0;
 
     const puInput = u.prix_achat_unitaire !== undefined ? u.prix_achat_unitaire : ((ligne as { prix_achat_unitaire?: number | null }).prix_achat_unitaire ?? null);

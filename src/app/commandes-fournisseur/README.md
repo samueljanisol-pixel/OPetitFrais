@@ -34,10 +34,14 @@ Lorsque le lot est **prêt pour l’achat**, le commentaire du lot est affiché 
 
 Les lignes produit du lot sont **triées comme au récap commande** (`ref_category.sort_order`, libellé, nom produit) et le GET renvoie **`categoryLabel`** par ligne. Dans la matrice, une **ligne d’en-tête** par groupe (fond vert léger, comme le récap) sépare les familles (ex. Fruit, « Sans catégorie » si besoin).
 
+## Quantités (saisie, validation, achat)
+
+Les quantités stockées en base sont en **`numeric(14,2)`** (au plus **2 décimales** côté UI) pour les lignes de commande, la répartition par magasin sur un lot, et les champs `qte_achat` / `qte_besoin_fige` des lignes de lot. Voir la migration `supabase/migrations/20260530143000_commande_quantites_decimal.sql`.
+
 ## Achat (lots prêts → clôture)
 
 - **Liste** : `/commandes-fournisseur/achat` — appelle `GET /api/commandes-fournisseur/achat/lots` (filtre préparés ou tous).
-- **Détail lot** : `/commandes-fournisseur/achat/lots/[id]` — tableau « sans vendeur » (sélection + attribution groupe), puis **un tableau par vendeur** ; totaux par vendeur (DH), frais généraux éditables (libellé / montant), bloc **Synthèse** (produits + frais). **Sauvegarde automatique** (debounce) via `PATCH /api/commandes-fournisseur/achat/lots/[id]` (`ligneUpdates` et facultatif `fraisUpserts`, `fraisDeleteIds`). Clôture avec `status: "terminee"` ; si `409` + `NEED_CONFIRM_ZERO_QTY`, dialogue de confirmation puis `confirmZeroQtyLines: true`.
+- **Détail lot** : `/commandes-fournisseur/achat/lots/[id]` — tableau « sans vendeur » (sélection + attribution groupe), puis **un tableau par vendeur** ; totaux par vendeur (DH), frais généraux éditables (libellé / montant, montant saisi en numérique max 2 décimales). **Sauvegarde automatique** (debounce) des **lignes produit** via `PATCH` (`ligneUpdates` seul, sans toucher aux frais en cours de saisie) ; les **frais** au **blur** des champs, à la **suppression** d’une ligne, ou avec la **clôture** ; le `PATCH` qui modifie les frais renvoie `frais` (globaux) pour éviter un GET redondant. Requêtes **enfilées** (pas de doubles inserts). Clôture avec `status: "terminee"` ; si `409` + `NEED_CONFIRM_ZERO_QTY`, dialogue puis `confirmZeroQtyLines: true`.
 - **Vendeurs fournisseur** :
   - `GET/POST /api/commandes-fournisseur/achat/suppliers/[supplierId]/vendeurs` (liste / création, permission achete).
   - `PATCH /api/commandes-fournisseur/achat/suppliers/[supplierId]/vendeurs/[vendeurId]` avec `{ label }` : renommage réservé à la permission **`commandes_fournisseur.vendeurs_renommer`** (cohérence RLS dans la migration SQL associée).

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { requireApiPermission } from "@/lib/auth/require-permission-api";
 import { userHasMagasin } from "@/lib/commandes-fournisseur/api-helpers";
+import { clampQtyToApiRange } from "@/lib/commandes-fournisseur/qty-parse";
 import { fallbackStatusLabel } from "@/lib/statusLabels/defaults";
 
 type LigneIn = {
@@ -60,8 +61,11 @@ export async function PUT(req: Request, ctx: Ctx) {
   }
 
   for (const l of lignes) {
-    if (!l.productId || typeof l.qte !== "number" || l.qte < 0 || !Number.isInteger(l.qte)) {
-      return NextResponse.json({ error: "Chaque ligne: productId et qte (entier >= 0)" }, { status: 400 });
+    if (!l.productId || typeof l.qte !== "number" || !Number.isFinite(l.qte) || l.qte < 0) {
+      return NextResponse.json(
+        { error: "Chaque ligne: productId et qte (nombre fini ≥ 0)" },
+        { status: 400 },
+      );
     }
   }
 
@@ -79,7 +83,7 @@ export async function PUT(req: Request, ctx: Ctx) {
       commande_id: commandeId,
       product_id: l.productId,
       product_packaging_id: l.productPackagingId,
-      qte: l.qte,
+      qte: clampQtyToApiRange(l.qte),
       line_comment: l.lineComment ?? null,
       hors_fournisseur: Boolean(l.horsFournisseur),
     }));

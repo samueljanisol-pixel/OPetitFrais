@@ -18,6 +18,7 @@ import {
   pKeyForProduct,
   uKeyForProduct,
 } from "@/features/commandes-fournisseur/parcours-product-quantity";
+import { clampQtyToApiRange } from "@/lib/commandes-fournisseur/qty-parse";
 
 type Product = ParcoursProductForQty & {
   name: string;
@@ -86,8 +87,8 @@ export default function ParcoursClient({ commandeId }: { commandeId: string }) {
             delete next[k];
           }
         }
-        if (v > 0) {
-          next[key] = v;
+        if (clampQtyToApiRange(v) > 0) {
+          next[key] = clampQtyToApiRange(v);
         }
         return next;
       });
@@ -187,12 +188,12 @@ export default function ParcoursClient({ commandeId }: { commandeId: string }) {
     for (const p of products) {
       const route = getRoute(p);
       if (route === "unit") {
-        const uq = getQ(uKey(p.id));
+        const uq = clampQtyToApiRange(getQ(uKey(p.id)));
         if (uq > 0) {
           out.push({ productId: p.id, productPackagingId: null, qte: uq, horsFournisseur: false });
         }
       } else {
-        const q = getQ(pKey(p.id, route));
+        const q = clampQtyToApiRange(getQ(pKey(p.id, route)));
         if (q > 0) {
           out.push({ productId: p.id, productPackagingId: route, qte: q, horsFournisseur: false });
         }

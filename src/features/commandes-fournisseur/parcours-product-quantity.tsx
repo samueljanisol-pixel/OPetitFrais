@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Button, Typography } from "@mui/material";
+import { DecimalQtyTextField } from "@/components/commandes-fournisseur/DecimalQtyTextField";
+import { clampQtyToApiRange, roundQty2 } from "@/lib/commandes-fournisseur/qty-parse";
 
 export type PPack = {
   id: string;
@@ -97,10 +99,12 @@ export function UnitQteControl({
   value: number;
   onChange: (n: number) => void;
 }) {
-  const step = (d: number) => () => onChange(Math.max(0, value + d));
+  const step =
+    (d: number) => () =>
+      onChange(Math.max(0, roundQty2(roundQty2(value) + d)));
   return (
     <div className="flex flex-col gap-1">
-      <div className="flex items-center justify-between gap-1">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex gap-0.5">
           <Button size="small" variant="outlined" onClick={step(-10)} disabled={value < 10}>
             -10
@@ -109,11 +113,15 @@ export function UnitQteControl({
             -1
           </Button>
         </div>
-        <div className="flex min-w-0 items-baseline justify-center gap-1">
-          <Typography variant="h6" className="shrink-0 text-center">
-            {value}
-          </Typography>
-          <Typography variant="body2" color="text.secondary" className="shrink-0">
+        <div className="flex min-w-0 flex-1 flex-wrap items-center justify-center gap-1">
+          <DecimalQtyTextField
+            size="small"
+            value={clampQtyToApiRange(value)}
+            onQtyChange={(n) => onChange(clampQtyToApiRange(n))}
+            sx={{ flex: "0 1 auto", minWidth: "4.75rem", maxWidth: "7rem", "& input": { textAlign: "center" } }}
+            slotProps={{ htmlInput: { "aria-label": `Quantité ${unitLabel}` } }}
+          />
+          <Typography variant="body2" color="text.secondary" className="shrink-0 whitespace-nowrap">
             {unitLabel}
           </Typography>
         </div>
@@ -141,14 +149,16 @@ export function PackQteControl({
   value: number;
   onChange: (n: number) => void;
 }) {
-  const step = (d: number) => () => onChange(Math.max(0, value + d));
+  const step =
+    (d: number) => () =>
+      onChange(Math.max(0, roundQty2(roundQty2(value) + d)));
   return (
     <div className="flex flex-col gap-1">
       <Typography variant="body2" className="!font-medium leading-snug" component="p">
         {condWithPackSpec}
       </Typography>
-      <div className="flex items-center justify-between gap-1">
-        <div className="flex gap-0.5">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex gap-0.5 shrink-0">
           <Button size="small" variant="outlined" onClick={step(-10)} disabled={value < 10}>
             -10
           </Button>
@@ -156,10 +166,14 @@ export function PackQteControl({
             -1
           </Button>
         </div>
-        <Typography variant="h6" className="min-w-[2.5rem] shrink-0 text-center">
-          {value}
-        </Typography>
-        <div className="flex gap-0.5">
+        <DecimalQtyTextField
+          size="small"
+          value={clampQtyToApiRange(value)}
+          onQtyChange={(n) => onChange(clampQtyToApiRange(n))}
+          sx={{ flex: "0 1 auto", minWidth: "4rem", maxWidth: "7rem", "& input": { textAlign: "center" } }}
+          slotProps={{ htmlInput: { "aria-label": "Quantité colis" } }}
+        />
+        <div className="flex gap-0.5 shrink-0">
           <Button size="small" variant="outlined" onClick={step(1)}>
             +1
           </Button>
@@ -371,8 +385,8 @@ export function useSingleProductParcoursQuantity(
             delete next[k];
           }
         }
-        if (v > 0) {
-          next[key] = v;
+        if (clampQtyToApiRange(v) > 0) {
+          next[key] = clampQtyToApiRange(v);
         }
         return next;
       });

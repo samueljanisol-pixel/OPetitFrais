@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type FocusEvent } from "react";
 import {
   Alert,
   Box,
@@ -38,6 +38,12 @@ import {
   parcoursShapeFromPickRow,
   useSingleProductParcoursQuantity,
 } from "@/features/commandes-fournisseur/parcours-product-quantity";
+import { DecimalQtyTextField } from "@/components/commandes-fournisseur/DecimalQtyTextField";
+import {
+  clampQtyToApiRange,
+  roundQty2,
+  sanitizeMontantDhTypingFrac2,
+} from "@/lib/commandes-fournisseur/qty-parse";
 import { useRouter } from "next/navigation";
 import { useSessionPermissions } from "@/lib/auth/useSessionPermissions";
 import {
@@ -160,7 +166,7 @@ function montantLigneDh(L: LotLineApi, d: DraftRow | undefined): number {
   const pr = one(L.product);
   const pkgId = (d?.product_packaging_id ?? L.product_packaging_id) ?? null;
   const display = buildLotProductDisplayInfo(pr ?? null, pkgId);
-  const qa = coerceInt(d?.qte_achat ?? L.qte_achat, 0);
+  const qa = coerceQty(d?.qte_achat ?? L.qte_achat, 0);
   const puNum = parsePuText(d?.puText ?? "");
   const qtyBase = qtyBaseFromLotLine(qa, display);
   const m = montantLigneFromPu(puNum, qtyBase);
@@ -214,10 +220,10 @@ function supplierHeading(raw: LotApi["ref_supplier"]): string {
   return "—";
 }
 
-function coerceInt(n: unknown, fallback = 0): number {
+function coerceQty(n: unknown, fallback = 0): number {
   const v = Number(n);
   if (!Number.isFinite(v)) return fallback;
-  return Math.floor(v);
+  return clampQtyToApiRange(v);
 }
 
 function draftSnapshot(d: DraftRow): string {
@@ -288,7 +294,7 @@ function draftsFromLines(lignesRows: LotLineApi[]): {
     const row: DraftRow = {
       vendeur_id: L.vendeur_id != null && String(L.vendeur_id).length > 0 ? String(L.vendeur_id) : null,
       marque_achete: Boolean(L.marque_achete),
-      qte_achat: coerceInt(L.qte_achat, 0),
+      qte_achat: coerceQty(L.qte_achat, 0),
       puText: puToText(L.prix_achat_unitaire ?? null),
       product_packaging_id: L.product_packaging_id ?? null,
     };
@@ -336,7 +342,7 @@ function BesoinEtUdVCoteACote({
   return (
     <Box sx={{ width: "100%", textAlign: "left", display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 0.35 }}>
       <Typography variant="caption" color="text.secondary" component="div" sx={{ fontWeight: 500, lineHeight: 1.3 }}>
-        {`Besoin : ${besoinN}`}
+        {`Besoin : ${besoinN.toLocaleString("fr-FR", { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`}
       </Typography>
       {display.isCond && display.condTitre ? (
         <Typography variant="caption" color="text.secondary" component="div" sx={{ lineHeight: 1.3 }}>
@@ -449,6 +455,8 @@ export default function AchatLotDetailClient({ lotId }: { lotId: string }) {
   const [lot, setLot] = useState<LotApi | null>(null);
   const [lignes, setLignes] = useState<LotLineApi[]>([]);
   const [fraisLines, setFraisLines] = useState<FraisUiLine[]>([]);
+  const fraisLinesRef = useRef<FraisUiLine[]>(fraisLines);
+  fraisLinesRef.current = fraisLines;
   const fraisBaselineSnap = useRef<string>("");
   const fraisDeletesPending = useRef<string[]>([]);
   const [vendeurs, setVendeurs] = useState<VendeurApi[]>([]);
@@ -489,6 +497,8 @@ export default function AchatLotDetailClient({ lotId }: { lotId: string }) {
 
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const saveSeq = useRef(0);
+  /** Enfile les PATCH pour éviter les sauvegardes concurrentes (ex. lignes sans id après insert frais → doublons). */
+  const persistTailRef = useRef(Promise.resolve(true));
 
   useEffect(() => {
     if (!permLoading && !can("commandes_fournisseur.achat")) {
@@ -638,111 +648,122 @@ export default function AchatLotDetailClient({ lotId }: { lotId: string }) {
   }, [lotId]);
 
   const persistAll = useCallback(
-    async (opts?: { silent?: boolean }): Promise<boolean> => {
-      const patches = computeDirtyPatches(lignes, draftByLine, baselineRef.current);
-      const delIds = [...fraisDeletesPending.current];
-      const statutFrais = serialiserEtatFrais(fraisLines, delIds);
+    (opts?: { silent?: boolean; lignesOnly?: boolean }) => {
+      const runOne = async (): Promise<boolean> => {
+        const patches = computeDirtyPatches(lignes, draftByLine, baselineRef.current);
+        const delIds = [...fraisDeletesPending.current];
+        const flNow = fraisLinesRef.current;
+        const statutFrais = serialiserEtatFrais(flNow, delIds);
 
-      const aFrais = statutFrais !== fraisBaselineSnap.current;
-      const aLignes = patches.length > 0;
+        const aFrais = statutFrais !== fraisBaselineSnap.current;
+        const aLignes = patches.length > 0;
+        const sendFrais = aFrais && !opts?.lignesOnly;
 
-      if (!aLignes && !aFrais) return true;
+        if (!aLignes && !sendFrais) return true;
 
-      const corps: Record<string, unknown> = {};
-      if (aLignes) {
-        corps.ligneUpdates = patches;
-      }
-      if (aFrais) {
-        if (delIds.length > 0) {
-          corps.fraisDeleteIds = delIds;
-        }
-
-        const upserts: Array<{ id?: string; label: string; montant: number }> = [];
-        for (const r of fraisLines) {
-          const lbl = typeof r.label === "string" ? r.label.trim() : "";
-          if (lbl.length === 0) continue;
-          const montant = montantNombreDepuisTxt(r.montantText);
-          const u: { id?: string; label: string; montant: number } = { label: lbl, montant };
-          if (r.id !== undefined && r.id.length > 0) {
-            u.id = r.id;
-          }
-          upserts.push(u);
-        }
-        if (upserts.length > 0) {
-          corps.fraisUpserts = upserts;
-        }
-      }
-
-      if (Object.keys(corps).length === 0) {
-        // État « dirty » côté UI sans rien à envoyer (ex. ligne frais encore vide).
-        if (aFrais) {
-          fraisBaselineSnap.current = serialiserEtatFrais(fraisLines, fraisDeletesPending.current);
-        }
-        return true;
-      }
-
-      const seq = ++saveSeq.current;
-      setSaving(true);
-      if (!opts?.silent) {
-        setErr(null);
-      }
-      try {
-        const res = await fetch(`/api/commandes-fournisseur/achat/lots/${encodeURIComponent(lotId)}`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(corps),
-        });
-        const json = (await res.json()) as { error?: string };
-        if (!res.ok) {
-          setErr(typeof json.error === "string" ? json.error : "Enregistrement impossible");
-          return false;
-        }
-
-        if (saveSeq.current !== seq) return true;
-
+        const corps: Record<string, unknown> = {};
         if (aLignes) {
-          commitBaselineForPatches(patches);
+          corps.ligneUpdates = patches;
         }
-        if (aFrais) {
-          const okFr = await rechargerFraisDepuisApi();
-          if (!okFr) return false;
+        if (sendFrais) {
+          if (delIds.length > 0) {
+            corps.fraisDeleteIds = delIds;
+          }
+
+          const upserts: Array<{ id?: string; label: string; montant: number }> = [];
+          for (const r of flNow) {
+            const lbl = typeof r.label === "string" ? r.label.trim() : "";
+            if (lbl.length === 0) continue;
+            const montant = montantNombreDepuisTxt(r.montantText);
+            const u: { id?: string; label: string; montant: number } = { label: lbl, montant };
+            if (r.id !== undefined && r.id.length > 0) {
+              u.id = r.id;
+            }
+            upserts.push(u);
+          }
+          if (upserts.length > 0) {
+            corps.fraisUpserts = upserts;
+          }
         }
+
+        if (Object.keys(corps).length === 0) {
+          if (sendFrais) {
+            fraisBaselineSnap.current = serialiserEtatFrais(flNow, fraisDeletesPending.current);
+          }
+          return true;
+        }
+
+        const seq = ++saveSeq.current;
+        setSaving(true);
         if (!opts?.silent) {
-          setInfo("Modifications enregistrées.");
+          setErr(null);
         }
-        return true;
-      } catch {
-        setErr("Réseau indisponible lors de l’enregistrement.");
-        return false;
-      } finally {
-        if (saveSeq.current === seq) {
-          setSaving(false);
+        try {
+          const res = await fetch(`/api/commandes-fournisseur/achat/lots/${encodeURIComponent(lotId)}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(corps),
+          });
+          const json = (await res.json()) as { error?: string; frais?: FraisApi[] };
+          if (!res.ok) {
+            setErr(typeof json.error === "string" ? json.error : "Enregistrement impossible");
+            return false;
+          }
+
+          if (saveSeq.current !== seq) return true;
+
+          if (aLignes) {
+            commitBaselineForPatches(patches);
+          }
+          if (sendFrais) {
+            if (Array.isArray(json.frais)) {
+              const fl = fraisGlobauxVersUi(json.frais);
+              setFraisLines(fl);
+              fraisDeletesPending.current = [];
+              fraisBaselineSnap.current = serialiserEtatFrais(fl, []);
+            } else {
+              const okFr = await rechargerFraisDepuisApi();
+              if (!okFr) return false;
+            }
+          }
+          if (!opts?.silent) {
+            setInfo("Modifications enregistrées.");
+          }
+          return true;
+        } catch {
+          setErr("Réseau indisponible lors de l’enregistrement.");
+          return false;
+        } finally {
+          if (saveSeq.current === seq) {
+            setSaving(false);
+          }
         }
-      }
+      };
+
+      const chained = persistTailRef.current.then(runOne).catch(() => false);
+      persistTailRef.current = chained;
+      return chained;
     },
-    [draftByLine, lignes, lotId, fraisLines, rechargerFraisDepuisApi],
+    [draftByLine, lignes, lotId, rechargerFraisDepuisApi],
   );
 
-  /** Sauvegarde automatique après chaque modification (debounced). */
+  /** Sauvegarde automatique des lignes après chaque modification (debounced). Les frais sont enregistrés au blur ou avec les actions explicites (suppression, clôture). */
   useEffect(() => {
     if (!editable || loading) return;
 
     const dirtyLignes = computeDirtyPatches(lignes, draftByLine, baselineRef.current);
-    const sn = serialiserEtatFrais(fraisLines, fraisDeletesPending.current);
-    const dirtyFrais = sn !== fraisBaselineSnap.current;
-
-    if (dirtyLignes.length === 0 && !dirtyFrais) return;
+    if (dirtyLignes.length === 0) return;
 
     if (debounceRef.current) clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(() => {
       debounceRef.current = null;
-      void persistAll({ silent: true });
+      void persistAll({ silent: true, lignesOnly: true });
     }, AUTOSAVE_MS);
 
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
     };
-  }, [draftByLine, editable, fraisLines, lignes, loading, persistAll]);
+  }, [draftByLine, editable, lignes, loading, persistAll]);
 
   const changeDraft = useCallback((lineId: string, patch: Partial<DraftRow>) => {
     setDraftByLine((prev) => {
@@ -862,8 +883,11 @@ export default function AchatLotDetailClient({ lotId }: { lotId: string }) {
         const idRm = hit.id;
         fraisDeletesPending.current = [...new Set([...fraisDeletesPending.current, idRm])];
       }
-      return prev.filter((r) => r.sid !== sid);
+      const next = prev.filter((r) => r.sid !== sid);
+      fraisLinesRef.current = next;
+      return next;
     });
+    void persistAll({ silent: true });
   }
 
   async function cloturer(forceConfirmZeros: boolean): Promise<boolean> {
@@ -1189,7 +1213,7 @@ export default function AchatLotDetailClient({ lotId }: { lotId: string }) {
                     const dRow = draftByLine[lid];
                     const pkgId = (dRow?.product_packaging_id ?? L.product_packaging_id) ?? null;
                     const display = buildLotProductDisplayInfo(pr ?? null, pkgId);
-                    const besoinN = coerceInt(L.qte_besoin_fige ?? null, 0);
+                    const besoinN = coerceQty(L.qte_besoin_fige ?? null, 0);
 
                     const pa = pr ? parseCategoryFromRef(pr.ref_category) : { label: "", sort_order: null };
                     const catKey = categoryDisplayLabel(pa);
@@ -1246,7 +1270,10 @@ export default function AchatLotDetailClient({ lotId }: { lotId: string }) {
                           </TableCell>
                           <TableCell align="center" sx={{ py: { xs: 0.5, sm: 1 }, verticalAlign: "top" }}>
                             <Typography variant="body2" component="div" sx={{ fontWeight: 500 }}>
-                              {besoinN}
+                              {besoinN.toLocaleString("fr-FR", {
+                                minimumFractionDigits: 0,
+                                maximumFractionDigits: 2,
+                              })}
                             </Typography>
                           </TableCell>
                           <TableCell align="center" sx={{ py: { xs: 0.5, sm: 1 }, verticalAlign: "top" }}>
@@ -1438,7 +1465,7 @@ export default function AchatLotDetailClient({ lotId }: { lotId: string }) {
 
                         const pkgId = (dRow?.product_packaging_id ?? L.product_packaging_id) ?? null;
                         const display = buildLotProductDisplayInfo(pr ?? null, pkgId);
-                        const qa = coerceInt(dRow?.qte_achat ?? L.qte_achat, 0);
+                        const qa = coerceQty(dRow?.qte_achat ?? L.qte_achat, 0);
 
                         const pa = pr ? parseCategoryFromRef(pr.ref_category) : { label: "", sort_order: null };
                         const catKey = categoryDisplayLabel(pa);
@@ -1451,14 +1478,15 @@ export default function AchatLotDetailClient({ lotId }: { lotId: string }) {
                           );
                         const showCat = i === 0 || catKey !== prevCat;
 
-                        const besoinN = coerceInt(L.qte_besoin_fige ?? null, 0);
+                        const besoinN = coerceQty(L.qte_besoin_fige ?? null, 0);
 
                         const puNum = parsePuText(dRow?.puText ?? "");
                         const qtyBaseGuess = qtyBaseFromLotLine(qa, display);
                         const montantGuess = montantLigneFromPu(puNum, qtyBaseGuess);
                         const soitCaptionAchat = qa > 0 ? buildSoitLine(display, qa) : null;
                         const afficherSoitSsQteAchat = Boolean(
-                          soitCaptionAchat && (!compactTable || qa !== besoinN),
+                          soitCaptionAchat &&
+                            (!compactTable || roundQty2(qa) !== roundQty2(besoinN)),
                         );
 
                         return (
@@ -1524,7 +1552,10 @@ export default function AchatLotDetailClient({ lotId }: { lotId: string }) {
                                   whiteSpace: "nowrap",
                                 }}
                               >
-                                {besoinN}
+                                {besoinN.toLocaleString("fr-FR", {
+                                minimumFractionDigits: 0,
+                                maximumFractionDigits: 2,
+                              })}
                               </TableCell>
                               <TableCell
                                 sx={{
@@ -1540,19 +1571,22 @@ export default function AchatLotDetailClient({ lotId }: { lotId: string }) {
                               </TableCell>
                               <TableCell sx={{ minWidth: 0, verticalAlign: "top" }}>
                                 <Box sx={{ display: "flex", flexDirection: "column", alignItems: "stretch", gap: 0 }}>
-                                  <TextField
+                                  <DecimalQtyTextField
                                     size="small"
                                     fullWidth
-                                    type="number"
                                     disabled={!editable}
-                                    slotProps={{
-                                      htmlInput: { inputMode: "numeric", step: 1, min: 0 },
-                                    }}
                                     value={qa}
-                                    onChange={(e) =>
-                                      changeDraft(lid, { qte_achat: coerceInt(Number(e.target.value), 0) })
+                                    onQtyChange={(n) =>
+                                      changeDraft(lid, { qte_achat: coerceQty(n, 0) })
                                     }
-                                    sx={{ "& .MuiInputBase-input": { py: 0.65, px: 0.85, fontSize: "0.85rem" } }}
+                                    sx={{
+                                      "& .MuiInputBase-input": {
+                                        py: 0.65,
+                                        px: 0.85,
+                                        fontSize: "0.85rem",
+                                      },
+                                    }}
+                                    slotProps={{ htmlInput: { "aria-label": "Quantité achat" } }}
                                   />
                                   {afficherSoitSsQteAchat && soitCaptionAchat ? (
                                     <Typography
@@ -1574,7 +1608,13 @@ export default function AchatLotDetailClient({ lotId }: { lotId: string }) {
                                   value={dRow?.puText ?? ""}
                                   placeholder="Prix"
                                   slotProps={{
-                                    htmlInput: { inputMode: "decimal" },
+                                    htmlInput: {
+                                      inputMode: "decimal",
+                                      onFocus: (ev: FocusEvent<HTMLInputElement>) => {
+                                        const el = ev.target as HTMLInputElement;
+                                        queueMicrotask(() => el.select());
+                                      },
+                                    },
                                   }}
                                   onChange={(e) => changeDraft(lid, { puText: e.target.value })}
                                   sx={{ "& .MuiInputBase-input": { py: 0.65, px: 0.85, fontSize: "0.85rem" } }}
@@ -1684,6 +1724,9 @@ export default function AchatLotDetailClient({ lotId }: { lotId: string }) {
                           placeholder="Libellé"
                           value={lf.label}
                           onChange={(e) => changerFrais(lf.sid, { label: e.target.value })}
+                          onBlur={() => {
+                            void persistAll({ silent: true });
+                          }}
                           sx={{ "& .MuiInputBase-input": { py: 0.75 } }}
                         />
                       </TableCell>
@@ -1694,10 +1737,21 @@ export default function AchatLotDetailClient({ lotId }: { lotId: string }) {
                           placeholder="0,00"
                           value={lf.montantText}
                           onChange={(e) =>
-                            changerFrais(lf.sid, { montantText: e.target.value })
+                            changerFrais(lf.sid, {
+                              montantText: sanitizeMontantDhTypingFrac2(e.target.value),
+                            })
                           }
+                          onBlur={() => {
+                            void persistAll({ silent: true });
+                          }}
                           slotProps={{
-                            htmlInput: { inputMode: "decimal" },
+                            htmlInput: {
+                              inputMode: "decimal",
+                              onFocus: (ev: FocusEvent<HTMLInputElement>) => {
+                                const el = ev.target as HTMLInputElement;
+                                queueMicrotask(() => el.select());
+                              },
+                            },
                           }}
                           sx={{ "& .MuiInputBase-input": { py: 0.75, textAlign: "right" } }}
                         />

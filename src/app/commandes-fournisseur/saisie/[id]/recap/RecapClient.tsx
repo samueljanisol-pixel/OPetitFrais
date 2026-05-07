@@ -30,6 +30,8 @@ import {
   useSingleProductParcoursQuantity,
 } from "@/features/commandes-fournisseur/parcours-product-quantity";
 import { useStatusLabels } from "@/lib/statusLabels/useStatusLabels";
+import { DecimalQtyTextField } from "@/components/commandes-fournisseur/DecimalQtyTextField";
+import { clampQtyToApiRange, roundQty2 } from "@/lib/commandes-fournisseur/qty-parse";
 
 type Ligne = {
   id: string;
@@ -66,7 +68,7 @@ function supplierLabel(c: Commande): string {
 function formatSoit(n: number): string {
   if (!Number.isFinite(n)) return "0";
   if (Number.isInteger(n)) return String(n);
-  return n.toLocaleString("fr-FR", { maximumFractionDigits: 4 });
+  return n.toLocaleString("fr-FR", { minimumFractionDigits: 0, maximumFractionDigits: 2 });
 }
 
 /** Largeur quantité + unité : plus étroit sur mobile pour ne pas pousser les boutons ± sur le libellé. */
@@ -84,6 +86,9 @@ function StepQte({
   /** Conditionnement : pas d’unité de vente à droite de la quantité. */
   hideUnit?: boolean;
 }) {
+  const step =
+    (d: number) => () =>
+      onChange(Math.max(0, roundQty2(roundQty2(value) + d)));
   return (
     <div className="flex max-w-[100%] shrink-0 items-center gap-0.5 sm:gap-1">
       <Button
@@ -91,19 +96,29 @@ function StepQte({
         variant="outlined"
         className="!min-w-[2.35rem] !px-1 sm:!min-w-[40px] sm:!px-2"
         sx={{ py: 0.5 }}
-        onClick={() => onChange(Math.max(0, value - 1))}
-        disabled={value <= 1}
-        aria-label={value <= 1 ? "Quantité minimale (1), supprimez la ligne pour retirer le produit" : "Diminuer de 1"}
+        onClick={() => step(-1)()}
+        disabled={value < 1}
+        aria-label={value < 1 ? "Quantité minimale, supprimez la ligne pour retirer" : "Diminuer de 1"}
       >
         -1
       </Button>
-      <div className={`flex items-baseline justify-center gap-0.5 sm:gap-1 ${QTE_UNITE_W} tabular-nums`}>
-        <Typography className="shrink-0 text-center font-medium tabular-nums">{value}</Typography>
+      <div className={`flex shrink-0 items-center gap-1 ${QTE_UNITE_W}`}>
+        <DecimalQtyTextField
+          size="small"
+          value={clampQtyToApiRange(value)}
+          onQtyChange={(n) => onChange(clampQtyToApiRange(n))}
+          sx={{
+            "& .MuiInputBase-input": { py: 0.65, textAlign: "center", px: 0.75 },
+            minWidth: "3.75rem",
+            maxWidth: "5.75rem",
+          }}
+          slotProps={{ htmlInput: { "aria-label": "Quantité produit" } }}
+        />
         {hideUnit ? null : (
           <Typography
             variant="caption"
             color="text.secondary"
-            className="min-w-0 shrink truncate text-left"
+            className="min-w-0 max-w-[5rem] shrink truncate text-left"
             title={uniteVente}
           >
             {uniteVente}
@@ -115,7 +130,7 @@ function StepQte({
         variant="outlined"
         className="!min-w-[2.35rem] !px-1 sm:!min-w-[40px] sm:!px-2"
         sx={{ py: 0.5 }}
-        onClick={() => onChange(value + 1)}
+        onClick={() => step(1)()}
       >
         +1
       </Button>
@@ -548,7 +563,7 @@ export default function RecapClient({ commandeId }: { commandeId: string }) {
                         className={`flex items-baseline justify-center gap-1 tabular-nums ${QTE_UNITE_W}`}
                       >
                         <Typography variant="body2" className="shrink-0 font-medium tabular-nums">
-                          {l.qte}
+                          {formatSoit(l.qte)}
                         </Typography>
                         {isCond ? null : (
                           <Typography variant="body2" color="text.secondary" className="min-w-0 truncate">

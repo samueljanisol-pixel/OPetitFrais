@@ -6,6 +6,7 @@ import {
   compareByCategoryThenProductName,
   parseCategoryFromRef,
 } from "@/lib/commandes-fournisseur/ligne-category-order";
+import { clampQtyToApiRange } from "@/lib/commandes-fournisseur/qty-parse";
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -273,7 +274,7 @@ export async function PATCH(req: Request, ctx: Ctx) {
     if (typeof lotLigneId !== "string" || typeof magasinId !== "string" || typeof rawQte !== "number") {
       return NextResponse.json({ error: "setMagasinQte invalide" }, { status: 400 });
     }
-    const qte = Math.max(0, Math.min(1_000_000_000, Math.floor(rawQte)));
+    const qte = clampQtyToApiRange(rawQte);
 
     const { data: lotRow, error: le1 } = await supabase
       .from("commande_fournisseur_lot_ligne")

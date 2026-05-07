@@ -34,6 +34,8 @@ import {
   parcoursShapeFromPickRow,
   useSingleProductParcoursQuantity,
 } from "@/features/commandes-fournisseur/parcours-product-quantity";
+import { DecimalQtyTextField } from "@/components/commandes-fournisseur/DecimalQtyTextField";
+import { roundQty2 } from "@/lib/commandes-fournisseur/qty-parse";
 
 type ProductE = {
   id: string;
@@ -759,41 +761,36 @@ export default function ValidationLotDetailClient({ lotId }: { lotId: string }) 
                       return (
                         <TableCell key={col.id} align="right">
                           {editable ? (
-                            <TextField
-                              type="number"
+                            <DecimalQtyTextField
                               value={v}
                               size="small"
                               disabled={rowSaving === l.id}
-                              onChange={(e) => {
-                                const raw = e.target.value;
-                                const n = Math.max(
-                                  0,
-                                  Math.min(1_000_000_000, Math.floor(Number.parseFloat(raw) || 0)),
-                                );
-                                updateLocalQte(l.id, col.id, n);
-                              }}
+                              onQtyChange={(n) => updateLocalQte(l.id, col.id, n)}
                               onFocus={() => {
                                 cellFocusBaseline.current[cellKey] = v;
                               }}
                               onBlur={() => {
                                 const before = cellFocusBaseline.current[cellKey] ?? 0;
                                 const after = mags[i] ?? 0;
-                                if (before !== after) {
+                                if (roundQty2(before) !== roundQty2(after)) {
                                   void patchMagasinQte(l.id, col.id, after);
                                 }
                               }}
-                              slotProps={{ htmlInput: { min: 0, step: 1 } }}
-                              sx={{ width: 84, "& input": { textAlign: "right" } }}
+                              sx={{ width: 88, "& .MuiInputBase-input": { textAlign: "right", py: 0.65 } }}
+                              slotProps={{ htmlInput: { "aria-label": `Quantité ${col.label}` } }}
                             />
                           ) : (
-                            v
+                            v.toLocaleString("fr-FR", {
+                              minimumFractionDigits: 0,
+                              maximumFractionDigits: 2,
+                            })
                           )}
                         </TableCell>
                       );
                     })}
                     <TableCell align="right" sx={{ verticalAlign: "middle" }}>
                       <Typography variant="body2" component="span" sx={{ fontWeight: 700 }}>
-                        {tot}
+                        {tot.toLocaleString("fr-FR", { minimumFractionDigits: 0, maximumFractionDigits: 2 })}
                       </Typography>
                     </TableCell>
                     <TableCell
