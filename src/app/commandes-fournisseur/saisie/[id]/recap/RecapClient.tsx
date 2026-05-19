@@ -31,6 +31,7 @@ import {
 } from "@/features/commandes-fournisseur/parcours-product-quantity";
 import { useStatusLabels } from "@/lib/statusLabels/useStatusLabels";
 import { DecimalQtyTextField } from "@/components/commandes-fournisseur/DecimalQtyTextField";
+import { buildSoitLine } from "@/lib/commandes-fournisseur/product-display";
 import { clampQtyToApiRange, roundQty2 } from "@/lib/commandes-fournisseur/qty-parse";
 
 type Ligne = {
@@ -46,6 +47,8 @@ type Ligne = {
   condTitre?: string | null;
   /** Quantité contenu par conditionnement (product_packaging.quantity), pour le calcul Soit. */
   packContentQty?: number | null;
+  /** UdV du conditionnement = « Unité » : pas de ligne « Soit … ». */
+  packSalesUnitIsUnite?: boolean;
   /** Libellé catégorie (pour regroupement récap) ; absent avant rechargement après ajout ponctuel. */
   categoryLabel?: string | null;
 };
@@ -55,6 +58,7 @@ type Commande = {
   status: string;
   commentaire: string | null;
   supplier_id: string;
+  magasin_id: string;
   ref_supplier: { label: string } | { label: string }[] | null;
 };
 
@@ -312,6 +316,16 @@ export default function RecapClient({ commandeId }: { commandeId: string }) {
   const onDeleteLigne = useCallback(
     async (i: number) => {
       if (!editable) return;
+      const row = lignes[i];
+      if (!row) return;
+      const name = row.product?.name?.trim() || row.product_id;
+      if (
+        !window.confirm(
+          `Supprimer la ligne « ${name} » de cette commande ?\n\nCette action est définitive.`,
+        )
+      ) {
+        return;
+      }
       setErr(null);
       setSaving(true);
       try {
@@ -475,10 +489,16 @@ export default function RecapClient({ commandeId }: { commandeId: string }) {
           const u = l.uniteVente ?? "—";
           const isCond = Boolean(l.product_packaging_id);
           const pq = l.packContentQty;
-          const soitCond =
-            isCond && pq != null && Number.isFinite(pq) && l.qte > 0
-              ? `Soit ${formatSoit(l.qte * pq)} ${u}`
-              : null;
+          const soitCond = buildSoitLine(
+            {
+              uniteVente: u,
+              condTitre: l.condTitre ?? null,
+              packContentQty: isCond ? (pq ?? null) : null,
+              isCond,
+              packSalesUnitIsUnite: l.packSalesUnitIsUnite === true,
+            },
+            l.qte,
+          );
           const catKey = (l.categoryLabel ?? "").trim() || "Sans catégorie";
           const prevCat =
             i > 0 ? ((lignes[i - 1]!.categoryLabel ?? "").trim() || "Sans catégorie") : null;
@@ -517,7 +537,7 @@ export default function RecapClient({ commandeId }: { commandeId: string }) {
                   <Typography variant="body2" className="!font-medium">
                     {l.product?.name ?? l.product_id}
                   </Typography>
-                  <ProductArabicSubtitle nameAr={l.product?.name_ar} variant="caption" />
+                  <ProductArabicSubtitle nameAr={l.product?.name_ar} matchNameLine />
                   {l.condTitre ? (
                     <Typography variant="caption" color="text.secondary" className="!mt-0.5 block">
                       {l.condTitre}
@@ -534,7 +554,7 @@ export default function RecapClient({ commandeId }: { commandeId: string }) {
                           hideUnit={isCond}
                           onChange={(q) => setLigneQte(i, q)}
                         />
-                        {isCond && soitCond ? (
+                        {soitCond ? (
                           <Typography
                             variant="body2"
                             color="text.secondary"
@@ -571,7 +591,7 @@ export default function RecapClient({ commandeId }: { commandeId: string }) {
                           </Typography>
                         )}
                       </div>
-                      {isCond && soitCond ? (
+                      {soitCond ? (
                         <Typography
                           variant="body2"
                           color="text.secondary"
@@ -660,6 +680,7 @@ export default function RecapClient({ commandeId }: { commandeId: string }) {
           open={pickerOpen}
           onClose={() => setPickerOpen(false)}
           supplierId={commande.supplier_id}
+          magasinId={commande.magasin_id}
           existingProductIds={lignes.map((l) => l.product_id)}
           onSelect={handleProductPicked}
         />
@@ -704,7 +725,7 @@ export default function RecapClient({ commandeId }: { commandeId: string }) {
               <Typography variant="subtitle2" className="!mb-2 !font-semibold">
                 {pendingProduct.name}
               </Typography>
-              <ProductArabicSubtitle nameAr={pendingProduct.name_ar} variant="body2" />
+              <ProductArabicSubtitle nameAr={pendingProduct.name_ar} matchNameLine />
               {condPanelProps ? <ParcoursProductQuantityPanel {...condPanelProps} /> : null}
             </>
           ) : null}

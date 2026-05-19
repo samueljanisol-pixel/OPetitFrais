@@ -1137,7 +1137,7 @@ export default function ValidationLotDetailClient({ lotId }: { lotId: string }) 
               <Typography variant="subtitle2" className="!mb-2 !font-semibold">
                 {pendingProduct.name}
               </Typography>
-              <ProductArabicSubtitle nameAr={pendingProduct.name_ar} variant="body2" />
+              <ProductArabicSubtitle nameAr={pendingProduct.name_ar} matchNameLine />
               <Typography variant="body2" color="text.secondary" className="!mb-3">
                 Pré-sélection comme à la saisie magasin ; vous pouvez choisir à l’unité ou un autre conditionnement.
               </Typography>

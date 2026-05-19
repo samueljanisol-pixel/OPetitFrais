@@ -20,22 +20,35 @@ import {
 } from '@mui/material'
 import BackNavButton from '@/components/BackNavButton'
 import { createSupabaseBrowserClient } from '@/lib/supabase/client'
-import type { RefConditionnementRow, RefRow } from '@/lib/products/types'
-import { muiSlotPropsDecimalKeypad, muiSlotPropsIntegerKeypad } from '@/lib/mui/numericTextFieldProps'
+import type { RefConditionnementRow, RefRow, RefVendeurRow } from '@/lib/products/types'
+import { muiSlotPropsDecimalKeypad } from '@/lib/mui/numericTextFieldProps'
 import MagasinsAdminPanel from './MagasinsAdminPanel'
 import StatusLabelsAdminPanel from './StatusLabelsAdminPanel'
+import StockAdminPanel from './StockAdminPanel'
 
-type TabId = 'udv' | 'cat' | 'sup' | 'cond' | 'comptes'
+type TabId = 'udv' | 'cat' | 'sup' | 'cond' | 'vend' | 'stock' | 'comptes'
 
 const tabLabels: Record<TabId, string> = {
   udv: 'Unités de vente',
   cat: 'Catégories',
   sup: 'Fournisseurs',
   cond: 'Conditionnements',
+  vend: 'Vendeurs',
+  stock: 'Stock',
   comptes: 'Administration',
 }
 
-function RefTable<T extends { id: string; code: string; label: string; sort_order: number }>({
+const deleteConfirmPhrase: Partial<Record<TabId, string>> = {
+  udv: 'cette unité de vente',
+  cat: 'cette catégorie',
+  sup: 'ce fournisseur',
+  cond: 'ce conditionnement',
+  vend: 'ce vendeur',
+}
+
+type DeleteConfirmTarget = { tab: TabId; id: string; label: string }
+
+function RefTable<T extends { id: string; label: string }>({
   title,
   rows,
   onEdit,
@@ -45,7 +58,7 @@ function RefTable<T extends { id: string; code: string; label: string; sort_orde
   title: string
   rows: T[]
   onEdit: (r: T) => void
-  onDelete: (id: string) => void
+  onDelete: (row: T) => void
   extras?: Array<{ header: string; render: (r: T) => ReactNode }>
 }) {
   return (
@@ -57,9 +70,7 @@ function RefTable<T extends { id: string; code: string; label: string; sort_orde
         <table className="w-full text-sm text-slate-900">
           <thead>
             <tr className="bg-slate-100 text-left text-xs font-semibold uppercase text-slate-800">
-              <th className="p-2">Code</th>
               <th className="p-2">Libellé</th>
-              <th className="p-2">Tri</th>
               {extras?.map((col, i) => (
                 <th key={`${col.header}-${i}`} className="p-2">
                   {col.header}
@@ -71,9 +82,7 @@ function RefTable<T extends { id: string; code: string; label: string; sort_orde
           <tbody>
             {rows.map(r => (
               <tr key={r.id} className="border-t border-slate-100">
-                <td className="p-2 font-mono text-sm text-slate-900 tabular-nums">{r.code}</td>
                 <td className="p-2 text-slate-900">{r.label}</td>
-                <td className="p-2 text-slate-900 tabular-nums">{r.sort_order}</td>
                 {extras?.map((col, i) => (
                   <td key={`${col.header}-${i}`} className="p-2 text-sm text-slate-800">
                     {col.render(r)}
@@ -83,7 +92,7 @@ function RefTable<T extends { id: string; code: string; label: string; sort_orde
                   <Button size="small" onClick={() => onEdit(r)} sx={{ textTransform: 'none' }}>
                     Modifier
                   </Button>
-                  <Button size="small" color="error" onClick={() => onDelete(r.id)} sx={{ textTransform: 'none' }}>
+                  <Button size="small" color="error" onClick={() => onDelete(r)} sx={{ textTransform: 'none' }}>
                     Suppr.
                   </Button>
                 </td>
@@ -101,7 +110,7 @@ export default function ReferentielClient() {
   const { isAdministrator, canAdminUsers, canAdminRoles, canAdminMagasins } = useSessionPermissions()
   const showComptesTab = isAdministrator
   const tabOrder = useMemo(() => {
-    const base: TabId[] = ['udv', 'cat', 'sup', 'cond']
+    const base: TabId[] = ['udv', 'cat', 'sup', 'cond', 'vend', 'stock']
     if (showComptesTab) base.push('comptes')
     return base
   }, [showComptesTab])
@@ -110,15 +119,16 @@ export default function ReferentielClient() {
   const [cat, setCat] = useState<RefRow[]>([])
   const [sup, setSup] = useState<RefRow[]>([])
   const [cond, setCond] = useState<RefConditionnementRow[]>([])
+  const [vendeurs, setVendeurs] = useState<RefVendeurRow[]>([])
   const [err, setErr] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [open, setOpen] = useState(false)
-  const [editing, setEditing] = useState<RefRow | RefConditionnementRow | null>(null)
+  const [editing, setEditing] = useState<RefRow | RefConditionnementRow | RefVendeurRow | null>(null)
   const [isNew, setIsNew] = useState(false)
+  const [deleteConfirm, setDeleteConfirm] = useState<DeleteConfirmTarget | null>(null)
+  const [deleteBusy, setDeleteBusy] = useState(false)
   const [form, setForm] = useState({
-    code: '',
     label: '',
-    sort_order: '0',
     h: '',
     w: '',
     d: '',
@@ -128,18 +138,24 @@ export default function ReferentielClient() {
   const load = useCallback(async () => {
     setErr(null)
     setLoading(true)
-    const [a, b, c, d] = await Promise.all([
+    const [a, b, c, d, e] = await Promise.all([
       supabase.from('ref_sales_unit').select('*').order('sort_order'),
       supabase.from('ref_category').select('*').order('sort_order'),
       supabase.from('ref_supplier').select('*').order('sort_order'),
       supabase.from('ref_conditionnement').select('*, ref_supplier(id, code, label)').order('sort_order'),
+      supabase
+        .from('ref_supplier_vendeur')
+        .select('*, ref_supplier(id, code, label)')
+        .order('sort_order')
+        .order('label'),
     ])
-    const firstErr = a.error ?? b.error ?? c.error ?? d.error
+    const firstErr = a.error ?? b.error ?? c.error ?? d.error ?? e.error
     if (firstErr) setErr(firstErr.message)
     setUdv((a.data as RefRow[]) ?? [])
     setCat((b.data as RefRow[]) ?? [])
     setSup((c.data as RefRow[]) ?? [])
     setCond((d.data as RefConditionnementRow[]) ?? [])
+    setVendeurs((e.data as RefVendeurRow[]) ?? [])
     setLoading(false)
   }, [supabase])
 
@@ -153,22 +169,28 @@ export default function ReferentielClient() {
 
   const openNew = () => {
     setIsNew(true)
-    setEditing({ id: '', code: '', label: '', sort_order: 0, created_at: '' } as RefRow)
-    setForm({ code: '', label: '', sort_order: '0', h: '', w: '', d: '', supplier_id: '' })
+    if (tab === 'vend') {
+      setEditing({ id: '', supplier_id: sup[0]?.id ?? '', label: '', sort_order: 0 } as RefVendeurRow)
+      setForm({ label: '', h: '', w: '', d: '', supplier_id: sup[0]?.id ?? '' })
+    } else {
+      setEditing({ id: '', code: '', label: '', sort_order: 0, created_at: '' } as RefRow)
+      setForm({ label: '', h: '', w: '', d: '', supplier_id: '' })
+    }
     setOpen(true)
   }
 
-  const openRow = (r: RefRow | RefConditionnementRow) => {
+  const openRow = (r: RefRow | RefConditionnementRow | RefVendeurRow) => {
     setIsNew(false)
     setEditing(r)
     setForm({
-      code: r.code,
       label: r.label,
-      sort_order: String(r.sort_order),
       h: 'height_mm' in r && r.height_mm != null ? String(r.height_mm) : '',
       w: 'width_mm' in r && r.width_mm != null ? String(r.width_mm) : '',
       d: 'depth_mm' in r && r.depth_mm != null ? String(r.depth_mm) : '',
-      supplier_id: 'supplier_id' in r && r.supplier_id ? r.supplier_id : '',
+      supplier_id:
+        'supplier_id' in r && typeof r.supplier_id === 'string' && r.supplier_id.length > 0
+          ? r.supplier_id
+          : '',
     })
     setOpen(true)
   }
@@ -177,13 +199,13 @@ export default function ReferentielClient() {
     if (t === 'udv') return 'ref_sales_unit'
     if (t === 'cat') return 'ref_category'
     if (t === 'sup') return 'ref_supplier'
+    if (t === 'vend') return 'ref_supplier_vendeur'
     if (t === 'cond') return 'ref_conditionnement'
     return 'ref_sales_unit'
   }
 
   const save = async () => {
-    if (!editing || tab === 'comptes') return
-    const sn = parseInt(form.sort_order, 10) || 0
+    if (!editing || tab === 'comptes' || tab === 'stock') return
     setErr(null)
     if (tab === 'cond') {
       const h = form.h ? Number(form.h) : null
@@ -192,9 +214,7 @@ export default function ReferentielClient() {
       const supplierId = form.supplier_id.trim() || null
       if (isNew) {
         const { error: e0 } = await supabase.from('ref_conditionnement').insert({
-          code: form.code.trim().toLowerCase().replace(/\s+/g, '_'),
           label: form.label.trim(),
-          sort_order: sn,
           height_mm: h,
           width_mm: w,
           depth_mm: d,
@@ -208,9 +228,7 @@ export default function ReferentielClient() {
         const { error: e0 } = await supabase
           .from('ref_conditionnement')
           .update({
-            code: form.code.trim().toLowerCase().replace(/\s+/g, '_'),
             label: form.label.trim(),
-            sort_order: sn,
             height_mm: h,
             width_mm: w,
             depth_mm: d,
@@ -222,12 +240,38 @@ export default function ReferentielClient() {
           return
         }
       }
+    } else if (tab === 'vend') {
+      const supplierId = form.supplier_id.trim()
+      if (!supplierId) {
+        setErr('Fournisseur requis pour un vendeur.')
+        return
+      }
+      if (isNew) {
+        const { error: e0 } = await supabase.from('ref_supplier_vendeur').insert({
+          supplier_id: supplierId,
+          label: form.label.trim(),
+        } as never)
+        if (e0) {
+          setErr(e0.message)
+          return
+        }
+      } else {
+        const { error: e0 } = await supabase
+          .from('ref_supplier_vendeur')
+          .update({
+            supplier_id: supplierId,
+            label: form.label.trim(),
+          } as never)
+          .eq('id', editing.id)
+        if (e0) {
+          setErr(e0.message)
+          return
+        }
+      }
     } else {
       if (isNew) {
         const { error: e0 } = await supabase.from(tableName(tab)).insert({
-          code: form.code.trim().toLowerCase().replace(/\s+/g, '_'),
           label: form.label.trim(),
-          sort_order: sn,
         } as never)
         if (e0) {
           setErr(e0.message)
@@ -237,9 +281,7 @@ export default function ReferentielClient() {
         const { error: e0 } = await supabase
           .from(tableName(tab))
           .update({
-            code: form.code.trim().toLowerCase().replace(/\s+/g, '_'),
             label: form.label.trim(),
-            sort_order: sn,
           } as never)
           .eq('id', editing.id)
         if (e0) {
@@ -252,14 +294,25 @@ export default function ReferentielClient() {
     void load()
   }
 
-  const del = async (id: string) => {
-    if (tab === 'comptes') return
-    if (!confirm('Supprimer cette entrée ?')) return
+  const requestDelete = (row: { id: string; label: string }) => {
+    if (tab === 'comptes' || tab === 'stock') return
+    setDeleteConfirm({ tab, id: row.id, label: row.label })
+  }
+
+  const executeDelete = async () => {
+    if (!deleteConfirm) return
+    const target = deleteConfirm
+    setDeleteBusy(true)
     setErr(null)
-    const t = tableName(tab)
-    const { error: e0 } = await supabase.from(t).delete().eq('id', id)
-    if (e0) setErr(e0.message)
-    else void load()
+    const t = tableName(target.tab)
+    const { error: e0 } = await supabase.from(t).delete().eq('id', target.id)
+    setDeleteBusy(false)
+    if (e0) {
+      setErr(e0.message)
+      return
+    }
+    setDeleteConfirm(null)
+    void load()
   }
 
   if (loading)
@@ -287,13 +340,16 @@ export default function ReferentielClient() {
             setTab(v as TabId)
             setErr(null)
           }}
-          sx={{ mb: 2, borderBottom: 1, borderColor: 'divider' }}
+          variant="scrollable"
+          scrollButtons="auto"
+          allowScrollButtonsMobile
+          sx={{ mb: 2, borderBottom: 1, borderColor: 'divider', maxWidth: '100%' }}
         >
           {tabOrder.map(k => (
             <Tab key={k} value={k} label={tabLabels[k]} />
           ))}
         </Tabs>
-        {tab !== 'comptes' ? (
+        {tab !== 'comptes' && tab !== 'stock' ? (
           <Button variant="contained" color="success" onClick={openNew} sx={{ mb: 2, textTransform: 'none' }}>
             Ajouter — {tabLabels[tab]}
           </Button>
@@ -328,15 +384,39 @@ export default function ReferentielClient() {
             {isAdministrator ? <StatusLabelsAdminPanel /> : null}
           </>
         ) : null}
-        {tab === 'udv' && <RefTable title="Unités" rows={udv} onEdit={openRow} onDelete={del} />}
-        {tab === 'cat' && <RefTable title="Catégories" rows={cat} onEdit={openRow} onDelete={del} />}
-        {tab === 'sup' && <RefTable title="Fournisseurs" rows={sup} onEdit={openRow} onDelete={del} />}
+        {tab === 'udv' && <RefTable title="Unités" rows={udv} onEdit={openRow} onDelete={requestDelete} />}
+        {tab === 'cat' && <RefTable title="Catégories" rows={cat} onEdit={openRow} onDelete={requestDelete} />}
+        {tab === 'sup' && <RefTable title="Fournisseurs" rows={sup} onEdit={openRow} onDelete={requestDelete} />}
+        {tab === 'vend' && (
+          <RefTable
+            title="Vendeurs (par fournisseur)"
+            rows={vendeurs}
+            onEdit={openRow}
+            onDelete={requestDelete}
+            extras={[
+              {
+                header: 'Fournisseur',
+                render: r => {
+                  const row = r as RefVendeurRow
+                  const s = row.ref_supplier
+                  if (s && typeof s === 'object' && 'label' in s && !Array.isArray(s)) {
+                    return (s as RefRow).label
+                  }
+                  if (Array.isArray(s) && s[0] && 'label' in s[0]) return s[0].label
+                  const supRow = sup.find(x => x.id === row.supplier_id)
+                  return supRow?.label ?? '—'
+                },
+              },
+            ]}
+          />
+        )}
+        {tab === 'stock' && <StockAdminPanel />}
         {tab === 'cond' && (
           <RefTable
             title="Conditionnements (dimensions en mm)"
             rows={cond}
             onEdit={openRow}
-            onDelete={del}
+            onDelete={requestDelete}
             extras={[
               {
                 header: 'Dimensions (mm)',
@@ -356,41 +436,58 @@ export default function ReferentielClient() {
           />
         )}
 
+        <Dialog open={deleteConfirm != null} onClose={() => !deleteBusy && setDeleteConfirm(null)} fullWidth maxWidth="xs">
+          <DialogTitle>Confirmer la suppression</DialogTitle>
+          <DialogContent>
+            {deleteConfirm ? (
+              <Typography variant="body2" color="text.secondary" className="!mt-1">
+                Supprimer {deleteConfirmPhrase[deleteConfirm.tab] ?? 'cette entrée'}{' '}
+                <strong className="text-slate-900">
+                  « {deleteConfirm.label.trim() || 'sans libellé'} »
+                </strong>{' '}
+                ?
+                <br />
+                <br />
+                Cette action est définitive et peut échouer si l’entrée est encore utilisée ailleurs.
+              </Typography>
+            ) : null}
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={() => setDeleteConfirm(null)} disabled={deleteBusy} sx={{ textTransform: 'none' }}>
+              Annuler
+            </Button>
+            <Button
+              variant="contained"
+              color="error"
+              disabled={deleteBusy}
+              onClick={() => void executeDelete()}
+              sx={{ textTransform: 'none' }}
+            >
+              {deleteBusy ? '…' : 'Supprimer'}
+            </Button>
+          </DialogActions>
+        </Dialog>
+
         <Dialog open={open} onClose={() => setOpen(false)} fullWidth maxWidth="sm">
           <DialogTitle>{isNew ? 'Ajouter' : 'Modifier'}</DialogTitle>
           <DialogContent>
             <div className="mt-1 flex flex-col gap-4">
-              <TextField
-                label="Code (interne)"
-                value={form.code}
-                onChange={e => setForm(f => ({ ...f, code: e.target.value }))}
-                size="small"
-                fullWidth
-                helperText="Ex. : barq_500 (sans espace, unique)"
-              />
               <TextField label="Libellé" value={form.label} onChange={e => setForm(f => ({ ...f, label: e.target.value }))} size="small" fullWidth />
-              <TextField
-                label="Ordre d’affichage"
-                value={form.sort_order}
-                onChange={e => setForm(f => ({ ...f, sort_order: e.target.value }))}
-                size="small"
-                type="number"
-                fullWidth
-                slotProps={muiSlotPropsIntegerKeypad}
-              />
-              {tab === 'cond' ? (
+              {tab === 'vend' || tab === 'cond' ? (
                 <>
-                  <FormControl size="small" fullWidth>
-                    <InputLabel id="cond-supplier-label">Fournisseur (optionnel)</InputLabel>
+                  <FormControl size="small" fullWidth required={tab === 'vend'}>
+                    <InputLabel id="ref-supplier-label">Fournisseur{tab === 'cond' ? ' (optionnel)' : ''}</InputLabel>
                     <Select
-                      labelId="cond-supplier-label"
-                      label="Fournisseur (optionnel)"
+                      labelId="ref-supplier-label"
+                      label={tab === 'vend' ? 'Fournisseur' : 'Fournisseur (optionnel)'}
                       value={form.supplier_id}
                       onChange={e => setForm(f => ({ ...f, supplier_id: e.target.value as string }))}
                     >
-                      <MenuItem value="">
-                        <em>Aucun</em>
-                      </MenuItem>
+                      {tab === 'cond' ? (
+                        <MenuItem value="">
+                          <em>Aucun</em>
+                        </MenuItem>
+                      ) : null}
                       {sup.map(s => (
                         <MenuItem key={s.id} value={s.id}>
                           {s.label}
@@ -398,29 +495,31 @@ export default function ReferentielClient() {
                       ))}
                     </Select>
                   </FormControl>
-                  <div className="flex flex-wrap gap-2">
-                    <TextField
-                      label="Hauteur (mm)"
-                      value={form.h}
-                      onChange={e => setForm(f => ({ ...f, h: e.target.value }))}
-                      size="small"
-                      slotProps={muiSlotPropsDecimalKeypad}
-                    />
-                    <TextField
-                      label="Largeur (mm)"
-                      value={form.w}
-                      onChange={e => setForm(f => ({ ...f, w: e.target.value }))}
-                      size="small"
-                      slotProps={muiSlotPropsDecimalKeypad}
-                    />
-                    <TextField
-                      label="Profondeur (mm)"
-                      value={form.d}
-                      onChange={e => setForm(f => ({ ...f, d: e.target.value }))}
-                      size="small"
-                      slotProps={muiSlotPropsDecimalKeypad}
-                    />
-                  </div>
+                  {tab === 'cond' ? (
+                    <div className="flex flex-wrap gap-2">
+                      <TextField
+                        label="Hauteur (mm)"
+                        value={form.h}
+                        onChange={e => setForm(f => ({ ...f, h: e.target.value }))}
+                        size="small"
+                        slotProps={muiSlotPropsDecimalKeypad}
+                      />
+                      <TextField
+                        label="Largeur (mm)"
+                        value={form.w}
+                        onChange={e => setForm(f => ({ ...f, w: e.target.value }))}
+                        size="small"
+                        slotProps={muiSlotPropsDecimalKeypad}
+                      />
+                      <TextField
+                        label="Profondeur (mm)"
+                        value={form.d}
+                        onChange={e => setForm(f => ({ ...f, d: e.target.value }))}
+                        size="small"
+                        slotProps={muiSlotPropsDecimalKeypad}
+                      />
+                    </div>
+                  ) : null}
                 </>
               ) : null}
             </div>

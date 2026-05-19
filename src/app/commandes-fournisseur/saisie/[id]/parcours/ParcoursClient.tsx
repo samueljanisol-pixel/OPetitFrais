@@ -19,6 +19,7 @@ import {
   uKeyForProduct,
 } from "@/features/commandes-fournisseur/parcours-product-quantity";
 import { clampQtyToApiRange } from "@/lib/commandes-fournisseur/qty-parse";
+import { commandeAllowsUnitProduct } from "@/lib/products/packagingEligibility";
 
 type Product = ParcoursProductForQty & {
   name: string;
@@ -111,7 +112,7 @@ export default function ParcoursClient({ commandeId }: { commandeId: string }) {
       try {
         const r1 = await fetch(`/api/commandes-fournisseur/commandes/${commandeId}`, { credentials: "include" });
         const j1 = (await r1.json()) as {
-          commande?: { status?: string; supplier_id?: string };
+          commande?: { status?: string; supplier_id?: string; magasin_id?: string };
           lignes?: LigneIn[];
           error?: string;
         };
@@ -129,10 +130,12 @@ export default function ParcoursClient({ commandeId }: { commandeId: string }) {
           return;
         }
         setCommandeSupplierId(sid);
-        const r2 = await fetch(
-          `/api/commandes-fournisseur/parcours-produits?supplierId=${encodeURIComponent(sid)}`,
-          { credentials: "include" },
-        );
+        const magasinId = j1.commande?.magasin_id?.trim() ?? "";
+        const q = new URLSearchParams({ supplierId: sid });
+        if (magasinId) q.set("magasinId", magasinId);
+        const r2 = await fetch(`/api/commandes-fournisseur/parcours-produits?${q.toString()}`, {
+          credentials: "include",
+        });
         const j2 = (await r2.json()) as { products?: Product[]; error?: string };
         if (!r2.ok) {
           setErr(j2.error ?? "Erreur");
@@ -153,12 +156,15 @@ export default function ParcoursClient({ commandeId }: { commandeId: string }) {
 
         for (const p of list) {
           const packs = packArray(p.product_packaging);
+          const packIds = new Set(packs.map((x) => x.id));
           const listL = byProduct.get(p.id) ?? [];
           const withQty = listL.find((l) => l.qte > 0) ?? null;
           if (withQty) {
-            if (withQty.product_packaging_id) {
+            if (withQty.product_packaging_id && packIds.has(withQty.product_packaging_id)) {
               nextRoute[p.id] = withQty.product_packaging_id;
               nextQ[pKey(p.id, withQty.product_packaging_id)] = withQty.qte;
+            } else if (withQty.product_packaging_id && !packIds.has(withQty.product_packaging_id)) {
+              nextRoute[p.id] = preferredPackRoute(packs, sid);
             } else {
               nextRoute[p.id] = "unit";
               nextQ[uKey(p.id)] = withQty.qte;
@@ -244,6 +250,7 @@ export default function ParcoursClient({ commandeId }: { commandeId: string }) {
         onSelectRoute={(route) => selectRoute(p, route)}
         getQ={getQ}
         setQuantityForKey={(key, value) => setQForKey(p, key, value)}
+        allowUnitInCommande={commandeAllowsUnitProduct(p.allow_unit_in_commande)}
       />
     );
   }, [current, getQ, getRoute, selectRoute, setQForKey]);

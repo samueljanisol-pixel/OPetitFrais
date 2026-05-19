@@ -7,6 +7,7 @@ import {
   compareByCategoryThenProductName,
   parseCategoryFromRef,
 } from "@/lib/commandes-fournisseur/ligne-category-order";
+import { isPackSalesUnitUnite } from "@/lib/commandes-fournisseur/product-display";
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -127,7 +128,7 @@ export async function GET(_req: Request, ctx: Ctx) {
   if (packIds.length > 0) {
     const { data: packs } = await supabase
       .from("product_packaging")
-      .select("id, quantity, ref_sales_unit(label), ref_conditionnement(label)")
+      .select("id, quantity, ref_sales_unit(label, code), ref_conditionnement(label)")
       .in("id", packIds);
     packMap = Object.fromEntries((packs ?? []).map((pk) => [pk.id, pk as PackRow]));
   }
@@ -158,6 +159,7 @@ export async function GET(_req: Request, ctx: Ctx) {
         uniteVente,
         condTitre,
         packContentQty: pr && pr.id && Number.isFinite(packQty) ? packQty : null,
+        packSalesUnitIsUnite: pr ? isPackSalesUnitUnite(pr.ref_sales_unit) : false,
         categoryLabel,
       };
     }),

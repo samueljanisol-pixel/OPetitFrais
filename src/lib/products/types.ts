@@ -16,6 +16,16 @@ export type RefConditionnementRow = RefRow & {
   ref_supplier?: RefRow | null
 }
 
+/** Vendeur / marchand achat, rattaché à un fournisseur. */
+export type RefVendeurRow = {
+  id: string
+  supplier_id: string
+  label: string
+  sort_order: number
+  created_at?: string
+  ref_supplier?: RefRow | RefRow[] | null
+}
+
 export type ProductRow = {
   id: string
   code: string
@@ -32,8 +42,17 @@ export type ProductRow = {
   image_path: string | null
   active: boolean
   visible_vitrine: boolean
+  /** Commande fournisseur : autoriser la saisie à l’unité (sans colis). Défaut true si absent (legacy). */
+  allow_unit_in_commande?: boolean
   created_at: string
   updated_at: string
+}
+
+export type ProductPackagingMagasinRow = {
+  product_packaging_id: string
+  magasin_id: string
+  sellable: boolean
+  purchasable: boolean
 }
 
 export type ProductPackagingRow = {
@@ -43,6 +62,9 @@ export type ProductPackagingRow = {
   quantity: number
   sales_unit_id: string
   created_at: string
+  available_for_sale?: boolean
+  available_for_purchase?: boolean
+  product_packaging_magasin?: ProductPackagingMagasinRow[] | ProductPackagingMagasinRow | null
 }
 
 export type ProductPriceHistoryRow = {

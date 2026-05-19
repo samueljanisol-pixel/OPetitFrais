@@ -4,11 +4,15 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Button, Typography } from "@mui/material";
 import { DecimalQtyTextField } from "@/components/commandes-fournisseur/DecimalQtyTextField";
 import { clampQtyToApiRange, roundQty2 } from "@/lib/commandes-fournisseur/qty-parse";
+import { isPackSalesUnitUnite } from "@/lib/commandes-fournisseur/product-display";
+import { commandeAllowsUnitProduct } from "@/lib/products/packagingEligibility";
 
 export type PPack = {
   id: string;
   conditionnement_id: string;
   quantity: string | number;
+  available_for_sale?: boolean | null;
+  available_for_purchase?: boolean | null;
   ref_conditionnement?: unknown;
   ref_sales_unit?: unknown;
 };
@@ -17,6 +21,8 @@ export type ParcoursProductForQty = {
   id: string;
   ref_sales_unit?: unknown;
   product_packaging: PPack[] | PPack | null | undefined;
+  /** Si false, pas de commande à l’unité (uniquement colis éligibles). */
+  allow_unit_in_commande?: boolean | null;
 };
 
 /** Cast sûr depuis une ligne API / picker (conditionnements au même format que le parcours). */
@@ -224,6 +230,8 @@ export type ParcoursProductQuantityPanelProps = {
   onSelectRoute: (route: PackRoute) => void;
   getQ: (key: string) => number;
   setQuantityForKey: (key: string, value: number) => void;
+  /** Si false : pas de bouton « à l’unité » (produit réservé aux colis). Défaut true. */
+  allowUnitInCommande?: boolean;
   /** Si true : masque les contrôles ± (lot consolidé ; quantités saisies par magasin dans la matrice). */
   hideQuantityControls?: boolean;
 };
@@ -237,6 +245,7 @@ export function ParcoursProductQuantityPanel({
   onSelectRoute,
   getQ,
   setQuantityForKey,
+  allowUnitInCommande = true,
   hideQuantityControls = false,
 }: ParcoursProductQuantityPanelProps) {
   const p = product;
@@ -264,16 +273,18 @@ export function ParcoursProductQuantityPanel({
   return (
     <div className="flex flex-col gap-3">
       <div className="flex flex-wrap gap-1.5">
-        <Button
-          type="button"
-          size="small"
-          variant={route === "unit" ? "contained" : "outlined"}
-          color="success"
-          onClick={() => onSelectRoute("unit")}
-          sx={{ textTransform: "none" }}
-        >
-          À l’unité ({productUnit})
-        </Button>
+        {allowUnitInCommande ? (
+          <Button
+            type="button"
+            size="small"
+            variant={route === "unit" ? "contained" : "outlined"}
+            color="success"
+            onClick={() => onSelectRoute("unit")}
+            sx={{ textTransform: "none" }}
+          >
+            À l’unité ({productUnit})
+          </Button>
+        ) : null}
         {packs.map((pkg) => {
           const cond = refLabel(pkg.ref_conditionnement);
           const pq = packQtyValue(pkg);
@@ -299,6 +310,10 @@ export function ParcoursProductQuantityPanel({
         <Typography variant="body2" color="text.secondary">
           Les quantités se saisissent par magasin dans la matrice.
         </Typography>
+      ) : route === "unit" && !allowUnitInCommande ? (
+        <Typography variant="body2" color="text.secondary">
+          Ce produit ne se commande qu’en conditionnement pour votre magasin.
+        </Typography>
       ) : route === "unit" ? (
         <UnitQteControl
           unitLabel={productUnit}
@@ -315,7 +330,10 @@ export function ParcoursProductQuantityPanel({
           const v = getQ(pKeyForProduct(p.id, pkg.id));
           const total = v * pq;
           const condWithPackSpec = `${condName} (${formatQtyDisplay(pq)} ${pkUnit})`;
-          const soitLine = v > 0 ? `Soit ${formatQtyDisplay(total)} ${productUnit}` : null;
+          const soitLine =
+            v > 0 && !isPackSalesUnitUnite(pkg.ref_sales_unit)
+              ? `Soit ${formatQtyDisplay(total)} ${productUnit}`
+              : null;
           return (
             <PackQteControl
               condWithPackSpec={condWithPackSpec}
@@ -348,13 +366,22 @@ export function useSingleProductParcoursQuantity(
       return;
     }
     const pArr = packArray(product.product_packaging);
-    setPackRoute(preferredPackRoute(pArr, commandSupplierId ?? null));
+    const initial: PackRoute =
+      pArr.length === 0 ? "unit" : preferredPackRoute(pArr, commandSupplierId ?? null);
+    setPackRoute(initial);
     setQtes({});
-  }, [product?.id, open, commandSupplierId]);
+  }, [product?.id, open, commandSupplierId, product?.allow_unit_in_commande]);
 
   const selectRoute = useCallback(
     (route: PackRoute) => {
       if (!product) {
+        return;
+      }
+      if (
+        route === "unit" &&
+        !commandeAllowsUnitProduct(product.allow_unit_in_commande) &&
+        packArray(product.product_packaging).length > 0
+      ) {
         return;
       }
       const pid = product.id;
@@ -421,6 +448,7 @@ export function useSingleProductParcoursQuantity(
       onSelectRoute: selectRoute,
       getQ,
       setQuantityForKey: setQForKey,
+      allowUnitInCommande: commandeAllowsUnitProduct(product.allow_unit_in_commande),
     };
   }, [product, packRoute, selectRoute, getQ, setQForKey]);
 

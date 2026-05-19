@@ -154,6 +154,20 @@ function serialiserEtatFrais(rows: FraisUiLine[], suppressionIds: string[]): str
   });
 }
 
+/** Fusionne la réponse API avec l’UI locale (suppressions rapides encore en file). */
+function reconcileFraisFromServer(
+  apiFrais: FraisApi[],
+  localRows: FraisUiLine[],
+  pendingDeleteIds: string[],
+): FraisUiLine[] {
+  const pending = new Set(pendingDeleteIds);
+  const fromServer = fraisGlobauxVersUi(apiFrais).filter((r) => !r.id || !pending.has(r.id));
+  const localOnly = localRows.filter(
+    (r) => !r.id && (r.label.trim().length > 0 || montantNombreDepuisTxt(r.montantText) > 0),
+  );
+  return [...fromServer, ...localOnly];
+}
+
 /** Affichage monétaire (DH). */
 function formatDh(n: number): string {
   return `${n.toLocaleString("fr-FR", {
@@ -280,6 +294,16 @@ function sortLinesAchat(rows: LotLineApi[]): LotLineApi[] {
 function hasVendeurDraft(d: DraftRow | undefined): boolean {
   if (!d) return false;
   return d.vendeur_id != null && String(d.vendeur_id).length > 0;
+}
+
+/** Retrait du vendeur : remise à zéro des saisies achat (qté, prix, marque). */
+function draftAfterVendeurRemoved(): Partial<DraftRow> {
+  return {
+    vendeur_id: null,
+    marque_achete: false,
+    qte_achat: 0,
+    puText: "",
+  };
 }
 
 function draftsFromLines(lignesRows: LotLineApi[]): {
@@ -640,10 +664,10 @@ export default function AchatLotDetailClient({ lotId }: { lotId: string }) {
       return false;
     }
     const fr = json.frais ?? [];
-    const fl = fraisGlobauxVersUi(fr);
+    const fl = reconcileFraisFromServer(fr, fraisLinesRef.current, fraisDeletesPending.current);
     setFraisLines(fl);
-    fraisDeletesPending.current = [];
-    fraisBaselineSnap.current = serialiserEtatFrais(fl, []);
+    fraisLinesRef.current = fl;
+    fraisBaselineSnap.current = serialiserEtatFrais(fl, fraisDeletesPending.current);
     return true;
   }, [lotId]);
 
@@ -688,6 +712,8 @@ export default function AchatLotDetailClient({ lotId }: { lotId: string }) {
 
         if (Object.keys(corps).length === 0) {
           if (sendFrais) {
+            const sentDel = new Set(delIds);
+            fraisDeletesPending.current = fraisDeletesPending.current.filter((id) => !sentDel.has(id));
             fraisBaselineSnap.current = serialiserEtatFrais(flNow, fraisDeletesPending.current);
           }
           return true;
@@ -716,11 +742,17 @@ export default function AchatLotDetailClient({ lotId }: { lotId: string }) {
             commitBaselineForPatches(patches);
           }
           if (sendFrais) {
+            const sentDel = new Set(delIds);
+            fraisDeletesPending.current = fraisDeletesPending.current.filter((id) => !sentDel.has(id));
             if (Array.isArray(json.frais)) {
-              const fl = fraisGlobauxVersUi(json.frais);
+              const fl = reconcileFraisFromServer(
+                json.frais,
+                fraisLinesRef.current,
+                fraisDeletesPending.current,
+              );
               setFraisLines(fl);
-              fraisDeletesPending.current = [];
-              fraisBaselineSnap.current = serialiserEtatFrais(fl, []);
+              fraisLinesRef.current = fl;
+              fraisBaselineSnap.current = serialiserEtatFrais(fl, fraisDeletesPending.current);
             } else {
               const okFr = await rechargerFraisDepuisApi();
               if (!okFr) return false;
@@ -1637,7 +1669,7 @@ export default function AchatLotDetailClient({ lotId }: { lotId: string }) {
                                   variant="text"
                                   color="error"
                                   disabled={!editable || saving || closing}
-                                  onClick={() => changeDraft(lid, { vendeur_id: null })}
+                                  onClick={() => changeDraft(lid, draftAfterVendeurRemoved())}
                                   sx={{
                                     textTransform: "none",
                                     minWidth: 0,
@@ -1898,7 +1930,7 @@ export default function AchatLotDetailClient({ lotId }: { lotId: string }) {
                   <Typography variant="subtitle2" className="!mb-2 !font-semibold">
                     {pendingProduct.name}
                   </Typography>
-                  <ProductArabicSubtitle nameAr={pendingProduct.name_ar} variant="body2" />
+                  <ProductArabicSubtitle nameAr={pendingProduct.name_ar} matchNameLine />
                   <Typography variant="body2" color="text.secondary" className="!mb-3">
                     Pré-sélection comme à la validation ; vous pouvez choisir à l&apos;unité ou un autre conditionnement.
                   </Typography>

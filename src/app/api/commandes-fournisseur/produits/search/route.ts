@@ -1,11 +1,15 @@
 import { NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { requireAnyApiPermission } from "@/lib/auth/require-permission-api";
+import { applyCommandeProductPackagingFilter } from "@/lib/commandes-fournisseur/applyCommandeProductPackagingFilter";
 
 const MAX_Q = 100;
 const MAX_RESULTS = 100;
 
 const PERMS = ["commandes_fournisseur.saisie", "commandes_fournisseur.consolidation", "commandes_fournisseur.achat"];
+
+const PACKAGING_FIELDS =
+  "id, conditionnement_id, quantity, available_for_sale, available_for_purchase, ref_conditionnement(label, code, supplier_id), ref_sales_unit(label, code), product_packaging_magasin(magasin_id, sellable, purchasable)";
 
 function escapeIlikeFragment(s: string): string {
   return s.replace(/\\/g, "\\\\").replace(/%/g, "\\%").replace(/_/g, "\\_");
@@ -29,6 +33,7 @@ export async function GET(req: Request) {
 
   const rawQ = (url.searchParams.get("q") ?? "").trim().slice(0, MAX_Q);
   const categoryId = url.searchParams.get("categoryId")?.trim() || null;
+  const magasinId = url.searchParams.get("magasinId")?.trim() || null;
 
   if (onlySupplier && supplierId.length === 0) {
     return NextResponse.json({ error: "supplierId requis lorsque le filtre fournisseur est actif" }, { status: 400 });
@@ -49,7 +54,7 @@ export async function GET(req: Request) {
   let qb = supabase
     .from("product")
     .select(
-      "id, code, name, name_ar, category_id, supplier_id, ref_supplier(code, label), ref_category(label, sort_order), ref_sales_unit(label, code), product_packaging(id, conditionnement_id, quantity, ref_conditionnement(label, code, supplier_id), ref_sales_unit(label, code))",
+      `id, code, name, name_ar, category_id, supplier_id, allow_unit_in_commande, ref_supplier(code, label), ref_category(label, sort_order), ref_sales_unit(label, code), product_packaging(${PACKAGING_FIELDS})`,
     )
     .eq("active", true);
 
@@ -94,5 +99,9 @@ export async function GET(req: Request) {
     return (a as { name: string }).name.localeCompare((b as { name: string }).name, "fr");
   });
 
-  return NextResponse.json({ products: sorted, total: sorted.length });
+  const filtered = magasinId
+    ? applyCommandeProductPackagingFilter(sorted as Parameters<typeof applyCommandeProductPackagingFilter>[0], magasinId)
+    : sorted;
+
+  return NextResponse.json({ products: filtered, total: filtered.length });
 }

@@ -2,10 +2,15 @@ import { NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { requireApiPermission } from "@/lib/auth/require-permission-api";
 import { productPhotoPublicUrl } from "@/lib/products/storage";
+import { applyCommandeProductPackagingFilter } from "@/lib/commandes-fournisseur/applyCommandeProductPackagingFilter";
+
+const PACKAGING_FIELDS =
+  "id, conditionnement_id, quantity, available_for_sale, available_for_purchase, ref_conditionnement(label, code, supplier_id), ref_sales_unit(label, code), product_packaging_magasin(magasin_id, sellable, purchasable)";
 
 /**
  * Liste ordonnée des produits actifs d'un fournisseur (parcours caissier i/N).
  * Tri : catégorie (sort_order, label) puis nom produit.
+ * magasinId : filtre les conditionnements non achetables pour ce magasin (override inclus).
  */
 export async function GET(req: Request) {
   const gate = await requireApiPermission("commandes_fournisseur.saisie");
@@ -19,11 +24,13 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: "supplierId requis" }, { status: 400 });
   }
 
+  const magasinId = url.searchParams.get("magasinId")?.trim() || null;
+
   const supabase = await createSupabaseServerClient();
   const { data: products, error } = await supabase
     .from("product")
     .select(
-      "id, code, name, name_ar, category_id, supplier_id, image_path, ref_category(label, sort_order), ref_sales_unit(label, code), product_packaging(id, conditionnement_id, quantity, ref_conditionnement(label, code, supplier_id), ref_sales_unit(label, code))",
+      `id, code, name, name_ar, category_id, supplier_id, image_path, allow_unit_in_commande, ref_category(label, sort_order), ref_sales_unit(label, code), product_packaging(${PACKAGING_FIELDS})`,
     )
     .eq("supplier_id", supplierId)
     .eq("active", true)
@@ -55,7 +62,12 @@ export async function GET(req: Request) {
     return (a as { name: string }).name.localeCompare((b as { name: string }).name, "fr");
   });
 
-  const withPhotos = sorted.map((row) => {
+  const filteredByPackaging = applyCommandeProductPackagingFilter(
+    sorted as Parameters<typeof applyCommandeProductPackagingFilter>[0],
+    magasinId,
+  );
+
+  const withPhotos = filteredByPackaging.map((row) => {
     const image_path = (row as { image_path?: string | null }).image_path;
     const photoUrl = productPhotoPublicUrl(supabase, image_path ?? null);
     return { ...(row as object), photoUrl };

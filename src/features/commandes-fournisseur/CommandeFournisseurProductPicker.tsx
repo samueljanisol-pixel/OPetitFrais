@@ -32,6 +32,7 @@ export type ProductPickRow = {
   name_ar?: string | null;
   category_id?: string | null;
   supplier_id?: string;
+  allow_unit_in_commande?: boolean | null;
   ref_category?: unknown;
   ref_sales_unit?: unknown;
   ref_supplier?: unknown;
@@ -57,6 +58,8 @@ export type CommandeFournisseurProductPickerProps = {
   open: boolean;
   onClose: () => void;
   supplierId: string;
+  /** Filtre les colis non achetables pour ce magasin (commande fournisseur). */
+  magasinId?: string | null;
   /** IDs produits déjà présents (commande, lot…). */
   existingProductIds: Set<string> | readonly string[];
   /** Texte badge « présent » (ex. Déjà dans la commande / le lot). */
@@ -70,6 +73,7 @@ export default function CommandeFournisseurProductPicker({
   open,
   onClose,
   supplierId,
+  magasinId = null,
   existingProductIds,
   alreadyPresentLabel = "Déjà dans la commande",
   onSelect,
@@ -161,6 +165,10 @@ export default function CommandeFournisseurProductPicker({
     if (categoryId.length > 0) {
       params.set("categoryId", categoryId);
     }
+    const m = magasinId?.trim();
+    if (m) {
+      params.set("magasinId", m);
+    }
     void (async () => {
       try {
         const res = await fetch(`/api/commandes-fournisseur/produits/search?${params.toString()}`, {
@@ -188,7 +196,7 @@ export default function CommandeFournisseurProductPicker({
     return () => {
       cancelled = true;
     };
-  }, [open, supplierId, debouncedQ, categoryId, limitToDefaultSupplier]);
+  }, [open, supplierId, debouncedQ, categoryId, limitToDefaultSupplier, magasinId]);
 
   const onPick = useCallback(
     (p: ProductPickRow) => {
@@ -289,7 +297,7 @@ export default function CommandeFournisseurProductPicker({
                               <Chip label={alreadyPresentLabel} size="small" color="default" sx={{ ml: 0.5 }} />
                             ) : null}
                           </span>
-                          <ProductArabicSubtitle nameAr={p.name_ar} variant="caption" />
+                          <ProductArabicSubtitle nameAr={p.name_ar} />
                         </span>
                       }
                     />

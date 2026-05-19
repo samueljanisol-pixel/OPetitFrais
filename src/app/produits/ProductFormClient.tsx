@@ -22,18 +22,26 @@ import type {
   ProductPriceHistoryRow,
   ProductRow,
   RefConditionnementRow,
+  RefVendeurRow,
   RefRow,
 } from '@/lib/products/types'
 import { useRouter } from 'next/navigation'
 import { muiSlotPropsDecimalKeypad } from '@/lib/mui/numericTextFieldProps'
 import { insertProductPriceHistoryRow } from '@/lib/products/priceHistory'
 import { useSessionPermissions } from '@/lib/auth/useSessionPermissions'
+import { ProductPackagingSettingsDialog, type MagasinMini } from '@/app/produits/ProductPackagingSettingsDialog'
 
 type Props = { productId: string | null }
+
+const PACKAGING_SELECT =
+  '*, ref_conditionnement(*), ref_sales_unit(*), product_packaging_magasin(magasin_id, sellable, purchasable), product_packaging_supplier(supplier_id), product_packaging_vendeur(vendeur_id)'
 
 type PackagingLine = ProductPackagingRow & {
   ref_conditionnement: RefConditionnementRow | null
   ref_sales_unit: RefRow | null
+  product_packaging_supplier?: Array<{ supplier_id: string }> | null
+  product_packaging_vendeur?: Array<{ vendeur_id: string }> | null
+  product_packaging_magasin?: Array<{ magasin_id: string; sellable: boolean; purchasable: boolean }> | null
 }
 
 const HIST_PAGE = 10
@@ -68,9 +76,13 @@ export default function ProductFormClient({ productId }: Props) {
     margin: null,
     active: true,
     visible_vitrine: true,
+    allow_unit_in_commande: true,
   })
   const [imageUrl, setImageUrl] = useState<string | null>(null)
   const [packs, setPacks] = useState<PackagingLine[]>([])
+  const [vendeurs, setVendeurs] = useState<RefVendeurRow[]>([])
+  const [magasins, setMagasins] = useState<MagasinMini[]>([])
+  const [packDialog, setPackDialog] = useState<PackagingLine | null>(null)
   const [hist, setHist] = useState<ProductPriceHistoryRow[]>([])
   const [histError, setHistError] = useState<string | null>(null)
   const [histHasMore, setHistHasMore] = useState(false)
@@ -84,11 +96,13 @@ export default function ProductFormClient({ productId }: Props) {
   const lastPriceDbRef = useRef<{ price: number; cost_purchase: number | null } | null>(null)
 
   const loadRefs = useCallback(async () => {
-    const [u, c, s, co] = await Promise.all([
+    const [u, c, s, co, ma, mg] = await Promise.all([
       supabase.from('ref_sales_unit').select('*').order('sort_order'),
       supabase.from('ref_category').select('*').order('sort_order'),
       supabase.from('ref_supplier').select('*').order('sort_order'),
       supabase.from('ref_conditionnement').select('*').order('sort_order'),
+      supabase.from('ref_supplier_vendeur').select('id, supplier_id, label, sort_order').order('sort_order').order('label'),
+      supabase.from('magasins').select('id, code, nom').order('sort_order'),
     ])
     if (u.data) {
       setUnits(u.data as RefRow[])
@@ -106,8 +120,19 @@ export default function ProductFormClient({ productId }: Props) {
       setConds(co.data as RefConditionnementRow[])
       if (co.data[0]) setAddCond((co.data[0] as RefConditionnementRow).id)
     }
+    if (ma.data) setVendeurs(ma.data as RefVendeurRow[])
+    if (mg.data) setMagasins(mg.data as MagasinMini[])
     if (u.data?.[0]) setAddUnit((u.data[0] as RefRow).id)
   }, [supabase, isNew])
+
+  const reloadPacks = useCallback(async () => {
+    if (!productId) return
+    const { data: pg } = await supabase
+      .from('product_packaging')
+      .select(PACKAGING_SELECT)
+      .eq('product_id', productId)
+    setPacks((pg as PackagingLine[]) ?? [])
+  }, [supabase, productId])
 
   const loadProduct = useCallback(async () => {
     if (!productId) return
@@ -143,7 +168,7 @@ export default function ProductFormClient({ productId }: Props) {
     setHistHasMore(!phErr && hRows.length === HIST_PAGE)
     const { data: pg } = await supabase
       .from('product_packaging')
-      .select('*, ref_conditionnement(*), ref_sales_unit(*)')
+      .select(PACKAGING_SELECT)
       .eq('product_id', productId)
     setPacks((pg as PackagingLine[]) ?? [])
     setLoading(false)
@@ -234,6 +259,7 @@ export default function ProductFormClient({ productId }: Props) {
       image_path: p.image_path ?? null,
       active: p.active ?? true,
       visible_vitrine: p.visible_vitrine ?? true,
+      allow_unit_in_commande: p.allow_unit_in_commande ?? true,
     }
     if (isNew) {
       const { data, error: e1 } = await supabase
@@ -333,25 +359,43 @@ export default function ProductFormClient({ productId }: Props) {
       return
     }
     setErr(null)
-    const { error: e1 } = await supabase.from('product_packaging').insert({
-      product_id: productId,
-      conditionnement_id: addCond,
-      quantity: q,
-      sales_unit_id: addUnit,
-    } as never)
+    const { data: ins, error: e1 } = await supabase
+      .from('product_packaging')
+      .insert({
+        product_id: productId,
+        conditionnement_id: addCond,
+        quantity: q,
+        sales_unit_id: addUnit,
+      } as never)
+      .select('id')
+      .single()
     if (e1) {
       setErr(e1.message)
       return
     }
-    const { data: pg } = await supabase
-      .from('product_packaging')
-      .select('*, ref_conditionnement(*), ref_sales_unit(*)')
-      .eq('product_id', productId)
-    setPacks((pg as PackagingLine[]) ?? [])
+    const newId = (ins as { id: string } | null)?.id
+    const sid = p.supplier_id?.trim()
+    if (newId && sid) {
+      await supabase.from('product_packaging_supplier').insert({
+        product_packaging_id: newId,
+        supplier_id: sid,
+      } as never)
+    }
+    await reloadPacks()
   }
 
   const removePack = async (id: string) => {
     if (readOnly) return
+    const pack = packs.find(x => x.id === id)
+    const condLabel =
+      (pack?.ref_conditionnement as RefConditionnementRow | null)?.label?.trim() || 'ce conditionnement'
+    if (
+      !window.confirm(
+        `Retirer le conditionnement « ${condLabel} » de ce produit ?\n\nLes paramètres vente/achat associés seront supprimés.`,
+      )
+    ) {
+      return
+    }
     const { error: e1 } = await supabase.from('product_packaging').delete().eq('id', id)
     if (e1) {
       setErr(e1.message)
@@ -389,9 +433,6 @@ export default function ProductFormClient({ productId }: Props) {
 
         <fieldset disabled={readOnly} className="m-0 min-w-0 border-0 p-0 disabled:opacity-80">
         <div className="flex flex-col gap-4">
-          {!isNew ? (
-            <TextField size="small" label="Code" value={p.code ?? ''} disabled fullWidth />
-          ) : null}
           <TextField
             required
             label="Nom"
@@ -527,6 +568,15 @@ export default function ProductFormClient({ productId }: Props) {
               }
               label="Visible vitrine (futur)"
             />
+            <FormControlLabel
+              control={
+                <Checkbox
+                  checked={p.allow_unit_in_commande ?? true}
+                  onChange={e => setP(x => ({ ...x, allow_unit_in_commande: e.target.checked }))}
+                />
+              }
+              label="Commande fournisseur : autoriser la saisie à l’unité"
+            />
           </div>
 
           {!isNew && (
@@ -615,6 +665,8 @@ export default function ProductFormClient({ productId }: Props) {
                   <th className="p-2">Conditionnement</th>
                   <th className="p-2">Qté</th>
                   <th className="p-2">UdV</th>
+                  <th className="p-2">Vente</th>
+                  <th className="p-2">Achat</th>
                   <th className="p-2" />
                 </tr>
               </thead>
@@ -624,8 +676,18 @@ export default function ProductFormClient({ productId }: Props) {
                     <td className="p-2">{(x.ref_conditionnement as RefConditionnementRow | null)?.label ?? '—'}</td>
                     <td className="p-2">{String(x.quantity)}</td>
                     <td className="p-2">{(x.ref_sales_unit as RefRow | null)?.label ?? '—'}</td>
+                    <td className="p-2">{x.available_for_sale !== false ? 'Oui' : 'Non'}</td>
+                    <td className="p-2">{x.available_for_purchase !== false ? 'Oui' : 'Non'}</td>
                     <td className="p-2">
-                      <Button size="small" color="error" onClick={() => void removePack(x.id)} sx={{ textTransform: 'none' }}>
+                      <Button
+                        size="small"
+                        variant="outlined"
+                        onClick={() => setPackDialog(x)}
+                        sx={{ textTransform: 'none' }}
+                      >
+                        Paramètres
+                      </Button>
+                      <Button size="small" color="error" onClick={() => void removePack(x.id)} sx={{ textTransform: 'none', ml: 0.5 }}>
                         Retirer
                       </Button>
                     </td>
@@ -633,6 +695,17 @@ export default function ProductFormClient({ productId }: Props) {
                 ))}
               </tbody>
             </table>
+            <ProductPackagingSettingsDialog
+              open={packDialog != null}
+              onClose={() => setPackDialog(null)}
+              readOnly={readOnly}
+              line={packDialog}
+              magasins={magasins}
+              units={units}
+              suppliers={sups}
+              vendeurs={vendeurs}
+              onSaved={() => void reloadPacks()}
+            />
           </Box>
         ) : null}
 
