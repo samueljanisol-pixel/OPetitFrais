@@ -34,6 +34,10 @@ Lorsque le lot est **prêt pour l’achat**, le commentaire du lot est affiché 
 
 Les lignes produit du lot sont **triées comme au récap commande** (`ref_category.sort_order`, libellé, nom produit) et le GET renvoie **`categoryLabel`** par ligne. Dans la matrice, une **ligne d’en-tête** par groupe (fond vert léger, comme le récap) sépare les familles (ex. Fruit, « Sans catégorie » si besoin).
 
+## Récap commande (`saisie/[id]/recap`)
+
+Sur chaque ligne : grille fixe **−1 | qté (4,25 rem) | unité (2,25 rem réservée) | +1** — champs qté alignés verticalement ; libellé **conditionnement** (`condTitre`) au-dessus des boutons ± ; **« Soit … »** en 2ᵉ rangée sous la qté (`col-span-2`, une seule ligne).
+
 ## Quantités (saisie, validation, achat)
 
 Les quantités stockées en base sont en **`numeric(14,2)`** (au plus **2 décimales** côté UI) pour les lignes de commande, la répartition par magasin sur un lot, et les champs `qte_achat` / `qte_besoin_fige` des lignes de lot. Voir la migration `supabase/migrations/20260530143000_commande_quantites_decimal.sql`.

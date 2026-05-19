@@ -75,69 +75,118 @@ function formatSoit(n: number): string {
   return n.toLocaleString("fr-FR", { minimumFractionDigits: 0, maximumFractionDigits: 2 });
 }
 
-/** Largeur quantité + unité : plus étroit sur mobile pour ne pas pousser les boutons ± sur le libellé. */
-const QTE_UNITE_W = "min-w-0 w-[6rem] sm:w-[9rem] shrink-0";
+/** Grille fixe : ± | qté | unité | ± — même gabarit sur toutes les lignes (avec ou sans « Soit »). */
+const QTE_GRID_ROW =
+  "grid shrink-0 grid-cols-[2.35rem_4.25rem_2.25rem_2.35rem] items-center gap-x-0.5 sm:grid-cols-[2.5rem_4.25rem_2.25rem_2.5rem] sm:gap-x-1";
+
+const QTE_STEP_BTN = "!min-w-0 !w-full !max-w-full !px-1 sm:!px-2";
+
+const QTE_FIELD_SX = {
+  "& .MuiInputBase-input": { py: 0.65, textAlign: "center" as const, px: 0.5 },
+  width: "100%",
+  minWidth: 0,
+  maxWidth: "none",
+};
+
+const QTE_UNIT_CELL = "min-w-0 truncate text-left";
+
+const QTE_SOIT_CELL =
+  "col-span-2 min-w-0 whitespace-nowrap text-center text-[0.8125rem] leading-tight tabular-nums sm:text-sm";
+
+const QTE_COND_TITRE_CELL = "col-span-4 min-w-0 text-center leading-tight";
+
+function RecapCondTitre({ label }: { label: string }) {
+  return (
+    <div className={QTE_GRID_ROW}>
+      <Typography
+        variant="caption"
+        color="text.secondary"
+        component="span"
+        className={QTE_COND_TITRE_CELL}
+      >
+        {label}
+      </Typography>
+    </div>
+  );
+}
 
 function StepQte({
   value,
   uniteVente,
   onChange,
   hideUnit,
+  soitLine,
 }: {
   value: number;
   uniteVente: string;
   onChange: (n: number) => void;
   /** Conditionnement : pas d’unité de vente à droite de la quantité. */
   hideUnit?: boolean;
+  /** Conversion UdV produit, centrée sous le champ quantité. */
+  soitLine?: string | null;
 }) {
   const step =
     (d: number) => () =>
       onChange(Math.max(0, roundQty2(roundQty2(value) + d)));
   return (
-    <div className="flex max-w-[100%] shrink-0 items-center gap-0.5 sm:gap-1">
-      <Button
-        size="small"
-        variant="outlined"
-        className="!min-w-[2.35rem] !px-1 sm:!min-w-[40px] sm:!px-2"
-        sx={{ py: 0.5 }}
-        onClick={() => step(-1)()}
-        disabled={value < 1}
-        aria-label={value < 1 ? "Quantité minimale, supprimez la ligne pour retirer" : "Diminuer de 1"}
-      >
-        -1
-      </Button>
-      <div className={`flex shrink-0 items-center gap-1 ${QTE_UNITE_W}`}>
+    <div className="flex max-w-full shrink-0 flex-col items-stretch gap-0.5">
+      <div className={QTE_GRID_ROW}>
+        <Button
+          size="small"
+          variant="outlined"
+          className={QTE_STEP_BTN}
+          sx={{ py: 0.5 }}
+          onClick={() => step(-1)()}
+          disabled={value < 1}
+          aria-label={
+            value < 1 ? "Quantité minimale, supprimez la ligne pour retirer" : "Diminuer de 1"
+          }
+        >
+          -1
+        </Button>
         <DecimalQtyTextField
           size="small"
           value={clampQtyToApiRange(value)}
           onQtyChange={(n) => onChange(clampQtyToApiRange(n))}
-          sx={{
-            "& .MuiInputBase-input": { py: 0.65, textAlign: "center", px: 0.75 },
-            minWidth: "3.75rem",
-            maxWidth: "5.75rem",
-          }}
+          sx={QTE_FIELD_SX}
           slotProps={{ htmlInput: { "aria-label": "Quantité produit" } }}
         />
-        {hideUnit ? null : (
+        {hideUnit ? (
+          <span className={QTE_UNIT_CELL} aria-hidden />
+        ) : (
           <Typography
             variant="caption"
             color="text.secondary"
-            className="min-w-0 max-w-[5rem] shrink truncate text-left"
+            className={QTE_UNIT_CELL}
             title={uniteVente}
           >
             {uniteVente}
           </Typography>
         )}
+        <Button
+          size="small"
+          variant="outlined"
+          className={QTE_STEP_BTN}
+          sx={{ py: 0.5 }}
+          onClick={() => step(1)()}
+        >
+          +1
+        </Button>
       </div>
-      <Button
-        size="small"
-        variant="outlined"
-        className="!min-w-[2.35rem] !px-1 sm:!min-w-[40px] sm:!px-2"
-        sx={{ py: 0.5 }}
-        onClick={() => step(1)()}
-      >
-        +1
-      </Button>
+      {soitLine ? (
+        <div className={QTE_GRID_ROW}>
+          <span aria-hidden />
+          <Typography
+            variant="body2"
+            color="text.secondary"
+            component="p"
+            className={QTE_SOIT_CELL}
+          >
+            {soitLine}
+          </Typography>
+          <span aria-hidden />
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -538,32 +587,19 @@ export default function RecapClient({ commandeId }: { commandeId: string }) {
                     {l.product?.name ?? l.product_id}
                   </Typography>
                   <ProductArabicSubtitle nameAr={l.product?.name_ar} matchNameLine />
-                  {l.condTitre ? (
-                    <Typography variant="caption" color="text.secondary" className="!mt-0.5 block">
-                      {l.condTitre}
-                    </Typography>
-                  ) : null}
                 </div>
                 <div className="flex shrink-0 flex-col items-end gap-0.5">
                   {editable ? (
                     <div className="flex items-start gap-0.5">
-                      <div className="flex flex-col items-end gap-0.5">
+                      <div className="flex flex-col items-stretch gap-0.5">
+                        {l.condTitre ? <RecapCondTitre label={l.condTitre} /> : null}
                         <StepQte
                           value={l.qte}
                           uniteVente={u}
                           hideUnit={isCond}
+                          soitLine={soitCond}
                           onChange={(q) => setLigneQte(i, q)}
                         />
-                        {soitCond ? (
-                          <Typography
-                            variant="body2"
-                            color="text.secondary"
-                            component="p"
-                            className={`block text-center tabular-nums ${QTE_UNITE_W} self-center`}
-                          >
-                            {soitCond}
-                          </Typography>
-                        ) : null}
                       </div>
                       <IconButton
                         type="button"
@@ -578,28 +614,35 @@ export default function RecapClient({ commandeId }: { commandeId: string }) {
                       </IconButton>
                     </div>
                   ) : (
-                    <div className="flex flex-col items-end pr-0.5">
-                      <div
-                        className={`flex items-baseline justify-center gap-1 tabular-nums ${QTE_UNITE_W}`}
-                      >
-                        <Typography variant="body2" className="shrink-0 font-medium tabular-nums">
+                    <div className="flex flex-col items-end gap-0.5 pr-0.5 tabular-nums">
+                      {l.condTitre ? <RecapCondTitre label={l.condTitre} /> : null}
+                      <div className={QTE_GRID_ROW}>
+                        <span aria-hidden />
+                        <Typography variant="body2" className="text-center font-medium tabular-nums">
                           {formatSoit(l.qte)}
                         </Typography>
-                        {isCond ? null : (
-                          <Typography variant="body2" color="text.secondary" className="min-w-0 truncate">
+                        {isCond ? (
+                          <span className={QTE_UNIT_CELL} aria-hidden />
+                        ) : (
+                          <Typography variant="body2" color="text.secondary" className={QTE_UNIT_CELL}>
                             {u}
                           </Typography>
                         )}
+                        <span aria-hidden />
                       </div>
                       {soitCond ? (
-                        <Typography
-                          variant="body2"
-                          color="text.secondary"
-                          component="p"
-                          className={`block text-center tabular-nums ${QTE_UNITE_W} self-center`}
-                        >
-                          {soitCond}
-                        </Typography>
+                        <div className={QTE_GRID_ROW}>
+                          <span aria-hidden />
+                          <Typography
+                            variant="body2"
+                            color="text.secondary"
+                            component="p"
+                            className={QTE_SOIT_CELL}
+                          >
+                            {soitCond}
+                          </Typography>
+                          <span aria-hidden />
+                        </div>
                       ) : null}
                     </div>
                   )}

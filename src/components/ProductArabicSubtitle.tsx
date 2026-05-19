@@ -13,6 +13,13 @@ type Props = {
 
 type ResolvedArabicType = Pick<TypographyProps, "variant" | "color" | "sx">;
 
+/** Récap / listes : une seule taille pour tous les noms arabe (sous le nom FR). */
+const MATCH_NAME_LINE_SX = {
+  fontSize: "1.0625rem",
+  lineHeight: 1.4,
+  fontWeight: 500,
+} as const;
+
 /** Tailles arabe légèrement au-dessus du français à chaque usage. */
 function resolveArabicTypography(
   centered: boolean | undefined,
@@ -32,13 +39,9 @@ function resolveArabicTypography(
   }
   if (matchNameLine) {
     return {
-      variant: "subtitle1",
+      variant: "body2",
       color: "text.primary",
-      sx: {
-        fontWeight: 500,
-        fontSize: "1.0625rem",
-        lineHeight: 1.4,
-      },
+      sx: MATCH_NAME_LINE_SX,
     };
   }
   if (variant === "caption") {
