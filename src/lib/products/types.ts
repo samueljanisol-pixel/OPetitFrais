@@ -34,6 +34,8 @@ export type ProductRow = {
   sales_unit_id: string
   category_id: string
   supplier_id: string
+  /** Vendeur achat par défaut (réf. fournisseur produit). */
+  vendeur_id?: string | null
   name_ar: string | null
   cost_purchase: number | null
   cost_manufacturing: number | null

@@ -3,6 +3,7 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
+  Box,
   Button,
   Dialog,
   DialogActions,
@@ -35,6 +36,11 @@ import {
   useSingleProductParcoursQuantity,
 } from "@/features/commandes-fournisseur/parcours-product-quantity";
 import { DecimalQtyTextField } from "@/components/commandes-fournisseur/DecimalQtyTextField";
+import LigneCommentaireSaisieControls from "@/components/commandes-fournisseur/LigneCommentaireSaisieControls";
+import type {
+  CommentaireMagasinCell,
+  SaisieLigneTarget,
+} from "@/lib/commandes-fournisseur/ligne-saisie-comments";
 import { roundQty2 } from "@/lib/commandes-fournisseur/qty-parse";
 
 type ProductE = {
@@ -61,7 +67,28 @@ type LotLigne = {
     qte: number;
     magasins: MagE;
   }[];
+  commentairesMagasin?: Record<string, CommentaireMagasinCell>;
 };
+
+function targetsForMagasinCell(
+  l: LotLigne,
+  magasinId: string,
+  magasinLabel: string,
+): SaisieLigneTarget[] {
+  const cell = l.commentairesMagasin?.[magasinId];
+  if (!cell) {
+    return [];
+  }
+  return [
+    {
+      ligneId: cell.ligneId,
+      commandeId: cell.commandeId,
+      magasinId,
+      magasinLabel,
+      lineComment: cell.lineComment,
+    },
+  ];
+}
 
 type Lot = {
   id: string;
@@ -760,31 +787,44 @@ export default function ValidationLotDetailClient({ lotId }: { lotId: string }) 
                       const cellKey = `${l.id}::${col.id}`;
                       return (
                         <TableCell key={col.id} align="right">
-                          {editable ? (
-                            <DecimalQtyTextField
-                              value={v}
-                              size="small"
-                              disabled={rowSaving === l.id}
-                              onQtyChange={(n) => updateLocalQte(l.id, col.id, n)}
-                              onFocus={() => {
-                                cellFocusBaseline.current[cellKey] = v;
-                              }}
-                              onBlur={() => {
-                                const before = cellFocusBaseline.current[cellKey] ?? 0;
-                                const after = mags[i] ?? 0;
-                                if (roundQty2(before) !== roundQty2(after)) {
-                                  void patchMagasinQte(l.id, col.id, after);
-                                }
-                              }}
-                              sx={{ width: 88, "& .MuiInputBase-input": { textAlign: "right", py: 0.65 } }}
-                              slotProps={{ htmlInput: { "aria-label": `Quantité ${col.label}` } }}
-                            />
-                          ) : (
-                            v.toLocaleString("fr-FR", {
-                              minimumFractionDigits: 0,
-                              maximumFractionDigits: 2,
-                            })
-                          )}
+                          <LigneCommentaireSaisieControls
+                            lotId={lotId}
+                            layout="inline"
+                            productLabel={productName(p)}
+                            targets={targetsForMagasinCell(l, col.id, col.label)}
+                            editable={editable}
+                            disabled={saving || rowSaving === l.id}
+                            onUpdated={load}
+                            leading={
+                              editable ? (
+                                <DecimalQtyTextField
+                                  value={v}
+                                  size="small"
+                                  disabled={rowSaving === l.id}
+                                  onQtyChange={(n) => updateLocalQte(l.id, col.id, n)}
+                                  onFocus={() => {
+                                    cellFocusBaseline.current[cellKey] = v;
+                                  }}
+                                  onBlur={() => {
+                                    const before = cellFocusBaseline.current[cellKey] ?? 0;
+                                    const after = mags[i] ?? 0;
+                                    if (roundQty2(before) !== roundQty2(after)) {
+                                      void patchMagasinQte(l.id, col.id, after);
+                                    }
+                                  }}
+                                  sx={{ width: 88, "& .MuiInputBase-input": { textAlign: "right", py: 0.65 } }}
+                                  slotProps={{ htmlInput: { "aria-label": `Quantité ${col.label}` } }}
+                                />
+                              ) : (
+                                <Typography variant="body2" component="span">
+                                  {v.toLocaleString("fr-FR", {
+                                    minimumFractionDigits: 0,
+                                    maximumFractionDigits: 2,
+                                  })}
+                                </Typography>
+                              )
+                            }
+                          />
                         </TableCell>
                       );
                     })}

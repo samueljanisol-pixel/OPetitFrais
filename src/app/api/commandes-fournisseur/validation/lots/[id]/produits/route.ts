@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { requireApiPermission } from "@/lib/auth/require-permission-api";
+import { vendeurIdForProduct } from "@/lib/commandes-fournisseur/product-vendeur";
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -46,6 +47,7 @@ export async function POST(req: Request, ctx: Ctx) {
   if (!lot) {
     return NextResponse.json({ error: "Introuvable" }, { status: 404 });
   }
+  const lotSupplierId = (lot as { supplier_id: string }).supplier_id;
   const st = (lot as { status: string }).status;
   if (st !== "brouillon") {
     return NextResponse.json({ error: "Seul un lot brouillon peut être modifié" }, { status: 409 });
@@ -113,6 +115,8 @@ export async function POST(req: Request, ctx: Ctx) {
     }
   }
 
+  const vendeurId = await vendeurIdForProduct(supabase, productId, lotSupplierId);
+
   const { data: inserted, error: insL } = await supabase
     .from("commande_fournisseur_lot_ligne")
     .insert({
@@ -120,6 +124,7 @@ export async function POST(req: Request, ctx: Ctx) {
       product_id: productId,
       product_packaging_id: packagingId,
       qte_achat: 0,
+      ...(vendeurId ? { vendeur_id: vendeurId } : {}),
     })
     .select("id")
     .single();

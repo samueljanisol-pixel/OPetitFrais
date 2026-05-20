@@ -59,10 +59,14 @@ import {
   type CategoryParsed,
 } from "@/lib/commandes-fournisseur/ligne-category-order";
 
+import LigneCommentaireSaisieControls from "@/components/commandes-fournisseur/LigneCommentaireSaisieControls";
+import type { SaisieCommentEntry, SaisieLigneTarget } from "@/lib/commandes-fournisseur/ligne-saisie-comments";
+
 type NestedProduct = {
   id: string;
   name?: string | null;
   code?: string | null;
+  vendeur_id?: string | null;
   ref_sales_unit?: unknown;
   ref_category?: unknown;
   product_packaging?: unknown;
@@ -79,6 +83,8 @@ type LotLineApi = {
   prix_achat_unitaire?: number | null;
   montant_ligne_achat?: number | null;
   categoryLabel?: string;
+  saisieComments?: SaisieCommentEntry[];
+  saisieLigneTargets?: SaisieLigneTarget[];
   product?: NestedProduct | NestedProduct[];
 };
 
@@ -306,6 +312,19 @@ function draftAfterVendeurRemoved(): Partial<DraftRow> {
   };
 }
 
+function productVendeurIdFromLine(L: LotLineApi): string | null {
+  const pr = one(L.product);
+  const vid = pr?.vendeur_id;
+  return vid != null && String(vid).length > 0 ? String(vid) : null;
+}
+
+function effectiveVendeurId(L: LotLineApi): string | null {
+  if (L.vendeur_id != null && String(L.vendeur_id).length > 0) {
+    return String(L.vendeur_id);
+  }
+  return productVendeurIdFromLine(L);
+}
+
 function draftsFromLines(lignesRows: LotLineApi[]): {
   drafts: Record<string, DraftRow>;
   baseline: Record<string, string>;
@@ -316,7 +335,7 @@ function draftsFromLines(lignesRows: LotLineApi[]): {
   for (const L of lignesRows) {
     const id = String(L.id);
     const row: DraftRow = {
-      vendeur_id: L.vendeur_id != null && String(L.vendeur_id).length > 0 ? String(L.vendeur_id) : null,
+      vendeur_id: effectiveVendeurId(L),
       marque_achete: Boolean(L.marque_achete),
       qte_achat: coerceQty(L.qte_achat, 0),
       puText: puToText(L.prix_achat_unitaire ?? null),
@@ -1309,7 +1328,26 @@ export default function AchatLotDetailClient({ lotId }: { lotId: string }) {
                             </Typography>
                           </TableCell>
                           <TableCell align="center" sx={{ py: { xs: 0.5, sm: 1 }, verticalAlign: "top" }}>
-                            <CelluleUdV display={display} qtePourSoit={besoinN} />
+                            <Box
+                              sx={{
+                                display: "flex",
+                                flexDirection: "column",
+                                alignItems: "center",
+                                gap: 0.5,
+                              }}
+                            >
+                              <CelluleUdV display={display} qtePourSoit={besoinN} />
+                              <LigneCommentaireSaisieControls
+                                lotId={lotId}
+                                productLabel={productName(pr)}
+                                targets={L.saisieLigneTargets ?? []}
+                                editable={editable}
+                                disabled={saving || closing}
+                                onUpdated={() => {
+                                  void reloadFromServer();
+                                }}
+                              />
+                            </Box>
                           </TableCell>
                         </TableRow>
                       </Fragment>
@@ -1630,6 +1668,16 @@ export default function AchatLotDetailClient({ lotId }: { lotId: string }) {
                                       {soitCaptionAchat}
                                     </Typography>
                                   ) : null}
+                                  <LigneCommentaireSaisieControls
+                                    lotId={lotId}
+                                    productLabel={productName(pr)}
+                                    targets={L.saisieLigneTargets ?? []}
+                                    editable={editable}
+                                    disabled={saving || closing}
+                                    onUpdated={() => {
+                                  void reloadFromServer();
+                                }}
+                                  />
                                 </Box>
                               </TableCell>
                               <TableCell sx={{ minWidth: 0, verticalAlign: "top" }}>

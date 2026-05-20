@@ -47,6 +47,9 @@ type Props = {
   units: RefRow[]
   suppliers: RefRow[]
   vendeurs: RefVendeurRow[]
+  /** Fournisseur du produit (création vendeur rapide). */
+  productSupplierId?: string | null
+  onVendeurCreated?: (row: RefVendeurRow) => void
   onSaved: () => void
 }
 
@@ -59,11 +62,15 @@ export function ProductPackagingSettingsDialog({
   units,
   suppliers,
   vendeurs,
+  productSupplierId,
+  onVendeurCreated,
   onSaved,
 }: Props) {
   const supabase = useMemo(() => createSupabaseBrowserClient(), [])
   const [saving, setSaving] = useState(false)
   const [err, setErr] = useState<string | null>(null)
+  const [newVendeurLabel, setNewVendeurLabel] = useState('')
+  const [creatingVendeur, setCreatingVendeur] = useState(false)
 
   const [quantity, setQuantity] = useState('1')
   const [salesUnitId, setSalesUnitId] = useState('')
@@ -109,6 +116,44 @@ export function ProductPackagingSettingsDialog({
     if (supplierIds.size === 0) return []
     return vendeurs.filter(v => supplierIds.has(v.supplier_id))
   }, [vendeurs, supplierIds])
+
+  const createVendeurSupplierId = useMemo(() => {
+    if (supplierIds.size === 1) return [...supplierIds][0] ?? null
+    const pid = productSupplierId?.trim()
+    if (pid && supplierIds.has(pid)) return pid
+    if (supplierIds.size > 0) return [...supplierIds][0] ?? null
+    return pid || null
+  }, [supplierIds, productSupplierId])
+
+  const createVendeur = async () => {
+    if (readOnly) return
+    const label = newVendeurLabel.trim()
+    const supplierId = createVendeurSupplierId
+    if (!supplierId) {
+      setErr('Cochez au moins un fournisseur du colis pour créer un vendeur.')
+      return
+    }
+    if (!label) {
+      setErr('Libellé du vendeur requis.')
+      return
+    }
+    setCreatingVendeur(true)
+    setErr(null)
+    const { data, error: e0 } = await supabase
+      .from('ref_supplier_vendeur')
+      .insert({ supplier_id: supplierId, label, sort_order: 0 } as never)
+      .select('id, supplier_id, label, sort_order')
+      .single()
+    setCreatingVendeur(false)
+    if (e0) {
+      setErr(e0.message)
+      return
+    }
+    const row = data as RefVendeurRow
+    onVendeurCreated?.(row)
+    setVendeurIds(prev => new Set(prev).add(row.id))
+    setNewVendeurLabel('')
+  }
 
   const save = async () => {
     if (readOnly || !line) return
@@ -336,6 +381,31 @@ export function ProductPackagingSettingsDialog({
                 })
               )}
             </div>
+            {!readOnly ? (
+              <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:items-end">
+                <TextField
+                  size="small"
+                  label="Nouveau vendeur"
+                  value={newVendeurLabel}
+                  onChange={e => setNewVendeurLabel(e.target.value)}
+                  disabled={creatingVendeur || !createVendeurSupplierId}
+                  sx={{ flex: 1, minWidth: 160 }}
+                  helperText={
+                    createVendeurSupplierId ? undefined : "Cochez un fournisseur du colis"
+                  }
+                />
+                <Button
+                  type="button"
+                  variant="outlined"
+                  size="small"
+                  disabled={creatingVendeur || !createVendeurSupplierId}
+                  onClick={() => void createVendeur()}
+                  sx={{ textTransform: "none", flexShrink: 0 }}
+                >
+                  {creatingVendeur ? "…" : "Créer vendeur"}
+                </Button>
+              </div>
+            ) : null}
           </div>
           <div>
             <Typography variant="subtitle2" className="!mb-1">

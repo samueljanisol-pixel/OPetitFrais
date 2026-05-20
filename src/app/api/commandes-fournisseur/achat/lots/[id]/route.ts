@@ -11,6 +11,11 @@ import {
   qtyBaseFromLotLine,
 } from "@/lib/commandes-fournisseur/achat-pricing";
 import { clampQtyToApiRange } from "@/lib/commandes-fournisseur/qty-parse";
+import {
+  commentairesMagasinFromTargets,
+  saisieCommentsByProductForLot,
+  saisieLigneTargetsByProductForLot,
+} from "@/lib/commandes-fournisseur/ligne-saisie-comments";
 import { buildLotProductDisplayInfo } from "@/lib/commandes-fournisseur/product-display";
 
 type Ctx = { params: Promise<{ id: string }> };
@@ -125,11 +130,26 @@ export async function GET(_req: NextRequest, ctx: Ctx) {
     );
   });
 
+  const [commentsByProduct, targetsByProduct] = await Promise.all([
+    saisieCommentsByProductForLot(supabase, id),
+    saisieLigneTargetsByProductForLot(supabase, id),
+  ]);
+
   const lignesWithCategory = rows.map((row) => {
     const pa = oneNestedProduct(row.product);
     const cat = pa ? parseCategoryFromRef(pa.ref_category) : { label: "", sort_order: null };
     const categoryLabel = categoryDisplayLabel(cat);
-    return { ...row, categoryLabel };
+    const pid = (row as { product_id: string }).product_id;
+    const targets = targetsByProduct.get(pid) ?? [];
+    const saisieComments = commentsByProduct.get(pid) ?? [];
+    const commentairesMagasin = commentairesMagasinFromTargets(targets);
+    return {
+      ...row,
+      categoryLabel,
+      saisieComments,
+      commentairesMagasin,
+      saisieLigneTargets: targets,
+    };
   });
 
   return NextResponse.json({

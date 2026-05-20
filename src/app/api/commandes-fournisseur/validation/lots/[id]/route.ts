@@ -6,6 +6,11 @@ import {
   compareByCategoryThenProductName,
   parseCategoryFromRef,
 } from "@/lib/commandes-fournisseur/ligne-category-order";
+import { assignProductVendeursToLotLines } from "@/lib/commandes-fournisseur/product-vendeur";
+import {
+  commentairesMagasinFromTargets,
+  saisieLigneTargetsByProductForLot,
+} from "@/lib/commandes-fournisseur/ligne-saisie-comments";
 import { clampQtyToApiRange } from "@/lib/commandes-fournisseur/qty-parse";
 
 type Ctx = { params: Promise<{ id: string }> };
@@ -163,11 +168,16 @@ export async function GET(_req: Request, ctx: Ctx) {
     );
   });
 
+  const targetsByProduct = await saisieLigneTargetsByProductForLot(supabase, id);
+
   const lignesWithCategory = rows.map((row) => {
     const pa = oneNestedProduct(row.product);
     const cat = pa ? parseCategoryFromRef(pa.ref_category) : { label: "", sort_order: null };
     const categoryLabel = categoryDisplayLabel(cat);
-    return { ...row, categoryLabel };
+    const pid = (row as { product_id: string }).product_id;
+    const targets = targetsByProduct.get(pid) ?? [];
+    const commentairesMagasin = commentairesMagasinFromTargets(targets);
+    return { ...row, categoryLabel, commentairesMagasin };
   });
 
   return NextResponse.json({ lot, lignes: lignesWithCategory });
@@ -364,6 +374,19 @@ export async function PATCH(req: Request, ctx: Ctx) {
         return NextResponse.json({ error: "Seul un lot brouillon peut être marqué prêt" }, { status: 409 });
       }
 
+      const { data: lotRow, error: lotRowErr } = await supabase
+        .from("commande_fournisseur_lot")
+        .select("supplier_id")
+        .eq("id", id)
+        .maybeSingle();
+      if (lotRowErr || !lotRow) {
+        return NextResponse.json(
+          { error: lotRowErr?.message ?? "Lot introuvable" },
+          { status: lotRowErr ? 500 : 404 },
+        );
+      }
+      const supplierId = (lotRow as { supplier_id: string }).supplier_id;
+
       const { error: ue } = await supabase
         .from("commande_fournisseur_lot")
         .update({ status: "prete", marque_prete_at: new Date().toISOString() })
@@ -375,6 +398,11 @@ export async function PATCH(req: Request, ctx: Ctx) {
       const errFreeze = await freezeBesoinEtResetQteAchat(supabase, id);
       if (errFreeze) {
         return NextResponse.json({ error: errFreeze }, { status: 500 });
+      }
+
+      const errVendeur = await assignProductVendeursToLotLines(supabase, id, supplierId);
+      if (errVendeur) {
+        return NextResponse.json({ error: errVendeur }, { status: 500 });
       }
 
       return NextResponse.json({ ok: true });

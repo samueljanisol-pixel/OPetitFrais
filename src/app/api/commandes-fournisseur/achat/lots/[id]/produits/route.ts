@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { requireApiPermission } from "@/lib/auth/require-permission-api";
+import { vendeurIdForProduct } from "@/lib/commandes-fournisseur/product-vendeur";
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -100,6 +101,8 @@ export async function POST(req: Request, ctx: Ctx) {
     return NextResponse.json({ error: "Ce produit est déjà dans le lot" }, { status: 409 });
   }
 
+  const vendeurId = await vendeurIdForProduct(supabase, productId, lotSupplierId);
+
   const { data: inserted, error: insL } = await supabase
     .from("commande_fournisseur_lot_ligne")
     .insert({
@@ -108,7 +111,7 @@ export async function POST(req: Request, ctx: Ctx) {
       product_packaging_id: packagingId,
       qte_achat: 0,
       qte_besoin_fige: 0,
-      vendeur_id: null,
+      vendeur_id: vendeurId,
     })
     .select("id")
     .single();

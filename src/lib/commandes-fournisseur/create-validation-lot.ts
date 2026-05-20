@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { vendeurIdsByProductIds } from "@/lib/commandes-fournisseur/product-vendeur";
 import { fallbackStatusLabel } from "@/lib/statusLabels/defaults";
 
 /**
@@ -103,12 +104,16 @@ export async function createValidationLot(
     return { lotId };
   }
 
+  const vendeurByProduct = await vendeurIdsByProductIds(supabase, productIds, supplierId);
+
   const toInsertLignes = productIds.map((productId) => {
     const cell = byProduct.get(productId)!;
+    const vendeurId = vendeurByProduct.get(productId) ?? null;
     return {
       lot_id: lotId,
       product_id: productId,
       qte_achat: cell.total,
+      ...(vendeurId ? { vendeur_id: vendeurId } : {}),
     };
   });
 

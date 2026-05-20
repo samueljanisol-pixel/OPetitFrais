@@ -17,7 +17,9 @@ import {
 } from "@mui/material";
 import { alpha } from "@mui/material/styles";
 import ChevronLeftIcon from "@mui/icons-material/ChevronLeft";
+import CommentOutlinedIcon from "@mui/icons-material/CommentOutlined";
 import DeleteOutlineOutlinedIcon from "@mui/icons-material/DeleteOutlineOutlined";
+import LigneSaisieComments from "@/components/commandes-fournisseur/LigneSaisieComments";
 import AppLink from "@/components/AppLink";
 import ProductArabicSubtitle from "@/components/ProductArabicSubtitle";
 import CommandeFournisseurProductPicker, {
@@ -204,6 +206,8 @@ export default function RecapClient({ commandeId }: { commandeId: string }) {
   const [condDialogOpen, setCondDialogOpen] = useState(false);
   const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
   const [pendingProduct, setPendingProduct] = useState<ProductPickRow | null>(null);
+  const [lineCommentIndex, setLineCommentIndex] = useState<number | null>(null);
+  const [lineCommentDraft, setLineCommentDraft] = useState("");
 
   const parcoursPending = pendingProduct ? parcoursShapeFromPickRow(pendingProduct) : null;
   const { snapshot: condSnapshot, panelProps: condPanelProps } = useSingleProductParcoursQuantity(
@@ -361,6 +365,67 @@ export default function RecapClient({ commandeId }: { commandeId: string }) {
       return next;
     });
   };
+
+  const openLineComment = useCallback(
+    (i: number) => {
+      const row = lignes[i];
+      if (!row) return;
+      setLineCommentIndex(i);
+      setLineCommentDraft(row.line_comment ?? "");
+    },
+    [lignes],
+  );
+
+  const closeLineComment = useCallback(() => {
+    setLineCommentIndex(null);
+    setLineCommentDraft("");
+  }, []);
+
+  const saveLineComment = useCallback(async () => {
+    if (!editable || lineCommentIndex === null) return;
+    const row = lignes[lineCommentIndex];
+    if (!row) return;
+    const trimmed = lineCommentDraft.trim();
+    setErr(null);
+    setSaving(true);
+    try {
+      const next = [...lignes];
+      next[lineCommentIndex] = {
+        ...row,
+        line_comment: trimmed.length > 0 ? trimmed : null,
+      };
+      await putLignes(next);
+      setLignes(next);
+      closeLineComment();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Erreur");
+    } finally {
+      setSaving(false);
+    }
+  }, [closeLineComment, editable, lineCommentDraft, lineCommentIndex, lignes, putLignes]);
+
+  const deleteLineComment = useCallback(async () => {
+    if (!editable || lineCommentIndex === null) return;
+    const row = lignes[lineCommentIndex];
+    if (!row) return;
+    if (!row.line_comment?.trim()) {
+      closeLineComment();
+      return;
+    }
+    setErr(null);
+    setSaving(true);
+    try {
+      const next = [...lignes];
+      next[lineCommentIndex] = { ...row, line_comment: null };
+      await putLignes(next);
+      setLignes(next);
+      closeLineComment();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Erreur");
+    } finally {
+      setSaving(false);
+    }
+  }, [closeLineComment, editable, lineCommentIndex, lignes, putLignes]);
 
   const onDeleteLigne = useCallback(
     async (i: number) => {
@@ -590,6 +655,7 @@ export default function RecapClient({ commandeId }: { commandeId: string }) {
                 </div>
                 <div className="flex shrink-0 flex-col items-end gap-0.5">
                   {editable ? (
+                    <>
                     <div className="flex items-start gap-0.5">
                       <div className="flex flex-col items-stretch gap-0.5">
                         {l.condTitre ? <RecapCondTitre label={l.condTitre} /> : null}
@@ -613,6 +679,29 @@ export default function RecapClient({ commandeId }: { commandeId: string }) {
                         <DeleteOutlineOutlinedIcon fontSize="small" />
                       </IconButton>
                     </div>
+                    <div className="flex max-w-full items-start justify-end gap-0.5">
+                      {l.line_comment ? (
+                        <LigneSaisieComments
+                          comments={[]}
+                          lineComment={l.line_comment}
+                          variant="chip"
+                        />
+                      ) : null}
+                      <IconButton
+                        type="button"
+                        size="small"
+                        color={l.line_comment ? "info" : "default"}
+                        aria-label={
+                          l.line_comment ? "Modifier le commentaire" : "Ajouter un commentaire"
+                        }
+                        onClick={() => openLineComment(i)}
+                        disabled={saving}
+                        sx={{ flexShrink: 0 }}
+                      >
+                        <CommentOutlinedIcon fontSize="small" />
+                      </IconButton>
+                    </div>
+                  </>
                   ) : (
                     <div className="flex flex-col items-end gap-0.5 pr-0.5 tabular-nums">
                       {l.condTitre ? <RecapCondTitre label={l.condTitre} /> : null}
@@ -643,6 +732,14 @@ export default function RecapClient({ commandeId }: { commandeId: string }) {
                           </Typography>
                           <span aria-hidden />
                         </div>
+                      ) : null}
+                      {l.line_comment ? (
+                        <LigneSaisieComments
+                          comments={[]}
+                          lineComment={l.line_comment}
+                          variant="chip"
+                          className="!mt-0.5"
+                        />
                       ) : null}
                     </div>
                   )}
@@ -757,6 +854,72 @@ export default function RecapClient({ commandeId }: { commandeId: string }) {
           >
             {saving ? "…" : "Confirmer l'annulation"}
           </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog open={lineCommentIndex !== null} onClose={closeLineComment} fullWidth maxWidth="sm">
+        <DialogTitle sx={{ pb: 0.5 }}>
+          {lineCommentDraft.trim().length > 0 || (lineCommentIndex !== null && lignes[lineCommentIndex]?.line_comment)
+            ? "Commentaire ligne"
+            : "Ajouter un commentaire"}
+        </DialogTitle>
+        <DialogContent>
+          {lineCommentIndex !== null ? (
+            <Typography variant="subtitle2" className="!mb-2 !font-semibold">
+              {lignes[lineCommentIndex]?.product?.name ?? lignes[lineCommentIndex]?.product_id}
+            </Typography>
+          ) : null}
+          <TextField
+            fullWidth
+            multiline
+            minRows={2}
+            maxRows={6}
+            label="Commentaire"
+            value={lineCommentDraft}
+            onChange={(e) => setLineCommentDraft(e.target.value)}
+            disabled={saving}
+            placeholder="Ex. préférence de calibrage, remplacement…"
+          />
+        </DialogContent>
+        <DialogActions
+          className="!px-3 !pb-2"
+          sx={{ justifyContent: "space-between", flexWrap: "wrap", gap: 1 }}
+        >
+          {lineCommentIndex !== null &&
+          typeof lignes[lineCommentIndex]?.line_comment === "string" &&
+          lignes[lineCommentIndex]!.line_comment!.trim().length > 0 ? (
+            <Button
+              type="button"
+              color="error"
+              disabled={saving}
+              onClick={() => void deleteLineComment()}
+              sx={{ textTransform: "none" }}
+            >
+              {saving ? "…" : "Supprimer"}
+            </Button>
+          ) : (
+            <span aria-hidden />
+          )}
+          <div className="flex gap-1">
+            <Button
+              type="button"
+              color="inherit"
+              onClick={closeLineComment}
+              sx={{ textTransform: "none" }}
+              disabled={saving}
+            >
+              Annuler
+            </Button>
+            <Button
+              type="button"
+              variant="contained"
+              disabled={saving}
+              onClick={() => void saveLineComment()}
+              sx={{ textTransform: "none" }}
+            >
+              {saving ? "…" : "Enregistrer"}
+            </Button>
+          </div>
         </DialogActions>
       </Dialog>
 

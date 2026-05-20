@@ -91,9 +91,14 @@ export default function ProductFormClient({ productId }: Props) {
   const [addCond, setAddCond] = useState('')
   const [addQty, setAddQty] = useState('1')
   const [addUnit, setAddUnit] = useState('')
-
   /** Derniers prix enregistrés en base (pour n’ajouter une ligne d’historique que si vente/achat change). */
   const lastPriceDbRef = useRef<{ price: number; cost_purchase: number | null } | null>(null)
+
+  const vendeursProduit = useMemo(() => {
+    const sid = p.supplier_id?.trim()
+    if (!sid) return []
+    return vendeurs.filter(v => v.supplier_id === sid)
+  }, [vendeurs, p.supplier_id])
 
   const loadRefs = useCallback(async () => {
     const [u, c, s, co, ma, mg] = await Promise.all([
@@ -251,6 +256,7 @@ export default function ProductFormClient({ productId }: Props) {
       sales_unit_id: p.sales_unit_id!,
       category_id: p.category_id!,
       supplier_id: p.supplier_id!,
+      vendeur_id: p.vendeur_id?.trim() ? p.vendeur_id : null,
       name_ar: p.name_ar || null,
       cost_purchase: p.cost_purchase,
       cost_manufacturing: p.cost_manufacturing,
@@ -491,11 +497,45 @@ export default function ProductFormClient({ productId }: Props) {
             <Select
               value={p.supplier_id ?? ''}
               label="Fournisseur"
-              onChange={e => setP(x => ({ ...x, supplier_id: e.target.value }))}
+              onChange={e => {
+                const supplier_id = e.target.value
+                setP(x => {
+                  const vendeurOk =
+                    x.vendeur_id &&
+                    vendeurs.some(v => v.id === x.vendeur_id && v.supplier_id === supplier_id)
+                  return {
+                    ...x,
+                    supplier_id,
+                    vendeur_id: vendeurOk ? x.vendeur_id : null,
+                  }
+                })
+              }}
             >
               {sups.map(s => (
                 <MenuItem key={s.id} value={s.id}>
                   {s.label}
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+          <FormControl fullWidth disabled={!p.supplier_id?.trim()}>
+            <InputLabel>Vendeur</InputLabel>
+            <Select
+              value={p.vendeur_id ?? ''}
+              label="Vendeur"
+              onChange={e =>
+                setP(x => ({
+                  ...x,
+                  vendeur_id: e.target.value.length > 0 ? e.target.value : null,
+                }))
+              }
+            >
+              <MenuItem value="">
+                <em>Aucun</em>
+              </MenuItem>
+              {vendeursProduit.map(v => (
+                <MenuItem key={v.id} value={v.id}>
+                  {v.label}
                 </MenuItem>
               ))}
             </Select>
