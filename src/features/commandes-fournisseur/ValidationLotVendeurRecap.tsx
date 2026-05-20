@@ -70,6 +70,34 @@ function VendeurExportBlock({
   const colSpan = 2 + magasinColumns.length + 2;
   const lotComment = lotCommentaire?.trim() ?? "";
 
+  const exportTableSx = {
+    width: "max-content",
+    maxWidth: "none",
+    tableLayout: "auto" as const,
+    "& .MuiTableCell-root": {
+      border: "1px solid #ccc",
+      py: 0.5,
+      px: 0.5,
+      fontSize: "0.8125rem",
+      whiteSpace: "nowrap" as const,
+      width: "auto",
+    },
+    "& .MuiTableHead-root .MuiTableCell-root": {
+      fontWeight: 700,
+      bgcolor: "#f5f5f5",
+    },
+  };
+
+  const captureRootSx = {
+    display: "inline-block",
+    width: "max-content",
+    maxWidth: "none",
+    background: "#fff",
+    p: 2,
+    fontFamily: "system-ui, sans-serif",
+    boxSizing: "border-box" as const,
+  };
+
   return (
     <Box className="!mb-8">
       <div className="!mb-2 flex flex-wrap items-center justify-end gap-2">
@@ -91,52 +119,29 @@ function VendeurExportBlock({
         </Typography>
       ) : null}
 
-      <div className="overflow-x-auto">
-        <div
-          ref={captureRef}
-          style={{
-            display: "inline-block",
-            minWidth: "100%",
-            background: "#fff",
-            padding: 16,
-            fontFamily: "system-ui, sans-serif",
-          }}
-        >
-          <Typography variant="subtitle1" sx={{ fontWeight: 700, mb: 0.5 }}>
+      <Box className="max-w-full overflow-x-auto" sx={{ display: "inline-block" }}>
+        <Box ref={captureRef} sx={captureRootSx}>
+          <Typography variant="subtitle1" sx={{ fontWeight: 700, mb: 0.5, whiteSpace: "nowrap" }}>
             {group.vendeurLabel}
           </Typography>
-          <Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 1.5 }}>
+          <Typography
+            variant="caption"
+            color="text.secondary"
+            sx={{ display: "block", mb: 1.5, whiteSpace: "nowrap" }}
+          >
             Commande du {commandeDateLabel}
           </Typography>
-          <Table
-            size="small"
-            sx={{
-              "& .MuiTableCell-root": {
-                border: "1px solid #ccc",
-                py: 0.65,
-                px: 0.75,
-                fontSize: "0.8125rem",
-              },
-              "& .MuiTableHead-root .MuiTableCell-root": {
-                fontWeight: 700,
-                bgcolor: "#f5f5f5",
-              },
-            }}
-          >
+          <Table size="small" sx={exportTableSx}>
             <TableHead>
               <TableRow>
-                <TableCell align="right" sx={{ minWidth: 140 }}>
-                  Produit
-                </TableCell>
+                <TableCell align="right">Produit</TableCell>
                 {magasinColumns.map((m) => (
-                  <TableCell key={m.id} align="right" sx={{ minWidth: 44 }}>
+                  <TableCell key={m.id} align="right">
                     {m.mxCode}
                   </TableCell>
                 ))}
-                <TableCell align="right" sx={{ minWidth: 48 }}>
-                  Total
-                </TableCell>
-                <TableCell sx={{ minWidth: 100 }}>UdV / cond.</TableCell>
+                <TableCell align="right">Total</TableCell>
+                <TableCell align="left">UdV / cond.</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
@@ -150,11 +155,10 @@ function VendeurExportBlock({
                     <TableCell align="right" sx={{ verticalAlign: "middle" }}>
                       <Box
                         sx={{
-                          display: "flex",
+                          display: "inline-flex",
                           flexDirection: "column",
                           alignItems: "flex-end",
                           textAlign: "right",
-                          width: "100%",
                         }}
                       >
                         {row.nameAr ? (
@@ -166,6 +170,7 @@ function VendeurExportBlock({
                               fontSize: "1rem",
                               fontWeight: 600,
                               lineHeight: 1.35,
+                              whiteSpace: "nowrap",
                             }}
                           >
                             {row.nameAr}
@@ -178,6 +183,7 @@ function VendeurExportBlock({
                             fontWeight: 500,
                             lineHeight: 1.3,
                             mt: row.nameAr ? 0.25 : 0,
+                            whiteSpace: "nowrap",
                           }}
                         >
                           {row.productName}
@@ -188,41 +194,35 @@ function VendeurExportBlock({
                       const magComment = row.magComments[i]?.trim() ?? "";
                       const qtyStr = formatRecapQtyCell(v);
                       return (
-                        <TableCell
-                          key={`${row.ligneId}-${i}`}
-                          align="right"
-                          sx={{ verticalAlign: "top", minWidth: 52 }}
-                        >
+                        <TableCell key={`${row.ligneId}-${i}`} align="right" sx={{ verticalAlign: "top" }}>
                           <Box
                             sx={{
-                              display: "flex",
+                              display: "inline-flex",
                               flexDirection: "column",
                               alignItems: "flex-end",
-                              justifyContent: "space-between",
-                              minHeight: magComment ? 40 : undefined,
-                              width: "100%",
+                              gap: 0.25,
                             }}
                           >
                             {qtyStr ? (
-                              <Typography variant="body2" component="span" sx={{ lineHeight: 1.3 }}>
+                              <Typography
+                                variant="body2"
+                                component="span"
+                                sx={{ lineHeight: 1.3, whiteSpace: "nowrap" }}
+                              >
                                 {qtyStr}
                               </Typography>
-                            ) : (
-                              <span />
-                            )}
+                            ) : null}
                             {magComment ? (
                               <Typography
                                 variant="caption"
                                 component="div"
                                 dir="rtl"
-                                className="whitespace-pre-wrap"
                                 sx={{
-                                  mt: 0.5,
                                   lineHeight: 1.25,
                                   fontSize: "0.6875rem",
                                   color: "text.secondary",
                                   textAlign: "right",
-                                  maxWidth: "100%",
+                                  whiteSpace: "nowrap",
                                 }}
                               >
                                 {magComment}
@@ -235,20 +235,22 @@ function VendeurExportBlock({
                     <TableCell align="right" sx={{ fontWeight: 700 }}>
                       {formatRecapQtyCell(row.total)}
                     </TableCell>
-                    <TableCell>
-                      <Typography variant="caption" component="div" sx={{ lineHeight: 1.3 }}>
-                        {row.udvCond}
-                      </Typography>
-                      {row.udvCondSub ? (
-                        <Typography
-                          variant="caption"
-                          color="text.secondary"
-                          component="div"
-                          sx={{ lineHeight: 1.25, mt: 0.25 }}
-                        >
-                          {row.udvCondSub}
+                    <TableCell align="left">
+                      <Box sx={{ display: "inline-flex", flexDirection: "column", whiteSpace: "nowrap" }}>
+                        <Typography variant="caption" component="div" sx={{ lineHeight: 1.3 }}>
+                          {row.udvCond}
                         </Typography>
-                      ) : null}
+                        {row.udvCondSub ? (
+                          <Typography
+                            variant="caption"
+                            color="text.secondary"
+                            component="div"
+                            sx={{ lineHeight: 1.25, mt: 0.25 }}
+                          >
+                            {row.udvCondSub}
+                          </Typography>
+                        ) : null}
+                      </Box>
                     </TableCell>
                   </TableRow>
                 ))
@@ -259,8 +261,8 @@ function VendeurExportBlock({
             <Typography
               variant="caption"
               component="p"
-              className="!mt-2 whitespace-pre-wrap"
-              sx={{ lineHeight: 1.4 }}
+              className="!mt-2"
+              sx={{ lineHeight: 1.4, whiteSpace: "nowrap", maxWidth: "none" }}
             >
               <Box component="span" sx={{ fontWeight: 700 }}>
                 Commentaire lot
@@ -269,8 +271,8 @@ function VendeurExportBlock({
               {lotComment}
             </Typography>
           ) : null}
-        </div>
-      </div>
+        </Box>
+      </Box>
     </Box>
   );
 }

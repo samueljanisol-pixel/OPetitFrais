@@ -82,7 +82,7 @@ export async function GET(_req: NextRequest, ctx: Ctx) {
     supabase
       .from("commande_fournisseur_lot_ligne")
       .select(
-        "id, product_id, product_packaging_id, qte_achat, qte_besoin_fige, vendeur_id, marque_achete, prix_achat_unitaire, montant_ligne_achat, product(id, name, code, ref_sales_unit(label), ref_category(label, sort_order), product_packaging(id, quantity, ref_conditionnement(label), ref_sales_unit(label))), commande_fournisseur_lot_ligne_magasin(magasin_id, qte, magasins(id, code, nom))",
+        "id, product_id, product_packaging_id, qte_achat, qte_besoin_fige, vendeur_id, marque_achete, prix_achat_unitaire, montant_ligne_achat, product(id, name, name_ar, code, ref_sales_unit(label), ref_category(label, sort_order), product_packaging(id, quantity, ref_conditionnement(label), ref_sales_unit(label))), commande_fournisseur_lot_ligne_magasin(magasin_id, qte, magasins(id, code, nom))",
       )
       .eq("lot_id", id),
     supabase
@@ -410,7 +410,7 @@ async function applyLineUpdates(
     const { data: ligne, error: le } = await supabase
       .from("commande_fournisseur_lot_ligne")
       .select(
-        "id, lot_id, product_id, product_packaging_id, qte_achat, vendeur_id, marque_achete, prix_achat_unitaire, montant_ligne_achat, product(id, name, ref_sales_unit(label), product_packaging(id, quantity, ref_conditionnement(label), ref_sales_unit(label)))",
+        "id, lot_id, product_id, product_packaging_id, qte_achat, vendeur_id, marque_achete, prix_achat_unitaire, montant_ligne_achat, product(id, name, name_ar, ref_sales_unit(label), product_packaging(id, quantity, ref_conditionnement(label), ref_sales_unit(label)))",
       )
       .eq("id", u.lotLigneId)
       .maybeSingle();

@@ -91,6 +91,37 @@ export function buildMagasinMxColumnsFromLot(
   return mags;
 }
 
+type LigneMagasinRef = {
+  commande_fournisseur_lot_ligne_magasin?: {
+    magasin_id: string;
+    magasins?: { code?: string | null } | { code?: string | null }[] | null;
+  }[];
+};
+
+/** Map magasin_id → MXX à partir des lignes lot (répartition magasin). */
+export function buildMagasinMxByIdFromLotLignes(lignes: LigneMagasinRef[]): Map<string, string> {
+  const mags: MagasinMxColumn[] = [];
+  const seen = new Set<string>();
+  let idx = 0;
+  for (const l of lignes) {
+    for (const cell of l.commande_fournisseur_lot_ligne_magasin ?? []) {
+      const id = cell.magasin_id;
+      if (!id || seen.has(id)) {
+        continue;
+      }
+      seen.add(id);
+      const code = one(cell.magasins)?.code ?? "";
+      mags.push({
+        id,
+        mxCode: magasinCodeMx(code, idx),
+      });
+      idx += 1;
+    }
+  }
+  mags.sort((a, b) => a.mxCode.localeCompare(b.mxCode, "fr", { numeric: true }));
+  return new Map(mags.map((m) => [m.id, m.mxCode]));
+}
+
 function formatQty(n: number): string {
   return n.toLocaleString("fr-FR", { minimumFractionDigits: 0, maximumFractionDigits: 2 });
 }

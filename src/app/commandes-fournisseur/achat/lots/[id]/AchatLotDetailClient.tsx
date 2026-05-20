@@ -59,12 +59,14 @@ import {
   type CategoryParsed,
 } from "@/lib/commandes-fournisseur/ligne-category-order";
 
-import LigneCommentaireSaisieControls from "@/components/commandes-fournisseur/LigneCommentaireSaisieControls";
-import type { SaisieCommentEntry, SaisieLigneTarget } from "@/lib/commandes-fournisseur/ligne-saisie-comments";
+import LigneCommentairesMxDisplay from "@/components/commandes-fournisseur/LigneCommentairesMxDisplay";
+import type { SaisieLigneTarget } from "@/lib/commandes-fournisseur/ligne-saisie-comments";
+import { buildMagasinMxByIdFromLotLignes } from "@/lib/commandes-fournisseur/validation-lot-vendeur-recap";
 
 type NestedProduct = {
   id: string;
   name?: string | null;
+  name_ar?: string | null;
   code?: string | null;
   vendeur_id?: string | null;
   ref_sales_unit?: unknown;
@@ -83,8 +85,12 @@ type LotLineApi = {
   prix_achat_unitaire?: number | null;
   montant_ligne_achat?: number | null;
   categoryLabel?: string;
-  saisieComments?: SaisieCommentEntry[];
   saisieLigneTargets?: SaisieLigneTarget[];
+  commande_fournisseur_lot_ligne_magasin?: {
+    magasin_id: string;
+    qte?: number;
+    magasins?: { code?: string | null; nom?: string | null } | { code?: string | null; nom?: string | null }[] | null;
+  }[];
   product?: NestedProduct | NestedProduct[];
 };
 
@@ -354,6 +360,22 @@ function productName(p: NestedProduct): string {
   return typeof o.name === "string" && o.name.length > 0 ? o.name : "—";
 }
 
+function ProductNameCell({ p }: { p: NestedProduct }) {
+  const o = one(p);
+  return (
+    <Box sx={{ minWidth: 0 }}>
+      <Typography
+        variant="body2"
+        className="!font-medium"
+        sx={{ lineHeight: 1.25, wordBreak: "break-word", overflowWrap: "anywhere" }}
+      >
+        {productName(p)}
+      </Typography>
+      <ProductArabicSubtitle nameAr={o?.name_ar} matchNameLine />
+    </Box>
+  );
+}
+
 /** Libellé court UdV (aligné UX : Kg vs Unité pour le reste). */
 function etiquetteUdvCourte(uniteVenteBrute: string): string {
   const t = uniteVenteBrute.trim().toLowerCase();
@@ -537,6 +559,8 @@ export default function AchatLotDetailClient({ lotId }: { lotId: string }) {
   );
 
   const editable = Boolean(lot && lot.status === "prete");
+
+  const mxByMagasinId = useMemo(() => buildMagasinMxByIdFromLotLignes(lignes), [lignes]);
 
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const saveSeq = useRef(0);
@@ -1315,9 +1339,7 @@ export default function AchatLotDetailClient({ lotId }: { lotId: string }) {
                             />
                           </TableCell>
                           <TableCell sx={{ py: { xs: 0.5, sm: 1 }, minWidth: 0, overflow: "hidden" }}>
-                            <Typography variant="body2" className="!font-medium" sx={{ lineHeight: 1.25, wordBreak: "break-word", overflowWrap: "anywhere" }}>
-                              {productName(pr)}
-                            </Typography>
+                            <ProductNameCell p={pr} />
                           </TableCell>
                           <TableCell align="center" sx={{ py: { xs: 0.5, sm: 1 }, verticalAlign: "top" }}>
                             <Typography variant="body2" component="div" sx={{ fontWeight: 500 }}>
@@ -1337,15 +1359,10 @@ export default function AchatLotDetailClient({ lotId }: { lotId: string }) {
                               }}
                             >
                               <CelluleUdV display={display} qtePourSoit={besoinN} />
-                              <LigneCommentaireSaisieControls
-                                lotId={lotId}
-                                productLabel={productName(pr)}
+                              <LigneCommentairesMxDisplay
                                 targets={L.saisieLigneTargets ?? []}
-                                editable={editable}
-                                disabled={saving || closing}
-                                onUpdated={() => {
-                                  void reloadFromServer();
-                                }}
+                                mxByMagasinId={mxByMagasinId}
+                                align="center"
                               />
                             </Box>
                           </TableCell>
@@ -1601,18 +1618,7 @@ export default function AchatLotDetailClient({ lotId }: { lotId: string }) {
                                   overflow: "hidden",
                                 }}
                               >
-                                <Typography
-                                  variant="body2"
-                                  className="!font-medium"
-                                  sx={{
-                                    lineHeight: 1.25,
-                                    textAlign: "left",
-                                    wordBreak: "break-word",
-                                    overflowWrap: "anywhere",
-                                  }}
-                                >
-                                  {productName(pr)}
-                                </Typography>
+                                <ProductNameCell p={pr} />
                               </TableCell>
                               <TableCell
                                 align="right"
@@ -1668,15 +1674,10 @@ export default function AchatLotDetailClient({ lotId }: { lotId: string }) {
                                       {soitCaptionAchat}
                                     </Typography>
                                   ) : null}
-                                  <LigneCommentaireSaisieControls
-                                    lotId={lotId}
-                                    productLabel={productName(pr)}
+                                  <LigneCommentairesMxDisplay
                                     targets={L.saisieLigneTargets ?? []}
-                                    editable={editable}
-                                    disabled={saving || closing}
-                                    onUpdated={() => {
-                                  void reloadFromServer();
-                                }}
+                                    mxByMagasinId={mxByMagasinId}
+                                    align="right"
                                   />
                                 </Box>
                               </TableCell>

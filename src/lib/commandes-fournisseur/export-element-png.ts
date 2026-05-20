@@ -5,11 +5,17 @@ export async function exportElementAsPng(
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   try {
     const html2canvas = (await import("html2canvas")).default;
+    const w = Math.ceil(element.scrollWidth);
+    const h = Math.ceil(element.scrollHeight);
     const canvas = await html2canvas(element, {
       scale: 2,
       backgroundColor: "#ffffff",
       logging: false,
       useCORS: true,
+      width: w,
+      height: h,
+      windowWidth: w,
+      windowHeight: h,
     });
     const blob = await new Promise<Blob | null>((resolve) => {
       canvas.toBlob((b) => resolve(b), "image/png", 1);
