@@ -42,12 +42,20 @@ import type {
   SaisieLigneTarget,
 } from "@/lib/commandes-fournisseur/ligne-saisie-comments";
 import { roundQty2 } from "@/lib/commandes-fournisseur/qty-parse";
+import ValidationLotVendeurRecap from "@/features/commandes-fournisseur/ValidationLotVendeurRecap";
+import { lotCommandeDateInfo } from "@/lib/commandes-fournisseur/lot-commande-date";
+import type {
+  RecapLigneInput,
+  VendeurRef,
+} from "@/lib/commandes-fournisseur/validation-lot-vendeur-recap";
 
 type ProductE = {
   id: string;
   name: string;
+  name_ar?: string | null;
   code: string;
   ref_sales_unit?: unknown;
+  ref_category?: unknown;
   product_packaging?: unknown;
 } | null;
 
@@ -56,6 +64,7 @@ type MagE = { id: string; code: string; nom: string } | { id: string; code: stri
 type LotLigne = {
   id: string;
   product_id: string;
+  vendeur_id?: string | null;
   /** Libellé affichage (GET lot tri comme récap commande). */
   categoryLabel?: string;
   /** Conditionnement retenu pour cette ligne ; null = quantités à l’unité de vente. */
@@ -68,6 +77,7 @@ type LotLigne = {
     magasins: MagE;
   }[];
   commentairesMagasin?: Record<string, CommentaireMagasinCell>;
+  saisieLigneTargets?: SaisieLigneTarget[];
 };
 
 function targetsForMagasinCell(
@@ -75,19 +85,14 @@ function targetsForMagasinCell(
   magasinId: string,
   magasinLabel: string,
 ): SaisieLigneTarget[] {
-  const cell = l.commentairesMagasin?.[magasinId];
-  if (!cell) {
-    return [];
+  const fromApi = (l.saisieLigneTargets ?? []).filter((t) => t.magasinId === magasinId);
+  if (fromApi.length > 0) {
+    return fromApi.map((t) => ({
+      ...t,
+      magasinLabel: t.magasinLabel || magasinLabel,
+    }));
   }
-  return [
-    {
-      ligneId: cell.ligneId,
-      commandeId: cell.commandeId,
-      magasinId,
-      magasinLabel,
-      lineComment: cell.lineComment,
-    },
-  ];
+  return [];
 }
 
 type Lot = {
@@ -104,6 +109,8 @@ type Lot = {
       magasin_id: string;
       status: string;
       commentaire: string | null;
+      created_at?: string;
+      validated_at?: string | null;
       magasins: MagE;
     } | null;
   }[];
@@ -129,6 +136,36 @@ function magLabel(m: MagE): string {
   );
   if (!o) return "—";
   return o.nom ? String(o.nom) : String(o.code ?? "—");
+}
+
+/** Magasins des commandes incluses dans le lot (colonnes stables même si qté à 0). */
+function magasinColumnsFromLot(lot: Lot | null): { id: string; label: string }[] {
+  const mags: { id: string; label: string }[] = [];
+  const seen = new Set<string>();
+  for (const inc of lot?.commande_fournisseur_lot_inclusion ?? []) {
+    const cf = inc.commande_fournisseur;
+    if (!cf) {
+      continue;
+    }
+    const id = cf.magasin_id;
+    if (!id || seen.has(id)) {
+      continue;
+    }
+    seen.add(id);
+    mags.push({ id, label: magLabel(cf.magasins) });
+  }
+  mags.sort((a, b) => a.label.localeCompare(b.label, "fr"));
+  return mags;
+}
+
+function magasinsForMagasinId(lot: Lot | null, magasinId: string): MagE {
+  for (const inc of lot?.commande_fournisseur_lot_inclusion ?? []) {
+    const cf = inc.commande_fournisseur;
+    if (cf?.magasin_id === magasinId) {
+      return cf.magasins;
+    }
+  }
+  return null;
 }
 
 function normalizeProduct(raw: ProductE | unknown): ProductE {
@@ -162,6 +199,7 @@ export default function ValidationLotDetailClient({ lotId }: { lotId: string }) 
   const { loading, can } = useSessionPermissions();
   const [lot, setLot] = useState<Lot | null>(null);
   const [lignes, setLignes] = useState<LotLigne[]>([]);
+  const [vendeurs, setVendeurs] = useState<VendeurRef[]>([]);
   const [err, setErr] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [rowSaving, setRowSaving] = useState<string | null>(null);
@@ -173,6 +211,11 @@ export default function ValidationLotDetailClient({ lotId }: { lotId: string }) 
   const [reopenBrouillonDialogOpen, setReopenBrouillonDialogOpen] = useState(false);
   const [mergeLotDialogOpen, setMergeLotDialogOpen] = useState(false);
   const [pendingMergeBlock, setPendingMergeBlock] = useState<string>("");
+  const [deleteLigneDialogOpen, setDeleteLigneDialogOpen] = useState(false);
+  const [pendingDeleteLigne, setPendingDeleteLigne] = useState<{
+    id: string;
+    productLabel: string;
+  } | null>(null);
   const [lotCommentDraft, setLotCommentDraft] = useState("");
   const [cmdComments, setCmdComments] = useState<Record<string, string>>({});
   const [lotCommentSaving, setLotCommentSaving] = useState(false);
@@ -187,7 +230,12 @@ export default function ValidationLotDetailClient({ lotId }: { lotId: string }) 
       const res = await fetch(`/api/commandes-fournisseur/validation/lots/${lotId}`, {
         credentials: "include",
       });
-      const j = (await res.json()) as { lot?: Lot; lignes?: LotLigne[]; error?: string };
+      const j = (await res.json()) as {
+        lot?: Lot;
+        lignes?: LotLigne[];
+        vendeurs?: VendeurRef[];
+        error?: string;
+      };
       if (!res.ok) {
         setErr(j.error ?? "Erreur");
         setLot(null);
@@ -195,6 +243,7 @@ export default function ValidationLotDetailClient({ lotId }: { lotId: string }) 
       }
       setLot(j.lot ?? null);
       setLignes(j.lignes ?? []);
+      setVendeurs(j.vendeurs ?? []);
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Erreur");
     } finally {
@@ -237,20 +286,22 @@ export default function ValidationLotDetailClient({ lotId }: { lotId: string }) 
     lot?.supplier_id ?? null,
   );
 
-  const magasinColumns = useMemo(() => {
-    const mags: { id: string; label: string }[] = [];
-    const seen = new Set<string>();
-    for (const l of lignes) {
-      for (const c of l.commande_fournisseur_lot_ligne_magasin ?? []) {
-        const id = c.magasin_id;
-        if (seen.has(id)) continue;
-        seen.add(id);
-        mags.push({ id, label: magLabel(c.magasins) });
-      }
-    }
-    mags.sort((a, b) => a.label.localeCompare(b.label, "fr"));
-    return mags;
+  const magasinColumns = useMemo(() => magasinColumnsFromLot(lot), [lot]);
+
+  const recapLignes = useMemo((): RecapLigneInput[] => {
+    return lignes.map((l) => ({
+      id: l.id,
+      product_id: l.product_id,
+      product_packaging_id: l.product_packaging_id,
+      vendeur_id: l.vendeur_id ?? null,
+      categoryLabel: l.categoryLabel,
+      product: normalizeProduct(l.product),
+      commande_fournisseur_lot_ligne_magasin: l.commande_fournisseur_lot_ligne_magasin,
+      saisieLigneTargets: l.saisieLigneTargets,
+    }));
   }, [lignes]);
+
+  const commandeDate = useMemo(() => lotCommandeDateInfo(lot), [lot]);
 
   const matrixCategoryColSpan = useMemo(() => {
     const ed = lot?.status === "brouillon";
@@ -285,6 +336,7 @@ export default function ValidationLotDetailClient({ lotId }: { lotId: string }) 
 
   const updateLocalQte = useCallback(
     (lotLigneId: string, magasinId: string, qte: number) => {
+      const magasinsMeta = magasinsForMagasinId(lot, magasinId);
       setLignes((prev) =>
         prev.map((l) => {
           if (l.id !== lotLigneId) {
@@ -292,21 +344,21 @@ export default function ValidationLotDetailClient({ lotId }: { lotId: string }) 
           }
           const mags = [...(l.commande_fournisseur_lot_ligne_magasin ?? [])];
           const ix = mags.findIndex((x) => x.magasin_id === magasinId);
-          if (qte === 0) {
-            if (ix >= 0) {
-              mags.splice(ix, 1);
-            }
-          } else if (ix >= 0) {
-            mags[ix] = { ...mags[ix]!, qte };
-          } else {
-            mags.push({ magasin_id: magasinId, qte, magasins: null });
+          if (ix >= 0) {
+            mags[ix] = {
+              ...mags[ix]!,
+              qte,
+              magasins: mags[ix]!.magasins ?? magasinsMeta,
+            };
+          } else if (qte > 0) {
+            mags.push({ magasin_id: magasinId, qte, magasins: magasinsMeta });
           }
           const tot = mags.reduce((s, m) => s + (Number(m.qte) || 0), 0);
           return { ...l, commande_fournisseur_lot_ligne_magasin: mags, qte_achat: tot };
         }),
       );
     },
-    [],
+    [lot],
   );
 
   const executeCancelLot = useCallback(async () => {
@@ -455,13 +507,25 @@ export default function ValidationLotDetailClient({ lotId }: { lotId: string }) 
     setPendingProduct(null);
   }, []);
 
-  const onDeleteLigne = async (lineId: string) => {
+  const openDeleteLigneDialog = useCallback((lineId: string, label: string) => {
     if (!lot || lot.status !== "brouillon") {
       return;
     }
-    if (!window.confirm("Supprimer cette ligne produit du lot ?")) {
+    setPendingDeleteLigne({ id: lineId, productLabel: label });
+    setDeleteLigneDialogOpen(true);
+  }, [lot]);
+
+  const closeDeleteLigneDialog = useCallback(() => {
+    setDeleteLigneDialogOpen(false);
+    setPendingDeleteLigne(null);
+  }, []);
+
+  const executeDeleteLigne = useCallback(async () => {
+    const pending = pendingDeleteLigne;
+    if (!pending || !lot || lot.status !== "brouillon") {
       return;
     }
+    const lineId = pending.id;
     setRowSaving(lineId);
     setErr(null);
     try {
@@ -476,13 +540,14 @@ export default function ValidationLotDetailClient({ lotId }: { lotId: string }) 
         setErr(j.error ?? "Erreur");
         return;
       }
+      closeDeleteLigneDialog();
       await load();
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Erreur");
     } finally {
       setRowSaving(null);
     }
-  };
+  }, [closeDeleteLigneDialog, load, lot, lotId, pendingDeleteLigne]);
 
   const patchLotCommentaire = useCallback(
     async (nextRaw: string) => {
@@ -683,23 +748,20 @@ export default function ValidationLotDetailClient({ lotId }: { lotId: string }) 
         </Typography>
       ) : null}
 
-      <div className="!mb-2 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-        <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
-          Matrice besoins (par magasin)
-        </Typography>
-        {editable ? (
+      {editable ? (
+        <div className="!mb-2 flex justify-end">
           <Button
             type="button"
             variant="outlined"
             size="small"
             onClick={() => setPickerOpen(true)}
             disabled={saving}
-            sx={{ textTransform: "none", alignSelf: "flex-start" }}
+            sx={{ textTransform: "none" }}
           >
             Ajouter un produit
           </Button>
-        ) : null}
-      </div>
+        </div>
+      ) : null}
       {lignes.length === 0 ? (
         <Typography color="text.secondary" variant="body2" className="!mb-4">
           Aucune ligne produit.
@@ -719,7 +781,7 @@ export default function ValidationLotDetailClient({ lotId }: { lotId: string }) 
                   Total
                 </TableCell>
                 <TableCell align="left" sx={{ fontWeight: 600, minWidth: 148 }}>
-                  Unité
+                  UdV / cond.
                 </TableCell>
                 {editable ? (
                   <TableCell align="center" width={48} padding="checkbox">
@@ -785,45 +847,77 @@ export default function ValidationLotDetailClient({ lotId }: { lotId: string }) 
                     {magasinColumns.map((col, i) => {
                       const v = mags[i] ?? 0;
                       const cellKey = `${l.id}::${col.id}`;
+                      const soitMag = v > 0 ? buildSoitLine(display, v) : null;
+                      const qtyBlock = (
+                        <Box
+                          sx={{
+                            display: "flex",
+                            flexDirection: "column",
+                            alignItems: "flex-end",
+                            minWidth: 88,
+                          }}
+                        >
+                          {editable ? (
+                            <DecimalQtyTextField
+                              value={v}
+                              size="small"
+                              disabled={rowSaving === l.id}
+                              onQtyChange={(n) => updateLocalQte(l.id, col.id, n)}
+                              onFocus={() => {
+                                cellFocusBaseline.current[cellKey] = v;
+                              }}
+                              onBlur={() => {
+                                const before = cellFocusBaseline.current[cellKey] ?? 0;
+                                const after = mags[i] ?? 0;
+                                if (roundQty2(before) !== roundQty2(after)) {
+                                  void patchMagasinQte(l.id, col.id, after);
+                                }
+                              }}
+                              sx={{ width: 88, "& .MuiInputBase-input": { textAlign: "right", py: 0.65 } }}
+                              slotProps={{ htmlInput: { "aria-label": `Quantité ${col.label}` } }}
+                            />
+                          ) : (
+                            <Typography variant="body2" component="span">
+                              {v.toLocaleString("fr-FR", {
+                                minimumFractionDigits: 0,
+                                maximumFractionDigits: 2,
+                              })}
+                            </Typography>
+                          )}
+                          {soitMag ? (
+                            <Typography
+                              variant="caption"
+                              color="text.secondary"
+                              component="div"
+                              className="tabular-nums"
+                              sx={{
+                                mt: 0.35,
+                                fontSize: "0.6875rem",
+                                lineHeight: 1.25,
+                                textAlign: "right",
+                                whiteSpace: "nowrap",
+                              }}
+                            >
+                              {soitMag}
+                            </Typography>
+                          ) : null}
+                        </Box>
+                      );
+                      const cellTargets = targetsForMagasinCell(l, col.id, col.label);
+
                       return (
                         <TableCell key={col.id} align="right">
                           <LigneCommentaireSaisieControls
                             lotId={lotId}
                             layout="inline"
                             productLabel={productName(p)}
-                            targets={targetsForMagasinCell(l, col.id, col.label)}
+                            productId={l.product_id}
+                            productPackagingId={l.product_packaging_id}
+                            targets={cellTargets}
                             editable={editable}
                             disabled={saving || rowSaving === l.id}
                             onUpdated={load}
-                            leading={
-                              editable ? (
-                                <DecimalQtyTextField
-                                  value={v}
-                                  size="small"
-                                  disabled={rowSaving === l.id}
-                                  onQtyChange={(n) => updateLocalQte(l.id, col.id, n)}
-                                  onFocus={() => {
-                                    cellFocusBaseline.current[cellKey] = v;
-                                  }}
-                                  onBlur={() => {
-                                    const before = cellFocusBaseline.current[cellKey] ?? 0;
-                                    const after = mags[i] ?? 0;
-                                    if (roundQty2(before) !== roundQty2(after)) {
-                                      void patchMagasinQte(l.id, col.id, after);
-                                    }
-                                  }}
-                                  sx={{ width: 88, "& .MuiInputBase-input": { textAlign: "right", py: 0.65 } }}
-                                  slotProps={{ htmlInput: { "aria-label": `Quantité ${col.label}` } }}
-                                />
-                              ) : (
-                                <Typography variant="body2" component="span">
-                                  {v.toLocaleString("fr-FR", {
-                                    minimumFractionDigits: 0,
-                                    maximumFractionDigits: 2,
-                                  })}
-                                </Typography>
-                              )
-                            }
+                            leading={qtyBlock}
                           />
                         </TableCell>
                       );
@@ -840,7 +934,7 @@ export default function ValidationLotDetailClient({ lotId }: { lotId: string }) 
                         textAlign: "left",
                       }}
                     >
-                      {display.condTitre ? (
+                      {display.isCond && display.condTitre ? (
                         <>
                           <Typography
                             variant="caption"
@@ -868,28 +962,15 @@ export default function ValidationLotDetailClient({ lotId }: { lotId: string }) 
                             </Typography>
                           ) : null}
                         </>
-                      ) : (
-                        <>
-                          {display.uniteVente && display.uniteVente !== "—" ? (
-                            <Typography
-                              variant="caption"
-                              color="text.secondary"
-                              sx={{ display: "block", lineHeight: 1.35, textAlign: "left" }}
-                            >
-                              {display.uniteVente}
-                            </Typography>
-                          ) : null}
-                          {soitLine ? (
-                            <Typography
-                              variant="body2"
-                              color="text.secondary"
-                              sx={{ mt: 0.5, display: "block", lineHeight: 1.35, textAlign: "left" }}
-                            >
-                              {soitLine}
-                            </Typography>
-                          ) : null}
-                        </>
-                      )}
+                      ) : display.uniteVente && display.uniteVente !== "—" ? (
+                        <Typography
+                          variant="caption"
+                          color="text.secondary"
+                          sx={{ display: "block", lineHeight: 1.35, textAlign: "left" }}
+                        >
+                          {display.uniteVente}
+                        </Typography>
+                      ) : null}
                     </TableCell>
                     {editable ? (
                       <TableCell align="center" padding="checkbox">
@@ -899,7 +980,7 @@ export default function ValidationLotDetailClient({ lotId }: { lotId: string }) 
                           color="error"
                           aria-label="Supprimer la ligne"
                           disabled={saving || rowSaving === l.id}
-                          onClick={() => void onDeleteLigne(l.id)}
+                          onClick={() => openDeleteLigneDialog(l.id, productName(p))}
                         >
                           <DeleteOutlineOutlinedIcon fontSize="small" />
                         </IconButton>
@@ -913,6 +994,17 @@ export default function ValidationLotDetailClient({ lotId }: { lotId: string }) 
           </Table>
         </div>
       )}
+
+      {lot.status === "prete" && lignes.length > 0 ? (
+        <ValidationLotVendeurRecap
+          lot={lot}
+          supplierLabel={supplierName}
+          commandeDateLabel={commandeDate.label}
+          commandeDateSlug={commandeDate.slug}
+          lignes={recapLignes}
+          vendeurs={vendeurs}
+        />
+      ) : null}
 
       {lot.status === "brouillon" ? (
         <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
@@ -1125,6 +1217,44 @@ export default function ValidationLotDetailClient({ lotId }: { lotId: string }) 
             sx={{ textTransform: "none" }}
           >
             {saving ? "…" : "Confirmer : revenir en saisie"}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog
+        open={deleteLigneDialogOpen}
+        onClose={closeDeleteLigneDialog}
+        fullWidth
+        maxWidth="sm"
+      >
+        <DialogTitle sx={{ pb: 0.5 }}>Supprimer la ligne produit</DialogTitle>
+        <DialogContent>
+          {pendingDeleteLigne ? (
+            <Typography variant="body2" color="text.secondary">
+              Retirer « {pendingDeleteLigne.productLabel} » de ce lot ? Les quantités par magasin de cette
+              ligne seront supprimées.
+            </Typography>
+          ) : null}
+        </DialogContent>
+        <DialogActions className="!px-3 !pb-2">
+          <Button
+            type="button"
+            color="inherit"
+            onClick={closeDeleteLigneDialog}
+            sx={{ textTransform: "none" }}
+            disabled={saving || rowSaving != null}
+          >
+            Annuler
+          </Button>
+          <Button
+            type="button"
+            variant="contained"
+            color="error"
+            disabled={saving || rowSaving != null}
+            onClick={() => void executeDeleteLigne()}
+            sx={{ textTransform: "none" }}
+          >
+            {rowSaving != null ? "…" : "Supprimer"}
           </Button>
         </DialogActions>
       </Dialog>

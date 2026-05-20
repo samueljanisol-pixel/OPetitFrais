@@ -110,32 +110,37 @@ export function UnitQteControl({
       onChange(Math.max(0, roundQty2(roundQty2(value) + d)));
   return (
     <div className="flex flex-col gap-1">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="flex gap-0.5">
-          <Button size="small" variant="outlined" onClick={step(-10)} disabled={value < 10}>
+      <div className="flex w-full min-w-0 items-center gap-1">
+        <div className="flex shrink-0 gap-0.5">
+          <Button size="small" variant="outlined" onClick={step(-10)} disabled={value < 10} sx={{ minWidth: 0, px: 0.75 }}>
             -10
           </Button>
-          <Button size="small" variant="outlined" onClick={step(-1)} disabled={value < 1}>
+          <Button size="small" variant="outlined" onClick={step(-1)} disabled={value < 1} sx={{ minWidth: 0, px: 0.75 }}>
             -1
           </Button>
         </div>
-        <div className="flex min-w-0 flex-1 flex-wrap items-center justify-center gap-1">
+        <div className="flex min-w-0 flex-1 items-center justify-center gap-1 flex-nowrap">
           <DecimalQtyTextField
             size="small"
             value={clampQtyToApiRange(value)}
             onQtyChange={(n) => onChange(clampQtyToApiRange(n))}
-            sx={{ flex: "0 1 auto", minWidth: "4.75rem", maxWidth: "7rem", "& input": { textAlign: "center" } }}
+            sx={{
+              width: "4.75rem",
+              minWidth: "4.75rem",
+              flexShrink: 0,
+              "& .MuiInputBase-input": { textAlign: "center", py: 0.65 },
+            }}
             slotProps={{ htmlInput: { "aria-label": `Quantité ${unitLabel}` } }}
           />
           <Typography variant="body2" color="text.secondary" className="shrink-0 whitespace-nowrap">
             {unitLabel}
           </Typography>
         </div>
-        <div className="flex gap-0.5">
-          <Button size="small" variant="outlined" onClick={step(1)}>
+        <div className="flex shrink-0 gap-0.5">
+          <Button size="small" variant="outlined" onClick={step(1)} sx={{ minWidth: 0, px: 0.75 }}>
             +1
           </Button>
-          <Button size="small" variant="outlined" onClick={step(10)}>
+          <Button size="small" variant="outlined" onClick={step(10)} sx={{ minWidth: 0, px: 0.75 }}>
             +10
           </Button>
         </div>
@@ -163,27 +168,34 @@ export function PackQteControl({
       <Typography variant="body2" className="!font-medium leading-snug" component="p">
         {condWithPackSpec}
       </Typography>
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="flex gap-0.5 shrink-0">
-          <Button size="small" variant="outlined" onClick={step(-10)} disabled={value < 10}>
+      <div className="flex w-full min-w-0 items-center gap-1">
+        <div className="flex shrink-0 gap-0.5">
+          <Button size="small" variant="outlined" onClick={step(-10)} disabled={value < 10} sx={{ minWidth: 0, px: 0.75 }}>
             -10
           </Button>
-          <Button size="small" variant="outlined" onClick={step(-1)} disabled={value < 1}>
+          <Button size="small" variant="outlined" onClick={step(-1)} disabled={value < 1} sx={{ minWidth: 0, px: 0.75 }}>
             -1
           </Button>
         </div>
-        <DecimalQtyTextField
-          size="small"
-          value={clampQtyToApiRange(value)}
-          onQtyChange={(n) => onChange(clampQtyToApiRange(n))}
-          sx={{ flex: "0 1 auto", minWidth: "4rem", maxWidth: "7rem", "& input": { textAlign: "center" } }}
-          slotProps={{ htmlInput: { "aria-label": "Quantité colis" } }}
-        />
-        <div className="flex gap-0.5 shrink-0">
-          <Button size="small" variant="outlined" onClick={step(1)}>
+        <div className="flex min-w-0 flex-1 justify-center">
+          <DecimalQtyTextField
+            size="small"
+            value={clampQtyToApiRange(value)}
+            onQtyChange={(n) => onChange(clampQtyToApiRange(n))}
+            sx={{
+              width: "4.75rem",
+              minWidth: "4.75rem",
+              flexShrink: 0,
+              "& .MuiInputBase-input": { textAlign: "center", py: 0.65 },
+            }}
+            slotProps={{ htmlInput: { "aria-label": "Quantité colis" } }}
+          />
+        </div>
+        <div className="flex shrink-0 gap-0.5">
+          <Button size="small" variant="outlined" onClick={step(1)} sx={{ minWidth: 0, px: 0.75 }}>
             +1
           </Button>
-          <Button size="small" variant="outlined" onClick={step(10)}>
+          <Button size="small" variant="outlined" onClick={step(10)} sx={{ minWidth: 0, px: 0.75 }}>
             +10
           </Button>
         </div>

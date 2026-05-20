@@ -21,6 +21,9 @@ import type { SaisieLigneTarget } from "@/lib/commandes-fournisseur/ligne-saisie
 type Props = {
   lotId: string;
   productLabel?: string;
+  /** Requis si une cible n’a pas encore de `ligneId` (création à l’enregistrement). */
+  productId?: string;
+  productPackagingId?: string | null;
   targets: SaisieLigneTarget[];
   editable: boolean;
   disabled?: boolean;
@@ -34,9 +37,15 @@ type Props = {
   leading?: ReactNode;
 };
 
+function targetKey(t: SaisieLigneTarget): string {
+  return t.ligneId.length > 0 ? t.ligneId : `cmd:${t.commandeId}`;
+}
+
 export default function LigneCommentaireSaisieControls({
   lotId,
   productLabel,
+  productId,
+  productPackagingId = null,
   targets,
   editable,
   disabled = false,
@@ -52,7 +61,8 @@ export default function LigneCommentaireSaisieControls({
 
   const targetsWithComment = targets.filter((t) => t.lineComment && t.lineComment.trim().length > 0);
 
-  const activeTarget = targets.find((t) => t.ligneId === activeLigneId) ?? targets[0] ?? null;
+  const activeTarget =
+    targets.find((t) => targetKey(t) === activeLigneId) ?? targets[0] ?? null;
 
   const openDialog = useCallback(() => {
     if (targets.length === 0) {
@@ -60,7 +70,7 @@ export default function LigneCommentaireSaisieControls({
     }
     const initial =
       targets.find((t) => t.lineComment && t.lineComment.trim().length > 0) ?? targets[0]!;
-    setActiveLigneId(initial.ligneId);
+    setActiveLigneId(targetKey(initial));
     setDraft(initial.lineComment ?? "");
     setErr(null);
     setDialogOpen(true);
@@ -74,13 +84,32 @@ export default function LigneCommentaireSaisieControls({
 
   const patchComment = useCallback(
     async (lineComment: string | null) => {
-      const ligneId =
-        activeLigneId.trim().length > 0
-          ? activeLigneId
-          : (targets.find((t) => t.lineComment?.trim()) ?? targets[0])?.ligneId;
-      if (!ligneId) {
-        setErr("Ligne commande introuvable pour ce commentaire.");
+      const t =
+        targets.find((x) => targetKey(x) === activeLigneId) ??
+        targets.find((x) => x.lineComment?.trim()) ??
+        targets[0];
+      if (!t) {
+        setErr("Magasin introuvable pour ce commentaire.");
         return;
+      }
+      const pid = productId?.trim() ?? "";
+      const body: {
+        lineComment: string | null;
+        ligneId?: string;
+        commandeId?: string;
+        productId?: string;
+        productPackagingId?: string | null;
+      } = { lineComment };
+      if (t.ligneId.length > 0) {
+        body.ligneId = t.ligneId;
+      } else {
+        if (!pid) {
+          setErr("Produit introuvable pour ce commentaire.");
+          return;
+        }
+        body.commandeId = t.commandeId;
+        body.productId = pid;
+        body.productPackagingId = productPackagingId;
       }
       setSaving(true);
       setErr(null);
@@ -91,7 +120,7 @@ export default function LigneCommentaireSaisieControls({
             method: "PATCH",
             credentials: "include",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ ligneId, lineComment }),
+            body: JSON.stringify(body),
           },
         );
         const j = (await res.json()) as { error?: string };
@@ -106,7 +135,7 @@ export default function LigneCommentaireSaisieControls({
         setSaving(false);
       }
     },
-    [activeLigneId, closeDialog, lotId, onUpdated, targets],
+    [activeLigneId, closeDialog, lotId, onUpdated, productId, productPackagingId, targets],
   );
 
   const save = useCallback(() => {
@@ -220,16 +249,16 @@ export default function LigneCommentaireSaisieControls({
               size="small"
               value={activeLigneId}
               onChange={(e) => {
-                const lid = String(e.target.value);
-                setActiveLigneId(lid);
-                const t = targets.find((x) => x.ligneId === lid);
+                const key = String(e.target.value);
+                setActiveLigneId(key);
+                const t = targets.find((x) => targetKey(x) === key);
                 setDraft(t?.lineComment ?? "");
               }}
               disabled={saving}
               className="!mb-2"
             >
               {targets.map((t) => (
-                <MenuItem key={t.ligneId} value={t.ligneId}>
+                <MenuItem key={targetKey(t)} value={targetKey(t)}>
                   {t.magasinLabel}
                 </MenuItem>
               ))}

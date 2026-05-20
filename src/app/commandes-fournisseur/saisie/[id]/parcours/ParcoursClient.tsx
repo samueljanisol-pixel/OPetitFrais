@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
-import { Button, Typography } from "@mui/material";
+import { Box, Button, Typography } from "@mui/material";
 import ChevronLeftIcon from "@mui/icons-material/ChevronLeft";
 import ChevronRightIcon from "@mui/icons-material/ChevronRight";
 import AppLink from "@/components/AppLink";
@@ -282,8 +282,8 @@ export default function ParcoursClient({ commandeId }: { commandeId: string }) {
   }
 
   return (
-    <main className="mx-auto w-full max-w-md px-3 py-3">
-      <div className="relative !mb-2 flex min-h-[36px] items-center">
+    <main className="mx-auto flex min-h-[calc(100dvh-5rem)] w-full max-w-md flex-col px-3 py-3">
+      <div className="relative !mb-2 flex min-h-[36px] shrink-0 items-center">
         <Button
           component={AppLink}
           href={`/commandes-fournisseur/saisie/${commandeId}/recap`}
@@ -312,49 +312,56 @@ export default function ParcoursClient({ commandeId }: { commandeId: string }) {
         </Typography>
       </div>
 
-      <Typography
-        variant="body2"
-        color="text.secondary"
-        className="!mb-1 block w-full text-center !text-[0.9375rem] sm:!text-base"
-        component="span"
-        sx={{ fontWeight: 600 }}
-      >
-        {catLabel}
-      </Typography>
-      {typeof current.photoUrl === "string" && current.photoUrl.length > 0 ? (
-        <div className="mb-3 flex w-full justify-center">
-          <div className="relative h-36 w-full max-w-[6rem]">
-            <Image
-              src={current.photoUrl}
-              alt=""
-              fill
-              className="object-contain object-center"
-              sizes="(max-width: 448px) 100vw, 12rem"
-            />
+      <div className="flex min-h-0 flex-1 flex-col">
+        <Typography
+          variant="body2"
+          color="text.secondary"
+          className="!mb-1 block w-full text-center !text-[0.9375rem] sm:!text-base"
+          component="span"
+          sx={{ fontWeight: 600 }}
+        >
+          {catLabel}
+        </Typography>
+        {typeof current.photoUrl === "string" && current.photoUrl.length > 0 ? (
+          <div className="mb-3 flex w-full justify-center">
+            <div className="relative h-36 w-full max-w-[6rem]">
+              <Image
+                src={current.photoUrl}
+                alt=""
+                fill
+                className="object-contain object-center"
+                sizes="(max-width: 448px) 100vw, 12rem"
+              />
+            </div>
           </div>
+        ) : null}
+        <Typography
+          variant="h6"
+          component="h1"
+          className="!mb-1 !text-base text-center"
+          sx={{ fontWeight: 600 }}
+        >
+          {current.name}
+        </Typography>
+        <ProductArabicSubtitle nameAr={current.name_ar} centered className="!mb-3" />
+
+        <div className="flex min-h-[min(17rem,42dvh)] flex-1 flex-col gap-3 pb-2">
+          {currentBlocks}
         </div>
-      ) : null}
-      <Typography
-        variant="h6"
-        component="h1"
-        className="!mb-1 !text-base text-center"
-        sx={{ fontWeight: 600 }}
+      </div>
+
+      <Box
+        className="mt-8 flex shrink-0 flex-col gap-4 pt-5"
+        sx={{ borderTop: 1, borderColor: "divider" }}
       >
-        {current.name}
-      </Typography>
-      <ProductArabicSubtitle nameAr={current.name_ar} centered className="!mb-3" />
-
-      <div className="!mb-4 flex flex-col gap-3">{currentBlocks}</div>
-
-      <div className="flex flex-col gap-3">
-        <div className="flex flex-row items-center justify-between gap-2">
+        <div className="flex min-h-[2.75rem] flex-row items-center justify-between gap-2">
           <Button
             type="button"
             variant="outlined"
             onClick={() => setIndex((i) => Math.max(0, i - 1))}
             disabled={index <= 0}
             startIcon={<ChevronLeftIcon />}
-            sx={{ textTransform: "none" }}
+            sx={{ textTransform: "none", minHeight: 40 }}
           >
             Précédent
           </Button>
@@ -365,7 +372,7 @@ export default function ParcoursClient({ commandeId }: { commandeId: string }) {
             onClick={() => setIndex((i) => i + 1)}
             disabled={isLast}
             endIcon={<ChevronRightIcon />}
-            sx={{ textTransform: "none" }}
+            sx={{ textTransform: "none", minHeight: 40 }}
           >
             Suivant
           </Button>
@@ -378,11 +385,11 @@ export default function ParcoursClient({ commandeId }: { commandeId: string }) {
           size="large"
           onClick={() => void onTerminer()}
           disabled={saving}
-          sx={{ textTransform: "none" }}
+          sx={{ textTransform: "none", minHeight: 48 }}
         >
           {saving ? "…" : "Terminer"}
         </Button>
-      </div>
+      </Box>
     </main>
   );
 }

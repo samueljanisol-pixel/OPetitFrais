@@ -6,6 +6,9 @@ type Ctx = { params: Promise<{ id: string }> };
 
 type PatchBody = {
   ligneId?: string;
+  commandeId?: string;
+  productId?: string;
+  productPackagingId?: string | null;
   lineComment?: string | null;
 };
 
@@ -26,10 +29,9 @@ export async function PATCH(req: Request, ctx: Ctx) {
     return NextResponse.json({ error: "JSON invalide" }, { status: 400 });
   }
 
-  const ligneId = body.ligneId?.trim();
-  if (!ligneId) {
-    return NextResponse.json({ error: "ligneId requis" }, { status: 400 });
-  }
+  let ligneId = body.ligneId?.trim() ?? "";
+  const commandeId = body.commandeId?.trim() ?? "";
+  const productId = body.productId?.trim() ?? "";
 
   const supabase = await createSupabaseServerClient();
 
@@ -62,6 +64,65 @@ export async function PATCH(req: Request, ctx: Ctx) {
     );
   }
 
+  if (!ligneId) {
+    if (!commandeId || !productId) {
+      return NextResponse.json(
+        { error: "ligneId ou (commandeId + productId) requis" },
+        { status: 400 },
+      );
+    }
+    if (lotStatus !== "brouillon" || !canConsolid) {
+      return NextResponse.json(
+        { error: "Création de ligne commentaire réservée à la consolidation (lot brouillon)" },
+        { status: 409 },
+      );
+    }
+    const { data: existing, error: exErr } = await supabase
+      .from("commande_fournisseur_ligne")
+      .select("id")
+      .eq("commande_id", commandeId)
+      .eq("product_id", productId)
+      .maybeSingle();
+    if (exErr) {
+      return NextResponse.json({ error: exErr.message }, { status: 500 });
+    }
+    if (existing) {
+      ligneId = (existing as { id: string }).id;
+    } else {
+      let packagingId: string | null = null;
+      if (body.productPackagingId !== undefined && body.productPackagingId !== null) {
+        const raw = String(body.productPackagingId).trim();
+        if (raw.length > 0) {
+          packagingId = raw;
+        }
+      }
+      const { data: inserted, error: insErr } = await supabase
+        .from("commande_fournisseur_ligne")
+        .insert({
+          commande_id: commandeId,
+          product_id: productId,
+          product_packaging_id: packagingId,
+          qte: 0,
+          line_comment: null,
+        })
+        .select("id")
+        .maybeSingle();
+      if (insErr) {
+        return NextResponse.json({ error: insErr.message }, { status: 500 });
+      }
+      if (!inserted) {
+        return NextResponse.json(
+          {
+            error:
+              "Création de ligne refusée (droits ou statut). Vérifiez la migration RLS insert commentaire lot.",
+          },
+          { status: 403 },
+        );
+      }
+      ligneId = (inserted as { id: string }).id;
+    }
+  }
+
   const { data: ligne, error: ligneErr } = await supabase
     .from("commande_fournisseur_ligne")
     .select("id, commande_id")
@@ -74,12 +135,12 @@ export async function PATCH(req: Request, ctx: Ctx) {
     return NextResponse.json({ error: "Ligne commande introuvable" }, { status: 404 });
   }
 
-  const commandeId = (ligne as { commande_id: string }).commande_id;
+  const commandeIdResolved = (ligne as { commande_id: string }).commande_id;
   const { data: inc, error: incErr } = await supabase
     .from("commande_fournisseur_lot_inclusion")
     .select("lot_id")
     .eq("lot_id", lotId)
-    .eq("commande_id", commandeId)
+    .eq("commande_id", commandeIdResolved)
     .maybeSingle();
   if (incErr) {
     return NextResponse.json({ error: incErr.message }, { status: 500 });
@@ -115,6 +176,7 @@ export async function PATCH(req: Request, ctx: Ctx) {
 
   return NextResponse.json({
     ok: true,
+    ligneId,
     lineComment: (updated as { line_comment: string | null }).line_comment,
   });
 }

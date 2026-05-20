@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { resolvePackagingIdFromSaisieRows } from "@/lib/commandes-fournisseur/packaging-from-saisie";
 import { vendeurIdsByProductIds } from "@/lib/commandes-fournisseur/product-vendeur";
 import { fallbackStatusLabel } from "@/lib/statusLabels/defaults";
 
@@ -76,7 +77,10 @@ export async function createValidationLot(
     return { error: ligErr.message };
   }
 
-  const byProduct = new Map<string, { total: number; byMag: Map<string, number> }>();
+  const byProduct = new Map<
+    string,
+    { total: number; byMag: Map<string, number>; packagingIds: Set<string | null> }
+  >();
   for (const row of lignes ?? []) {
     const pid = row.product_id as string;
     const q = Number(row.qte) || 0;
@@ -84,11 +88,13 @@ export async function createValidationLot(
     if (!mid) continue;
     let cell = byProduct.get(pid);
     if (!cell) {
-      cell = { total: 0, byMag: new Map() };
+      cell = { total: 0, byMag: new Map(), packagingIds: new Set() };
       byProduct.set(pid, cell);
     }
     cell.total += q;
     cell.byMag.set(mid, (cell.byMag.get(mid) ?? 0) + q);
+    const packRaw = (row as { product_packaging_id?: string | null }).product_packaging_id;
+    cell.packagingIds.add(typeof packRaw === "string" && packRaw.length > 0 ? packRaw : null);
   }
 
   const productIds = [...byProduct.keys()];
@@ -109,10 +115,12 @@ export async function createValidationLot(
   const toInsertLignes = productIds.map((productId) => {
     const cell = byProduct.get(productId)!;
     const vendeurId = vendeurByProduct.get(productId) ?? null;
+    const packagingId = resolvePackagingIdFromSaisieRows(cell.packagingIds);
     return {
       lot_id: lotId,
       product_id: productId,
       qte_achat: cell.total,
+      ...(packagingId ? { product_packaging_id: packagingId } : {}),
       ...(vendeurId ? { vendeur_id: vendeurId } : {}),
     };
   });

@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { commandeMagasinRefsForLot } from "@/lib/commandes-fournisseur/sync-lot-magasin-lignes";
 
 export type SaisieCommentEntry = {
   magasinLabel: string;
@@ -11,6 +12,8 @@ export type SaisieLigneTarget = {
   magasinId: string;
   magasinLabel: string;
   lineComment: string | null;
+  /** Quantité saisie magasin (`commande_fournisseur_ligne.qte`). */
+  qte?: number;
 };
 
 export type CommentaireMagasinCell = {
@@ -47,11 +50,87 @@ function magasinIdFromNested(raw: unknown): string | null {
   return typeof mid === "string" && mid.length > 0 ? mid : null;
 }
 
+export type MagasinCommentSlot = {
+  magasinId: string;
+  commandeId: string;
+  magasinLabel: string;
+};
+
+/** Une cible par magasin du lot (ligne existante ou emplacement commentaire). */
+export function enrichSaisieTargetsForMagasins(
+  targets: SaisieLigneTarget[],
+  magasins: MagasinCommentSlot[],
+): SaisieLigneTarget[] {
+  const byMag = new Map<string, SaisieLigneTarget>();
+  for (const t of targets) {
+    if (!byMag.has(t.magasinId)) {
+      byMag.set(t.magasinId, t);
+    }
+  }
+  return magasins.map((m) => {
+    const ex = byMag.get(m.magasinId);
+    if (ex) {
+      return ex;
+    }
+    return {
+      ligneId: "",
+      commandeId: m.commandeId,
+      magasinId: m.magasinId,
+      magasinLabel: m.magasinLabel,
+      lineComment: null,
+      qte: 0,
+    };
+  });
+}
+
+export async function magasinCommentSlotsForLot(
+  supabase: SupabaseClient,
+  lotId: string,
+): Promise<MagasinCommentSlot[]> {
+  const refs = await commandeMagasinRefsForLot(supabase, lotId);
+  if (refs.length === 0) {
+    return [];
+  }
+
+  const { data: magasins, error: magErr } = await supabase
+    .from("magasins")
+    .select("id, nom, code")
+    .in(
+      "id",
+      refs.map((r) => r.magasinId),
+    );
+  if (magErr) {
+    return [];
+  }
+
+  const magasinLabelById = new Map<string, string>();
+  for (const m of magasins ?? []) {
+    const id = (m as { id?: string }).id;
+    if (!id) {
+      continue;
+    }
+    const nom = typeof (m as { nom?: string }).nom === "string" ? (m as { nom: string }).nom.trim() : "";
+    const code = typeof (m as { code?: string }).code === "string" ? (m as { code: string }).code.trim() : "";
+    magasinLabelById.set(id, nom.length > 0 ? nom : code.length > 0 ? code : "Magasin");
+  }
+
+  const slots: MagasinCommentSlot[] = refs.map((r) => ({
+    magasinId: r.magasinId,
+    commandeId: r.commandeId,
+    magasinLabel: magasinLabelById.get(r.magasinId) ?? "Magasin",
+  }));
+  slots.sort((a, b) => a.magasinLabel.localeCompare(b.magasinLabel, "fr"));
+  return slots;
+}
+
 export function commentairesMagasinFromTargets(
   targets: SaisieLigneTarget[],
 ): Record<string, CommentaireMagasinCell> {
   const out: Record<string, CommentaireMagasinCell> = {};
   for (const t of targets) {
+    if (typeof t.ligneId !== "string" || t.ligneId.length === 0) {
+      continue;
+    }
     out[t.magasinId] = {
       ligneId: t.ligneId,
       commandeId: t.commandeId,
@@ -80,22 +159,33 @@ export async function saisieLigneTargetsByProductForLot(
 ): Promise<Map<string, SaisieLigneTarget[]>> {
   const out = new Map<string, SaisieLigneTarget[]>();
 
-  const { data: incs, error: ie } = await supabase
-    .from("commande_fournisseur_lot_inclusion")
-    .select("commande_id")
-    .eq("lot_id", lotId);
-  if (ie) {
+  const refs = await commandeMagasinRefsForLot(supabase, lotId);
+  if (refs.length === 0) {
     return out;
   }
-  const commandeIds = [
-    ...new Set(
-      (incs ?? [])
-        .map((r) => (r as { commande_id?: string }).commande_id)
-        .filter((id): id is string => typeof id === "string" && id.length > 0),
-    ),
-  ];
-  if (commandeIds.length === 0) {
+
+  const commandeIds = refs.map((r) => r.commandeId);
+  const commandeToMagasinId = new Map(refs.map((r) => [r.commandeId, r.magasinId]));
+
+  const { data: magasins, error: magErr } = await supabase
+    .from("magasins")
+    .select("id, nom, code")
+    .in(
+      "id",
+      refs.map((r) => r.magasinId),
+    );
+  if (magErr) {
     return out;
+  }
+  const magasinLabelById = new Map<string, string>();
+  for (const m of magasins ?? []) {
+    const id = (m as { id?: string }).id;
+    if (!id) {
+      continue;
+    }
+    const nom = typeof (m as { nom?: string }).nom === "string" ? (m as { nom: string }).nom.trim() : "";
+    const code = typeof (m as { code?: string }).code === "string" ? (m as { code: string }).code.trim() : "";
+    magasinLabelById.set(id, nom.length > 0 ? nom : code.length > 0 ? code : "Magasin");
   }
 
   const { data: lotLignes, error: leLot } = await supabase
@@ -118,9 +208,7 @@ export async function saisieLigneTargetsByProductForLot(
 
   const { data: lignes, error: le } = await supabase
     .from("commande_fournisseur_ligne")
-    .select(
-      "id, commande_id, product_id, line_comment, commande_fournisseur(magasin_id, magasins(nom, code))",
-    )
+    .select("id, commande_id, product_id, qte, line_comment")
     .in("commande_id", commandeIds)
     .in("product_id", productIds);
   if (le || !lignes) {
@@ -134,20 +222,22 @@ export async function saisieLigneTargetsByProductForLot(
     if (!pid || !ligneId || !commandeId) {
       continue;
     }
-    const cf = (row as { commande_fournisseur?: unknown }).commande_fournisseur;
-    const magasinId = magasinIdFromNested(cf);
+    const magasinId = commandeToMagasinId.get(commandeId);
     if (!magasinId) {
       continue;
     }
     const rawComment = (row as { line_comment?: string | null }).line_comment;
     const lineComment =
       typeof rawComment === "string" && rawComment.trim().length > 0 ? rawComment.trim() : null;
+    const qteRaw = (row as { qte?: string | number }).qte;
+    const qteN = typeof qteRaw === "string" ? parseFloat(qteRaw) : Number(qteRaw);
     const target: SaisieLigneTarget = {
       ligneId,
       commandeId,
       magasinId,
-      magasinLabel: magasinLabelFromNested(cf),
+      magasinLabel: magasinLabelById.get(magasinId) ?? "Magasin",
       lineComment,
+      qte: Number.isFinite(qteN) ? qteN : 0,
     };
     const list = out.get(pid) ?? [];
     list.push(target);

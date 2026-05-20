@@ -9,9 +9,13 @@ import {
 import { assignProductVendeursToLotLines } from "@/lib/commandes-fournisseur/product-vendeur";
 import {
   commentairesMagasinFromTargets,
+  enrichSaisieTargetsForMagasins,
+  magasinCommentSlotsForLot,
   saisieLigneTargetsByProductForLot,
 } from "@/lib/commandes-fournisseur/ligne-saisie-comments";
+import { packagingIdByProductFromCommandeLignes } from "@/lib/commandes-fournisseur/packaging-from-saisie";
 import { clampQtyToApiRange } from "@/lib/commandes-fournisseur/qty-parse";
+import { syncCommandeLignesFromLotMagasinQty } from "@/lib/commandes-fournisseur/sync-lot-magasin-lignes";
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -113,7 +117,7 @@ export async function GET(_req: Request, ctx: Ctx) {
   const { data: lot, error } = await supabase
     .from("commande_fournisseur_lot")
     .select(
-      "id, supplier_id, status, commentaire, created_at, marque_prete_at, ref_supplier(id, code, label), commande_fournisseur_lot_inclusion(commande_fournisseur(id, magasin_id, status, commentaire, magasins(id, code, nom), ref_supplier(label)))",
+      "id, supplier_id, status, commentaire, created_at, marque_prete_at, ref_supplier(id, code, label), commande_fournisseur_lot_inclusion(commande_fournisseur(id, magasin_id, status, commentaire, created_at, validated_at, magasins(id, code, nom), ref_supplier(label)))",
     )
     .eq("id", id)
     .maybeSingle();
@@ -125,15 +129,29 @@ export async function GET(_req: Request, ctx: Ctx) {
     return NextResponse.json({ error: "Introuvable" }, { status: 404 });
   }
 
-  const { data: lotLignes, error: lErr } = await supabase
-    .from("commande_fournisseur_lot_ligne")
-    .select(
-      "id, product_id, product_packaging_id, qte_achat, qte_besoin_fige, vendeur_id, marque_achete, prix_achat_unitaire, montant_ligne_achat, product(id, name, code, ref_sales_unit(label), ref_category(label, sort_order), product_packaging(id, quantity, ref_conditionnement(label), ref_sales_unit(label))), commande_fournisseur_lot_ligne_magasin(magasin_id, qte, magasins(id, code, nom))",
-    )
-    .eq("lot_id", id);
+  const supplierId = (lot as { supplier_id: string }).supplier_id;
 
+  const [lotLignesRes, vendeursRes] = await Promise.all([
+    supabase
+      .from("commande_fournisseur_lot_ligne")
+      .select(
+        "id, product_id, product_packaging_id, qte_achat, qte_besoin_fige, vendeur_id, marque_achete, prix_achat_unitaire, montant_ligne_achat, product(id, name, name_ar, code, ref_sales_unit(label), ref_category(label, sort_order), product_packaging(id, quantity, ref_conditionnement(label), ref_sales_unit(label))), commande_fournisseur_lot_ligne_magasin(magasin_id, qte, magasins(id, code, nom))",
+      )
+      .eq("lot_id", id),
+    supabase
+      .from("ref_supplier_vendeur")
+      .select("id, label")
+      .eq("supplier_id", supplierId)
+      .order("sort_order", { ascending: true })
+      .order("label", { ascending: true }),
+  ]);
+
+  const { data: lotLignes, error: lErr } = lotLignesRes;
   if (lErr) {
     return NextResponse.json({ error: lErr.message }, { status: 500 });
+  }
+  if (vendeursRes.error) {
+    return NextResponse.json({ error: vendeursRes.error.message }, { status: 500 });
   }
 
   type LotLigneProd = {
@@ -168,19 +186,59 @@ export async function GET(_req: Request, ctx: Ctx) {
     );
   });
 
+  const lotStatus = (lot as { status: string }).status;
+  await syncCommandeLignesFromLotMagasinQty(supabase, id, lotStatus);
+
   const targetsByProduct = await saisieLigneTargetsByProductForLot(supabase, id);
+  const magasinSlots = await magasinCommentSlotsForLot(supabase, id);
+
+  const commandeIds = [
+    ...new Set(
+      (
+        (lot as { commande_fournisseur_lot_inclusion?: unknown[] }).commande_fournisseur_lot_inclusion ??
+        []
+      ).flatMap((inc) => {
+        const cf = (inc as { commande_fournisseur?: { id?: string } | { id?: string }[] })
+          .commande_fournisseur;
+        const oneCf = Array.isArray(cf) ? cf[0] : cf;
+        const cid = oneCf?.id;
+        return typeof cid === "string" && cid.length > 0 ? [cid] : [];
+      }),
+    ),
+  ];
+  const productIdsForPack = rows.map((r) => (r as { product_id: string }).product_id);
+  const saisiePackagingByProduct = await packagingIdByProductFromCommandeLignes(
+    supabase,
+    commandeIds,
+    productIdsForPack,
+  );
 
   const lignesWithCategory = rows.map((row) => {
     const pa = oneNestedProduct(row.product);
     const cat = pa ? parseCategoryFromRef(pa.ref_category) : { label: "", sort_order: null };
     const categoryLabel = categoryDisplayLabel(cat);
     const pid = (row as { product_id: string }).product_id;
-    const targets = targetsByProduct.get(pid) ?? [];
-    const commentairesMagasin = commentairesMagasinFromTargets(targets);
-    return { ...row, categoryLabel, commentairesMagasin };
+    const rawTargets = targetsByProduct.get(pid) ?? [];
+    const saisieLigneTargets = enrichSaisieTargetsForMagasins(rawTargets, magasinSlots);
+    const commentairesMagasin = commentairesMagasinFromTargets(rawTargets);
+    const storedPackId = (row as { product_packaging_id?: string | null }).product_packaging_id ?? null;
+    const product_packaging_id =
+      storedPackId ?? saisiePackagingByProduct.get(pid) ?? null;
+    return {
+      ...row,
+      product_packaging_id,
+      categoryLabel,
+      commentairesMagasin,
+      saisieLigneTargets,
+    };
   });
 
-  return NextResponse.json({ lot, lignes: lignesWithCategory });
+  const vendeurs = (vendeursRes.data ?? []).map((v) => {
+    const row = v as { id: string; label: string };
+    return { id: row.id, label: row.label };
+  });
+
+  return NextResponse.json({ lot, lignes: lignesWithCategory, vendeurs });
 }
 
 export async function PATCH(req: Request, ctx: Ctx) {
@@ -349,6 +407,10 @@ export async function PATCH(req: Request, ctx: Ctx) {
           return NextResponse.json({ error: ins.message }, { status: 500 });
         }
       }
+    }
+
+    if (qte > 0) {
+      await syncCommandeLignesFromLotMagasinQty(supabase, id, "brouillon");
     }
 
     const errRe = await recomputeQteAchat(supabase, lotLigneId);
