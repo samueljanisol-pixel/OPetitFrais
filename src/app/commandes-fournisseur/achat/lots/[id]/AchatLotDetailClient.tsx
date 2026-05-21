@@ -1204,7 +1204,7 @@ export default function AchatLotDetailClient({ lotId }: { lotId: string }) {
 
           <Box className="!mb-2 flex flex-row flex-wrap items-center justify-between gap-2">
             <Typography variant="h6" sx={{ fontWeight: 700, mb: 0 }}>
-              Produits sans vendeur
+              {vendeurs.length === 0 ? supplierHeading(lot.ref_supplier) : "Produits sans vendeur"}
             </Typography>
             {editable ? (
               <Button
@@ -1889,7 +1889,10 @@ export default function AchatLotDetailClient({ lotId }: { lotId: string }) {
               {totauxAchat.lignesSansVendeurDh > 0 ? (
                 <>
                   <Typography variant="body2" component="span">
-                    Produits sans vendeur (montants lignes)&nbsp;:
+                    {vendeurs.length === 0
+                      ? `${supplierHeading(lot.ref_supplier)} (montants lignes)`
+                      : "Produits sans vendeur (montants lignes)"}
+                    &nbsp;:
                   </Typography>
                   <Typography
                     variant="body2"
@@ -1967,7 +1970,6 @@ export default function AchatLotDetailClient({ lotId }: { lotId: string }) {
             open={pickerOpen}
             onClose={() => setPickerOpen(false)}
             supplierId={lot.supplier_id}
-            existingProductIds={lignes.map((l) => l.product_id)}
             alreadyPresentLabel="Déjà dans le lot"
             onSelect={handleProductChosenFromPicker}
           />

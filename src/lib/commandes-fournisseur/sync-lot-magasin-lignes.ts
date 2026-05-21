@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { normalizeProductPackagingId } from "@/lib/commandes-fournisseur/commande-ligne-key";
 import { clampQtyToApiRange } from "@/lib/commandes-fournisseur/qty-parse";
 
 type CommandeMagasinRef = {
@@ -80,7 +81,9 @@ export async function syncCommandeLignesFromLotMagasinQty(
 
   for (const ll of lotLignes) {
     const productId = (ll as { product_id?: string }).product_id;
-    const packagingId = (ll as { product_packaging_id?: string | null }).product_packaging_id ?? null;
+    const packagingId = normalizeProductPackagingId(
+      (ll as { product_packaging_id?: string | null }).product_packaging_id,
+    );
     if (!productId) {
       continue;
     }
@@ -102,12 +105,17 @@ export async function syncCommandeLignesFromLotMagasinQty(
         continue;
       }
 
-      const { data: existing, error: exErr } = await supabase
+      let exQuery = supabase
         .from("commande_fournisseur_ligne")
         .select("id, qte")
         .eq("commande_id", commandeId)
-        .eq("product_id", productId)
-        .maybeSingle();
+        .eq("product_id", productId);
+      if (packagingId) {
+        exQuery = exQuery.eq("product_packaging_id", packagingId);
+      } else {
+        exQuery = exQuery.is("product_packaging_id", null);
+      }
+      const { data: existing, error: exErr } = await exQuery.maybeSingle();
       if (exErr) {
         continue;
       }

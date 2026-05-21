@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { requireApiPermission } from "@/lib/auth/require-permission-api";
 import { userHasMagasin } from "@/lib/commandes-fournisseur/api-helpers";
+import { hasDuplicateCommandeLignes } from "@/lib/commandes-fournisseur/commande-ligne-key";
 import { clampQtyToApiRange } from "@/lib/commandes-fournisseur/qty-parse";
 import { fallbackStatusLabel } from "@/lib/statusLabels/defaults";
 
@@ -67,6 +68,21 @@ export async function PUT(req: Request, ctx: Ctx) {
         { status: 400 },
       );
     }
+  }
+
+  if (
+    hasDuplicateCommandeLignes(
+      lignes.map((l) => ({
+        productId: l.productId,
+        productPackagingId: l.productPackagingId ?? null,
+        qte: l.qte,
+      })),
+    )
+  ) {
+    return NextResponse.json(
+      { error: "Doublon interdit : même produit et même conditionnement sur la commande." },
+      { status: 400 },
+    );
   }
 
   const { error: delErr } = await supabase

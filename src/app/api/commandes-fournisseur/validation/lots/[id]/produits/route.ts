@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { requireApiPermission } from "@/lib/auth/require-permission-api";
+import { findExistingLotLigneId } from "@/lib/commandes-fournisseur/lot-ligne-duplicate-query";
 import { vendeurIdForProduct } from "@/lib/commandes-fournisseur/product-vendeur";
 
 type Ctx = { params: Promise<{ id: string }> };
@@ -83,17 +84,20 @@ export async function POST(req: Request, ctx: Ctx) {
     }
   }
 
-  const { data: dup, error: dupE } = await supabase
-    .from("commande_fournisseur_lot_ligne")
-    .select("id")
-    .eq("lot_id", lotId)
-    .eq("product_id", productId)
-    .maybeSingle();
-  if (dupE) {
-    return NextResponse.json({ error: dupE.message }, { status: 500 });
+  let dup: { id: string } | null;
+  try {
+    dup = await findExistingLotLigneId(supabase, lotId, productId, packagingId);
+  } catch (e) {
+    return NextResponse.json(
+      { error: e instanceof Error ? e.message : "Erreur" },
+      { status: 500 },
+    );
   }
   if (dup) {
-    return NextResponse.json({ error: "Ce produit est déjà dans le lot" }, { status: 409 });
+    return NextResponse.json(
+      { error: "Ce conditionnement est déjà dans le lot" },
+      { status: 409 },
+    );
   }
 
   const { data: incRows, error: ie } = await supabase

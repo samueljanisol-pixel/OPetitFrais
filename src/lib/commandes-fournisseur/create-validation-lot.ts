@@ -1,10 +1,20 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { resolvePackagingIdFromSaisieRows } from "@/lib/commandes-fournisseur/packaging-from-saisie";
+import {
+  commandeLigneKey,
+  normalizeProductPackagingId,
+} from "@/lib/commandes-fournisseur/commande-ligne-key";
 import { vendeurIdsByProductIds } from "@/lib/commandes-fournisseur/product-vendeur";
 import { fallbackStatusLabel } from "@/lib/statusLabels/defaults";
 
+type LotAggCell = {
+  productId: string;
+  packagingId: string | null;
+  total: number;
+  byMag: Map<string, number>;
+};
+
 /**
- * Crée un lot, rattache les commandes validées, agrège les lignes (par produit + par magasin),
+ * Crée un lot, rattache les commandes validées, agrège les lignes (par produit + conditionnement + magasin),
  * met les commandes en statut integree.
  */
 export async function createValidationLot(
@@ -70,35 +80,34 @@ export async function createValidationLot(
 
   const { data: lignes, error: ligErr } = await supabase
     .from("commande_fournisseur_ligne")
-    .select("commande_id, product_id, qte")
+    .select("commande_id, product_id, product_packaging_id, qte")
     .in("commande_id", unique);
   if (ligErr) {
     await supabase.from("commande_fournisseur_lot").delete().eq("id", lotId);
     return { error: ligErr.message };
   }
 
-  const byProduct = new Map<
-    string,
-    { total: number; byMag: Map<string, number>; packagingIds: Set<string | null> }
-  >();
+  const byLineKey = new Map<string, LotAggCell>();
   for (const row of lignes ?? []) {
     const pid = row.product_id as string;
+    const packagingId = normalizeProductPackagingId(
+      (row as { product_packaging_id?: string | null }).product_packaging_id,
+    );
+    const key = commandeLigneKey(pid, packagingId);
     const q = Number(row.qte) || 0;
     const mid = magByCmd.get(row.commande_id as string);
     if (!mid) continue;
-    let cell = byProduct.get(pid);
+    let cell = byLineKey.get(key);
     if (!cell) {
-      cell = { total: 0, byMag: new Map(), packagingIds: new Set() };
-      byProduct.set(pid, cell);
+      cell = { productId: pid, packagingId, total: 0, byMag: new Map() };
+      byLineKey.set(key, cell);
     }
     cell.total += q;
     cell.byMag.set(mid, (cell.byMag.get(mid) ?? 0) + q);
-    const packRaw = (row as { product_packaging_id?: string | null }).product_packaging_id;
-    cell.packagingIds.add(typeof packRaw === "string" && packRaw.length > 0 ? packRaw : null);
   }
 
-  const productIds = [...byProduct.keys()];
-  if (productIds.length === 0) {
+  const lineKeys = [...byLineKey.keys()];
+  if (lineKeys.length === 0) {
     const { error: upErr } = await supabase
       .from("commande_fournisseur")
       .update({ lot_id: lotId, status: "integree" })
@@ -110,17 +119,17 @@ export async function createValidationLot(
     return { lotId };
   }
 
+  const productIds = [...new Set(lineKeys.map((k) => byLineKey.get(k)!.productId))];
   const vendeurByProduct = await vendeurIdsByProductIds(supabase, productIds, supplierId);
 
-  const toInsertLignes = productIds.map((productId) => {
-    const cell = byProduct.get(productId)!;
-    const vendeurId = vendeurByProduct.get(productId) ?? null;
-    const packagingId = resolvePackagingIdFromSaisieRows(cell.packagingIds);
+  const toInsertLignes = lineKeys.map((key) => {
+    const cell = byLineKey.get(key)!;
+    const vendeurId = vendeurByProduct.get(cell.productId) ?? null;
     return {
       lot_id: lotId,
-      product_id: productId,
+      product_id: cell.productId,
       qte_achat: cell.total,
-      ...(packagingId ? { product_packaging_id: packagingId } : {}),
+      ...(cell.packagingId ? { product_packaging_id: cell.packagingId } : {}),
       ...(vendeurId ? { vendeur_id: vendeurId } : {}),
     };
   });
@@ -128,17 +137,31 @@ export async function createValidationLot(
   const { data: insLl, error: llErr } = await supabase
     .from("commande_fournisseur_lot_ligne")
     .insert(toInsertLignes)
-    .select("id, product_id");
+    .select("id, product_id, product_packaging_id");
   if (llErr || !insLl) {
     await supabase.from("commande_fournisseur_lot").delete().eq("id", lotId);
-    return { error: llErr?.message ?? "Écriture des lignes lot impossible" };
+    const msg = llErr?.message ?? "Écriture des lignes lot impossible";
+    if (msg.includes("commande_fournisseur_lot_ligne_lot_id_product_id_key")) {
+      return {
+        error:
+          "Impossible de créer le lot : la base utilise encore l’ancienne règle « un produit par lot ». Appliquez la migration supabase/migrations/20260625120000_lot_ligne_unique_product_packaging.sql (Supabase SQL Editor ou supabase db push), puis réessayez.",
+      };
+    }
+    return { error: msg };
   }
 
-  const productToLotLigne = new Map((insLl as { id: string; product_id: string }[]).map((r) => [r.product_id, r.id]));
+  const keyToLotLigne = new Map<string, string>();
+  for (const r of insLl as { id: string; product_id: string; product_packaging_id?: string | null }[]) {
+    keyToLotLigne.set(
+      commandeLigneKey(r.product_id, normalizeProductPackagingId(r.product_packaging_id)),
+      r.id,
+    );
+  }
+
   const magRows: { lot_ligne_id: string; magasin_id: string; qte: number }[] = [];
-  for (const pid of productIds) {
-    const cell = byProduct.get(pid)!;
-    const llId = productToLotLigne.get(pid);
+  for (const key of lineKeys) {
+    const cell = byLineKey.get(key)!;
+    const llId = keyToLotLigne.get(key);
     if (!llId) continue;
     for (const [magId, q] of cell.byMag) {
       if (q > 0) {

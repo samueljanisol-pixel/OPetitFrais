@@ -27,16 +27,39 @@ export function formatPackQty(n: number): string {
   return n.toLocaleString("fr-FR", { maximumFractionDigits: 4 });
 }
 
-type PPack = {
+export type PackagingRowForDisplay = {
   id: string;
   quantity: string | number;
+  /** Nom personnalisé (product_packaging.nom) ; prioritaire sur ref_conditionnement.label. */
+  nom?: string | null;
   ref_conditionnement?: unknown;
   ref_sales_unit?: unknown;
 };
 
+type PPack = PackagingRowForDisplay;
+
 function packArray(p: PPack | PPack[] | null | undefined): PPack[] {
   if (!p) return [];
   return Array.isArray(p) ? p : [p];
+}
+
+/** Libellé court du conditionnement (nom produit ou référentiel). */
+export function packagingConditionnementLabel(pack: PackagingRowForDisplay): string {
+  const custom = typeof pack.nom === "string" ? pack.nom.trim() : "";
+  if (custom.length > 0) {
+    return custom;
+  }
+  const ref = labelFromRef(pack.ref_conditionnement);
+  return ref !== "—" ? ref : "Colis";
+}
+
+/** Ex. « Carton (12 Kg) » — utilisé partout où le conditionnement apparaît. */
+export function buildPackagingCondTitre(pack: PackagingRowForDisplay): string {
+  const packQty =
+    typeof pack.quantity === "string" ? parseFloat(pack.quantity) : Number(pack.quantity);
+  const condN = packagingConditionnementLabel(pack);
+  const packUs = labelFromRef(pack.ref_sales_unit);
+  return `${condN} (${formatPackQty(packQty)} ${packUs})`;
 }
 
 export type ProductDisplayInfo = {
@@ -89,10 +112,8 @@ export function buildLotProductDisplayInfo(
     return { ...noCond, uniteVente };
   }
   const packQty = typeof pr.quantity === "string" ? parseFloat(pr.quantity) : Number(pr.quantity);
-  const condN = labelFromRef(pr.ref_conditionnement);
-  const packUs = labelFromRef(pr.ref_sales_unit);
   const packSalesUnitIsUnite = isPackSalesUnitUnite(pr.ref_sales_unit);
-  const condTitre = `${condN !== "—" ? condN : "Colis"} (${formatPackQty(packQty)} ${packUs})`;
+  const condTitre = buildPackagingCondTitre(pr);
   return {
     uniteVente,
     condTitre,

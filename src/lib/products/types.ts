@@ -63,6 +63,8 @@ export type ProductPackagingRow = {
   conditionnement_id: string
   quantity: number
   sales_unit_id: string
+  /** Nom affiché (prioritaire sur ref_conditionnement.label). */
+  nom?: string | null
   created_at: string
   available_for_sale?: boolean
   available_for_purchase?: boolean

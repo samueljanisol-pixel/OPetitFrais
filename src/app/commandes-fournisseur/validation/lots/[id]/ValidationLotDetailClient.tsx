@@ -1294,7 +1294,6 @@ export default function ValidationLotDetailClient({ lotId }: { lotId: string }) 
         open={pickerOpen}
         onClose={() => setPickerOpen(false)}
         supplierId={lot.supplier_id}
-        existingProductIds={lignes.map((l) => l.product_id)}
         alreadyPresentLabel="Déjà dans le lot"
         onSelect={handleProductChosenFromPicker}
       />

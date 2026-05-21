@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useCallback, useEffect, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   Button,
@@ -29,10 +29,13 @@ import {
   ParcoursProductQuantityPanel,
   packArray,
   parcoursShapeFromPickRow,
+  pKeyForProduct,
+  uKeyForProduct,
   useSingleProductParcoursQuantity,
 } from "@/features/commandes-fournisseur/parcours-product-quantity";
 import { useStatusLabels } from "@/lib/statusLabels/useStatusLabels";
 import { DecimalQtyTextField } from "@/components/commandes-fournisseur/DecimalQtyTextField";
+import { commandeLigneKey } from "@/lib/commandes-fournisseur/commande-ligne-key";
 import { buildSoitLine } from "@/lib/commandes-fournisseur/product-display";
 import { clampQtyToApiRange, roundQty2 } from "@/lib/commandes-fournisseur/qty-parse";
 
@@ -210,11 +213,25 @@ export default function RecapClient({ commandeId }: { commandeId: string }) {
   const [lineCommentDraft, setLineCommentDraft] = useState("");
 
   const parcoursPending = pendingProduct ? parcoursShapeFromPickRow(pendingProduct) : null;
-  const { snapshot: condSnapshot, panelProps: condPanelProps } = useSingleProductParcoursQuantity(
-    parcoursPending,
-    condDialogOpen,
-    commande?.supplier_id ?? null,
-  );
+  const seedLignesForPending = useMemo(() => {
+    if (!pendingProduct) {
+      return undefined;
+    }
+    return lignes
+      .filter((l) => l.product_id === pendingProduct.id)
+      .map((l) => ({ product_packaging_id: l.product_packaging_id, qte: l.qte }));
+  }, [lignes, pendingProduct]);
+  const hasExistingLinesForPending = (seedLignesForPending?.length ?? 0) > 0;
+  const {
+    allSnapshots: condAllSnapshots,
+    panelProps: condPanelProps,
+    getQ: condGetQ,
+  } = useSingleProductParcoursQuantity(parcoursPending, condDialogOpen, commande?.supplier_id ?? null, {
+    seedLignes: seedLignesForPending,
+    multiPackaging: true,
+  });
+  const canConfirmCondDialog =
+    condAllSnapshots.length > 0 || hasExistingLinesForPending;
 
   const load = useCallback(async () => {
     setErr(null);
@@ -455,36 +472,87 @@ export default function RecapClient({ commandeId }: { commandeId: string }) {
     [editable, lignes, load, putLignes],
   );
 
-  const addLineFromProduct = useCallback(
-    async (p: ProductPickRow, productPackagingId: string | null, qte: number) => {
+  const newLigneFromPick = useCallback(
+    (p: ProductPickRow, productPackagingId: string | null, qte: number): Ligne => ({
+      id: `tmp-${globalThis.crypto?.randomUUID?.() ?? String(Date.now())}`,
+      product_id: p.id,
+      product_packaging_id: productPackagingId,
+      qte,
+      line_comment: null,
+      hors_fournisseur: false,
+      product: {
+        name: p.name,
+        code: p.code,
+        name_ar: p.name_ar ?? null,
+      },
+    }),
+    [],
+  );
+
+  /** Fusionne unité + conditionnements saisis dans le dialogue (ajout ou mise à jour). */
+  const applyProductQtyFromDialog = useCallback(
+    async (p: ProductPickRow, getQ: (key: string) => number): Promise<boolean> => {
       if (!editable || !commande) {
-        return;
+        return false;
       }
-      const newLine: Ligne = {
-        id: `tmp-${globalThis.crypto?.randomUUID?.() ?? String(Date.now())}`,
-        product_id: p.id,
-        product_packaging_id: productPackagingId,
-        qte,
-        line_comment: null,
-        hors_fournisseur: false,
-        product: {
-          name: p.name,
-          code: p.code,
-          name_ar: p.name_ar ?? null,
-        },
-      };
+      const shape = parcoursShapeFromPickRow(p);
+      const packs = packArray(shape.product_packaging);
+      const managedKeys = new Set<string>([
+        commandeLigneKey(p.id, null),
+        ...packs.map((pk) => commandeLigneKey(p.id, pk.id)),
+      ]);
+      const active: { productPackagingId: string | null; qte: number }[] = [];
+      const uq = getQ(uKeyForProduct(p.id));
+      if (uq > 0) {
+        active.push({ productPackagingId: null, qte: uq });
+      }
+      for (const pkg of packs) {
+        const q = getQ(pKeyForProduct(p.id, pkg.id));
+        if (q > 0) {
+          active.push({ productPackagingId: pkg.id, qte: q });
+        }
+      }
+      const activeKeys = new Set(
+        active.map((a) => commandeLigneKey(p.id, a.productPackagingId)),
+      );
+
+      let next = lignes.filter((l) => {
+        if (l.product_id !== p.id) {
+          return true;
+        }
+        const key = commandeLigneKey(l.product_id, l.product_packaging_id);
+        if (!managedKeys.has(key)) {
+          return true;
+        }
+        return activeKeys.has(key);
+      });
+
+      for (const { productPackagingId, qte } of active) {
+        const key = commandeLigneKey(p.id, productPackagingId);
+        const idx = next.findIndex(
+          (l) => commandeLigneKey(l.product_id, l.product_packaging_id) === key,
+        );
+        if (idx >= 0) {
+          next[idx] = { ...next[idx]!, qte };
+        } else {
+          next = [...next, newLigneFromPick(p, productPackagingId, qte)];
+        }
+      }
+
       setErr(null);
       setSaving(true);
       try {
-        await putLignes([...lignes, newLine]);
+        await putLignes(next);
         await load();
+        return true;
       } catch (e) {
         setErr(e instanceof Error ? e.message : "Erreur");
+        return false;
       } finally {
         setSaving(false);
       }
     },
-    [commande, editable, lignes, load, putLignes],
+    [commande, editable, lignes, load, newLigneFromPick, putLignes],
   );
 
   const handleProductPicked = useCallback(
@@ -499,23 +567,23 @@ export default function RecapClient({ commandeId }: { commandeId: string }) {
         setCondDialogOpen(true);
         return;
       }
-      void addLineFromProduct(p, null, 1);
+      void applyProductQtyFromDialog(p, (k) => (k === uKeyForProduct(p.id) ? 1 : 0));
     },
-    [addLineFromProduct, commande, editable],
+    [applyProductQtyFromDialog, commande, editable],
   );
 
   const handleCondDialogConfirm = useCallback(() => {
-    if (!pendingProduct || !condSnapshot) {
+    if (!pendingProduct || !canConfirmCondDialog) {
       return;
     }
-    void addLineFromProduct(
-      pendingProduct,
-      condSnapshot.product_packaging_id,
-      condSnapshot.qte,
-    );
-    setCondDialogOpen(false);
-    setPendingProduct(null);
-  }, [addLineFromProduct, condSnapshot, pendingProduct]);
+    void (async () => {
+      const ok = await applyProductQtyFromDialog(pendingProduct, condGetQ);
+      if (ok) {
+        setCondDialogOpen(false);
+        setPendingProduct(null);
+      }
+    })();
+  }, [applyProductQtyFromDialog, canConfirmCondDialog, condGetQ, pendingProduct]);
 
   const handleCondDialogClose = useCallback(() => {
     setCondDialogOpen(false);
@@ -821,7 +889,6 @@ export default function RecapClient({ commandeId }: { commandeId: string }) {
           onClose={() => setPickerOpen(false)}
           supplierId={commande.supplier_id}
           magasinId={commande.magasin_id}
-          existingProductIds={lignes.map((l) => l.product_id)}
           onSelect={handleProductPicked}
         />
       ) : null}
@@ -944,11 +1011,11 @@ export default function RecapClient({ commandeId }: { commandeId: string }) {
             type="button"
             variant="contained"
             color="success"
-            disabled={saving || !condSnapshot}
+            disabled={saving || !canConfirmCondDialog}
             onClick={handleCondDialogConfirm}
             sx={{ textTransform: "none" }}
           >
-            Ajouter
+            {hasExistingLinesForPending ? "Enregistrer" : "Ajouter"}
           </Button>
         </DialogActions>
       </Dialog>

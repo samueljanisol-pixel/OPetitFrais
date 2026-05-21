@@ -4,13 +4,17 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Button, Typography } from "@mui/material";
 import { DecimalQtyTextField } from "@/components/commandes-fournisseur/DecimalQtyTextField";
 import { clampQtyToApiRange, roundQty2 } from "@/lib/commandes-fournisseur/qty-parse";
-import { isPackSalesUnitUnite } from "@/lib/commandes-fournisseur/product-display";
+import {
+  isPackSalesUnitUnite,
+  packagingConditionnementLabel,
+} from "@/lib/commandes-fournisseur/product-display";
 import { commandeAllowsUnitProduct } from "@/lib/products/packagingEligibility";
 
 export type PPack = {
   id: string;
   conditionnement_id: string;
   quantity: string | number;
+  nom?: string | null;
   available_for_sale?: boolean | null;
   available_for_purchase?: boolean | null;
   ref_conditionnement?: unknown;
@@ -236,6 +240,37 @@ export function snapshotFromParcoursKeys(
   return q > 0 ? { product_packaging_id: route, qte: q } : null;
 }
 
+/** Toutes les quantités saisies pour un produit (unité + chaque conditionnement). */
+export function snapshotsAllForProduct(
+  product: ParcoursProductForQty,
+  getQ: (key: string) => number,
+): ParcoursProductQtySnapshot[] {
+  const out: ParcoursProductQtySnapshot[] = [];
+  const uq = getQ(uKeyForProduct(product.id));
+  if (uq > 0) {
+    out.push({ product_packaging_id: null, qte: uq });
+  }
+  for (const pkg of packArray(product.product_packaging)) {
+    const q = getQ(pKeyForProduct(product.id, pkg.id));
+    if (q > 0) {
+      out.push({ product_packaging_id: pkg.id, qte: q });
+    }
+  }
+  return out;
+}
+
+export type ParcoursQtySeedLigne = {
+  product_packaging_id: string | null;
+  qte: number;
+};
+
+export type UseSingleProductParcoursQtyOptions = {
+  /** Lignes commande déjà enregistrées pour ce produit (préremplissage récap). */
+  seedLignes?: ParcoursQtySeedLigne[];
+  /** Ne pas effacer les autres conditionnements au changement de route (récap). */
+  multiPackaging?: boolean;
+};
+
 export type ParcoursProductQuantityPanelProps = {
   product: ParcoursProductForQty;
   route: PackRoute;
@@ -289,31 +324,36 @@ export function ParcoursProductQuantityPanel({
           <Button
             type="button"
             size="small"
-            variant={route === "unit" ? "contained" : "outlined"}
+            variant={
+              route === "unit" || getQ(uk) > 0 ? "contained" : "outlined"
+            }
             color="success"
             onClick={() => onSelectRoute("unit")}
             sx={{ textTransform: "none" }}
           >
             À l’unité ({productUnit})
+            {getQ(uk) > 0 && route !== "unit" ? ` · ${formatQtyDisplay(getQ(uk))}` : ""}
           </Button>
         ) : null}
         {packs.map((pkg) => {
-          const cond = refLabel(pkg.ref_conditionnement);
           const pq = packQtyValue(pkg);
           const pkUnit = refLabel(pkg.ref_sales_unit);
-          const shortT = cond !== "—" ? cond : "Colis";
+          const shortT = packagingConditionnementLabel(pkg);
           const spec = `(${formatQtyDisplay(pq)} ${pkUnit})`;
+          const pk = pKeyForProduct(p.id, pkg.id);
+          const qPack = getQ(pk);
           return (
             <Button
               key={pkg.id}
               type="button"
               size="small"
-              variant={route === pkg.id ? "contained" : "outlined"}
+              variant={route === pkg.id || qPack > 0 ? "contained" : "outlined"}
               color="success"
               onClick={() => onSelectRoute(pkg.id)}
               sx={{ textTransform: "none" }}
             >
               {shortT} {spec}
+              {qPack > 0 && route !== pkg.id ? ` · ${formatQtyDisplay(qPack)}` : ""}
             </Button>
           );
         })}
@@ -335,8 +375,7 @@ export function ParcoursProductQuantityPanel({
       ) : (() => {
           const pkg = packs.find((x) => x.id === route);
           if (!pkg) return null;
-          const cond = refLabel(pkg.ref_conditionnement);
-          const condName = cond !== "—" ? cond : "Colis";
+          const condName = packagingConditionnementLabel(pkg);
           const pq = packQtyValue(pkg);
           const pkUnit = refLabel(pkg.ref_sales_unit);
           const v = getQ(pKeyForProduct(p.id, pkg.id));
@@ -359,17 +398,21 @@ export function ParcoursProductQuantityPanel({
   );
 }
 
-/** État local (un produit) aligné sur ParcoursClient : route + quantités exclusives. */
+/** État local (un produit) : route + quantités (exclusives ou multi-conditionnements). */
 export function useSingleProductParcoursQuantity(
   product: ParcoursProductForQty | null,
   open: boolean,
   /** Fournisseur de la commande : conditionnement préféré si-lié dans le référentiel. */
   commandSupplierId: string | null = null,
+  options: UseSingleProductParcoursQtyOptions = {},
 ): {
   snapshot: ParcoursProductQtySnapshot | null;
+  allSnapshots: ParcoursProductQtySnapshot[];
   panelProps: ParcoursProductQuantityPanelProps | null;
   packRoute: PackRoute;
+  getQ: (key: string) => number;
 } {
+  const { seedLignes, multiPackaging = false } = options;
   const [packRoute, setPackRoute] = useState<PackRoute>("unit");
   const [qtes, setQtes] = useState<Record<string, number>>({});
 
@@ -378,11 +421,33 @@ export function useSingleProductParcoursQuantity(
       return;
     }
     const pArr = packArray(product.product_packaging);
-    const initial: PackRoute =
-      pArr.length === 0 ? "unit" : preferredPackRoute(pArr, commandSupplierId ?? null);
+    const packIds = new Set(pArr.map((x) => x.id));
+    const nextQ: Record<string, number> = {};
+    let routeSet = false;
+    let initial: PackRoute = pArr.length === 0 ? "unit" : preferredPackRoute(pArr, commandSupplierId ?? null);
+
+    for (const l of seedLignes ?? []) {
+      if (l.qte <= 0) {
+        continue;
+      }
+      if (l.product_packaging_id && packIds.has(l.product_packaging_id)) {
+        nextQ[pKeyForProduct(product.id, l.product_packaging_id)] = l.qte;
+        if (!routeSet) {
+          initial = l.product_packaging_id;
+          routeSet = true;
+        }
+      } else if (!l.product_packaging_id) {
+        nextQ[uKeyForProduct(product.id)] = l.qte;
+        if (!routeSet) {
+          initial = "unit";
+          routeSet = true;
+        }
+      }
+    }
+
     setPackRoute(initial);
-    setQtes({});
-  }, [product?.id, open, commandSupplierId, product?.allow_unit_in_commande]);
+    setQtes(nextQ);
+  }, [product?.id, open, commandSupplierId, product?.allow_unit_in_commande, seedLignes, multiPackaging]);
 
   const selectRoute = useCallback(
     (route: PackRoute) => {
@@ -396,9 +461,12 @@ export function useSingleProductParcoursQuantity(
       ) {
         return;
       }
+      setPackRoute(route);
+      if (multiPackaging) {
+        return;
+      }
       const pid = product.id;
       const pList = packArray(product.product_packaging);
-      setPackRoute(route);
       setQtes((prev) => {
         const next = { ...prev };
         delete next[uKeyForProduct(pid)];
@@ -408,7 +476,7 @@ export function useSingleProductParcoursQuantity(
         return next;
       });
     },
-    [product],
+    [product, multiPackaging],
   );
 
   const setQForKey = useCallback(
@@ -417,15 +485,24 @@ export function useSingleProductParcoursQuantity(
         return;
       }
       const pid = product.id;
+      const clamped = clampQtyToApiRange(v);
       setQtes((prev) => {
         const next = { ...prev };
+        if (multiPackaging) {
+          if (clamped > 0) {
+            next[key] = clamped;
+          } else {
+            delete next[key];
+          }
+          return next;
+        }
         for (const k of Object.keys(next)) {
           if (k === uKeyForProduct(pid) || (k.startsWith("p:") && k.split(":")[1] === pid)) {
             delete next[k];
           }
         }
-        if (clampQtyToApiRange(v) > 0) {
-          next[key] = clampQtyToApiRange(v);
+        if (clamped > 0) {
+          next[key] = clamped;
         }
         return next;
       });
@@ -438,7 +515,7 @@ export function useSingleProductParcoursQuantity(
         }
       }
     },
-    [product],
+    [product, multiPackaging],
   );
 
   const getQ = useCallback((k: string) => qtes[k] ?? 0, [qtes]);
@@ -449,6 +526,13 @@ export function useSingleProductParcoursQuantity(
     }
     return snapshotFromParcoursKeys(product.id, packRoute, getQ);
   }, [product, packRoute, getQ]);
+
+  const allSnapshots = useMemo(() => {
+    if (!product) {
+      return [];
+    }
+    return snapshotsAllForProduct(product, getQ);
+  }, [product, getQ]);
 
   const panelProps = useMemo((): ParcoursProductQuantityPanelProps | null => {
     if (!product) {
@@ -464,5 +548,5 @@ export function useSingleProductParcoursQuantity(
     };
   }, [product, packRoute, selectRoute, getQ, setQForKey]);
 
-  return { snapshot, panelProps, packRoute };
+  return { snapshot, allSnapshots, panelProps, packRoute, getQ };
 }

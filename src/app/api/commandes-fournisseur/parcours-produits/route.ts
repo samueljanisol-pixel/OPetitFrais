@@ -5,7 +5,7 @@ import { productPhotoPublicUrl } from "@/lib/products/storage";
 import { applyCommandeProductPackagingFilter } from "@/lib/commandes-fournisseur/applyCommandeProductPackagingFilter";
 
 const PACKAGING_FIELDS =
-  "id, conditionnement_id, quantity, available_for_sale, available_for_purchase, ref_conditionnement(label, code, supplier_id), ref_sales_unit(label, code), product_packaging_magasin(magasin_id, sellable, purchasable)";
+  "id, conditionnement_id, quantity, nom, available_for_sale, available_for_purchase, ref_conditionnement(label, code, supplier_id), ref_sales_unit(label, code), product_packaging_magasin(magasin_id, sellable, purchasable)";
 
 /**
  * Liste ordonnée des produits actifs d'un fournisseur (parcours caissier i/N).

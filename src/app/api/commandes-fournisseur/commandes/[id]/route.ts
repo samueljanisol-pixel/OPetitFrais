@@ -7,7 +7,11 @@ import {
   compareByCategoryThenProductName,
   parseCategoryFromRef,
 } from "@/lib/commandes-fournisseur/ligne-category-order";
-import { isPackSalesUnitUnite } from "@/lib/commandes-fournisseur/product-display";
+import {
+  buildPackagingCondTitre,
+  isPackSalesUnitUnite,
+  labelFromRef,
+} from "@/lib/commandes-fournisseur/product-display";
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -66,19 +70,6 @@ export async function GET(_req: Request, ctx: Ctx) {
     ),
   ];
 
-  type LabelRow = { label: string | null };
-  function labelFromRef(raw: unknown): string {
-    const o = (Array.isArray(raw) ? raw[0] : raw) as LabelRow | null | undefined;
-    const t = o?.label?.trim();
-    return t ? String(t) : "—";
-  }
-
-  function formatPackQty(n: number): string {
-    if (!Number.isFinite(n)) return "0";
-    if (Number.isInteger(n)) return String(n);
-    return n.toLocaleString("fr-FR", { maximumFractionDigits: 4 });
-  }
-
   type ProductRow = {
     id: string;
     name: string;
@@ -121,6 +112,7 @@ export async function GET(_req: Request, ctx: Ctx) {
   type PackRow = {
     id: string;
     quantity: string | number;
+    nom?: string | null;
     ref_sales_unit: unknown;
     ref_conditionnement: unknown;
   };
@@ -128,7 +120,7 @@ export async function GET(_req: Request, ctx: Ctx) {
   if (packIds.length > 0) {
     const { data: packs } = await supabase
       .from("product_packaging")
-      .select("id, quantity, ref_sales_unit(label, code), ref_conditionnement(label)")
+      .select("id, quantity, nom, ref_sales_unit(label, code), ref_conditionnement(label)")
       .in("id", packIds);
     packMap = Object.fromEntries((packs ?? []).map((pk) => [pk.id, pk as PackRow]));
   }
@@ -143,12 +135,7 @@ export async function GET(_req: Request, ctx: Ctx) {
       const uniteVente = product ? labelFromRef(product.ref_sales_unit) : "—";
       const pr = packId ? packMap[packId] : null;
       const packQty = pr ? (typeof pr.quantity === "string" ? parseFloat(pr.quantity) : Number(pr.quantity)) : 0;
-      const condN = pr ? labelFromRef(pr.ref_conditionnement) : "—";
-      const packUs = pr ? labelFromRef(pr.ref_sales_unit) : "—";
-      const condTitre =
-        pr && pr.id
-          ? `${condN !== "—" ? condN : "Colis"} (${formatPackQty(packQty)} ${packUs})`
-          : null;
+      const condTitre = pr && pr.id ? buildPackagingCondTitre(pr) : null;
       const cat = product ? parseCategoryFromRef(product.ref_category) : { label: "", sort_order: null };
       const categoryLabel = categoryDisplayLabel(cat);
       return {

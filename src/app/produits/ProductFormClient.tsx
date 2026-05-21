@@ -30,6 +30,8 @@ import { muiSlotPropsDecimalKeypad } from '@/lib/mui/numericTextFieldProps'
 import { insertProductPriceHistoryRow } from '@/lib/products/priceHistory'
 import { useSessionPermissions } from '@/lib/auth/useSessionPermissions'
 import { ProductPackagingSettingsDialog, type MagasinMini } from '@/app/produits/ProductPackagingSettingsDialog'
+import { packagingConditionnementLabel } from '@/lib/commandes-fournisseur/product-display'
+import { hasPackagingCombo, packagingDbErrorMessage } from '@/lib/products/packaging-errors'
 
 type Props = { productId: string | null }
 
@@ -89,6 +91,7 @@ export default function ProductFormClient({ productId }: Props) {
   const [histLoadingMore, setHistLoadingMore] = useState(false)
 
   const [addCond, setAddCond] = useState('')
+  const [addNom, setAddNom] = useState('')
   const [addQty, setAddQty] = useState('1')
   const [addUnit, setAddUnit] = useState('')
   /** Derniers prix enregistrés en base (pour n’ajouter une ligne d’historique que si vente/achat change). */
@@ -364,7 +367,14 @@ export default function ProductFormClient({ productId }: Props) {
       setErr('Conditionnement, quantité > 0 et unité requis.')
       return
     }
+    if (hasPackagingCombo(packs, addCond, addUnit)) {
+      setErr(
+        'Ce conditionnement avec cette unité de vente existe déjà. Modifiez la ligne existante (Paramètres) ou choisissez une autre unité.',
+      )
+      return
+    }
     setErr(null)
+    const nomTrim = addNom.trim()
     const { data: ins, error: e1 } = await supabase
       .from('product_packaging')
       .insert({
@@ -372,11 +382,12 @@ export default function ProductFormClient({ productId }: Props) {
         conditionnement_id: addCond,
         quantity: q,
         sales_unit_id: addUnit,
+        nom: nomTrim.length > 0 ? nomTrim : null,
       } as never)
       .select('id')
       .single()
     if (e1) {
-      setErr(e1.message)
+      setErr(packagingDbErrorMessage(e1))
       return
     }
     const newId = (ins as { id: string } | null)?.id
@@ -387,14 +398,22 @@ export default function ProductFormClient({ productId }: Props) {
         supplier_id: sid,
       } as never)
     }
+    setAddNom('')
     await reloadPacks()
   }
 
   const removePack = async (id: string) => {
     if (readOnly) return
     const pack = packs.find(x => x.id === id)
-    const condLabel =
-      (pack?.ref_conditionnement as RefConditionnementRow | null)?.label?.trim() || 'ce conditionnement'
+    const condLabel = pack
+      ? packagingConditionnementLabel({
+          id: pack.id,
+          quantity: pack.quantity,
+          nom: pack.nom,
+          ref_conditionnement: pack.ref_conditionnement,
+          ref_sales_unit: pack.ref_sales_unit,
+        })
+      : 'ce conditionnement'
     if (
       !window.confirm(
         `Retirer le conditionnement « ${condLabel} » de ce produit ?\n\nLes paramètres vente/achat associés seront supprimés.`,
@@ -675,6 +694,15 @@ export default function ProductFormClient({ productId }: Props) {
               </FormControl>
               <TextField
                 size="small"
+                label="Nom affiché"
+                value={addNom}
+                onChange={e => setAddNom(e.target.value)}
+                placeholder="Optionnel"
+                sx={{ minWidth: 160, flex: '1 1 160px' }}
+                helperText="Prioritaire sur le libellé réf. (commandes, achat…)"
+              />
+              <TextField
+                size="small"
                 label="Quantité"
                 value={addQty}
                 onChange={e => setAddQty(e.target.value)}
@@ -713,7 +741,15 @@ export default function ProductFormClient({ productId }: Props) {
               <tbody>
                 {packs.map(x => (
                   <tr key={x.id} className="border-t border-slate-100">
-                    <td className="p-2">{(x.ref_conditionnement as RefConditionnementRow | null)?.label ?? '—'}</td>
+                    <td className="p-2">
+                      {packagingConditionnementLabel({
+                        id: x.id,
+                        quantity: x.quantity,
+                        nom: x.nom,
+                        ref_conditionnement: x.ref_conditionnement,
+                        ref_sales_unit: x.ref_sales_unit,
+                      })}
+                    </td>
                     <td className="p-2">{String(x.quantity)}</td>
                     <td className="p-2">{(x.ref_sales_unit as RefRow | null)?.label ?? '—'}</td>
                     <td className="p-2">{x.available_for_sale !== false ? 'Oui' : 'Non'}</td>
@@ -740,6 +776,7 @@ export default function ProductFormClient({ productId }: Props) {
               onClose={() => setPackDialog(null)}
               readOnly={readOnly}
               line={packDialog}
+              siblingLines={packDialog ? packs.filter(p => p.id !== packDialog.id) : []}
               magasins={magasins}
               units={units}
               suppliers={sups}

@@ -63,33 +63,20 @@ export default function ParcoursClient({ commandeId }: { commandeId: string }) {
     [packRoute, commandeSupplierId],
   );
 
-  const selectRoute = useCallback(
-    (p: Product, route: PackRoute) => {
-      setPackRoute((prev) => ({ ...prev, [p.id]: route }));
-      setQtes((prev) => {
-        const next = { ...prev };
-        delete next[uKey(p.id)];
-        for (const pkg of packArray(p.product_packaging)) {
-          delete next[pKey(p.id, pkg.id)];
-        }
-        return next;
-      });
-    },
-    [pKey, uKey],
-  );
+  const selectRoute = useCallback((p: Product, route: PackRoute) => {
+    setPackRoute((prev) => ({ ...prev, [p.id]: route }));
+  }, []);
 
-  /** Une seule quantité par produit : soit unité, soit un conditionnement. */
+  /** Plusieurs quantités par produit : à l’unité et/ou plusieurs conditionnements. */
   const setQForKey = useCallback(
     (p: Product, key: string, v: number) => {
+      const clamped = clampQtyToApiRange(v);
       setQtes((prev) => {
         const next = { ...prev };
-        for (const k of Object.keys(next)) {
-          if (k === uKey(p.id) || (k.startsWith("p:") && k.split(":")[1] === p.id)) {
-            delete next[k];
-          }
-        }
-        if (clampQtyToApiRange(v) > 0) {
-          next[key] = clampQtyToApiRange(v);
+        if (clamped > 0) {
+          next[key] = clamped;
+        } else {
+          delete next[key];
         }
         return next;
       });
@@ -158,18 +145,26 @@ export default function ParcoursClient({ commandeId }: { commandeId: string }) {
           const packs = packArray(p.product_packaging);
           const packIds = new Set(packs.map((x) => x.id));
           const listL = byProduct.get(p.id) ?? [];
-          const withQty = listL.find((l) => l.qte > 0) ?? null;
-          if (withQty) {
-            if (withQty.product_packaging_id && packIds.has(withQty.product_packaging_id)) {
-              nextRoute[p.id] = withQty.product_packaging_id;
-              nextQ[pKey(p.id, withQty.product_packaging_id)] = withQty.qte;
-            } else if (withQty.product_packaging_id && !packIds.has(withQty.product_packaging_id)) {
+          let routeSet = false;
+          for (const l of listL) {
+            if (l.qte <= 0) continue;
+            if (l.product_packaging_id && packIds.has(l.product_packaging_id)) {
+              nextQ[pKey(p.id, l.product_packaging_id)] = l.qte;
+              if (!routeSet) {
+                nextRoute[p.id] = l.product_packaging_id;
+                routeSet = true;
+              }
+            } else if (!l.product_packaging_id) {
+              nextQ[uKey(p.id)] = l.qte;
+              if (!routeSet) {
+                nextRoute[p.id] = "unit";
+                routeSet = true;
+              }
+            } else if (!routeSet) {
               nextRoute[p.id] = preferredPackRoute(packs, sid);
-            } else {
-              nextRoute[p.id] = "unit";
-              nextQ[uKey(p.id)] = withQty.qte;
             }
-          } else {
+          }
+          if (!routeSet) {
             nextRoute[p.id] = preferredPackRoute(packs, sid);
           }
         }
@@ -192,21 +187,19 @@ export default function ParcoursClient({ commandeId }: { commandeId: string }) {
       horsFournisseur: boolean;
     }[] = [];
     for (const p of products) {
-      const route = getRoute(p);
-      if (route === "unit") {
-        const uq = clampQtyToApiRange(getQ(uKey(p.id)));
-        if (uq > 0) {
-          out.push({ productId: p.id, productPackagingId: null, qte: uq, horsFournisseur: false });
-        }
-      } else {
-        const q = clampQtyToApiRange(getQ(pKey(p.id, route)));
+      const uq = clampQtyToApiRange(getQ(uKey(p.id)));
+      if (uq > 0) {
+        out.push({ productId: p.id, productPackagingId: null, qte: uq, horsFournisseur: false });
+      }
+      for (const pkg of packArray(p.product_packaging)) {
+        const q = clampQtyToApiRange(getQ(pKey(p.id, pkg.id)));
         if (q > 0) {
-          out.push({ productId: p.id, productPackagingId: route, qte: q, horsFournisseur: false });
+          out.push({ productId: p.id, productPackagingId: pkg.id, qte: q, horsFournisseur: false });
         }
       }
     }
     return out;
-  }, [getQ, getRoute, pKey, products, uKey]);
+  }, [getQ, pKey, products, uKey]);
 
   const sendLignes = useCallback(async () => {
     const lignes = buildLignesPayload();

@@ -185,8 +185,13 @@ export function buildVendeurRecapGroups(
   lignes: RecapLigneInput[],
   vendeurs: VendeurRef[],
   magasinColumns: MagasinMxColumn[],
+  /** Utilisé à la place de « Sans vendeur » si le fournisseur n’a aucun marchand. */
+  supplierLabel?: string,
 ): VendeurRecapGroup[] {
   const vendeurLabel = new Map(vendeurs.map((v) => [v.id, v.label]));
+  const supplierTrim = supplierLabel?.trim() ?? "";
+  const sansVendeurGroupTitle =
+    vendeurs.length === 0 && supplierTrim.length > 0 ? supplierTrim : "Sans vendeur";
   const byVendeur = new Map<string, RecapLigneInput[]>();
 
   for (const l of lignes) {
@@ -226,7 +231,7 @@ export function buildVendeurRecapGroups(
     groups.push({
       vendeurKey: key,
       vendeurLabel:
-        key === SANS_VENDEUR_KEY ? "Sans vendeur" : (vendeurLabel.get(key) ?? "Vendeur"),
+        key === SANS_VENDEUR_KEY ? sansVendeurGroupTitle : (vendeurLabel.get(key) ?? "Vendeur"),
       rows: sorted.map((l) => buildRecapRow(l, magasinColumns)),
     });
   }

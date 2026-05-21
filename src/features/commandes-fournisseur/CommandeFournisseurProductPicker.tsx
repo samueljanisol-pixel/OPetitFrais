@@ -60,8 +60,11 @@ export type CommandeFournisseurProductPickerProps = {
   supplierId: string;
   /** Filtre les colis non achetables pour ce magasin (commande fournisseur). */
   magasinId?: string | null;
-  /** IDs produits déjà présents (commande, lot…). */
-  existingProductIds: Set<string> | readonly string[];
+  /**
+   * IDs produits déjà présents (lot validation/achat : un produit par lot).
+   * Omis ou vide pour une commande : le même produit peut être ajouté avec un autre conditionnement.
+   */
+  existingProductIds?: Set<string> | readonly string[];
   /** Texte badge « présent » (ex. Déjà dans la commande / le lot). */
   alreadyPresentLabel?: string;
   onSelect: (product: ProductPickRow) => void;
@@ -78,7 +81,7 @@ export default function CommandeFournisseurProductPicker({
   alreadyPresentLabel = "Déjà dans la commande",
   onSelect,
 }: CommandeFournisseurProductPickerProps) {
-  const existing = useMemo(() => toIdSet(existingProductIds), [existingProductIds]);
+  const existing = useMemo(() => toIdSet(existingProductIds ?? []), [existingProductIds]);
   /** Par défaut : catalogue limité au fournisseur du contexte (commande / lot). */
   const [limitToDefaultSupplier, setLimitToDefaultSupplier] = useState(true);
   const [q, setQ] = useState("");

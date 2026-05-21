@@ -19,13 +19,16 @@ import {
 import { createSupabaseBrowserClient } from '@/lib/supabase/client'
 import { muiSlotPropsDecimalKeypad } from '@/lib/mui/numericTextFieldProps'
 import type { RefRow, RefVendeurRow } from '@/lib/products/types'
+import { hasPackagingCombo, packagingDbErrorMessage } from '@/lib/products/packaging-errors'
 
 export type MagasinMini = { id: string; code: string; nom: string }
 
 export type PackagingLineForSettings = {
   id: string
+  conditionnement_id: string
   quantity: number
   sales_unit_id: string
+  nom?: string | null
   available_for_sale?: boolean | null
   available_for_purchase?: boolean | null
   product_packaging_magasin?: Array<{ magasin_id: string; sellable: boolean; purchasable: boolean }> | null
@@ -43,6 +46,8 @@ type Props = {
   onClose: () => void
   readOnly: boolean
   line: PackagingLineForSettings | null
+  /** Autres lignes du même produit (détection doublon conditionnement + UdV). */
+  siblingLines?: PackagingLineForSettings[]
   magasins: MagasinMini[]
   units: RefRow[]
   suppliers: RefRow[]
@@ -58,6 +63,7 @@ export function ProductPackagingSettingsDialog({
   onClose,
   readOnly,
   line,
+  siblingLines = [],
   magasins,
   units,
   suppliers,
@@ -73,6 +79,7 @@ export function ProductPackagingSettingsDialog({
   const [creatingVendeur, setCreatingVendeur] = useState(false)
 
   const [quantity, setQuantity] = useState('1')
+  const [packNom, setPackNom] = useState('')
   const [salesUnitId, setSalesUnitId] = useState('')
   const [sale, setSale] = useState(true)
   const [purchase, setPurchase] = useState(true)
@@ -85,6 +92,7 @@ export function ProductPackagingSettingsDialog({
     if (!open || !line) return
     setErr(null)
     setQuantity(String(line.quantity))
+    setPackNom(typeof line.nom === 'string' ? line.nom : '')
     setSalesUnitId(line.sales_unit_id)
     setSale(line.available_for_sale !== false)
     setPurchase(line.available_for_purchase !== false)
@@ -166,20 +174,30 @@ export function ProductPackagingSettingsDialog({
       setErr('Unité de vente requise.')
       return
     }
+    if (
+      hasPackagingCombo(siblingLines, line.conditionnement_id, salesUnitId, line.id)
+    ) {
+      setErr(
+        'Une autre ligne utilise déjà ce conditionnement avec cette unité de vente. Choisissez une autre unité.',
+      )
+      return
+    }
     setSaving(true)
     setErr(null)
     try {
+      const nomTrim = packNom.trim()
       const { error: e1 } = await supabase
         .from('product_packaging')
         .update({
           quantity: q,
           sales_unit_id: salesUnitId,
+          nom: nomTrim.length > 0 ? nomTrim : null,
           available_for_sale: sale,
           available_for_purchase: purchase,
         } as never)
         .eq('id', line.id)
       if (e1) {
-        setErr(e1.message)
+        setErr(packagingDbErrorMessage(e1))
         setSaving(false)
         return
       }
@@ -290,6 +308,16 @@ export function ProductPackagingSettingsDialog({
       <DialogContent>
         {err ? <Typography color="error" variant="body2" className="!mb-2">{err}</Typography> : null}
         <div className="mt-1 flex flex-col gap-3">
+          <TextField
+            fullWidth
+            size="small"
+            label="Nom affiché"
+            value={packNom}
+            onChange={e => setPackNom(e.target.value)}
+            disabled={readOnly}
+            placeholder="Ex. Cagette rouge"
+            helperText="Utilisé partout à la place du libellé du référentiel conditionnement (commandes, achat, export…). Laisser vide pour garder le libellé réf."
+          />
           <div className="flex flex-wrap gap-3">
             <TextField
               size="small"

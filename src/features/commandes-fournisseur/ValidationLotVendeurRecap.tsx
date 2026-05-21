@@ -193,26 +193,31 @@ function VendeurExportBlock({
                     {row.mags.map((v, i) => {
                       const magComment = row.magComments[i]?.trim() ?? "";
                       const qtyStr = formatRecapQtyCell(v);
+                      const hasComment = magComment.length > 0;
                       return (
-                        <TableCell key={`${row.ligneId}-${i}`} align="right" sx={{ verticalAlign: "top" }}>
-                          <Box
-                            sx={{
-                              display: "inline-flex",
-                              flexDirection: "column",
-                              alignItems: "flex-end",
-                              gap: 0.25,
-                            }}
-                          >
-                            {qtyStr ? (
-                              <Typography
-                                variant="body2"
-                                component="span"
-                                sx={{ lineHeight: 1.3, whiteSpace: "nowrap" }}
-                              >
-                                {qtyStr}
-                              </Typography>
-                            ) : null}
-                            {magComment ? (
+                        <TableCell
+                          key={`${row.ligneId}-${i}`}
+                          align="right"
+                          sx={{ verticalAlign: hasComment ? "top" : "middle" }}
+                        >
+                          {hasComment ? (
+                            <Box
+                              sx={{
+                                display: "inline-flex",
+                                flexDirection: "column",
+                                alignItems: "flex-end",
+                                gap: 0.25,
+                              }}
+                            >
+                              {qtyStr ? (
+                                <Typography
+                                  variant="body2"
+                                  component="span"
+                                  sx={{ lineHeight: 1.3, whiteSpace: "nowrap" }}
+                                >
+                                  {qtyStr}
+                                </Typography>
+                              ) : null}
                               <Typography
                                 variant="caption"
                                 component="div"
@@ -227,12 +232,20 @@ function VendeurExportBlock({
                               >
                                 {magComment}
                               </Typography>
-                            ) : null}
-                          </Box>
+                            </Box>
+                          ) : (
+                            <Typography
+                              variant="body2"
+                              component="span"
+                              sx={{ lineHeight: 1.3, whiteSpace: "nowrap" }}
+                            >
+                              {qtyStr}
+                            </Typography>
+                          )}
                         </TableCell>
                       );
                     })}
-                    <TableCell align="right" sx={{ fontWeight: 700 }}>
+                    <TableCell align="right" sx={{ fontWeight: 700, verticalAlign: "middle" }}>
                       {formatRecapQtyCell(row.total)}
                     </TableCell>
                     <TableCell align="left">
@@ -288,8 +301,8 @@ export default function ValidationLotVendeurRecap({
   const magasinColumns = useMemo(() => buildMagasinMxColumnsFromLot(lot), [lot]);
   const lotCommentaire = typeof lot.commentaire === "string" ? lot.commentaire : null;
   const groups = useMemo(
-    () => buildVendeurRecapGroups(lignes, vendeurs, magasinColumns),
-    [lignes, vendeurs, magasinColumns],
+    () => buildVendeurRecapGroups(lignes, vendeurs, magasinColumns, supplierLabel),
+    [lignes, vendeurs, magasinColumns, supplierLabel],
   );
 
   if (groups.length === 0) {

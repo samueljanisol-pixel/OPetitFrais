@@ -38,7 +38,7 @@ Sur `/commandes-fournisseur/validation/lots/[id]`, lorsque le statut est **`pret
 2. **Récap groupé par vendeur** en dessous (`ValidationLotVendeurRecap`) :
 
 - Colonnes magasins en **codes MXX** (ex. M01, M12) — pas le nom du magasin (`magasinCodeMx`).
-- Tableau par vendeur : **Produit** (libellé français + **nom arabe** `product.name_ar` si renseigné), quantités par MXX, **Total**, **UdV / cond.** (avec « Soit … » si conditionnement).
+- Tableau par vendeur : **Produit** (libellé français + **nom arabe** `product.name_ar` si renseigné), quantités par MXX, **Total**, **UdV / cond.** (avec « Soit … » si conditionnement). Si le fournisseur n’a **aucun marchand** (`vendeurs` vide), le groupe sans `vendeur_id` est intitulé avec le **nom du fournisseur** (plus « Sans vendeur »).
 - **Date de commande** dans l’image exportée et dans le nom du fichier (`validated_at` ou `created_at` des commandes incluses ; plage si plusieurs jours).
 - **Commentaires** : `line_comment` dans la **cellule quantité** du magasin (bas à droite, souvent en arabe, `dir="rtl"`). Optionnel : commentaire du lot en bas de l’image. Noms produit : **arabe puis français**, alignés à droite dans la colonne Produit.
 - Bouton **Exporter en image** par vendeur : capture PNG (`html2canvas`) puis **partage natif** (`navigator.share` avec fichier) sur mobile, sinon **téléchargement** du PNG — pour envoi WhatsApp, e-mail, SMS, etc. Nom de fichier du type `commande-2026-05-19-{fournisseur}-{vendeur}.png`.
@@ -53,14 +53,28 @@ Les lignes produit du lot sont **triées comme au récap commande** (`ref_catego
 
 Comme au **récap saisie** : si la ligne est en conditionnement (`product_packaging_id`), la colonne affiche le libellé colis (`condTitre`, ex. « Carton (12 Kg) ») et éventuellement **« Soit … »** sous le total ; sinon l’**unité de vente** du produit (ex. Kg).
 
-- À la **création du lot**, `product_packaging_id` est repris des commandes incluses lorsque toutes les lignes saisie du produit ont le **même** conditionnement.
-- Pour les lots déjà créés sans cette FK, le **GET lot** complète depuis les lignes `commande_fournisseur_ligne` (même règle d’unicité).
+- À la **création du lot**, `product_packaging_id` est repris de chaque ligne de commande (agrégation par produit **et** conditionnement).
+- Pour les lots déjà créés sans cette FK, le **GET lot** complète depuis les lignes `commande_fournisseur_ligne` lorsqu’un seul conditionnement distinct existe pour le produit.
 - Sous chaque **qté par magasin** (matrice) : ligne **« Soit … »** en petit lorsque la ligne est en conditionnement (comme le récap saisie).
 - **Suppression d’une ligne produit** (lot brouillon) : dialogue de confirmation avant `PATCH` `removeLotLigneId`.
 
 ## Récap commande (`saisie/[id]/recap`)
 
 Sur chaque ligne : grille fixe **−1 | qté (4,25 rem) | unité (2,25 rem réservée) | +1** — champs qté alignés verticalement ; libellé **conditionnement** (`condTitre`) au-dessus des boutons ± ; **« Soit … »** en 2ᵉ rangée sous la qté (`col-span-2`, une seule ligne).
+
+### Plusieurs conditionnements pour un même produit
+
+Une commande peut contenir **plusieurs lignes** pour le même `product_id` si les `product_packaging_id` diffèrent (ou une ligne à l’unité et une ou plusieurs lignes en colis).
+
+- **Récap** : « Ajouter un produit » ne bloque plus tout le produit ; le dialogue **préremplit** les quantités déjà en commande pour chaque conditionnement et permet de les **modifier** (bouton « Enregistrer » si le produit est déjà présent).
+- **Parcours** : chaque conditionnement (et l’unité) garde sa quantité ; changer de bouton ne réinitialise pas les autres ; à l’enregistrement, toutes les clés avec qté &gt; 0 sont envoyées.
+- **API** `PUT …/commandes/[id]/lignes` : rejet 400 si deux lignes actives partagent le même couple produit / conditionnement.
+
+### Création de lot (consolidation)
+
+À la création, chaque ligne de commande est agrégée par **(produit, conditionnement)** : une ligne de lot par couple, avec `product_packaging_id` repris de la saisie. Plusieurs conditionnements du même produit → plusieurs lignes dans le lot (migration `20260625120000_lot_ligne_unique_product_packaging.sql`).
+
+Ajout manuel au lot (brouillon / achat) : refus uniquement si le **même conditionnement** est déjà présent.
 
 ### Commentaire par ligne (`line_comment`)
 

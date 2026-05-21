@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { requireAnyApiPermission } from "@/lib/auth/require-permission-api";
+import { normalizeProductPackagingId } from "@/lib/commandes-fournisseur/commande-ligne-key";
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -77,25 +78,24 @@ export async function PATCH(req: Request, ctx: Ctx) {
         { status: 409 },
       );
     }
-    const { data: existing, error: exErr } = await supabase
+    const packagingId = normalizeProductPackagingId(body.productPackagingId);
+    let exQuery = supabase
       .from("commande_fournisseur_ligne")
       .select("id")
       .eq("commande_id", commandeId)
-      .eq("product_id", productId)
-      .maybeSingle();
+      .eq("product_id", productId);
+    if (packagingId) {
+      exQuery = exQuery.eq("product_packaging_id", packagingId);
+    } else {
+      exQuery = exQuery.is("product_packaging_id", null);
+    }
+    const { data: existing, error: exErr } = await exQuery.maybeSingle();
     if (exErr) {
       return NextResponse.json({ error: exErr.message }, { status: 500 });
     }
     if (existing) {
       ligneId = (existing as { id: string }).id;
     } else {
-      let packagingId: string | null = null;
-      if (body.productPackagingId !== undefined && body.productPackagingId !== null) {
-        const raw = String(body.productPackagingId).trim();
-        if (raw.length > 0) {
-          packagingId = raw;
-        }
-      }
       const { data: inserted, error: insErr } = await supabase
         .from("commande_fournisseur_ligne")
         .insert({
