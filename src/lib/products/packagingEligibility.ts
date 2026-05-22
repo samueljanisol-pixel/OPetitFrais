@@ -48,7 +48,12 @@ export function effectivePurchasableForMagasin(
   return base;
 }
 
-export type ProductPackagingForFilter = {
+import {
+  packagingMatchesCommandeSupplier,
+  type PackagingWithSupplierLinks,
+} from "@/lib/products/packagingSupplierMatch";
+
+export type ProductPackagingForFilter = PackagingWithSupplierLinks & {
   id: string;
   available_for_sale?: boolean | null;
   available_for_purchase?: boolean | null;
@@ -58,10 +63,14 @@ export type ProductPackagingForFilter = {
 export function filterPackagingForCommandePurchase<T extends ProductPackagingForFilter>(
   packs: T[] | null | undefined,
   magasinId: string | null | undefined,
+  commandSupplierId?: string | null,
+  productSupplierId?: string | null,
 ): T[] {
   const list = packs ?? [];
-  return list.filter((pp) =>
-    effectivePurchasableForMagasin(pp.available_for_purchase, magasinId, pp.product_packaging_magasin),
+  return list.filter(
+    (pp) =>
+      effectivePurchasableForMagasin(pp.available_for_purchase, magasinId, pp.product_packaging_magasin) &&
+      packagingMatchesCommandeSupplier(pp, commandSupplierId, productSupplierId),
   );
 }
 

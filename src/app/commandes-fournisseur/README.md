@@ -76,6 +76,16 @@ Une commande peut contenir **plusieurs lignes** pour le même `product_id` si le
 
 Ajout manuel au lot (brouillon / achat) : refus uniquement si le **même conditionnement** est déjà présent.
 
+### Conditionnements et fournisseur de la commande
+
+Pour une commande du fournisseur **F**, les colis affichés (parcours, récap, recherche produit) incluent :
+
+- tous les colis achetables si le **produit** est déjà rattaché à **F** (`product.supplier_id`) ;
+- sinon les colis dont le **conditionnement réf.** (`ref_conditionnement.supplier_id`) ou les liaisons **`product_packaging_supplier`** ciblent **F** ;
+- les colis « génériques » (pas de fournisseur sur le réf. ni liaison explicite).
+
+Le **parcours** liste aussi les produits actifs qui ont au moins un tel colis pour **F**, même si `product.supplier_id` est différent, ainsi que les produits déjà présents sur la commande.
+
 ### Commentaire par ligne (`line_comment`)
 
 - Champ **`commande_fournisseur_ligne.line_comment`** (texte libre).

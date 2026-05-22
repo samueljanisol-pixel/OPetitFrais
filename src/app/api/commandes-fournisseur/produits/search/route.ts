@@ -2,14 +2,12 @@ import { NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { requireAnyApiPermission } from "@/lib/auth/require-permission-api";
 import { applyCommandeProductPackagingFilter } from "@/lib/commandes-fournisseur/applyCommandeProductPackagingFilter";
+import { COMMANDE_PACKAGING_SELECT } from "@/lib/commandes-fournisseur/commande-packaging-fields";
 
 const MAX_Q = 100;
 const MAX_RESULTS = 100;
 
 const PERMS = ["commandes_fournisseur.saisie", "commandes_fournisseur.consolidation", "commandes_fournisseur.achat"];
-
-const PACKAGING_FIELDS =
-  "id, conditionnement_id, quantity, nom, available_for_sale, available_for_purchase, ref_conditionnement(label, code, supplier_id), ref_sales_unit(label, code), product_packaging_magasin(magasin_id, sellable, purchasable)";
 
 function escapeIlikeFragment(s: string): string {
   return s.replace(/\\/g, "\\\\").replace(/%/g, "\\%").replace(/_/g, "\\_");
@@ -54,7 +52,7 @@ export async function GET(req: Request) {
   let qb = supabase
     .from("product")
     .select(
-      `id, code, name, name_ar, category_id, supplier_id, allow_unit_in_commande, ref_supplier(code, label), ref_category(label, sort_order), ref_sales_unit(label, code), product_packaging(${PACKAGING_FIELDS})`,
+      `id, code, name, name_ar, category_id, supplier_id, allow_unit_in_commande, ref_supplier(code, label), ref_category(label, sort_order), ref_sales_unit(label, code), product_packaging(${COMMANDE_PACKAGING_SELECT})`,
     )
     .eq("active", true);
 
@@ -99,9 +97,12 @@ export async function GET(req: Request) {
     return (a as { name: string }).name.localeCompare((b as { name: string }).name, "fr");
   });
 
-  const filtered = magasinId
-    ? applyCommandeProductPackagingFilter(sorted as Parameters<typeof applyCommandeProductPackagingFilter>[0], magasinId)
-    : sorted;
+  const commandSupplierId = supplierId.length > 0 ? supplierId : null;
+  const filtered = applyCommandeProductPackagingFilter(
+    sorted as Parameters<typeof applyCommandeProductPackagingFilter>[0],
+    magasinId,
+    commandSupplierId,
+  );
 
   return NextResponse.json({ products: filtered, total: filtered.length });
 }

@@ -175,7 +175,11 @@ export default function ParcoursClient({ commandeId }: { commandeId: string }) {
     }
     setRefreshingProduct(true);
     try {
-      const q = new URLSearchParams({ supplierId: commandeSupplierId, productId: pid });
+      const q = new URLSearchParams({
+        supplierId: commandeSupplierId,
+        productId: pid,
+        commandeId,
+      });
       const mid = commandeMagasinId?.trim();
       if (mid) {
         q.set("magasinId", mid);
@@ -222,7 +226,7 @@ export default function ParcoursClient({ commandeId }: { commandeId: string }) {
         setCommandeSupplierId(sid);
         const magasinId = j1.commande?.magasin_id?.trim() ?? "";
         setCommandeMagasinId(magasinId.length > 0 ? magasinId : null);
-        const q = new URLSearchParams({ supplierId: sid });
+        const q = new URLSearchParams({ supplierId: sid, commandeId });
         if (magasinId) q.set("magasinId", magasinId);
         const r2 = await fetch(`/api/commandes-fournisseur/parcours-produits?${q.toString()}`, {
           credentials: "include",
@@ -403,10 +407,32 @@ export default function ParcoursClient({ commandeId }: { commandeId: string }) {
           variant="body2"
           component="p"
           className="w-full text-center tabular-nums !text-[0.9375rem] sm:!text-base"
-          sx={{ fontWeight: 600 }}
+          sx={{ fontWeight: 600, px: "6.5rem" }}
         >
           {posLabel}
         </Typography>
+        {!permLoading && canOpenProductFiche ? (
+          <Button
+            component={AppLink}
+            href={`/produits/${current.id}?returnTo=${encodeURIComponent(parcoursReturnTo)}`}
+            variant="outlined"
+            size="small"
+            startIcon={<DescriptionOutlinedIcon fontSize="small" />}
+            disabled={refreshingProduct}
+            sx={{
+              textTransform: "none",
+              position: "absolute",
+              right: 0,
+              top: "50%",
+              transform: "translateY(-50%)",
+              zIndex: 1,
+              minWidth: 0,
+              px: 1,
+            }}
+          >
+            {refreshingProduct ? "…" : "Fiche produit"}
+          </Button>
+        ) : null}
       </div>
 
       <div className="flex min-h-0 flex-1 flex-col">
@@ -440,22 +466,7 @@ export default function ParcoursClient({ commandeId }: { commandeId: string }) {
         >
           {current.name}
         </Typography>
-        <ProductArabicSubtitle nameAr={current.name_ar} centered className="!mb-2" />
-        {!permLoading && canOpenProductFiche ? (
-          <div className="!mb-3 flex justify-center">
-            <Button
-              component={AppLink}
-              href={`/produits/${current.id}?returnTo=${encodeURIComponent(parcoursReturnTo)}`}
-              variant="outlined"
-              size="small"
-              startIcon={<DescriptionOutlinedIcon fontSize="small" />}
-              disabled={refreshingProduct}
-              sx={{ textTransform: "none" }}
-            >
-              {refreshingProduct ? "Mise à jour…" : "Fiche produit"}
-            </Button>
-          </div>
-        ) : null}
+        <ProductArabicSubtitle nameAr={current.name_ar} centered className="!mb-3" />
 
         <div className="flex min-h-[min(17rem,42dvh)] flex-1 flex-col gap-3 pb-2">
           {currentBlocks}

@@ -16,14 +16,18 @@ export type ProductWithPackagingForCommande = {
 export function applyCommandeProductPackagingFilter<T extends ProductWithPackagingForCommande>(
   products: T[],
   magasinId: string | null | undefined,
+  commandSupplierId?: string | null,
 ): T[] {
   const out: T[] = [];
   for (const row of products) {
     const raw = row.product_packaging;
     const packs = Array.isArray(raw) ? raw : raw ? [raw] : [];
+    const productSupplierId = (row as { supplier_id?: string | null }).supplier_id ?? null;
     const eligible = filterPackagingForCommandePurchase(
       packs as Parameters<typeof filterPackagingForCommandePurchase>[0],
       magasinId ?? null,
+      commandSupplierId,
+      productSupplierId,
     );
     const allowUnit = commandeAllowsUnitProduct(row.allow_unit_in_commande);
     if (eligible.length === 0 && !allowUnit) continue;

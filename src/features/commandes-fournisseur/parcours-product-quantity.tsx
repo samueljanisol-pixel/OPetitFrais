@@ -9,6 +9,7 @@ import {
   packagingConditionnementLabel,
 } from "@/lib/commandes-fournisseur/product-display";
 import { commandeAllowsUnitProduct } from "@/lib/products/packagingEligibility";
+import { conditionnementSupplierId } from "@/lib/products/packagingSupplierMatch";
 
 export type PPack = {
   id: string;
@@ -57,13 +58,6 @@ export function formatQtyDisplay(n: number): string {
 
 export function packQtyValue(pkg: PPack): number {
   return typeof pkg.quantity === "string" ? parseFloat(pkg.quantity) : Number(pkg.quantity);
-}
-
-/** UUID fournisseur rattaché au conditionnement référentiel, si défini */
-export function conditionnementSupplierId(ref: unknown): string | null {
-  const o = (Array.isArray(ref) ? ref[0] : ref) as { supplier_id?: string | null } | null | undefined;
-  const id = o?.supplier_id;
-  return typeof id === "string" && id.length > 0 ? id : null;
 }
 
 /**
