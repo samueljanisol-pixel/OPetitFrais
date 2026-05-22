@@ -25,16 +25,24 @@ export async function GET(req: Request) {
   }
 
   const magasinId = url.searchParams.get("magasinId")?.trim() || null;
+  const productId = url.searchParams.get("productId")?.trim() || null;
 
   const supabase = await createSupabaseServerClient();
-  const { data: products, error } = await supabase
+  let query = supabase
     .from("product")
     .select(
       `id, code, name, name_ar, category_id, supplier_id, image_path, allow_unit_in_commande, ref_category(label, sort_order), ref_sales_unit(label, code), product_packaging(${PACKAGING_FIELDS})`,
     )
     .eq("supplier_id", supplierId)
-    .eq("active", true)
-    .order("name", { ascending: true });
+    .eq("active", true);
+
+  if (productId) {
+    query = query.eq("id", productId);
+  } else {
+    query = query.order("name", { ascending: true });
+  }
+
+  const { data: products, error } = await query;
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
@@ -72,6 +80,14 @@ export async function GET(req: Request) {
     const photoUrl = productPhotoPublicUrl(supabase, image_path ?? null);
     return { ...(row as object), photoUrl };
   });
+
+  if (productId) {
+    const one = withPhotos[0] ?? null;
+    if (!one) {
+      return NextResponse.json({ error: "Produit introuvable" }, { status: 404 });
+    }
+    return NextResponse.json({ product: one });
+  }
 
   return NextResponse.json({ products: withPhotos, total: withPhotos.length });
 }

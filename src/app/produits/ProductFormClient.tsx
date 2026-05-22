@@ -33,7 +33,8 @@ import { ProductPackagingSettingsDialog, type MagasinMini } from '@/app/produits
 import { packagingConditionnementLabel } from '@/lib/commandes-fournisseur/product-display'
 import { hasPackagingCombo, packagingDbErrorMessage } from '@/lib/products/packaging-errors'
 
-type Props = { productId: string | null }
+type Props = { productId: string | null; /** Retour après enregistrement (ex. parcours commande). */
+  returnTo?: string | null }
 
 const PACKAGING_SELECT =
   '*, ref_conditionnement(*), ref_sales_unit(*), product_packaging_magasin(magasin_id, sellable, purchasable), product_packaging_supplier(supplier_id), product_packaging_vendeur(vendeur_id)'
@@ -53,7 +54,7 @@ const num = (s: string) => {
   return Number.isFinite(n) ? n : null
 }
 
-export default function ProductFormClient({ productId }: Props) {
+export default function ProductFormClient({ productId, returnTo = null }: Props) {
   const isNew = productId == null
   const supabase = useMemo(() => createSupabaseBrowserClient(), [])
   const router = useRouter()
@@ -326,6 +327,9 @@ export default function ProductFormClient({ productId }: Props) {
     }
     await loadProduct()
     setSaving(false)
+    if (returnTo) {
+      router.push(returnTo)
+    }
   }
 
   const onFile = async (f: File | null) => {
@@ -440,8 +444,8 @@ export default function ProductFormClient({ productId }: Props) {
     <div className="min-h-screen bg-gradient-to-br from-emerald-50 via-white to-rose-50 p-4 md:p-8">
       <div className="mx-auto max-w-3xl">
         <div className="mb-2 flex flex-col gap-1">
-          <BackNavButton href="/produits" size="small">
-            Liste produits
+          <BackNavButton href={returnTo ?? '/produits'} size="small">
+            {returnTo ? 'Retour au parcours' : 'Liste produits'}
           </BackNavButton>
           <Typography variant="h4" component="h1" sx={{ fontWeight: 600, color: '#0f172a' }}>
             {isNew ? 'Nouveau produit' : p.name?.trim() || (p.code != null ? `Produit ${p.code}` : 'Fiche produit')}

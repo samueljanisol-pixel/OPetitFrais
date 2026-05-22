@@ -1,11 +1,12 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import Image from "next/image";
 import { Box, Button, Typography } from "@mui/material";
 import ChevronLeftIcon from "@mui/icons-material/ChevronLeft";
 import ChevronRightIcon from "@mui/icons-material/ChevronRight";
+import DescriptionOutlinedIcon from "@mui/icons-material/DescriptionOutlined";
 import AppLink from "@/components/AppLink";
 import ProductArabicSubtitle from "@/components/ProductArabicSubtitle";
 import {
@@ -18,6 +19,16 @@ import {
   pKeyForProduct,
   uKeyForProduct,
 } from "@/features/commandes-fournisseur/parcours-product-quantity";
+import { useSessionPermissions } from "@/lib/auth/useSessionPermissions";
+import {
+  buildParcoursQtesFromLignes,
+  findParcoursProductIndex,
+} from "@/lib/commandes-fournisseur/build-parcours-qtes-from-lignes";
+import {
+  clearParcoursDraft,
+  loadParcoursDraft,
+  saveParcoursDraft,
+} from "@/lib/commandes-fournisseur/parcours-draft-storage";
 import { clampQtyToApiRange } from "@/lib/commandes-fournisseur/qty-parse";
 import { commandeAllowsUnitProduct } from "@/lib/products/packagingEligibility";
 
@@ -33,6 +44,9 @@ type LigneIn = { product_id: string; product_packaging_id: string | null; qte: n
 
 export default function ParcoursClient({ commandeId }: { commandeId: string }) {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const { loading: permLoading, can, canWriteProducts } = useSessionPermissions();
+  const canOpenProductFiche = canWriteProducts || can("produits.read");
   const [products, setProducts] = useState<Product[]>([]);
   const [err, setErr] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -40,7 +54,13 @@ export default function ParcoursClient({ commandeId }: { commandeId: string }) {
   const [qtes, setQtes] = useState<Record<string, number>>({});
   const [packRoute, setPackRoute] = useState<Record<string, PackRoute>>({});
   const [commandeSupplierId, setCommandeSupplierId] = useState<string | null>(null);
+  const [commandeMagasinId, setCommandeMagasinId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [refreshingProduct, setRefreshingProduct] = useState(false);
+  const indexRef = useRef(0);
+  const productsRef = useRef<Product[]>([]);
+  indexRef.current = index;
+  productsRef.current = products;
 
   const n = products.length;
   const current = n > 0 && index < n ? products[index] : null;
@@ -92,6 +112,89 @@ export default function ParcoursClient({ commandeId }: { commandeId: string }) {
     [uKey],
   );
 
+  const parcoursReturnTo = useMemo(() => {
+    const base = `/commandes-fournisseur/saisie/${commandeId}/parcours`;
+    if (!current?.id) {
+      return base;
+    }
+    return `${base}?productId=${encodeURIComponent(current.id)}`;
+  }, [commandeId, current?.id]);
+
+  const persistDraft = useCallback(() => {
+    const list = productsRef.current;
+    const idx = indexRef.current;
+    const pid = list[idx]?.id ?? null;
+    saveParcoursDraft(commandeId, {
+      qtes,
+      packRoute,
+      index: idx,
+      focusProductId: pid,
+    });
+  }, [commandeId, packRoute, qtes]);
+
+  const reconcileProductInState = useCallback(
+    (updated: Product) => {
+      setProducts((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
+      const packs = packArray(updated.product_packaging);
+      const validKeys = new Set([
+        uKey(updated.id),
+        ...packs.map((pk) => pKey(updated.id, pk.id)),
+      ]);
+      setQtes((prev) => {
+        const next = { ...prev };
+        for (const k of Object.keys(next)) {
+          if (k === uKey(updated.id) || (k.startsWith("p:") && k.split(":")[1] === updated.id)) {
+            if (!validKeys.has(k)) {
+              delete next[k];
+            }
+          }
+        }
+        return next;
+      });
+      setPackRoute((prev) => {
+        const cur = prev[updated.id];
+        if (cur === "unit") {
+          if (commandeAllowsUnitProduct(updated.allow_unit_in_commande) || packs.length === 0) {
+            return prev;
+          }
+        } else if (typeof cur === "string" && packs.some((pk) => pk.id === cur)) {
+          return prev;
+        }
+        const nextRoute =
+          packs.length === 0 ? "unit" : preferredPackRoute(packs, commandeSupplierId);
+        return { ...prev, [updated.id]: nextRoute };
+      });
+    },
+    [commandeSupplierId, pKey, uKey],
+  );
+
+  const refreshCurrentProduct = useCallback(async () => {
+    const pid = productsRef.current[indexRef.current]?.id;
+    if (!pid || !commandeSupplierId) {
+      return;
+    }
+    setRefreshingProduct(true);
+    try {
+      const q = new URLSearchParams({ supplierId: commandeSupplierId, productId: pid });
+      const mid = commandeMagasinId?.trim();
+      if (mid) {
+        q.set("magasinId", mid);
+      }
+      const res = await fetch(`/api/commandes-fournisseur/parcours-produits?${q.toString()}`, {
+        credentials: "include",
+      });
+      const j = (await res.json()) as { product?: Product; error?: string };
+      if (!res.ok || !j.product) {
+        return;
+      }
+      reconcileProductInState(j.product);
+    } catch {
+      /* ignore */
+    } finally {
+      setRefreshingProduct(false);
+    }
+  }, [commandeMagasinId, commandeSupplierId, reconcileProductInState]);
+
   useEffect(() => {
     (async () => {
       setErr(null);
@@ -118,6 +221,7 @@ export default function ParcoursClient({ commandeId }: { commandeId: string }) {
         }
         setCommandeSupplierId(sid);
         const magasinId = j1.commande?.magasin_id?.trim() ?? "";
+        setCommandeMagasinId(magasinId.length > 0 ? magasinId : null);
         const q = new URLSearchParams({ supplierId: sid });
         if (magasinId) q.set("magasinId", magasinId);
         const r2 = await fetch(`/api/commandes-fournisseur/parcours-produits?${q.toString()}`, {
@@ -131,53 +235,52 @@ export default function ParcoursClient({ commandeId }: { commandeId: string }) {
         const list = j2.products ?? [];
         setProducts(list);
 
-        const byProduct = new Map<string, LigneIn[]>();
-        for (const l of j1.lignes ?? []) {
-          const arr = byProduct.get(l.product_id) ?? [];
-          arr.push(l);
-          byProduct.set(l.product_id, arr);
-        }
+        const fromDb = buildParcoursQtesFromLignes(list, j1.lignes ?? [], sid);
+        const draft = loadParcoursDraft(commandeId);
+        const mergedQ = { ...fromDb.qtes, ...(draft?.qtes ?? {}) };
+        const mergedRoute = { ...fromDb.packRoute, ...(draft?.packRoute ?? {}) };
+        setQtes(mergedQ);
+        setPackRoute(mergedRoute);
 
-        const nextRoute: Record<string, PackRoute> = {};
-        const nextQ: Record<string, number> = {};
-
-        for (const p of list) {
-          const packs = packArray(p.product_packaging);
-          const packIds = new Set(packs.map((x) => x.id));
-          const listL = byProduct.get(p.id) ?? [];
-          let routeSet = false;
-          for (const l of listL) {
-            if (l.qte <= 0) continue;
-            if (l.product_packaging_id && packIds.has(l.product_packaging_id)) {
-              nextQ[pKey(p.id, l.product_packaging_id)] = l.qte;
-              if (!routeSet) {
-                nextRoute[p.id] = l.product_packaging_id;
-                routeSet = true;
-              }
-            } else if (!l.product_packaging_id) {
-              nextQ[uKey(p.id)] = l.qte;
-              if (!routeSet) {
-                nextRoute[p.id] = "unit";
-                routeSet = true;
-              }
-            } else if (!routeSet) {
-              nextRoute[p.id] = preferredPackRoute(packs, sid);
-            }
-          }
-          if (!routeSet) {
-            nextRoute[p.id] = preferredPackRoute(packs, sid);
-          }
+        const urlProductId = searchParams.get("productId")?.trim() || null;
+        const focusId = urlProductId || draft?.focusProductId || null;
+        let nextIndex = 0;
+        const byProduct = findParcoursProductIndex(list, focusId);
+        if (byProduct >= 0) {
+          nextIndex = byProduct;
+        } else if (
+          draft &&
+          typeof draft.index === "number" &&
+          draft.index >= 0 &&
+          draft.index < list.length
+        ) {
+          nextIndex = draft.index;
         }
-        setPackRoute(nextRoute);
-        setQtes(nextQ);
-        setIndex(0);
+        setIndex(nextIndex);
       } catch (e) {
         setErr(e instanceof Error ? e.message : "Erreur");
       } finally {
         setLoading(false);
       }
     })();
-  }, [commandeId, router, pKey, uKey]);
+  }, [commandeId, router, searchParams]);
+
+  useEffect(() => {
+    if (loading || products.length === 0) {
+      return;
+    }
+    persistDraft();
+  }, [loading, persistDraft, products.length]);
+
+  useEffect(() => {
+    const onVisible = () => {
+      if (document.visibilityState === "visible") {
+        void refreshCurrentProduct();
+      }
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => document.removeEventListener("visibilitychange", onVisible);
+  }, [refreshCurrentProduct]);
 
   const buildLignesPayload = useCallback(() => {
     const out: {
@@ -220,6 +323,7 @@ export default function ParcoursClient({ commandeId }: { commandeId: string }) {
     setSaving(true);
     try {
       await sendLignes();
+      clearParcoursDraft(commandeId);
       void router.push(`/commandes-fournisseur/saisie/${commandeId}/recap`);
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Erreur");
@@ -336,7 +440,22 @@ export default function ParcoursClient({ commandeId }: { commandeId: string }) {
         >
           {current.name}
         </Typography>
-        <ProductArabicSubtitle nameAr={current.name_ar} centered className="!mb-3" />
+        <ProductArabicSubtitle nameAr={current.name_ar} centered className="!mb-2" />
+        {!permLoading && canOpenProductFiche ? (
+          <div className="!mb-3 flex justify-center">
+            <Button
+              component={AppLink}
+              href={`/produits/${current.id}?returnTo=${encodeURIComponent(parcoursReturnTo)}`}
+              variant="outlined"
+              size="small"
+              startIcon={<DescriptionOutlinedIcon fontSize="small" />}
+              disabled={refreshingProduct}
+              sx={{ textTransform: "none" }}
+            >
+              {refreshingProduct ? "Mise à jour…" : "Fiche produit"}
+            </Button>
+          </div>
+        ) : null}
 
         <div className="flex min-h-[min(17rem,42dvh)] flex-1 flex-col gap-3 pb-2">
           {currentBlocks}
