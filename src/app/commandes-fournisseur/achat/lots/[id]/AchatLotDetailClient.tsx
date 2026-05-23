@@ -24,9 +24,9 @@ import {
 } from "@mui/material";
 import { alpha, useTheme } from "@mui/material/styles";
 import useMediaQuery from "@mui/material/useMediaQuery";
-import ChevronLeftIcon from "@mui/icons-material/ChevronLeft";
 import DeleteOutlineOutlinedIcon from "@mui/icons-material/DeleteOutlineOutlined";
 import EditOutlinedIcon from "@mui/icons-material/EditOutlined";
+import { useTranslations } from "next-intl";
 import AppLink from "@/components/AppLink";
 import ProductArabicSubtitle from "@/components/ProductArabicSubtitle";
 import CommandeFournisseurProductPicker, {
@@ -46,6 +46,7 @@ import {
 } from "@/lib/commandes-fournisseur/qty-parse";
 import { useRouter } from "next/navigation";
 import { useSessionPermissions } from "@/lib/auth/useSessionPermissions";
+import { useStatusLabels } from "@/lib/statusLabels/useStatusLabels";
 import {
   buildLotProductDisplayInfo,
   buildSoitLine,
@@ -62,6 +63,8 @@ import {
 import LigneCommentairesMxDisplay from "@/components/commandes-fournisseur/LigneCommentairesMxDisplay";
 import type { SaisieLigneTarget } from "@/lib/commandes-fournisseur/ligne-saisie-comments";
 import { buildMagasinMxByIdFromLotLignes } from "@/lib/commandes-fournisseur/validation-lot-vendeur-recap";
+import { useAppFormat } from "@/lib/i18n/useAppFormat";
+import { useBackChevronIcon } from "@/lib/i18n/useBackChevronIcon";
 
 type NestedProduct = {
   id: string;
@@ -178,14 +181,6 @@ function reconcileFraisFromServer(
     (r) => !r.id && (r.label.trim().length > 0 || montantNombreDepuisTxt(r.montantText) > 0),
   );
   return [...fromServer, ...localOnly];
-}
-
-/** Affichage monétaire (DH). */
-function formatDh(n: number): string {
-  return `${n.toLocaleString("fr-FR", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  })} DH`;
 }
 
 function montantLigneDh(L: LotLineApi, d: DraftRow | undefined): number {
@@ -389,25 +384,27 @@ function etiquetteUdvCourte(uniteVenteBrute: string): string {
   ) {
     return "Kg";
   }
-  return "Unité";
+  return "UdV";
 }
 
 /** Ligne récap besoin (compact) : « Besoin : n », puis UdV/colissage ; « Soit … » résolument sous ces lignes pour rester lisible. */
 function BesoinEtUdVCoteACote({
-  besoinN,
   display,
   qtePourSoit,
+  needLabel,
+  formattedNeed,
 }: {
-  besoinN: number;
   display: ProductDisplayInfo;
   qtePourSoit: number;
+  needLabel: string;
+  formattedNeed: string;
 }) {
   const soitLigneBesoin = qtePourSoit > 0 ? buildSoitLine(display, qtePourSoit) : null;
 
   return (
     <Box sx={{ width: "100%", textAlign: "left", display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 0.35 }}>
       <Typography variant="caption" color="text.secondary" component="div" sx={{ fontWeight: 500, lineHeight: 1.3 }}>
-        {`Besoin : ${besoinN.toLocaleString("fr-FR", { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`}
+        {`${needLabel} : ${formattedNeed}`}
       </Typography>
       {display.isCond && display.condTitre ? (
         <Typography variant="caption" color="text.secondary" component="div" sx={{ lineHeight: 1.3 }}>
@@ -485,7 +482,7 @@ async function fetchLotPayload(lotId: string): Promise<
   if (!res.ok || !json.lot || !Array.isArray(json.lignes)) {
     return {
       ok: false,
-      error: typeof json.error === "string" ? json.error : "Lot introuvable",
+      error: typeof json.error === "string" ? json.error : "LOT_NOT_FOUND",
       status: res.status,
     };
   }
@@ -505,6 +502,13 @@ const AUTOSAVE_MS = 500;
 
 export default function AchatLotDetailClient({ lotId }: { lotId: string }) {
   const router = useRouter();
+  const t = useTranslations("backoffice.commandes.achat.detail");
+  const tCommonOrder = useTranslations("backoffice.commandes.common");
+  const tErrors = useTranslations("backoffice.commandes.errors");
+  const tCommon = useTranslations("common");
+  const { labelFor } = useStatusLabels();
+  const { formatDate, formatNumber, compareStrings } = useAppFormat();
+  const BackChevron = useBackChevronIcon();
   const {
     loading: permLoading,
     can,
@@ -559,6 +563,25 @@ export default function AchatLotDetailClient({ lotId }: { lotId: string }) {
   );
 
   const editable = Boolean(lot && lot.status === "prete");
+  const emDash = tCommon("emDash");
+  const formatQty = useCallback(
+    (value: number) =>
+      formatNumber(value, {
+        minimumFractionDigits: 0,
+        maximumFractionDigits: 2,
+      }),
+    [formatNumber],
+  );
+  const formatDh = useCallback(
+    (value: number) =>
+      t("amountDh", {
+        amount: formatNumber(value, {
+          minimumFractionDigits: 2,
+          maximumFractionDigits: 2,
+        }),
+      }),
+    [formatNumber, t],
+  );
 
   const mxByMagasinId = useMemo(() => buildMagasinMxByIdFromLotLignes(lignes), [lignes]);
 
@@ -591,14 +614,14 @@ export default function AchatLotDetailClient({ lotId }: { lotId: string }) {
     setErr(null);
     const fetched = await fetchLotPayload(lotId);
     if (!fetched.ok) {
-      setErr(fetched.error);
+      setErr(fetched.error === "LOT_NOT_FOUND" ? tErrors("lotNotFound") : fetched.error);
       setLot(null);
       setLignes([]);
       return false;
     }
     applyPayload(fetched.data);
     return true;
-  }, [applyPayload, lotId]);
+  }, [applyPayload, lotId, tErrors]);
 
   const postAchatLotProduct = useCallback(
     async (productId: string, productPackagingId: string | null) => {
@@ -616,12 +639,12 @@ export default function AchatLotDetailClient({ lotId }: { lotId: string }) {
         );
         const j = (await res.json()) as { error?: string };
         if (!res.ok) {
-          setErr(typeof j.error === "string" ? j.error : "Erreur");
+          setErr(typeof j.error === "string" ? j.error : tErrors("generic"));
           return;
         }
         await reloadFromServer();
       } catch {
-        setErr("Réseau indisponible.");
+        setErr(tErrors("networkUnavailableDot"));
       } finally {
         setProductPickerBusy(false);
       }
@@ -670,7 +693,7 @@ export default function AchatLotDetailClient({ lotId }: { lotId: string }) {
       const fetched = await fetchLotPayload(lotId);
       if (cancelled) return;
       if (!fetched.ok) {
-        setErr(fetched.error);
+        setErr(fetched.error === "LOT_NOT_FOUND" ? tErrors("lotNotFound") : fetched.error);
         setLot(null);
         setLignes([]);
         setLoading(false);
@@ -683,7 +706,7 @@ export default function AchatLotDetailClient({ lotId }: { lotId: string }) {
     return () => {
       cancelled = true;
     };
-  }, [permLoading, can, lotId, applyPayload]);
+  }, [permLoading, can, lotId, applyPayload, tErrors]);
 
   /** Recalcul chaque rendu avec la baseline réelle ( évite staleness après autosave sans setState draft ). */
   const ligneUpdatesDirty = computeDirtyPatches(lignes, draftByLine, baselineRef.current);
@@ -703,7 +726,7 @@ export default function AchatLotDetailClient({ lotId }: { lotId: string }) {
     const res = await fetch(`/api/commandes-fournisseur/achat/lots/${encodeURIComponent(lotId)}`);
     const json = (await res.json()) as { frais?: FraisApi[]; error?: string };
     if (!res.ok) {
-      setErr(typeof json.error === "string" ? json.error : "Rechargement frais impossible");
+      setErr(typeof json.error === "string" ? json.error : tErrors("reloadFeesFailed"));
       return false;
     }
     const fr = json.frais ?? [];
@@ -712,7 +735,7 @@ export default function AchatLotDetailClient({ lotId }: { lotId: string }) {
     fraisLinesRef.current = fl;
     fraisBaselineSnap.current = serialiserEtatFrais(fl, fraisDeletesPending.current);
     return true;
-  }, [lotId]);
+  }, [lotId, tErrors]);
 
   const persistAll = useCallback(
     (opts?: { silent?: boolean; lignesOnly?: boolean }) => {
@@ -775,7 +798,7 @@ export default function AchatLotDetailClient({ lotId }: { lotId: string }) {
           });
           const json = (await res.json()) as { error?: string; frais?: FraisApi[] };
           if (!res.ok) {
-            setErr(typeof json.error === "string" ? json.error : "Enregistrement impossible");
+            setErr(typeof json.error === "string" ? json.error : tErrors("saveRegistrationFailed"));
             return false;
           }
 
@@ -802,11 +825,11 @@ export default function AchatLotDetailClient({ lotId }: { lotId: string }) {
             }
           }
           if (!opts?.silent) {
-            setInfo("Modifications enregistrées.");
+            setInfo(t("savedSuccess"));
           }
           return true;
         } catch {
-          setErr("Réseau indisponible lors de l’enregistrement.");
+          setErr(tErrors("networkSaveFailed"));
           return false;
         } finally {
           if (saveSeq.current === seq) {
@@ -819,7 +842,7 @@ export default function AchatLotDetailClient({ lotId }: { lotId: string }) {
       persistTailRef.current = chained;
       return chained;
     },
-    [draftByLine, lignes, lotId, rechargerFraisDepuisApi],
+    [draftByLine, lignes, lotId, rechargerFraisDepuisApi, t, tErrors],
   );
 
   /** Sauvegarde automatique des lignes après chaque modification (debounced). Les frais sont enregistrés au blur ou avec les actions explicites (suppression, clôture). */
@@ -869,10 +892,10 @@ export default function AchatLotDetailClient({ lotId }: { lotId: string }) {
     list.sort((a, b) => {
       const la = vendeurs.find((v) => v.id === a)?.label ?? a;
       const lb = vendeurs.find((v) => v.id === b)?.label ?? b;
-      return la.localeCompare(lb, "fr");
+      return compareStrings(la, lb);
     });
     return list;
-  }, [draftByLine, lignes, vendeurs]);
+  }, [compareStrings, draftByLine, lignes, vendeurs]);
 
   function lignesPourVendeur(vendeurKey: string): LotLineApi[] {
     const rows = lignes.filter((L) => {
@@ -995,7 +1018,7 @@ export default function AchatLotDetailClient({ lotId }: { lotId: string }) {
       };
 
       if (res.ok) {
-        setInfo("Lot clôturé.");
+        setInfo(t("lotClosedSuccess"));
         setConfirmZeroOpen(false);
         await reloadFromServer();
         return true;
@@ -1006,11 +1029,11 @@ export default function AchatLotDetailClient({ lotId }: { lotId: string }) {
         return false;
       }
 
-      setErr(typeof json.error === "string" ? json.error : "Clôture impossible");
+      setErr(typeof json.error === "string" ? json.error : tErrors("closeFailed"));
       setConfirmZeroOpen(false);
       return false;
     } catch {
-      setErr("Réseau indisponible lors de la clôture.");
+      setErr(tErrors("networkCloseFailed"));
       return false;
     } finally {
       setClosing(false);
@@ -1041,21 +1064,21 @@ export default function AchatLotDetailClient({ lotId }: { lotId: string }) {
       const json = ((await res.json().catch(() => undefined)) ?? undefined) as PostJson;
 
       if (!res.ok) {
-        setErr(typeof json?.error === "string" ? json.error : "Création impossible");
+        setErr(typeof json?.error === "string" ? json.error : tErrors("createVendorFailed"));
         return;
       }
 
       const body = json;
 
       if (!body) {
-        setErr("Réponse serveur invalide après création du vendeur");
+        setErr(tErrors("invalidVendorResponse"));
         return;
       }
 
       const newId = body.id;
 
       if (typeof newId !== "string" || newId.length === 0) {
-        setErr("Réponse serveur invalide après création du vendeur");
+        setErr(tErrors("invalidVendorResponse"));
         return;
       }
 
@@ -1063,14 +1086,14 @@ export default function AchatLotDetailClient({ lotId }: { lotId: string }) {
 
       setVendeurs((prev) =>
         [...prev, { id: newId, label: labelOut }].sort((a, b) =>
-          a.label.localeCompare(b.label, "fr"),
+          compareStrings(a.label, b.label),
         ),
       );
 
       setNewVendeurLabel("");
       setNewVendeurDlg(false);
     } catch {
-      setErr("Réseau indisponible.");
+      setErr(tErrors("networkUnavailableDot"));
     } finally {
       setNewVendeurBusy(false);
     }
@@ -1099,7 +1122,7 @@ export default function AchatLotDetailClient({ lotId }: { lotId: string }) {
 
       if (!res.ok) {
         const msg =
-          json && typeof json.error === "string" ? json.error : "Modification impossible";
+          json && typeof json.error === "string" ? json.error : tErrors("updateVendorFailed");
         setErr(msg);
         return;
       }
@@ -1109,20 +1132,20 @@ export default function AchatLotDetailClient({ lotId }: { lotId: string }) {
       setVendeurs((prev) =>
         prev
           .map((x) => (x.id === renameVendeurId ? { ...x, label: outLabel } : x))
-          .sort((a, b) => a.label.localeCompare(b.label, "fr")),
+          .sort((a, b) => compareStrings(a.label, b.label)),
       );
 
       setRenameVendeurId(null);
       setRenameVendeurLabel("");
     } catch {
-      setErr("Réseau indisponible.");
+      setErr(tErrors("networkUnavailableDot"));
     } finally {
       setRenameVendeurBusy(false);
     }
   }
 
   if (permLoading) {
-    return <p className="px-4 py-6">Chargement…</p>;
+    return <p className="px-4 py-6">{tCommon("loading")}</p>;
   }
 
   if (!can("commandes_fournisseur.achat")) {
@@ -1136,7 +1159,7 @@ export default function AchatLotDetailClient({ lotId }: { lotId: string }) {
         href="/commandes-fournisseur/achat"
         color="inherit"
         size="small"
-        startIcon={<ChevronLeftIcon fontSize="small" />}
+        startIcon={<BackChevron fontSize="small" />}
         sx={{
           textTransform: "none",
           mb: 1,
@@ -1146,12 +1169,12 @@ export default function AchatLotDetailClient({ lotId }: { lotId: string }) {
           fontWeight: 500,
         }}
       >
-        Liste des lots
+        {t("backToLots")}
       </Button>
 
       {loading ? (
         <div className="flex items-center gap-2 text-slate-600">
-          <CircularProgress size={22} /> Chargement…
+          <CircularProgress size={22} /> {tCommonOrder("loading")}
         </div>
       ) : null}
 
@@ -1168,7 +1191,7 @@ export default function AchatLotDetailClient({ lotId }: { lotId: string }) {
 
       {editable && saving ? (
         <Typography variant="caption" color="text.secondary" className="!mb-2 inline-block">
-          Enregistrement…
+          {t("saving")}
         </Typography>
       ) : null}
 
@@ -1178,15 +1201,15 @@ export default function AchatLotDetailClient({ lotId }: { lotId: string }) {
             {supplierHeading(lot.ref_supplier)}
           </Typography>
           <Typography variant="body2" color="text.secondary" className="!mb-2">
-            Statut&nbsp;:{" "}
-            <strong>{String(lot.status)}</strong> — préparée&nbsp;:{" "}
-            {lot.marque_prete_at ? new Date(lot.marque_prete_at).toLocaleString("fr-FR") : "—"}
-            {" — "}clôture&nbsp;:{" "}
-            {lot.marque_terminee_at ? new Date(lot.marque_terminee_at).toLocaleString("fr-FR") : "—"}
+            {t("statusLine", {
+              status: labelFor("commande_fournisseur_lot", lot.status),
+              readyDate: lot.marque_prete_at ? formatDate(lot.marque_prete_at) : emDash,
+              closedDate: lot.marque_terminee_at ? formatDate(lot.marque_terminee_at) : emDash,
+            })}
           </Typography>
           {!editable ? (
             <Alert severity="info" className="!mb-3">
-              Lot terminé : affichage en lecture seule.
+              {t("readOnlyNotice")}
             </Alert>
           ) : null}
 
@@ -1198,13 +1221,13 @@ export default function AchatLotDetailClient({ lotId }: { lotId: string }) {
               onClick={() => void cloturer(false)}
               sx={{ textTransform: "none" }}
             >
-              {closing ? "Clôture…" : "Clôturer"}
+              {closing ? t("closing") : t("close")}
             </Button>
           </Box>
 
           <Box className="!mb-2 flex flex-row flex-wrap items-center justify-between gap-2">
             <Typography variant="h6" sx={{ fontWeight: 700, mb: 0 }}>
-              {vendeurs.length === 0 ? supplierHeading(lot.ref_supplier) : "Produits sans vendeur"}
+              {vendeurs.length === 0 ? supplierHeading(lot.ref_supplier) : t("productsWithoutVendor")}
             </Typography>
             {editable ? (
               <Button
@@ -1215,7 +1238,7 @@ export default function AchatLotDetailClient({ lotId }: { lotId: string }) {
                 onClick={() => setPickerOpen(true)}
                 sx={{ textTransform: "none" }}
               >
-                Ajouter un produit
+                {tCommonOrder("addProduct")}
               </Button>
             ) : null}
           </Box>
@@ -1262,13 +1285,13 @@ export default function AchatLotDetailClient({ lotId }: { lotId: string }) {
                       overflow: "hidden",
                     }}
                   >
-                    Produit
+                    {tCommonOrder("product")}
                   </TableCell>
                   <TableCell align="center" sx={{ py: { xs: 0.75, sm: 1 }, whiteSpace: "nowrap", width: "18%" }}>
-                    Qté
+                    {tCommonOrder("quantityShort")}
                   </TableCell>
                   <TableCell align="center" sx={{ py: { xs: 0.75, sm: 1 }, whiteSpace: "nowrap", width: "18%" }}>
-                    UdV
+                    {tCommonOrder("udv")}
                   </TableCell>
                 </TableRow>
               </TableHead>
@@ -1277,7 +1300,7 @@ export default function AchatLotDetailClient({ lotId }: { lotId: string }) {
                   <TableRow>
                     <TableCell colSpan={4}>
                       <Typography variant="body2" color="text.secondary">
-                        Tous les produits ont un vendeur.
+                        {t("allProductsHaveVendor")}
                       </Typography>
                     </TableCell>
                   </TableRow>
@@ -1343,10 +1366,7 @@ export default function AchatLotDetailClient({ lotId }: { lotId: string }) {
                           </TableCell>
                           <TableCell align="center" sx={{ py: { xs: 0.5, sm: 1 }, verticalAlign: "top" }}>
                             <Typography variant="body2" component="div" sx={{ fontWeight: 500 }}>
-                              {besoinN.toLocaleString("fr-FR", {
-                                minimumFractionDigits: 0,
-                                maximumFractionDigits: 2,
-                              })}
+                              {formatQty(besoinN)}
                             </Typography>
                           </TableCell>
                           <TableCell align="center" sx={{ py: { xs: 0.5, sm: 1 }, verticalAlign: "top" }}>
@@ -1399,7 +1419,7 @@ export default function AchatLotDetailClient({ lotId }: { lotId: string }) {
                   }}
                 >
                   <MenuItem value="">
-                    <em>Choisir un vendeur…</em>
+                    <em>{t("chooseVendor")}</em>
                   </MenuItem>
                   {vendeurs.map((v) => (
                     <MenuItem key={v.id} value={v.id}>
@@ -1416,7 +1436,7 @@ export default function AchatLotDetailClient({ lotId }: { lotId: string }) {
                   onClick={() => attribuerVendeurSelection()}
                   sx={{ textTransform: "none" }}
                 >
-                  Attribuer le vendeur à la sélection ({selectedSansVendeur.size})
+                  {t("assignVendorToSelection", { count: selectedSansVendeur.size })}
                 </Button>
               </Box>
               <Button
@@ -1426,7 +1446,7 @@ export default function AchatLotDetailClient({ lotId }: { lotId: string }) {
                 onClick={() => setNewVendeurDlg(true)}
                 sx={{ textTransform: "none", alignSelf: "center" }}
               >
-                Nouveau vendeur
+                {t("newVendor")}
               </Button>
             </Box>
           ) : editable ? (
@@ -1438,7 +1458,7 @@ export default function AchatLotDetailClient({ lotId }: { lotId: string }) {
                 onClick={() => setNewVendeurDlg(true)}
                 sx={{ textTransform: "none" }}
               >
-                Nouveau vendeur
+                {t("newVendor")}
               </Button>
             </Box>
           ) : null}
@@ -1464,7 +1484,7 @@ export default function AchatLotDetailClient({ lotId }: { lotId: string }) {
                   !renameVendeurBusy &&
                   !newVendeurBusy ? (
                     <IconButton
-                      aria-label={`Renommer le vendeur ${vLabel}`}
+                      aria-label={t("renameVendorAria", { label: vLabel })}
                       size="small"
                       onClick={() => {
                         setRenameVendeurId(vid);
@@ -1478,7 +1498,7 @@ export default function AchatLotDetailClient({ lotId }: { lotId: string }) {
                   ) : null}
                 </Box>
                 <Typography variant="body2" color="text.secondary" className="!mb-2">
-                  Total achats : {formatDh(totauxAchat.parVendeur[vid] ?? 0)}
+                  {t("vendorTotal", { amount: formatDh(totauxAchat.parVendeur[vid] ?? 0) })}
                 </Typography>
                 <div className="mb-6 min-w-0 w-full">
                   <Table
@@ -1502,7 +1522,7 @@ export default function AchatLotDetailClient({ lotId }: { lotId: string }) {
                             overflow: "hidden",
                           }}
                         >
-                          Produit
+                          {tCommonOrder("product")}
                         </TableCell>
                         <TableCell
                           align="right"
@@ -1512,7 +1532,7 @@ export default function AchatLotDetailClient({ lotId }: { lotId: string }) {
                             width: { sm: "9%" },
                           }}
                         >
-                          Qté besoin
+                          {tCommonOrder("quantityNeed")}
                         </TableCell>
                         <TableCell
                           sx={{
@@ -1521,16 +1541,16 @@ export default function AchatLotDetailClient({ lotId }: { lotId: string }) {
                             overflow: "hidden",
                           }}
                         >
-                          UdV
+                          {tCommonOrder("udv")}
                         </TableCell>
                         <TableCell sx={{ whiteSpace: "nowrap", width: { xs: "18%", sm: "12%" } }}>
-                          Qté ach.
+                          {tCommonOrder("quantityPurchase")}
                         </TableCell>
                         <TableCell sx={{ whiteSpace: "nowrap", width: { xs: "20%", sm: "14%" } }}>
-                          Prix achat
+                          {t("purchasePrice")}
                         </TableCell>
                         <TableCell align="center" sx={{ whiteSpace: "nowrap", width: { xs: "13%", sm: "14%" } }}>
-                          Total
+                          {tCommonOrder("total")}
                         </TableCell>
                         <TableCell
                           align="center"
@@ -1540,7 +1560,7 @@ export default function AchatLotDetailClient({ lotId }: { lotId: string }) {
                             width: { xs: "13%", sm: "13%" },
                           }}
                         >
-                          Retirer
+                          {tCommonOrder("remove")}
                         </TableCell>
                       </TableRow>
                     </TableHead>
@@ -1628,10 +1648,7 @@ export default function AchatLotDetailClient({ lotId }: { lotId: string }) {
                                   whiteSpace: "nowrap",
                                 }}
                               >
-                                {besoinN.toLocaleString("fr-FR", {
-                                minimumFractionDigits: 0,
-                                maximumFractionDigits: 2,
-                              })}
+                                {formatQty(besoinN)}
                               </TableCell>
                               <TableCell
                                 sx={{
@@ -1662,7 +1679,7 @@ export default function AchatLotDetailClient({ lotId }: { lotId: string }) {
                                         fontSize: "0.85rem",
                                       },
                                     }}
-                                    slotProps={{ htmlInput: { "aria-label": "Quantité achat" } }}
+                                    slotProps={{ htmlInput: { "aria-label": tCommonOrder("quantityPurchaseAria") } }}
                                   />
                                   {afficherSoitSsQteAchat && soitCaptionAchat ? (
                                     <Typography
@@ -1687,7 +1704,7 @@ export default function AchatLotDetailClient({ lotId }: { lotId: string }) {
                                   fullWidth
                                   disabled={!editable}
                                   value={dRow?.puText ?? ""}
-                                  placeholder="Prix"
+                                  placeholder={tCommonOrder("price")}
                                   slotProps={{
                                     htmlInput: {
                                       inputMode: "decimal",
@@ -1709,7 +1726,7 @@ export default function AchatLotDetailClient({ lotId }: { lotId: string }) {
                                   fontSize: { xs: "0.8rem", sm: "inherit" },
                                 }}
                               >
-                                {montantGuess === null ? "—" : formatDh(montantGuess)}
+                                {montantGuess === null ? emDash : formatDh(montantGuess)}
                               </TableCell>
                               <TableCell align="center" sx={{ whiteSpace: "nowrap", verticalAlign: "middle" }}>
                                 <Button
@@ -1726,7 +1743,7 @@ export default function AchatLotDetailClient({ lotId }: { lotId: string }) {
                                     fontSize: { xs: "0.72rem", sm: "inherit" },
                                   }}
                                 >
-                                  Retirer
+                                  {tCommonOrder("remove")}
                                 </Button>
                               </TableCell>
                             </TableRow>
@@ -1741,9 +1758,10 @@ export default function AchatLotDetailClient({ lotId }: { lotId: string }) {
                                   }}
                                 >
                                   <BesoinEtUdVCoteACote
-                                    besoinN={besoinN}
                                     display={display}
                                     qtePourSoit={besoinN}
+                                    needLabel={tCommonOrder("quantityNeed")}
+                                    formattedNeed={formatQty(besoinN)}
                                   />
                                 </TableCell>
                               </TableRow>
@@ -1759,10 +1777,10 @@ export default function AchatLotDetailClient({ lotId }: { lotId: string }) {
           })}
 
           <Typography variant="h6" className="!mt-6 !mb-2" sx={{ fontWeight: 700 }}>
-            Frais
+            {t("feesSection")}
           </Typography>
           <Typography variant="body2" color="text.secondary" className="!mb-2">
-            Frais généraux au lot {editable ? "(ajouter des lignes libellé / montant en DH)." : ""}
+            {editable ? t("feesHintEditable") : t("feesHintReadOnly")}
           </Typography>
           <div className="!mb-2 overflow-x-auto">
             <Table
@@ -1776,9 +1794,9 @@ export default function AchatLotDetailClient({ lotId }: { lotId: string }) {
             >
               <TableHead>
                 <TableRow>
-                  <TableCell sx={{ width: { xs: "58%", sm: "auto" } }}>Libellé</TableCell>
+                  <TableCell sx={{ width: { xs: "58%", sm: "auto" } }}>{tCommonOrder("label")}</TableCell>
                   <TableCell align="right" sx={{ width: { xs: "34%", sm: "auto" } }}>
-                    Montant
+                    {tCommonOrder("amount")}
                   </TableCell>
                   <TableCell width={48} sx={{ px: { xs: 0.25, sm: 1 } }}>
                     {""}
@@ -1790,7 +1808,7 @@ export default function AchatLotDetailClient({ lotId }: { lotId: string }) {
                   <TableRow>
                     <TableCell colSpan={3}>
                       <Typography variant="body2" color="text.secondary">
-                        Aucun frais enregistré.
+                        {t("noFees")}
                       </Typography>
                     </TableCell>
                   </TableRow>
@@ -1802,7 +1820,7 @@ export default function AchatLotDetailClient({ lotId }: { lotId: string }) {
                           size="small"
                           fullWidth
                           disabled={!editable}
-                          placeholder="Libellé"
+                          placeholder={tCommonOrder("label")}
                           value={lf.label}
                           onChange={(e) => changerFrais(lf.sid, { label: e.target.value })}
                           onBlur={() => {
@@ -1815,7 +1833,7 @@ export default function AchatLotDetailClient({ lotId }: { lotId: string }) {
                         <TextField
                           size="small"
                           disabled={!editable}
-                          placeholder="0,00"
+                          placeholder={tCommonOrder("pricePlaceholder")}
                           value={lf.montantText}
                           onChange={(e) =>
                             changerFrais(lf.sid, {
@@ -1839,7 +1857,7 @@ export default function AchatLotDetailClient({ lotId }: { lotId: string }) {
                       </TableCell>
                       <TableCell align="center" padding="checkbox">
                         <IconButton
-                          aria-label="Supprimer cette ligne"
+                          aria-label={tCommonOrder("removeFeeLineAria")}
                           size="small"
                           disabled={!editable}
                           onClick={() => supprimerLigneFraisGlobaux(lf.sid)}
@@ -1862,16 +1880,16 @@ export default function AchatLotDetailClient({ lotId }: { lotId: string }) {
                 onClick={ajouterLigneFraisGlobaux}
                 sx={{ textTransform: "none" }}
               >
-                Ajouter une ligne de frais
+                {t("addFeeLine")}
               </Button>
             ) : null}
             <Typography variant="subtitle2" sx={{ fontWeight: 700 }} className="!mt-3">
-              Total frais : {formatDh(totauxAchat.totalFrais)}
+              {t("totalFees", { amount: formatDh(totauxAchat.totalFrais) })}
             </Typography>
           </div>
 
           <Typography variant="h6" className="!mt-8 !mb-2" sx={{ fontWeight: 700 }}>
-            Synthèse
+            {t("summarySection")}
           </Typography>
           <Box
             className="!mb-2 rounded-lg border border-slate-200 p-3 dark:border-slate-700 sm:p-4"
@@ -1890,8 +1908,8 @@ export default function AchatLotDetailClient({ lotId }: { lotId: string }) {
                 <>
                   <Typography variant="body2" component="span">
                     {vendeurs.length === 0
-                      ? `${supplierHeading(lot.ref_supplier)} (montants lignes)`
-                      : "Produits sans vendeur (montants lignes)"}
+                      ? t("summarySupplierLines", { supplier: supplierHeading(lot.ref_supplier) })
+                      : t("summaryNoVendorLines")}
                     &nbsp;:
                   </Typography>
                   <Typography
@@ -1922,7 +1940,7 @@ export default function AchatLotDetailClient({ lotId }: { lotId: string }) {
                 ];
               })}
               <Typography variant="body2" component="span" sx={{ fontWeight: 600 }}>
-                Total produits&nbsp;:
+                {t("summaryTotalProducts")}
               </Typography>
               <Typography
                 variant="body2"
@@ -1932,7 +1950,7 @@ export default function AchatLotDetailClient({ lotId }: { lotId: string }) {
                 {formatDh(totauxAchat.totalProduits)}
               </Typography>
               <Typography variant="body2" component="span">
-                Frais&nbsp;:
+                {t("summaryFees")}
               </Typography>
               <Typography
                 variant="body2"
@@ -1957,7 +1975,7 @@ export default function AchatLotDetailClient({ lotId }: { lotId: string }) {
               })}
             >
               <Typography variant="h5" sx={{ fontWeight: 900, letterSpacing: "0.01em" }}>
-                Total&nbsp;: {formatDh(totauxAchat.cumul)}
+                {t("summaryGrandTotal", { amount: formatDh(totauxAchat.cumul) })}
               </Typography>
             </Box>
           </Box>
@@ -1970,11 +1988,11 @@ export default function AchatLotDetailClient({ lotId }: { lotId: string }) {
             open={pickerOpen}
             onClose={() => setPickerOpen(false)}
             supplierId={lot.supplier_id}
-            alreadyPresentLabel="Déjà dans le lot"
+            alreadyPresentLabel={tCommonOrder("alreadyInLot")}
             onSelect={handleProductChosenFromPicker}
           />
           <Dialog open={condDialogOpen} onClose={handleCondLotDialogClose} fullWidth maxWidth="sm">
-            <DialogTitle sx={{ pb: 0.5 }}>Conditionnement</DialogTitle>
+            <DialogTitle sx={{ pb: 0.5 }}>{t("condDialogTitle")}</DialogTitle>
             <DialogContent>
               {pendingProduct ? (
                 <>
@@ -1983,7 +2001,7 @@ export default function AchatLotDetailClient({ lotId }: { lotId: string }) {
                   </Typography>
                   <ProductArabicSubtitle nameAr={pendingProduct.name_ar} matchNameLine />
                   <Typography variant="body2" color="text.secondary" className="!mb-3">
-                    Pré-sélection comme à la validation ; vous pouvez choisir à l&apos;unité ou un autre conditionnement.
+                    {t("condDialogHint")}
                   </Typography>
                   {condPanelProps ? (
                     <ParcoursProductQuantityPanel {...condPanelProps} hideQuantityControls />
@@ -1993,7 +2011,7 @@ export default function AchatLotDetailClient({ lotId }: { lotId: string }) {
             </DialogContent>
             <DialogActions className="!px-3 !pb-2">
               <Button type="button" color="inherit" onClick={handleCondLotDialogClose} sx={{ textTransform: "none" }}>
-                Annuler
+                {tCommon("cancel")}
               </Button>
               <Button
                 type="button"
@@ -2003,7 +2021,7 @@ export default function AchatLotDetailClient({ lotId }: { lotId: string }) {
                 onClick={() => void handleCondLotDialogConfirm()}
                 sx={{ textTransform: "none" }}
               >
-                Ajouter au lot
+                {t("addToLot")}
               </Button>
             </DialogActions>
           </Dialog>
@@ -2011,21 +2029,21 @@ export default function AchatLotDetailClient({ lotId }: { lotId: string }) {
       ) : null}
 
       <Dialog open={confirmZeroOpen} onClose={() => setConfirmZeroOpen(false)}>
-        <DialogTitle>Quantités achat à 0</DialogTitle>
+        <DialogTitle>{t("confirmZeroDialog.title")}</DialogTitle>
         <DialogContent>
           <Typography variant="body2" className="!mb-2">
-            Certaines lignes ont une quantité achat égale à 0.
+            {t("confirmZeroDialog.body1")}
           </Typography>
           <Typography variant="body2" color="text.secondary">
-            Confirmez-vous la clôture tout de même&nbsp;?
+            {t("confirmZeroDialog.body2")}
           </Typography>
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setConfirmZeroOpen(false)} sx={{ textTransform: "none" }}>
-            Annuler
+            {tCommon("cancel")}
           </Button>
           <Button variant="contained" onClick={() => void cloturer(true)} sx={{ textTransform: "none" }}>
-            Confirmer la clôture
+            {t("confirmZeroDialog.confirm")}
           </Button>
         </DialogActions>
       </Dialog>
@@ -2038,13 +2056,13 @@ export default function AchatLotDetailClient({ lotId }: { lotId: string }) {
           setRenameVendeurLabel("");
         }}
       >
-        <DialogTitle>Renommer le vendeur</DialogTitle>
+        <DialogTitle>{t("renameVendorDialog.title")}</DialogTitle>
         <DialogContent>
           <TextField
             margin="dense"
             autoFocus
             fullWidth
-            label="Nom affiché"
+            label={t("renameVendorDialog.displayNameLabel")}
             value={renameVendeurLabel}
             onChange={(e) => setRenameVendeurLabel(e.target.value)}
           />
@@ -2058,40 +2076,40 @@ export default function AchatLotDetailClient({ lotId }: { lotId: string }) {
             }}
             sx={{ textTransform: "none" }}
           >
-            Annuler
+            {tCommon("cancel")}
           </Button>
           <Button
             variant="contained"
             disabled={renameVendeurBusy || renameVendeurLabel.trim().length === 0}
             onClick={() => void renommerVendeur()}
           >
-            {renameVendeurBusy ? <CircularProgress size={18} /> : "Enregistrer"}
+            {renameVendeurBusy ? <CircularProgress size={18} /> : tCommon("save")}
           </Button>
         </DialogActions>
       </Dialog>
 
       <Dialog open={newVendeurDlg} onClose={() => setNewVendeurDlg(false)}>
-        <DialogTitle>Nouveau vendeur fournisseur</DialogTitle>
+        <DialogTitle>{t("newVendorDialog.title")}</DialogTitle>
         <DialogContent>
           <TextField
             margin="dense"
             autoFocus
             fullWidth
-            label="Nom affiché"
+            label={t("newVendorDialog.displayNameLabel")}
             value={newVendeurLabel}
             onChange={(e) => setNewVendeurLabel(e.target.value)}
           />
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setNewVendeurDlg(false)} sx={{ textTransform: "none" }}>
-            Fermer
+            {tCommon("close")}
           </Button>
           <Button
             variant="contained"
             disabled={newVendeurBusy || newVendeurLabel.trim().length === 0}
             onClick={() => void ajouterVendeur()}
           >
-            {newVendeurBusy ? <CircularProgress size={18} /> : "Ajouter"}
+            {newVendeurBusy ? <CircularProgress size={18} /> : t("newVendorDialog.add")}
           </Button>
         </DialogActions>
       </Dialog>

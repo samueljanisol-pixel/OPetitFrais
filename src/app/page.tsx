@@ -2,6 +2,7 @@
 
 import Image from 'next/image'
 import { useRouter } from 'next/navigation'
+import { useTranslations } from 'next-intl'
 import { Button, Fab, Paper, Stack, Tooltip } from '@mui/material'
 import AssessmentOutlinedIcon from '@mui/icons-material/AssessmentOutlined'
 import Inventory2OutlinedIcon from '@mui/icons-material/Inventory2Outlined'
@@ -13,6 +14,8 @@ import { clearSessionSnapshot } from '@/lib/auth/session-display-cache'
 
 export default function HomePage() {
   const router = useRouter()
+  const t = useTranslations('backoffice.home')
+  const tCommon = useTranslations('common')
   const { loading, can, canReadVentes, canReadParametres } = useSessionPermissions()
   const canCommandesFournisseur =
     can('commandes_fournisseur.saisie') ||
@@ -29,7 +32,7 @@ export default function HomePage() {
   if (loading) {
     return (
       <main className="min-h-[calc(100vh-0px)] flex items-center justify-center bg-gradient-to-br from-emerald-50 via-white to-rose-50 px-6 py-16">
-        <p className="text-slate-600">Chargement…</p>
+        <p className="text-slate-600">{tCommon('loading')}</p>
       </main>
     )
   }
@@ -41,7 +44,7 @@ export default function HomePage() {
           <AppLink
             href="/"
             className="block w-full max-w-[min(26rem,calc(100vw-3rem))] rounded-3xl bg-white p-5 shadow-sm ring-1 ring-emerald-100 transition hover:ring-emerald-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-500"
-            aria-label="O&apos; Petit Frais — accueil"
+            aria-label={t('homeAria')}
           >
             <Image
               src="/logo-opetitfrais.png"
@@ -87,7 +90,7 @@ export default function HomePage() {
                   '& .MuiButton-startIcon': { mr: 0.5, ml: 0 },
                 }}
               >
-                Produits
+                {t('products')}
               </Button>
             ) : null}
             {canReadVentes ? (
@@ -110,7 +113,7 @@ export default function HomePage() {
                   '& .MuiButton-startIcon': { mr: 0.5, ml: 0 },
                 }}
               >
-                Statistique
+                {t('stats')}
               </Button>
             ) : null}
             {canCommandesFournisseur ? (
@@ -133,7 +136,7 @@ export default function HomePage() {
                   '& .MuiButton-startIcon': { mr: 0.5, ml: 0 },
                 }}
               >
-                Commandes fournisseur
+                {t('supplierOrders')}
               </Button>
             ) : null}
           </Stack>
@@ -144,20 +147,20 @@ export default function HomePage() {
           className="!mt-8"
           sx={{ textTransform: 'none', color: 'text.secondary' }}
         >
-          Déconnexion
+          {t('logout')}
         </Button>
       </div>
 
       {canReadParametres ? (
-        <Tooltip title="Paramètres">
+        <Tooltip title={t('settings')}>
           <Fab
             component={AppLink}
             href="/referentiel"
             color="success"
-            aria-label="Paramètres"
+            aria-label={t('settingsAria')}
             sx={{
               position: 'fixed',
-              right: 24,
+              insetInlineEnd: 24,
               bottom: 24,
               zIndex: 10,
             }}

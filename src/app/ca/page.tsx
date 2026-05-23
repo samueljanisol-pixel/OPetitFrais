@@ -4,7 +4,9 @@ import { useEffect, useMemo, useState } from 'react'
 import ChevronLeftIcon from '@mui/icons-material/ChevronLeft'
 import { Button, Stack, TextField } from '@mui/material'
 import AppLink from '@/components/AppLink'
+import FireworksOverlay from '@/components/FireworksOverlay'
 import PaniersHeureHistogram from '@/components/PaniersHeureHistogram'
+import RecordCaBanner from '@/components/RecordCaBanner'
 import SyncStatusFooter from '@/components/SyncStatusFooter'
 import { fetchCaDashboardFromSupabase } from '@/lib/ca/fromSupabase'
 import type { CaResponse } from '@/lib/ca/types'
@@ -204,9 +206,34 @@ export default function CaDashboardPage() {
     return `${y}-${m}-${day}`
   }
 
+  const isoAddDays = (iso: string, days: number) => {
+    const [yy, mm, dd] = iso.split('-').map(x => Number(x))
+    if (!yy || !mm || !dd) return iso
+    const t = Date.UTC(yy, mm - 1, dd) + days * 24 * 60 * 60 * 1000
+    const d = new Date(t)
+    const y = d.getUTCFullYear()
+    const m = String(d.getUTCMonth() + 1).padStart(2, '0')
+    const day = String(d.getUTCDate()).padStart(2, '0')
+    return `${y}-${m}-${day}`
+  }
+
   const goPrevDay = () => {
     setDate(prev => isoMinusDays(prev, 1))
   }
+
+  const goNextDay = () => {
+    setDate(prev => {
+      const next = isoAddDays(prev, 1)
+      return next > maxIso ? prev : next
+    })
+  }
+
+  const outlinedNavButtonSx = {
+    borderRadius: 3,
+    textTransform: 'none',
+    fontWeight: 600,
+    bgcolor: 'rgba(255,255,255,0.85)',
+  } as const
 
   const labelMagasin = (raw: string) => {
     const m = raw.match(/^M(\d+)$/i)
@@ -241,7 +268,9 @@ export default function CaDashboardPage() {
   const month = data?.month
 
   return (
-    <main className="min-h-[calc(100vh-0px)] bg-gradient-to-br from-emerald-50 via-white to-rose-50 px-6 py-10">
+    <>
+      {data.isRecordDay ? <FireworksOverlay active={!!data.isRecordDay} /> : null}
+      <main className="min-h-[calc(100vh-0px)] bg-gradient-to-br from-emerald-50 via-white to-rose-50 px-6 py-10">
       <div className="mx-auto w-full max-w-5xl">
         <header className="flex w-full flex-col gap-5">
           <div className="w-full">
@@ -290,30 +319,20 @@ export default function CaDashboardPage() {
               variant="outlined"
               color="success"
               size="medium"
-              onClick={goPrevDay}
-              sx={{
-                borderRadius: 3,
-                textTransform: 'none',
-                fontWeight: 600,
-                bgcolor: 'rgba(255,255,255,0.85)',
-              }}
+              onClick={() => setRefreshNonce(n => n + 1)}
+              sx={outlinedNavButtonSx}
             >
-              Jour précédent
+              Actualiser
             </Button>
             <Button
               type="button"
               variant="outlined"
               color="success"
               size="medium"
-              onClick={() => setRefreshNonce(n => n + 1)}
-              sx={{
-                borderRadius: 3,
-                textTransform: 'none',
-                fontWeight: 600,
-                bgcolor: 'rgba(255,255,255,0.85)',
-              }}
+              onClick={goPrevDay}
+              sx={outlinedNavButtonSx}
             >
-              Actualiser
+              J-1
             </Button>
             <TextField
               label="Date"
@@ -333,6 +352,17 @@ export default function CaDashboardPage() {
                 },
               }}
             />
+            <Button
+              type="button"
+              variant="outlined"
+              color="success"
+              size="medium"
+              onClick={goNextDay}
+              disabled={date >= maxIso}
+              sx={outlinedNavButtonSx}
+            >
+              J+1
+            </Button>
           </Stack>
 
           <div className="grid gap-3 md:grid-cols-2">
@@ -343,6 +373,7 @@ export default function CaDashboardPage() {
               <div className="mt-1 text-2xl font-semibold text-slate-900">
                 {formatMAD(data.totalGlobal)}
               </div>
+              {data.isRecordDay ? <RecordCaBanner /> : null}
               {(() => {
                 const g = data.panierJourGlobal
                 if (!g || g.nbPaniers <= 0) return null
@@ -684,5 +715,6 @@ export default function CaDashboardPage() {
         <SyncStatusFooter />
       </div>
     </main>
+    </>
   )
 }

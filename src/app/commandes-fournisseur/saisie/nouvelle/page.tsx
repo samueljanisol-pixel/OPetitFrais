@@ -2,9 +2,11 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { useTranslations } from "next-intl";
 import { Button, FormControl, InputLabel, MenuItem, Select, Typography } from "@mui/material";
 import AppLink from "@/components/AppLink";
 import { useSessionPermissions } from "@/lib/auth/useSessionPermissions";
+import { useBackChevronIcon } from "@/lib/i18n/useBackChevronIcon";
 import { useMagasinSaisie } from "../MagasinSaisieContext";
 
 type Supplier = { id: string; code: string; label: string };
@@ -13,6 +15,11 @@ export default function NouvelleCommandePage() {
   const router = useRouter();
   const { loading: sLoading, can } = useSessionPermissions();
   const { magasinId, currentMagasin } = useMagasinSaisie();
+  const t = useTranslations("backoffice.commandes.saisie.nouvelle");
+  const tc = useTranslations("backoffice.commandes.common");
+  const te = useTranslations("backoffice.commandes.errors");
+  const tCommon = useTranslations("common");
+  const BackChevron = useBackChevronIcon();
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [supplierId, setSupplierId] = useState("");
   const [err, setErr] = useState<string | null>(null);
@@ -24,16 +31,16 @@ export default function NouvelleCommandePage() {
       const res = await fetch("/api/commandes-fournisseur/suppliers", { credentials: "include" });
       const j = (await res.json()) as { suppliers?: Supplier[]; error?: string };
       if (!res.ok) {
-        setErr(j.error ?? "Erreur");
+        setErr(j.error ?? te("generic"));
         return;
       }
       setSuppliers(j.suppliers ?? []);
     })();
-  }, [sLoading, can]);
+  }, [sLoading, can, te]);
 
   const create = async () => {
     if (!magasinId || !supplierId) {
-      setErr("Choisissez un fournisseur");
+      setErr(te("chooseSupplier"));
       return;
     }
     setErr(null);
@@ -47,21 +54,21 @@ export default function NouvelleCommandePage() {
       });
       const j = (await res.json()) as { id?: string; error?: string };
       if (!res.ok) {
-        setErr(j.error ?? "Erreur");
+        setErr(j.error ?? te("generic"));
         return;
       }
       if (j.id) {
         void router.push(`/commandes-fournisseur/saisie/${j.id}/parcours`);
       }
     } catch (e) {
-      setErr(e instanceof Error ? e.message : "Erreur");
+      setErr(e instanceof Error ? e.message : te("generic"));
     } finally {
       setSaving(false);
     }
   };
 
   if (sLoading) {
-    return <p className="px-4 py-6">Chargement…</p>;
+    return <p className="px-4 py-6">{tCommon("loading")}</p>;
   }
 
   if (!can("commandes_fournisseur.saisie")) {
@@ -71,9 +78,14 @@ export default function NouvelleCommandePage() {
   if (!currentMagasin) {
     return (
       <main className="px-4 py-6">
-        <Typography color="error">Aucun magasin rattaché.</Typography>
-        <Button component={AppLink} href="/commandes-fournisseur/saisie" className="!mt-4">
-          Retour
+        <Typography color="error">{te("noStoreLinkedShort")}</Typography>
+        <Button
+          component={AppLink}
+          href="/commandes-fournisseur/saisie"
+          className="!mt-4"
+          startIcon={<BackChevron fontSize="small" />}
+        >
+          {tc("back")}
         </Button>
       </main>
     );
@@ -81,8 +93,25 @@ export default function NouvelleCommandePage() {
 
   return (
     <main className="mx-auto w-full max-w-sm px-4 py-4">
+      <Button
+        component={AppLink}
+        href="/commandes-fournisseur/saisie"
+        color="inherit"
+        size="small"
+        startIcon={<BackChevron fontSize="small" />}
+        sx={{
+          textTransform: "none",
+          mb: 1,
+          alignSelf: "flex-start",
+          pl: 0,
+          minHeight: 36,
+          fontWeight: 500,
+        }}
+      >
+        {tc("back")}
+      </Button>
       <Typography variant="h5" className="!mb-1" sx={{ fontWeight: 600 }}>
-        Nouvelle commande
+        {t("title")}
       </Typography>
       <Typography variant="body2" color="text.secondary" className="!mb-4">
         {currentMagasin.nom}
@@ -90,10 +119,10 @@ export default function NouvelleCommandePage() {
 
       <div className="flex flex-col gap-4">
         <FormControl fullWidth>
-          <InputLabel id="fournisseur-label">Fournisseur</InputLabel>
+          <InputLabel id="fournisseur-label">{tc("supplier")}</InputLabel>
           <Select
             labelId="fournisseur-label"
-            label="Fournisseur"
+            label={tc("supplier")}
             value={supplierId}
             onChange={(e) => setSupplierId(e.target.value as string)}
           >
@@ -112,10 +141,10 @@ export default function NouvelleCommandePage() {
         ) : null}
 
         <Button variant="contained" color="success" onClick={() => void create()} disabled={saving} sx={{ textTransform: "none" }}>
-          {saving ? "Création…" : "Commencer la saisie"}
+          {saving ? t("creating") : t("startEntry")}
         </Button>
         <Button component={AppLink} href="/commandes-fournisseur/saisie" color="inherit" sx={{ textTransform: "none" }}>
-          Annuler
+          {tCommon("cancel")}
         </Button>
       </div>
     </main>

@@ -3,12 +3,15 @@
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useTranslations } from "next-intl";
 import AccountCircleOutlinedIcon from "@mui/icons-material/AccountCircleOutlined";
 import { useSessionPermissions } from "@/lib/auth/useSessionPermissions";
+import LocaleSwitcher from "@/components/LocaleSwitcher";
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const { loading, displayName } = useSessionPermissions();
+  const t = useTranslations("backoffice.shell");
 
   if (pathname === "/login") {
     return <>{children}</>;
@@ -19,12 +22,12 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       <header
         className="sticky top-0 z-30 flex shrink-0 items-center gap-2 border-b border-emerald-100/80 bg-white/95 px-2 py-1.5 shadow-sm backdrop-blur-sm"
         role="banner"
-        aria-label={loading ? "Profil" : `Profil : ${displayName}`}
+        aria-label={loading ? t("profile") : t("profileWithName", { name: displayName })}
       >
         <Link
           href="/"
-          title="O' Petit Frais — accueil"
-          aria-label="O' Petit Frais — accueil"
+          title={t("homeTitle")}
+          aria-label={t("homeAria")}
           className="relative block h-11 w-[9.5rem] shrink-0 overflow-hidden rounded-lg bg-white shadow-sm ring-1 ring-emerald-100 transition hover:ring-emerald-200"
         >
           <Image
@@ -37,10 +40,11 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           />
         </Link>
 
-        <div className="ml-auto flex min-w-0 max-w-[min(100%,20rem)] shrink-0 items-center gap-2">
+        <div className="ms-auto flex min-w-0 max-w-[min(100%,24rem)] shrink-0 items-center gap-2">
+          <LocaleSwitcher variant="header" />
           <AccountCircleOutlinedIcon className="!h-7 !w-7 shrink-0 text-emerald-700" aria-hidden />
           <span className="min-w-0 truncate text-sm font-medium text-slate-800" title={displayName}>
-            {loading ? "Chargement…" : displayName || "—"}
+            {loading ? t("loading") : displayName || "—"}
           </span>
         </div>
       </header>

@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useState, type ReactNode } from "react";
+import { useTranslations } from "next-intl";
 import {
   Box,
   Button,
@@ -53,6 +54,10 @@ export default function LigneCommentaireSaisieControls({
   layout = "stack",
   leading,
 }: Props) {
+  const t = useTranslations("backoffice.commandes.components.ligneCommentaireSaisieControls");
+  const tc = useTranslations("backoffice.commandes.common");
+  const te = useTranslations("backoffice.commandes.errors");
+  const tCommon = useTranslations("common");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [activeLigneId, setActiveLigneId] = useState<string>("");
   const [draft, setDraft] = useState("");
@@ -89,7 +94,7 @@ export default function LigneCommentaireSaisieControls({
         targets.find((x) => x.lineComment?.trim()) ??
         targets[0];
       if (!t) {
-        setErr("Magasin introuvable pour ce commentaire.");
+        setErr(te("storeNotFoundForComment"));
         return;
       }
       const pid = productId?.trim() ?? "";
@@ -104,7 +109,7 @@ export default function LigneCommentaireSaisieControls({
         body.ligneId = t.ligneId;
       } else {
         if (!pid) {
-          setErr("Produit introuvable pour ce commentaire.");
+          setErr(te("productNotFoundForComment"));
           return;
         }
         body.commandeId = t.commandeId;
@@ -125,17 +130,17 @@ export default function LigneCommentaireSaisieControls({
         );
         const j = (await res.json()) as { error?: string };
         if (!res.ok) {
-          throw new Error(j.error ?? "Erreur");
+          throw new Error(j.error ?? te("generic"));
         }
         closeDialog();
         await onUpdated();
       } catch (e) {
-        setErr(e instanceof Error ? e.message : "Erreur");
+        setErr(e instanceof Error ? e.message : te("generic"));
       } finally {
         setSaving(false);
       }
     },
-    [activeLigneId, closeDialog, lotId, onUpdated, productId, productPackagingId, targets],
+    [activeLigneId, closeDialog, lotId, onUpdated, productId, productPackagingId, targets, te],
   );
 
   const save = useCallback(() => {
@@ -177,7 +182,7 @@ export default function LigneCommentaireSaisieControls({
         type="button"
         size="small"
         color={hasComment ? "info" : "default"}
-        aria-label={hasComment ? "Modifier le commentaire" : "Ajouter un commentaire"}
+        aria-label={hasComment ? tc("editCommentAria") : tc("addCommentAria")}
         onClick={openDialog}
         disabled={disabled || saving}
         sx={{ flexShrink: 0, mt: layout === "inline" ? 0 : 0.5 }}
@@ -234,8 +239,8 @@ export default function LigneCommentaireSaisieControls({
       <Dialog open={dialogOpen} onClose={closeDialog} fullWidth maxWidth="sm">
         <DialogTitle sx={{ pb: 0.5 }}>
           {draft.trim().length > 0 || activeTarget?.lineComment
-            ? "Commentaire ligne"
-            : "Ajouter un commentaire"}
+            ? t("dialogTitleEdit")
+            : t("dialogTitleAdd")}
         </DialogTitle>
         <DialogContent>
           {productLabel ? (
@@ -274,11 +279,11 @@ export default function LigneCommentaireSaisieControls({
             multiline
             minRows={2}
             maxRows={6}
-            label="Commentaire"
+            label={tc("comment")}
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
             disabled={saving}
-            placeholder="Ex. préférence de calibrage, remplacement…"
+            placeholder={tc("commentPlaceholder")}
           />
         </DialogContent>
         <DialogActions
@@ -293,7 +298,7 @@ export default function LigneCommentaireSaisieControls({
               onClick={() => void remove()}
               sx={{ textTransform: "none" }}
             >
-              {saving ? "…" : "Supprimer"}
+              {saving ? tc("loadingEllipsis") : tCommon("delete")}
             </Button>
           ) : (
             <span aria-hidden />
@@ -306,7 +311,7 @@ export default function LigneCommentaireSaisieControls({
               sx={{ textTransform: "none" }}
               disabled={saving}
             >
-              Annuler
+              {tCommon("cancel")}
             </Button>
             <Button
               type="button"
@@ -315,7 +320,7 @@ export default function LigneCommentaireSaisieControls({
               onClick={() => void save()}
               sx={{ textTransform: "none" }}
             >
-              {saving ? "…" : "Enregistrer"}
+              {saving ? tc("loadingEllipsis") : tCommon("save")}
             </Button>
           </div>
         </DialogActions>

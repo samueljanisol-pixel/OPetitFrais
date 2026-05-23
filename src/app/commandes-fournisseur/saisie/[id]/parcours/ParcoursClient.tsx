@@ -2,9 +2,9 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { useTranslations } from "next-intl";
 import Image from "next/image";
 import { Box, Button, Typography } from "@mui/material";
-import ChevronLeftIcon from "@mui/icons-material/ChevronLeft";
 import ChevronRightIcon from "@mui/icons-material/ChevronRight";
 import DescriptionOutlinedIcon from "@mui/icons-material/DescriptionOutlined";
 import AppLink from "@/components/AppLink";
@@ -30,6 +30,7 @@ import {
   saveParcoursDraft,
 } from "@/lib/commandes-fournisseur/parcours-draft-storage";
 import { clampQtyToApiRange } from "@/lib/commandes-fournisseur/qty-parse";
+import { useBackChevronIcon } from "@/lib/i18n/useBackChevronIcon";
 import { commandeAllowsUnitProduct } from "@/lib/products/packagingEligibility";
 
 type Product = ParcoursProductForQty & {
@@ -46,6 +47,11 @@ export default function ParcoursClient({ commandeId }: { commandeId: string }) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { loading: permLoading, can, canWriteProducts } = useSessionPermissions();
+  const t = useTranslations("backoffice.commandes.parcours");
+  const tc = useTranslations("backoffice.commandes.common");
+  const te = useTranslations("backoffice.commandes.errors");
+  const tCommon = useTranslations("common");
+  const BackChevron = useBackChevronIcon();
   const canOpenProductFiche = canWriteProducts || can("produits.read");
   const [products, setProducts] = useState<Product[]>([]);
   const [err, setErr] = useState<string | null>(null);
@@ -211,7 +217,7 @@ export default function ParcoursClient({ commandeId }: { commandeId: string }) {
           error?: string;
         };
         if (!r1.ok) {
-          setErr(j1.error ?? "Erreur");
+          setErr(j1.error ?? te("generic"));
           return;
         }
         if (j1.commande?.status !== "en_saisie") {
@@ -220,7 +226,7 @@ export default function ParcoursClient({ commandeId }: { commandeId: string }) {
         }
         const sid = j1.commande?.supplier_id;
         if (!sid) {
-          setErr("Fournisseur manquant");
+          setErr(te("missingSupplier"));
           return;
         }
         setCommandeSupplierId(sid);
@@ -233,7 +239,7 @@ export default function ParcoursClient({ commandeId }: { commandeId: string }) {
         });
         const j2 = (await r2.json()) as { products?: Product[]; error?: string };
         if (!r2.ok) {
-          setErr(j2.error ?? "Erreur");
+          setErr(j2.error ?? te("generic"));
           return;
         }
         const list = j2.products ?? [];
@@ -262,12 +268,12 @@ export default function ParcoursClient({ commandeId }: { commandeId: string }) {
         }
         setIndex(nextIndex);
       } catch (e) {
-        setErr(e instanceof Error ? e.message : "Erreur");
+        setErr(e instanceof Error ? e.message : te("generic"));
       } finally {
         setLoading(false);
       }
     })();
-  }, [commandeId, router, searchParams]);
+  }, [commandeId, router, searchParams, te]);
 
   useEffect(() => {
     if (loading || products.length === 0) {
@@ -318,9 +324,9 @@ export default function ParcoursClient({ commandeId }: { commandeId: string }) {
     });
     const j = (await res.json()) as { error?: string };
     if (!res.ok) {
-      throw new Error(j.error ?? "Sauvegarde impossible");
+      throw new Error(j.error ?? te("saveFailed"));
     }
-  }, [buildLignesPayload, commandeId]);
+  }, [buildLignesPayload, commandeId, te]);
 
   const onTerminer = useCallback(async () => {
     setErr(null);
@@ -330,14 +336,14 @@ export default function ParcoursClient({ commandeId }: { commandeId: string }) {
       clearParcoursDraft(commandeId);
       void router.push(`/commandes-fournisseur/saisie/${commandeId}/recap`);
     } catch (e) {
-      setErr(e instanceof Error ? e.message : "Erreur");
+      setErr(e instanceof Error ? e.message : te("generic"));
     } finally {
       setSaving(false);
     }
-  }, [sendLignes, router, commandeId]);
+  }, [sendLignes, router, commandeId, te]);
 
   const isLast = index >= n - 1;
-  const posLabel = n > 0 ? `${index + 1} / ${n}` : "0 / 0";
+  const posLabel = n > 0 ? t("position", { current: index + 1, total: n }) : t("position", { current: 0, total: 0 });
 
   const catLabel = useMemo(() => (current ? parseCategoryLabel(current.ref_category) : ""), [current]);
 
@@ -357,7 +363,7 @@ export default function ParcoursClient({ commandeId }: { commandeId: string }) {
   }, [current, getQ, getRoute, selectRoute, setQForKey]);
 
   if (loading) {
-    return <p className="px-4 py-4 text-slate-600">Chargement du parcours…</p>;
+    return <p className="px-4 py-4 text-slate-600">{t("loading")}</p>;
   }
 
   if (err) {
@@ -365,7 +371,7 @@ export default function ParcoursClient({ commandeId }: { commandeId: string }) {
       <main className="px-4 py-4">
         <Typography color="error">{err}</Typography>
         <Button component={AppLink} href={`/commandes-fournisseur/saisie/${commandeId}/recap`} className="!mt-4">
-          Revenir au récap
+          {t("backToRecap")}
         </Button>
       </main>
     );
@@ -374,9 +380,9 @@ export default function ParcoursClient({ commandeId }: { commandeId: string }) {
   if (!current || n === 0) {
     return (
       <main className="px-4 py-4">
-        <Typography>Aucun produit actif pour ce fournisseur.</Typography>
+        <Typography>{t("noActiveProducts")}</Typography>
         <Button component={AppLink} href={`/commandes-fournisseur/saisie/${commandeId}/recap`} className="!mt-4" variant="contained">
-          Revenir au récap
+          {t("backToRecap")}
         </Button>
       </main>
     );
@@ -390,7 +396,7 @@ export default function ParcoursClient({ commandeId }: { commandeId: string }) {
           href={`/commandes-fournisseur/saisie/${commandeId}/recap`}
           size="small"
           color="inherit"
-          startIcon={<ChevronLeftIcon fontSize="small" />}
+          startIcon={<BackChevron fontSize="small" />}
           sx={{
             textTransform: "none",
             pl: 0,
@@ -401,7 +407,7 @@ export default function ParcoursClient({ commandeId }: { commandeId: string }) {
             zIndex: 1,
           }}
         >
-          Récapitulatif
+          {t("recapLink")}
         </Button>
         <Typography
           variant="body2"
@@ -430,7 +436,7 @@ export default function ParcoursClient({ commandeId }: { commandeId: string }) {
               px: 1,
             }}
           >
-            {refreshingProduct ? "…" : "Fiche produit"}
+            {refreshingProduct ? tCommon("loadingEllipsis") : t("productSheet")}
           </Button>
         ) : null}
       </div>
@@ -488,10 +494,10 @@ export default function ParcoursClient({ commandeId }: { commandeId: string }) {
             variant="outlined"
             onClick={() => setIndex((i) => Math.max(0, i - 1))}
             disabled={index <= 0}
-            startIcon={<ChevronLeftIcon />}
+            startIcon={<BackChevron />}
             sx={{ textTransform: "none", minHeight: 40 }}
           >
-            Précédent
+            {t("previous")}
           </Button>
           <Button
             type="button"
@@ -502,7 +508,7 @@ export default function ParcoursClient({ commandeId }: { commandeId: string }) {
             endIcon={<ChevronRightIcon />}
             sx={{ textTransform: "none", minHeight: 40 }}
           >
-            Suivant
+            {t("next")}
           </Button>
         </div>
         <Button
@@ -515,7 +521,7 @@ export default function ParcoursClient({ commandeId }: { commandeId: string }) {
           disabled={saving}
           sx={{ textTransform: "none", minHeight: 48 }}
         >
-          {saving ? "…" : "Terminer"}
+          {saving ? tc("loadingEllipsis") : t("finish")}
         </Button>
       </Box>
     </main>

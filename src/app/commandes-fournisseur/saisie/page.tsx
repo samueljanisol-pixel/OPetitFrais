@@ -2,14 +2,16 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import { useTranslations } from "next-intl";
 import { Button, List, ListItem, ListItemButton, ListItemText, Typography } from "@mui/material";
 import AddIcon from "@mui/icons-material/Add";
-import ChevronLeftIcon from "@mui/icons-material/ChevronLeft";
 import AppLink from "@/components/AppLink";
 import { useSessionPermissions } from "@/lib/auth/useSessionPermissions";
 import { useMagasinSaisie } from "./MagasinSaisieContext";
 import SaisieMagasinStrip from "./SaisieMagasinStrip";
 import { useStatusLabels } from "@/lib/statusLabels/useStatusLabels";
+import { useAppFormat } from "@/lib/i18n/useAppFormat";
+import { useBackChevronIcon } from "@/lib/i18n/useBackChevronIcon";
 
 type CmdRow = {
   id: string;
@@ -18,11 +20,11 @@ type CmdRow = {
   ref_supplier: { label: string } | { label: string }[] | null;
 };
 
-function supplierLabel(row: CmdRow): string {
+function supplierLabel(row: CmdRow, emDash: string): string {
   const r = row.ref_supplier;
-  if (!r) return "—";
+  if (!r) return emDash;
   const x = Array.isArray(r) ? r[0] : r;
-  return (x as { label?: string })?.label ?? "—";
+  return (x as { label?: string })?.label ?? emDash;
 }
 
 function isIntegrated(status: string): boolean {
@@ -45,6 +47,13 @@ export default function SaisieIndexPage() {
   const [list, setList] = useState<CmdRow[]>([]);
   const [err, setErr] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const t = useTranslations("backoffice.commandes.saisie.index");
+  const tStatusList = useTranslations("backoffice.status");
+  const te = useTranslations("backoffice.commandes.errors");
+  const tCommon = useTranslations("common");
+  const { formatDate } = useAppFormat();
+  const BackChevron = useBackChevronIcon();
+  const emDash = tCommon("emDash");
 
   const load = useCallback(async () => {
     if (!magasinId) {
@@ -61,18 +70,18 @@ export default function SaisieIndexPage() {
       );
       const j = (await res.json()) as { commandes?: CmdRow[]; error?: string };
       if (!res.ok) {
-        setErr(j.error ?? "Erreur");
+        setErr(j.error ?? te("generic"));
         setList([]);
         return;
       }
       setList(j.commandes ?? []);
     } catch (e) {
-      setErr(e instanceof Error ? e.message : "Erreur");
+      setErr(e instanceof Error ? e.message : te("generic"));
       setList([]);
     } finally {
       setLoading(false);
     }
-  }, [magasinId]);
+  }, [magasinId, te]);
 
   useEffect(() => {
     if (!sLoading && !can("commandes_fournisseur.saisie")) {
@@ -94,7 +103,7 @@ export default function SaisieIndexPage() {
   }, [list]);
 
   if (sLoading) {
-    return <p className="px-4 py-6 text-slate-600">Chargement…</p>;
+    return <p className="px-4 py-6 text-slate-600">{tCommon("loading")}</p>;
   }
 
   if (!can("commandes_fournisseur.saisie")) {
@@ -104,9 +113,9 @@ export default function SaisieIndexPage() {
   if (!currentMagasin) {
     return (
       <main className="px-4 py-6">
-        <Typography color="error">Aucun magasin n&apos;est rattaché à votre profil.</Typography>
+        <Typography color="error">{te("noStoreLinked")}</Typography>
         <Button component={AppLink} href="/" className="!mt-4">
-          Retour
+          {tCommon("back")}
         </Button>
       </main>
     );
@@ -119,7 +128,7 @@ export default function SaisieIndexPage() {
         href="/"
         color="inherit"
         size="small"
-        startIcon={<ChevronLeftIcon fontSize="small" />}
+        startIcon={<BackChevron fontSize="small" />}
         sx={{
           textTransform: "none",
           mb: 1,
@@ -129,13 +138,13 @@ export default function SaisieIndexPage() {
           fontWeight: 500,
         }}
       >
-        Accueil
+        {tCommon("home")}
       </Button>
       <SaisieMagasinStrip className="!mb-4" />
       <div className="!mb-4 flex flex-row items-center justify-between">
         <div>
           <Typography variant="h5" component="h1" sx={{ fontWeight: 600 }}>
-            Commandes Fournisseur
+            {t("title")}
           </Typography>
         </div>
         <Button
@@ -147,7 +156,7 @@ export default function SaisieIndexPage() {
           size="small"
           sx={{ textTransform: "none" }}
         >
-          Nouvelle
+          {t("newOrder")}
         </Button>
       </div>
 
@@ -158,15 +167,15 @@ export default function SaisieIndexPage() {
       ) : null}
 
       {loading ? (
-        <Typography color="text.secondary">Chargement des commandes…</Typography>
+        <Typography color="text.secondary">{t("loadingOrders")}</Typography>
       ) : list.length === 0 ? (
-        <Typography color="text.secondary">Aucune commande. Créez-en une.</Typography>
+        <Typography color="text.secondary">{t("emptyOrders")}</Typography>
       ) : (
         <div className="flex flex-col gap-6">
           {enCoursOrders.length > 0 ? (
             <section>
               <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 1.5 }}>
-                En cours
+                {tStatusList("listSections.inProgress")}
               </Typography>
               <List dense disablePadding>
                 {enCoursOrders.map((c) => (
@@ -177,8 +186,11 @@ export default function SaisieIndexPage() {
                       sx={{ borderRadius: 2, border: "1px solid", borderColor: "divider" }}
                     >
                       <ListItemText
-                        primary={supplierLabel(c)}
-                        secondary={`${labelFor("commande_fournisseur", c.status)} — ${new Date(c.created_at).toLocaleString("fr-FR")}`}
+                        primary={supplierLabel(c, emDash)}
+                        secondary={tStatusList("orderListSecondary", {
+                          statusLabel: labelFor("commande_fournisseur", c.status),
+                          dateTime: formatDate(c.created_at),
+                        })}
                       />
                     </ListItemButton>
                   </ListItem>
@@ -190,7 +202,7 @@ export default function SaisieIndexPage() {
           {prisesEnCompteOrders.length > 0 ? (
             <section>
               <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 1.5 }}>
-                Prises en compte (non modifiables)
+                {tStatusList("listSections.integratedReadOnly")}
               </Typography>
               <List dense disablePadding>
                 {prisesEnCompteOrders.map((c) => (
@@ -206,8 +218,11 @@ export default function SaisieIndexPage() {
                       }}
                     >
                       <ListItemText
-                        primary={supplierLabel(c)}
-                        secondary={`${labelFor("commande_fournisseur", c.status)} — ${new Date(c.created_at).toLocaleString("fr-FR")}`}
+                        primary={supplierLabel(c, emDash)}
+                        secondary={tStatusList("orderListSecondary", {
+                          statusLabel: labelFor("commande_fournisseur", c.status),
+                          dateTime: formatDate(c.created_at),
+                        })}
                       />
                     </ListItemButton>
                   </ListItem>
@@ -219,7 +234,7 @@ export default function SaisieIndexPage() {
           {annuleesOrders.length > 0 ? (
             <section>
               <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 1.5 }}>
-                Annulées
+                {tStatusList("listSections.cancelled")}
               </Typography>
               <List dense disablePadding>
                 {annuleesOrders.map((c) => (
@@ -235,8 +250,11 @@ export default function SaisieIndexPage() {
                       }}
                     >
                       <ListItemText
-                        primary={supplierLabel(c)}
-                        secondary={`${labelFor("commande_fournisseur", c.status)} — ${new Date(c.created_at).toLocaleString("fr-FR")}`}
+                        primary={supplierLabel(c, emDash)}
+                        secondary={tStatusList("orderListSecondary", {
+                          statusLabel: labelFor("commande_fournisseur", c.status),
+                          dateTime: formatDate(c.created_at),
+                        })}
                       />
                     </ListItemButton>
                   </ListItem>

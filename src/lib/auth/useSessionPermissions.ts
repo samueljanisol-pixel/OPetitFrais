@@ -23,6 +23,9 @@ export function useSessionPermissions() {
         if (cancelled) return;
         setSession(j.session);
         writeSessionSnapshot(j.session);
+        if (j.session?.uiLocale) {
+          document.cookie = `locale=${j.session.uiLocale}; path=/; max-age=${60 * 60 * 24 * 365}; samesite=lax`;
+        }
       } catch {
         if (!cancelled) {
           setSession(null);

@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import { useTranslations } from "next-intl";
 import {
   Button,
   Checkbox,
@@ -13,10 +14,11 @@ import {
   Typography,
 } from "@mui/material";
 import { alpha } from "@mui/material/styles";
-import ChevronLeftIcon from "@mui/icons-material/ChevronLeft";
 import AppLink from "@/components/AppLink";
 import { useSessionPermissions } from "@/lib/auth/useSessionPermissions";
 import { useStatusLabels } from "@/lib/statusLabels/useStatusLabels";
+import { useAppFormat } from "@/lib/i18n/useAppFormat";
+import { useBackChevronIcon } from "@/lib/i18n/useBackChevronIcon";
 
 type PendingCmd = {
   id: string;
@@ -30,14 +32,10 @@ type PendingCmd = {
   magasins: { id: string; code: string; nom: string } | { id: string; code: string; nom: string }[] | null;
 };
 
-function formatCmdDateTime(c: PendingCmd): string {
+function formatCmdDateTime(c: PendingCmd, formatDateTime: (value: Date | string | number) => string, emDash: string): string {
   const iso = c.validated_at ?? c.created_at;
-  if (!iso) return "—";
-  return new Date(iso).toLocaleString("fr-FR", { dateStyle: "short", timeStyle: "short" });
-}
-
-function produitsLabel(n: number): string {
-  return `${n} produit${n > 1 ? "s" : ""}`;
+  if (!iso) return emDash;
+  return formatDateTime(iso);
 }
 
 type LotRow = {
@@ -50,22 +48,31 @@ type LotRow = {
 
 function oneLabel(
   r: { label?: string } | { label?: string }[] | null | undefined,
+  emDash: string,
 ): string {
-  if (!r) return "—";
+  if (!r) return emDash;
   const x = Array.isArray(r) ? r[0] : r;
-  return (x as { label?: string })?.label ?? "—";
+  return (x as { label?: string })?.label ?? emDash;
 }
 
 function oneMag(
   m: { code?: string; nom?: string } | { code?: string; nom?: string }[] | null | undefined,
+  emDash: string,
 ): string {
-  if (!m) return "—";
+  if (!m) return emDash;
   const x = Array.isArray(m) ? m[0] : m;
-  return (x as { code?: string; nom?: string })?.nom ?? (x as { code?: string })?.code ?? "—";
+  return (x as { code?: string; nom?: string })?.nom ?? (x as { code?: string })?.code ?? emDash;
 }
 
 export default function ValidationCommandeFournisseurClient() {
   const router = useRouter();
+  const t = useTranslations("backoffice.commandes.validation.index");
+  const tStatus = useTranslations("backoffice.status");
+  const tc = useTranslations("backoffice.commandes.common");
+  const te = useTranslations("backoffice.commandes.errors");
+  const tCommon = useTranslations("common");
+  const { formatDateTime } = useAppFormat();
+  const BackChevron = useBackChevronIcon();
   const { labelFor } = useStatusLabels();
   const { loading, can } = useSessionPermissions();
   const [commandes, setCommandes] = useState<PendingCmd[]>([]);
@@ -75,6 +82,7 @@ export default function ValidationCommandeFournisseurClient() {
   const [saving, setSaving] = useState(false);
   const [filterSupplier, setFilterSupplier] = useState<string>("");
   const [selected, setSelected] = useState<Set<string>>(() => new Set());
+  const emDash = tCommon("emDash");
 
   const load = useCallback(async () => {
     setErr(null);
@@ -87,7 +95,7 @@ export default function ValidationCommandeFournisseurClient() {
       const j1 = (await r1.json()) as { commandes?: PendingCmd[]; error?: string };
       const j2 = (await r2.json()) as { lots?: LotRow[]; error?: string };
       if (!r1.ok) {
-        setErr(j1.error ?? "Erreur");
+        setErr(j1.error ?? te("generic"));
         setCommandes([]);
       } else {
         setCommandes(j1.commandes ?? []);
@@ -96,14 +104,14 @@ export default function ValidationCommandeFournisseurClient() {
         setLots(j2.lots ?? []);
       } else {
         if (!r1.ok) return;
-        setErr(j2.error ?? "Erreur listes lots");
+        setErr(j2.error ?? te("lotsListFailed"));
       }
     } catch (e) {
-      setErr(e instanceof Error ? e.message : "Erreur");
+      setErr(e instanceof Error ? e.message : te("generic"));
     } finally {
       setLoadingData(false);
     }
-  }, []);
+  }, [te]);
 
   useEffect(() => {
     if (!loading && !can("commandes_fournisseur.consolidation")) {
@@ -120,11 +128,11 @@ export default function ValidationCommandeFournisseurClient() {
   const suppliers = useMemo(() => {
     const m = new Map<string, string>();
     for (const c of commandes) {
-      const lab = oneLabel(c.ref_supplier);
+      const lab = oneLabel(c.ref_supplier, emDash);
       m.set(c.supplier_id, lab);
     }
-    return [...m.entries()].sort((a, b) => a[1].localeCompare(b[1], "fr"));
-  }, [commandes]);
+    return [...m.entries()].sort((a, b) => a[1].localeCompare(b[1]));
+  }, [commandes, emDash]);
 
   const filtered = useMemo(() => {
     if (!filterSupplier) return commandes;
@@ -142,7 +150,7 @@ export default function ValidationCommandeFournisseurClient() {
 
   const createLot = async () => {
     if (selected.size === 0) {
-      setErr("Sélectionnez au moins une commande");
+      setErr(te("selectAtLeastOneOrder"));
       return;
     }
     setErr(null);
@@ -156,7 +164,7 @@ export default function ValidationCommandeFournisseurClient() {
       });
       const j = (await res.json()) as { lotId?: string; error?: string };
       if (!res.ok) {
-        setErr(j.error ?? "Erreur");
+        setErr(j.error ?? te("generic"));
         return;
       }
       if (j.lotId) {
@@ -164,14 +172,14 @@ export default function ValidationCommandeFournisseurClient() {
         void router.push(`/commandes-fournisseur/validation/lots/${j.lotId}`);
       }
     } catch (e) {
-      setErr(e instanceof Error ? e.message : "Erreur");
+      setErr(e instanceof Error ? e.message : te("generic"));
     } finally {
       setSaving(false);
     }
   };
 
   if (loading) {
-    return <p className="px-4 py-6">Chargement…</p>;
+    return <p className="px-4 py-6">{tCommon("loading")}</p>;
   }
   if (!can("commandes_fournisseur.consolidation")) {
     return null;
@@ -184,7 +192,7 @@ export default function ValidationCommandeFournisseurClient() {
         href="/commandes-fournisseur"
         color="inherit"
         size="small"
-        startIcon={<ChevronLeftIcon fontSize="small" />}
+        startIcon={<BackChevron fontSize="small" />}
         sx={{
           textTransform: "none",
           mb: 1,
@@ -194,10 +202,10 @@ export default function ValidationCommandeFournisseurClient() {
           fontWeight: 500,
         }}
       >
-        Retour
+        {tc("back")}
       </Button>
       <Typography variant="h5" className="!mb-4" sx={{ fontWeight: 600 }} component="h1">
-        Validation Commandes Fournisseur
+        {t("title")}
       </Typography>
 
       {err ? (
@@ -208,27 +216,27 @@ export default function ValidationCommandeFournisseurClient() {
 
       <section className="!mb-8">
         <Typography variant="subtitle1" className="!mb-2" sx={{ fontWeight: 600 }}>
-          Commandes en attente de validation
+          {t("pendingSection")}
         </Typography>
         {loadingData ? (
-          <Typography color="text.secondary">Chargement…</Typography>
+          <Typography color="text.secondary">{tc("loading")}</Typography>
         ) : commandes.length === 0 ? (
-          <Typography color="text.secondary">Aucune commande validée en attente.</Typography>
+          <Typography color="text.secondary">{t("pendingEmpty")}</Typography>
         ) : (
           <>
             <div className="!mb-3 flex flex-wrap items-end gap-3">
               <FormControl size="small" sx={{ minWidth: 200 }}>
-                <InputLabel id="fs">Fournisseur</InputLabel>
+                <InputLabel id="fs">{tc("supplier")}</InputLabel>
                 <Select
                   labelId="fs"
-                  label="Fournisseur"
+                  label={tc("supplier")}
                   value={filterSupplier}
                   onChange={(e) => {
                     setFilterSupplier(e.target.value as string);
                     setSelected(new Set());
                   }}
                 >
-                  <MenuItem value="">(tous)</MenuItem>
+                  <MenuItem value="">{tc("allSuppliers")}</MenuItem>
                   {suppliers.map(([id, label]) => (
                     <MenuItem key={id} value={id}>
                       {label}
@@ -244,7 +252,7 @@ export default function ValidationCommandeFournisseurClient() {
                 onClick={() => void createLot()}
                 sx={{ textTransform: "none" }}
               >
-                {saving ? "…" : "Constituer un lot"}
+                {saving ? tc("loadingEllipsis") : t("createLot")}
               </Button>
             </div>
             <ul className="space-y-2 rounded-lg border border-slate-200 bg-white p-2">
@@ -261,8 +269,12 @@ export default function ValidationCommandeFournisseurClient() {
                     }
                     label={
                       <span className="text-sm">
-                        <strong>{oneLabel(c.ref_supplier)}</strong> — {oneMag(c.magasins)} —{" "}
-                        {formatCmdDateTime(c)} — {produitsLabel(c.lineCount)}
+                        {t("pendingRow", {
+                          supplier: oneLabel(c.ref_supplier, emDash),
+                          store: oneMag(c.magasins, emDash),
+                          dateTime: formatCmdDateTime(c, formatDateTime, emDash),
+                          productCount: tStatus("productCount", { count: c.lineCount }),
+                        })}
                       </span>
                     }
                   />
@@ -275,11 +287,11 @@ export default function ValidationCommandeFournisseurClient() {
 
       <section className="!mb-6">
         <Typography variant="subtitle1" className="!mb-2" sx={{ fontWeight: 600 }}>
-          Lots en cours
+          {t("lotsSection")}
         </Typography>
         {lots.length === 0 ? (
           <Typography color="text.secondary" variant="body2">
-            Aucun lot.
+            {t("lotsEmpty")}
           </Typography>
         ) : (
           <ul className="space-y-1">
@@ -325,8 +337,11 @@ export default function ValidationCommandeFournisseurClient() {
                           : {}),
                     })}
                   >
-                    {oneLabel(l.ref_supplier)} — {labelFor("commande_fournisseur_lot", l.status)} —{" "}
-                    {new Date(l.created_at).toLocaleString("fr-FR")}
+                    {t("lotRow", {
+                      supplier: oneLabel(l.ref_supplier, emDash),
+                      statusLabel: labelFor("commande_fournisseur_lot", l.status),
+                      dateTime: formatDateTime(l.created_at),
+                    })}
                   </Button>
                 </li>
               );

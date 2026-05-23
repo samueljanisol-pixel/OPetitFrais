@@ -2,6 +2,7 @@
 
 import { useMemo } from "react";
 import { Box, Typography } from "@mui/material";
+import { useTranslations } from "next-intl";
 import type { SaisieLigneTarget } from "@/lib/commandes-fournisseur/ligne-saisie-comments";
 
 type Props = {
@@ -16,6 +17,7 @@ export default function LigneCommentairesMxDisplay({
   mxByMagasinId,
   align = "right",
 }: Props) {
+  const tc = useTranslations("backoffice.commandes.common");
   const lines = useMemo(() => {
     const out: { mx: string; text: string }[] = [];
     for (const t of targets) {
@@ -68,7 +70,7 @@ export default function LigneCommentairesMxDisplay({
           <Box component="span" sx={{ fontWeight: 700, unicodeBidi: "plaintext" }}>
             {l.mx}
           </Box>
-          {" : "}
+          {tc("storeCommentSeparator")}
           {l.text}
         </Typography>
       ))}

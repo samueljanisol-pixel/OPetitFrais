@@ -2,13 +2,17 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { useTranslations } from "next-intl";
 import { Button, Typography } from "@mui/material";
-import ChevronLeftIcon from "@mui/icons-material/ChevronLeft";
 import AppLink from "@/components/AppLink";
 import { useSessionPermissions } from "@/lib/auth/useSessionPermissions";
+import { useBackChevronIcon } from "@/lib/i18n/useBackChevronIcon";
 
 export default function CommandesFournisseurLandingClient() {
   const router = useRouter();
+  const t = useTranslations("backoffice.commandes.landing");
+  const tCommon = useTranslations("common");
+  const BackChevron = useBackChevronIcon();
   const {
     loading,
     isFullAccess,
@@ -52,7 +56,7 @@ export default function CommandesFournisseurLandingClient() {
   if (loading || (redirecting && !isHub)) {
     return (
       <main className="mx-auto w-full max-w-lg px-4 py-8">
-        <p className="text-slate-600">Chargement…</p>
+        <p className="text-slate-600">{tCommon("loading")}</p>
       </main>
     );
   }
@@ -68,7 +72,7 @@ export default function CommandesFournisseurLandingClient() {
         href="/"
         color="inherit"
         size="small"
-        startIcon={<ChevronLeftIcon fontSize="small" />}
+        startIcon={<BackChevron fontSize="small" />}
         sx={{
           textTransform: "none",
           mb: 1,
@@ -78,13 +82,13 @@ export default function CommandesFournisseurLandingClient() {
           fontWeight: 500,
         }}
       >
-        Accueil
+        {tCommon("home")}
       </Button>
       <Typography variant="h5" component="h1" className="!mb-1" sx={{ fontWeight: 600 }}>
-        Commandes fournisseur
+        {t("title")}
       </Typography>
       <Typography variant="body2" color="text.secondary" className="!mb-6">
-        Choisissez l&apos;espace à ouvrir
+        {t("subtitle")}
       </Typography>
       <div className="flex flex-col gap-3">
         {canCommandesFournisseurSaisie || isFullAccess ? (
@@ -97,7 +101,7 @@ export default function CommandesFournisseurLandingClient() {
             fullWidth
             sx={{ borderRadius: 2, textTransform: "none", py: 1.25 }}
           >
-            Saisie
+            {t("navSaisie")}
           </Button>
         ) : null}
         {canCommandesFournisseurConsolidation || isFullAccess ? (
@@ -110,7 +114,7 @@ export default function CommandesFournisseurLandingClient() {
             fullWidth
             sx={{ borderRadius: 2, textTransform: "none", py: 1.25 }}
           >
-            Validation
+            {t("navValidation")}
           </Button>
         ) : null}
         {canCommandesFournisseurAchat || isFullAccess ? (
@@ -123,7 +127,7 @@ export default function CommandesFournisseurLandingClient() {
             fullWidth
             sx={{ borderRadius: 2, textTransform: "none", py: 1.25 }}
           >
-            Achat
+            {t("navAchat")}
           </Button>
         ) : null}
       </div>

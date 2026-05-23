@@ -2,6 +2,8 @@ export type PanierMag = { nbPaniers: number; panierMoyen: number | null }
 
 export type CaResponse = {
   totalGlobal: number
+  /** Vrai si le CA du jour sélectionné atteint ou dépasse le record sur la période historique. */
+  isRecordDay?: boolean
   magasins: Record<string, Record<string, number>>
   month?: {
     ym: string

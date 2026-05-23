@@ -6,6 +6,7 @@ import Link from 'next/link'
 import AppLink from '@/components/AppLink'
 import BackNavButton from '@/components/BackNavButton'
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { HISTORIQUE_FROM_ISO } from '@/lib/ca/constants'
 import { fetchHistoriqueFromSupabase } from '@/lib/ca/fromSupabase'
 import type { HistoriqueDayRow, HistoriquePayload } from '@/lib/ca/types'
 import { maybeAutoSyncIfStale } from '@/lib/sync/maybeAutoSyncIfStale'
@@ -26,9 +27,6 @@ const labelMagasin = (raw: string) => {
 const isoToUtcDate = (iso: string) => new Date(`${iso}T00:00:00Z`)
 
 const monthKey = (iso: string) => iso.slice(0, 7) // YYYY-MM
-
-/** Borne basse de l’historique (inclus), au lieu du 1er janvier de l’année en cours. */
-const HISTORIQUE_FROM_ISO = '2025-05-13'
 
 export default function HistoriqueCA() {
   const { session, loading: sessionLoading } = useSessionPermissions()
@@ -159,12 +157,21 @@ export default function HistoriqueCA() {
     const from = sortedDates[0]?.date ?? null
     const to = sortedDates[sortedDates.length - 1]?.date ?? null
 
+    let recordDay: { date: string; totalGlobal: number } | null = null
+    for (const d of days) {
+      if (!Number.isFinite(d.totalGlobal)) continue
+      if (!recordDay || d.totalGlobal > recordDay.totalGlobal) {
+        recordDay = { date: d.date, totalGlobal: d.totalGlobal }
+      }
+    }
+
     return {
       days,
       totalGlobal,
       avgPerDay,
       avgPerMonth,
       monthList,
+      recordDay,
       from,
       to,
       dataFrom: data.from,
@@ -295,7 +302,7 @@ export default function HistoriqueCA() {
             </div>
           </div>
 
-          <div className="grid w-full min-w-0 grid-cols-3 gap-2 sm:gap-3">
+          <div className="grid w-full min-w-0 grid-cols-2 gap-2 sm:grid-cols-4 sm:gap-3">
             <div className="min-w-0 rounded-2xl border border-emerald-100 bg-white/80 px-3 py-4 shadow-sm backdrop-blur sm:px-5">
               <div className="text-[10px] font-medium uppercase tracking-wide text-emerald-700/80 sm:text-xs">
                 Total global
@@ -318,6 +325,17 @@ export default function HistoriqueCA() {
               <div className="mt-1 text-[10px] leading-tight text-slate-500 sm:text-[11px]">
                 {computed.monthList.length} mois avec données
               </div>
+            </div>
+            <div className="min-w-0 rounded-2xl border border-amber-200 bg-amber-50/80 px-3 py-4 shadow-sm backdrop-blur sm:px-5">
+              <div className="text-[10px] font-medium uppercase tracking-wide text-amber-800/80 sm:text-xs">Jour record</div>
+              <div className="mt-1 break-words text-lg font-semibold text-slate-900 sm:text-2xl">
+                {computed.recordDay ? formatMAD(computed.recordDay.totalGlobal) : '—'}
+              </div>
+              {computed.recordDay ? (
+                <div className="mt-1 text-[10px] leading-tight capitalize text-slate-600 sm:text-[11px]">
+                  {dayLabel(computed.recordDay.date)}
+                </div>
+              ) : null}
             </div>
           </div>
         </header>

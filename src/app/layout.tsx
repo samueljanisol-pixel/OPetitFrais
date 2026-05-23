@@ -1,9 +1,11 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
-import { AppRouterCacheProvider } from "@mui/material-nextjs/v16-appRouter";
+import { getLocale, getMessages, getTimeZone } from "next-intl/server";
 import "./globals.css";
 import SwRegister from "./swRegister";
 import AppShell from "@/components/AppShell";
+import AppProviders from "@/components/AppProviders";
+import { isRtl, normalizeLocale, type AppLocale } from "@/i18n/config";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -35,24 +37,30 @@ export const metadata: Metadata = {
 };
 
 export const viewport = {
-  themeColor: "#16a34a"
-}
+  themeColor: "#16a34a",
+};
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const locale = normalizeLocale(await getLocale()) as AppLocale;
+  const messages = await getMessages();
+  const timeZone = await getTimeZone();
+  const dir = isRtl(locale) ? "rtl" : "ltr";
+
   return (
     <html
-      lang="en"
+      lang={locale}
+      dir={dir}
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="flex min-h-full flex-col">
-        <AppRouterCacheProvider options={{ enableCssLayer: true }}>
+        <AppProviders locale={locale} messages={messages as Record<string, unknown>} timeZone={timeZone}>
           <SwRegister />
           <AppShell>{children}</AppShell>
-        </AppRouterCacheProvider>
+        </AppProviders>
       </body>
     </html>
   );

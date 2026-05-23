@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { useTranslations } from "next-intl";
 import {
   Alert,
   Button,
@@ -13,6 +14,9 @@ import {
 import AppLink from "@/components/AppLink";
 import { useRouter } from "next/navigation";
 import { useSessionPermissions } from "@/lib/auth/useSessionPermissions";
+import { useStatusLabels } from "@/lib/statusLabels/useStatusLabels";
+import { useAppFormat } from "@/lib/i18n/useAppFormat";
+import { useBackChevronIcon } from "@/lib/i18n/useBackChevronIcon";
 
 type SupplierRefOne = { id?: string; code?: string; label?: string } | null | undefined;
 
@@ -27,17 +31,24 @@ type LotRow = {
 };
 
 function supplierLabel(raw: LotRow["ref_supplier"]): string {
-  if (raw == null) return "—";
+  if (raw == null) return "";
   const o = Array.isArray(raw) ? raw[0] : raw;
   const lb = typeof o?.label === "string" ? o.label.trim() : "";
   const code = typeof o?.code === "string" ? o.code.trim() : "";
   if (lb.length > 0) return lb;
   if (code.length > 0) return code;
-  return "—";
+  return "";
 }
 
 export default function AchatLotsListClient() {
   const router = useRouter();
+  const t = useTranslations("backoffice.commandes.achat.list");
+  const tc = useTranslations("backoffice.commandes.common");
+  const te = useTranslations("backoffice.commandes.errors");
+  const tCommon = useTranslations("common");
+  const { labelFor } = useStatusLabels();
+  const { formatDateTime } = useAppFormat();
+  const BackChevron = useBackChevronIcon();
   const { loading: permLoading, can } = useSessionPermissions();
   const [statusMode, setStatusMode] = useState<"prete" | "all">("prete");
   const [lots, setLots] = useState<LotRow[]>([]);
@@ -58,18 +69,18 @@ export default function AchatLotsListClient() {
       const res = await fetch(`/api/commandes-fournisseur/achat/lots${q}`, { method: "GET" });
       const json = (await res.json().catch(() => ({}))) as { lots?: LotRow[]; error?: string };
       if (!res.ok) {
-        setErr(typeof json.error === "string" ? json.error : "Erreur de chargement");
+        setErr(typeof json.error === "string" ? json.error : te("loadFailed"));
         setLots([]);
         return;
       }
       setLots(Array.isArray(json.lots) ? json.lots : []);
     } catch {
-      setErr("Réseau indisponible");
+      setErr(te("networkUnavailable"));
       setLots([]);
     } finally {
       setLoading(false);
     }
-  }, [statusMode]);
+  }, [statusMode, te]);
 
   useEffect(() => {
     if (!permLoading && can("commandes_fournisseur.achat")) {
@@ -83,7 +94,7 @@ export default function AchatLotsListClient() {
   };
 
   if (permLoading) {
-    return <p className="px-4 py-6">Chargement…</p>;
+    return <p className="px-4 py-6">{tCommon("loading")}</p>;
   }
 
   if (!can("commandes_fournisseur.achat")) {
@@ -97,6 +108,7 @@ export default function AchatLotsListClient() {
         href="/"
         color="inherit"
         size="small"
+        startIcon={<BackChevron fontSize="small" />}
         sx={{
           textTransform: "none",
           mb: 1,
@@ -106,13 +118,13 @@ export default function AchatLotsListClient() {
           fontWeight: 500,
         }}
       >
-        {"< Accueil"}
+        {tCommon("home")}
       </Button>
       <Typography variant="h5" className="!mb-1" sx={{ fontWeight: 600 }}>
-        Achat — lots
+        {t("title")}
       </Typography>
       <Typography variant="body2" color="text.secondary" className="!mb-4">
-        Lots prêts à saisie et achat ; après clôture, lecture seule.
+        {t("subtitle")}
       </Typography>
 
       <div className="flex flex-wrap items-center gap-2 !mb-4">
@@ -121,18 +133,18 @@ export default function AchatLotsListClient() {
           exclusive
           value={statusMode}
           onChange={handleToggle}
-          aria-label="Filtre statut lots"
+          aria-label={t("filterAria")}
           sx={{
             "& .MuiToggleButton-root": {
               textTransform: "none",
             },
           }}
         >
-          <ToggleButton value="prete">À traiter</ToggleButton>
-          <ToggleButton value="all">Tous (prêts + terminés)</ToggleButton>
+          <ToggleButton value="prete">{t("filterPending")}</ToggleButton>
+          <ToggleButton value="all">{t("filterAll")}</ToggleButton>
         </ToggleButtonGroup>
         <Button size="small" variant="outlined" onClick={() => void load()} sx={{ textTransform: "none" }}>
-          Actualiser
+          {tc("refresh")}
         </Button>
       </div>
 
@@ -144,11 +156,11 @@ export default function AchatLotsListClient() {
 
       {loading ? (
         <div className="flex items-center gap-2 text-slate-600">
-          <CircularProgress size={20} /> Chargement des lots…
+          <CircularProgress size={20} /> {t("loadingLots")}
         </div>
       ) : lots.length === 0 ? (
         <Typography variant="body2" color="text.secondary">
-          Aucun lot pour ce filtre.
+          {t("emptyLots")}
         </Typography>
       ) : (
         <div className="flex flex-col gap-3">
@@ -167,16 +179,18 @@ export default function AchatLotsListClient() {
               <div className="flex flex-wrap items-start justify-between gap-2">
                 <div className="min-w-0">
                   <Typography variant="subtitle1" sx={{ fontWeight: 600 }} className="truncate">
-                    {supplierLabel(l.ref_supplier)}
+                    {supplierLabel(l.ref_supplier) || tCommon("emDash")}
                   </Typography>
                   <Typography variant="caption" color="text.secondary" component="div">
-                    Statut&nbsp;: {String(l.status)} — Prête le{" "}
-                    {l.marque_prete_at ? new Date(l.marque_prete_at).toLocaleString("fr-FR") : "—"}
+                    {t("lotStatusLine", {
+                      status: labelFor("commande_fournisseur_lot", String(l.status)),
+                      readyDate: l.marque_prete_at ? formatDateTime(l.marque_prete_at) : tCommon("emDash"),
+                    })}
                     {l.status === "terminee" ? (
                       <>
-                        {" "}
-                        — Clôturée le{" "}
-                        {l.marque_terminee_at ? new Date(l.marque_terminee_at).toLocaleString("fr-FR") : "—"}
+                        {t("lotStatusClosed", {
+                          closedDate: l.marque_terminee_at ? formatDateTime(l.marque_terminee_at) : tCommon("emDash"),
+                        })}
                       </>
                     ) : null}
                   </Typography>
@@ -188,7 +202,7 @@ export default function AchatLotsListClient() {
                   size="small"
                   sx={{ textTransform: "none", flexShrink: 0 }}
                 >
-                  Ouvrir
+                  {tc("open")}
                 </Button>
               </div>
             </Paper>

@@ -1,11 +1,13 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { useTranslations } from "next-intl";
 import type { RefStatusLabelRow } from "@/lib/statusLabels/types";
-import { fallbackStatusLabel } from "@/lib/statusLabels/defaults";
+import { FALLBACK_STATUS_LABELS, fallbackStatusLabel } from "@/lib/statusLabels/defaults";
 
 export function useStatusLabels() {
   const [rows, setRows] = useState<RefStatusLabelRow[] | null>(null);
+  const tStatus = useTranslations("backoffice.status");
 
   useEffect(() => {
     let cancelled = false;
@@ -28,12 +30,20 @@ export function useStatusLabels() {
     };
   }, []);
 
-  const labelFor = useCallback((domain: string, code: string) => {
-    const r = rows?.find((x) => x.domain === domain && x.status_code === code);
-    const t = r?.label?.trim();
-    if (t) return t;
-    return fallbackStatusLabel(domain, code);
-  }, [rows]);
+  const labelFor = useCallback(
+    (domain: string, code: string) => {
+      const i18nDomain = FALLBACK_STATUS_LABELS[domain];
+      if (i18nDomain && code in i18nDomain) {
+        return tStatus(`${domain}.${code}` as "commande_fournisseur.en_saisie");
+      }
+
+      const r = rows?.find((x) => x.domain === domain && x.status_code === code);
+      const dbLabel = r?.label?.trim();
+      if (dbLabel) return dbLabel;
+      return fallbackStatusLabel(domain, code);
+    },
+    [rows, tStatus],
+  );
 
   return { labelFor, loaded: rows !== null };
 }

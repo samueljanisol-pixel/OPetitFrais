@@ -1,8 +1,10 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { createServerClient } from "@supabase/ssr";
-import { authErrorMessageFr } from "@/lib/auth/auth-error-fr";
+import { authErrorCode, authErrorMessageFr } from "@/lib/auth/auth-error-fr";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/server";
+import { normalizeLocale } from "@/i18n/config";
+import { localeCookieOptions } from "@/lib/i18n/locale-cookie";
 
 function looksLikeEmail(s: string): boolean {
   return s.includes("@");
@@ -76,7 +78,26 @@ export async function POST(req: Request) {
 
   const { error } = await supabase.auth.signInWithPassword({ email, password });
   if (error) {
-    return NextResponse.json({ error: authErrorMessageFr(error.message) }, { status: 401 });
+    return NextResponse.json(
+      { error: authErrorMessageFr(error.message), errorCode: authErrorCode(error.message) },
+      { status: 401 },
+    );
+  }
+
+  const { data: authUser } = await supabase.auth.getUser();
+  if (authUser.user) {
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("ui_locale")
+      .eq("user_id", authUser.user.id)
+      .maybeSingle();
+    const uiLocale = normalizeLocale(profile?.ui_locale);
+    const opts = localeCookieOptions(uiLocale);
+    cookieStore.set(opts.name, opts.value, {
+      path: opts.path,
+      maxAge: opts.maxAge,
+      sameSite: opts.sameSite,
+    });
   }
 
   return NextResponse.json({ ok: true });

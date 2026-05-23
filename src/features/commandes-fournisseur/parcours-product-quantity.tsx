@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Button, Typography } from "@mui/material";
+import { useTranslations } from "next-intl";
 import { DecimalQtyTextField } from "@/components/commandes-fournisseur/DecimalQtyTextField";
 import { clampQtyToApiRange, roundQty2 } from "@/lib/commandes-fournisseur/qty-parse";
 import {
@@ -10,6 +11,7 @@ import {
 } from "@/lib/commandes-fournisseur/product-display";
 import { commandeAllowsUnitProduct } from "@/lib/products/packagingEligibility";
 import { conditionnementSupplierId } from "@/lib/products/packagingSupplierMatch";
+import { useAppFormat } from "@/lib/i18n/useAppFormat";
 
 export type PPack = {
   id: string;
@@ -53,7 +55,7 @@ export function refLabel(raw: unknown): string {
 export function formatQtyDisplay(n: number): string {
   if (!Number.isFinite(n)) return "0";
   if (Number.isInteger(n)) return String(n);
-  return n.toLocaleString("fr-FR", { maximumFractionDigits: 4 });
+  return new Intl.NumberFormat(undefined, { maximumFractionDigits: 4 }).format(n);
 }
 
 export function packQtyValue(pkg: PPack): number {
@@ -103,6 +105,7 @@ export function UnitQteControl({
   value: number;
   onChange: (n: number) => void;
 }) {
+  const tc = useTranslations("backoffice.commandes.common");
   const step =
     (d: number) => () =>
       onChange(Math.max(0, roundQty2(roundQty2(value) + d)));
@@ -128,7 +131,7 @@ export function UnitQteControl({
               flexShrink: 0,
               "& .MuiInputBase-input": { textAlign: "center", py: 0.65 },
             }}
-            slotProps={{ htmlInput: { "aria-label": `Quantité ${unitLabel}` } }}
+            slotProps={{ htmlInput: { "aria-label": tc("quantityForUnitAria", { unitLabel }) } }}
           />
           <Typography variant="body2" color="text.secondary" className="shrink-0 whitespace-nowrap">
             {unitLabel}
@@ -158,6 +161,7 @@ export function PackQteControl({
   value: number;
   onChange: (n: number) => void;
 }) {
+  const tc = useTranslations("backoffice.commandes.common");
   const step =
     (d: number) => () =>
       onChange(Math.max(0, roundQty2(roundQty2(value) + d)));
@@ -186,7 +190,7 @@ export function PackQteControl({
               flexShrink: 0,
               "& .MuiInputBase-input": { textAlign: "center", py: 0.65 },
             }}
-            slotProps={{ htmlInput: { "aria-label": "Quantité colis" } }}
+            slotProps={{ htmlInput: { "aria-label": tc("quantityColisAria") } }}
           />
         </div>
         <div className="flex shrink-0 gap-0.5">
@@ -289,16 +293,27 @@ export function ParcoursProductQuantityPanel({
   allowUnitInCommande = true,
   hideQuantityControls = false,
 }: ParcoursProductQuantityPanelProps) {
+  const t = useTranslations("backoffice.commandes.quantityPanel");
+  const tc = useTranslations("backoffice.commandes.common");
+  const { formatNumber } = useAppFormat();
   const p = product;
   const packs = packArray(p.product_packaging);
   const productUnit = refLabel(p.ref_sales_unit);
   const uk = uKeyForProduct(p.id);
+  const formatQty = useCallback(
+    (value: number) =>
+      formatNumber(value, {
+        minimumFractionDigits: 0,
+        maximumFractionDigits: 4,
+      }),
+    [formatNumber],
+  );
 
   if (packs.length === 0) {
     if (hideQuantityControls) {
       return (
         <Typography variant="body2" color="text.secondary">
-          Les quantités se saisissent par magasin dans la matrice du lot.
+          {t("matrixQtyHint")}
         </Typography>
       );
     }
@@ -325,15 +340,16 @@ export function ParcoursProductQuantityPanel({
             onClick={() => onSelectRoute("unit")}
             sx={{ textTransform: "none" }}
           >
-            À l’unité ({productUnit})
-            {getQ(uk) > 0 && route !== "unit" ? ` · ${formatQtyDisplay(getQ(uk))}` : ""}
+            {getQ(uk) > 0 && route !== "unit"
+              ? t("unitButtonWithQty", { unit: productUnit, qty: formatQty(getQ(uk)) })
+              : t("unitButton", { unit: productUnit })}
           </Button>
         ) : null}
         {packs.map((pkg) => {
           const pq = packQtyValue(pkg);
           const pkUnit = refLabel(pkg.ref_sales_unit);
           const shortT = packagingConditionnementLabel(pkg);
-          const spec = `(${formatQtyDisplay(pq)} ${pkUnit})`;
+          const formattedPackQty = formatQty(pq);
           const pk = pKeyForProduct(p.id, pkg.id);
           const qPack = getQ(pk);
           return (
@@ -346,19 +362,25 @@ export function ParcoursProductQuantityPanel({
               onClick={() => onSelectRoute(pkg.id)}
               sx={{ textTransform: "none" }}
             >
-              {shortT} {spec}
-              {qPack > 0 && route !== pkg.id ? ` · ${formatQtyDisplay(qPack)}` : ""}
+              {qPack > 0 && route !== pkg.id
+                ? t("packButtonWithQty", {
+                    label: shortT,
+                    packQty: formattedPackQty,
+                    unit: pkUnit,
+                    qty: formatQty(qPack),
+                  })
+                : t("packButton", { label: shortT, packQty: formattedPackQty, unit: pkUnit })}
             </Button>
           );
         })}
       </div>
       {hideQuantityControls ? (
         <Typography variant="body2" color="text.secondary">
-          Les quantités se saisissent par magasin dans la matrice.
+          {t("matrixQtyHintShort")}
         </Typography>
       ) : route === "unit" && !allowUnitInCommande ? (
         <Typography variant="body2" color="text.secondary">
-          Ce produit ne se commande qu’en conditionnement pour votre magasin.
+          {t("packagingOnly")}
         </Typography>
       ) : route === "unit" ? (
         <UnitQteControl
@@ -374,10 +396,14 @@ export function ParcoursProductQuantityPanel({
           const pkUnit = refLabel(pkg.ref_sales_unit);
           const v = getQ(pKeyForProduct(p.id, pkg.id));
           const total = v * pq;
-          const condWithPackSpec = `${condName} (${formatQtyDisplay(pq)} ${pkUnit})`;
+          const condWithPackSpec = t("packButton", {
+            label: condName,
+            packQty: formatQty(pq),
+            unit: pkUnit,
+          });
           const soitLine =
             v > 0 && !isPackSalesUnitUnite(pkg.ref_sales_unit)
-              ? `Soit ${formatQtyDisplay(total)} ${pkUnit}`
+              ? tc("soitLine", { qty: formatQty(total), unit: pkUnit })
               : null;
           return (
             <PackQteControl

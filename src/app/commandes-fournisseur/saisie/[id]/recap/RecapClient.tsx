@@ -2,6 +2,7 @@
 
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import { useTranslations } from "next-intl";
 import {
   Box,
   Button,
@@ -22,7 +23,6 @@ import {
   TableRow,
 } from "@mui/material";
 import { alpha } from "@mui/material/styles";
-import ChevronLeftIcon from "@mui/icons-material/ChevronLeft";
 import CommentOutlinedIcon from "@mui/icons-material/CommentOutlined";
 import DeleteOutlineOutlinedIcon from "@mui/icons-material/DeleteOutlineOutlined";
 import LigneSaisieComments from "@/components/commandes-fournisseur/LigneSaisieComments";
@@ -46,6 +46,8 @@ import { buildSoitLine } from "@/lib/commandes-fournisseur/product-display";
 import { clampQtyToApiRange, roundQty2 } from "@/lib/commandes-fournisseur/qty-parse";
 import CommandeSaisieRecapExport from "@/features/commandes-fournisseur/CommandeSaisieRecapExport";
 import type { VendeurRef } from "@/lib/commandes-fournisseur/validation-lot-vendeur-recap";
+import { useAppFormat } from "@/lib/i18n/useAppFormat";
+import { useBackChevronIcon } from "@/lib/i18n/useBackChevronIcon";
 
 type Ligne = {
   id: string;
@@ -78,17 +80,20 @@ type Commande = {
   ref_supplier: { label: string } | { label: string }[] | null;
 };
 
-function supplierLabel(c: Commande): string {
+function supplierLabel(c: Commande, emDash: string): string {
   const r = c.ref_supplier;
-  if (!r) return "—";
+  if (!r) return emDash;
   const x = Array.isArray(r) ? r[0] : r;
-  return (x as { label?: string })?.label ?? "—";
+  return (x as { label?: string })?.label ?? emDash;
 }
 
-function formatSoit(n: number): string {
+function formatSoit(
+  n: number,
+  formatNumber: (value: number, options?: Intl.NumberFormatOptions) => string,
+): string {
   if (!Number.isFinite(n)) return "0";
   if (Number.isInteger(n)) return String(n);
-  return n.toLocaleString("fr-FR", { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+  return formatNumber(n, { minimumFractionDigits: 0, maximumFractionDigits: 2 });
 }
 
 /** Grille fixe : ± | qté | unité | ± — même gabarit sur toutes les lignes (avec ou sans « Soit »). */
@@ -132,6 +137,9 @@ function StepQte({
   onChange,
   hideUnit,
   soitLine,
+  decreaseByOneAria,
+  minQtyRemoveLineAria,
+  quantityProductAria,
 }: {
   value: number;
   uniteVente: string;
@@ -140,6 +148,9 @@ function StepQte({
   hideUnit?: boolean;
   /** Conversion UdV produit, centrée sous le champ quantité. */
   soitLine?: string | null;
+  decreaseByOneAria: string;
+  minQtyRemoveLineAria: string;
+  quantityProductAria: string;
 }) {
   const step =
     (d: number) => () =>
@@ -154,9 +165,7 @@ function StepQte({
           sx={{ py: 0.5 }}
           onClick={() => step(-1)()}
           disabled={value < 1}
-          aria-label={
-            value < 1 ? "Quantité minimale, supprimez la ligne pour retirer" : "Diminuer de 1"
-          }
+          aria-label={value < 1 ? minQtyRemoveLineAria : decreaseByOneAria}
         >
           -1
         </Button>
@@ -165,7 +174,7 @@ function StepQte({
           value={clampQtyToApiRange(value)}
           onQtyChange={(n) => onChange(clampQtyToApiRange(n))}
           sx={QTE_FIELD_SX}
-          slotProps={{ htmlInput: { "aria-label": "Quantité produit" } }}
+          slotProps={{ htmlInput: { "aria-label": quantityProductAria } }}
         />
         {hideUnit ? (
           <span className={QTE_UNIT_CELL} aria-hidden />
@@ -209,6 +218,12 @@ function StepQte({
 
 export default function RecapClient({ commandeId }: { commandeId: string }) {
   const router = useRouter();
+  const t = useTranslations("backoffice.commandes.recap");
+  const tc = useTranslations("backoffice.commandes.common");
+  const te = useTranslations("backoffice.commandes.errors");
+  const tCommon = useTranslations("common");
+  const BackChevron = useBackChevronIcon();
+  const { formatNumber } = useAppFormat();
   const { labelFor } = useStatusLabels();
   const [commande, setCommande] = useState<Commande | null>(null);
   const [lignes, setLignes] = useState<Ligne[]>([]);
@@ -259,7 +274,7 @@ export default function RecapClient({ commandeId }: { commandeId: string }) {
         error?: string;
       };
       if (!res.ok) {
-        setErr(j.error ?? "Erreur");
+        setErr(j.error ?? te("generic"));
         return;
       }
       if (j.commande) {
@@ -270,11 +285,11 @@ export default function RecapClient({ commandeId }: { commandeId: string }) {
       setVendeurs(j.vendeurs ?? []);
       setSaisieParLabel(typeof j.saisieParLabel === "string" ? j.saisieParLabel : null);
     } catch (e) {
-      setErr(e instanceof Error ? e.message : "Erreur");
+      setErr(e instanceof Error ? e.message : te("generic"));
     } finally {
       setLoading(false);
     }
-  }, [commandeId]);
+  }, [commandeId, te]);
 
   useEffect(() => {
     void load();
@@ -303,10 +318,10 @@ export default function RecapClient({ commandeId }: { commandeId: string }) {
       });
       const j = (await res.json()) as { error?: string };
       if (!res.ok) {
-        throw new Error(j.error ?? "Sauvegarde lignes");
+        throw new Error(j.error ?? te("saveLinesFailed"));
       }
     },
-    [commandeId],
+    [commandeId, te],
   );
 
   const persistLignes = useCallback(async () => {
@@ -322,9 +337,9 @@ export default function RecapClient({ commandeId }: { commandeId: string }) {
     });
     const j = (await res.json()) as { error?: string };
     if (!res.ok) {
-      throw new Error(j.error ?? "Commentaire");
+      throw new Error(j.error ?? te("commentFailed"));
     }
-  }, [commandeId, comment]);
+  }, [commandeId, comment, te]);
 
   const onValidate = useCallback(async () => {
     setErr(null);
@@ -342,16 +357,16 @@ export default function RecapClient({ commandeId }: { commandeId: string }) {
       });
       const j = (await res.json()) as { error?: string };
       if (!res.ok) {
-        throw new Error(j.error ?? "Validation");
+        throw new Error(j.error ?? te("validationFailed"));
       }
       void router.refresh();
       await load();
     } catch (e) {
-      setErr(e instanceof Error ? e.message : "Erreur");
+      setErr(e instanceof Error ? e.message : te("generic"));
     } finally {
       setSaving(false);
     }
-  }, [commandeId, editable, load, persistLignes, router, saveComment]);
+  }, [commandeId, editable, load, persistLignes, router, saveComment, te]);
 
   const executeCancelOrder = useCallback(async () => {
     setCancelDialogOpen(false);
@@ -364,16 +379,16 @@ export default function RecapClient({ commandeId }: { commandeId: string }) {
       });
       const j = (await res.json()) as { error?: string };
       if (!res.ok) {
-        throw new Error(j.error ?? "Annulation");
+        throw new Error(j.error ?? te("cancellationFailed"));
       }
       void router.refresh();
       await load();
     } catch (e) {
-      setErr(e instanceof Error ? e.message : "Erreur");
+      setErr(e instanceof Error ? e.message : te("generic"));
     } finally {
       setSaving(false);
     }
-  }, [commandeId, load, router]);
+  }, [commandeId, load, router, te]);
 
   const onRouvrir = useCallback(async () => {
     setErr(null);
@@ -387,16 +402,16 @@ export default function RecapClient({ commandeId }: { commandeId: string }) {
       });
       const j = (await res.json()) as { error?: string };
       if (!res.ok) {
-        throw new Error(j.error ?? "Réouverture");
+        throw new Error(j.error ?? te("reopenFailed"));
       }
       void router.refresh();
       await load();
     } catch (e) {
-      setErr(e instanceof Error ? e.message : "Erreur");
+      setErr(e instanceof Error ? e.message : te("generic"));
     } finally {
       setSaving(false);
     }
-  }, [commandeId, load, router]);
+  }, [commandeId, load, router, te]);
 
   const setLigneQte = (i: number, q: number) => {
     setLignes((prev) => {
@@ -440,11 +455,11 @@ export default function RecapClient({ commandeId }: { commandeId: string }) {
       setLignes(next);
       closeLineComment();
     } catch (e) {
-      setErr(e instanceof Error ? e.message : "Erreur");
+      setErr(e instanceof Error ? e.message : te("generic"));
     } finally {
       setSaving(false);
     }
-  }, [closeLineComment, editable, lineCommentDraft, lineCommentIndex, lignes, putLignes]);
+  }, [closeLineComment, editable, lineCommentDraft, lineCommentIndex, lignes, putLignes, te]);
 
   const deleteLineComment = useCallback(async () => {
     if (!editable || lineCommentIndex === null) return;
@@ -463,11 +478,11 @@ export default function RecapClient({ commandeId }: { commandeId: string }) {
       setLignes(next);
       closeLineComment();
     } catch (e) {
-      setErr(e instanceof Error ? e.message : "Erreur");
+      setErr(e instanceof Error ? e.message : te("generic"));
     } finally {
       setSaving(false);
     }
-  }, [closeLineComment, editable, lineCommentIndex, lignes, putLignes]);
+  }, [closeLineComment, editable, lineCommentIndex, lignes, putLignes, te]);
 
   const onDeleteLigne = useCallback(
     async (i: number) => {
@@ -475,11 +490,7 @@ export default function RecapClient({ commandeId }: { commandeId: string }) {
       const row = lignes[i];
       if (!row) return;
       const name = row.product?.name?.trim() || row.product_id;
-      if (
-        !window.confirm(
-          `Supprimer la ligne « ${name} » de cette commande ?\n\nCette action est définitive.`,
-        )
-      ) {
+      if (!window.confirm(t("deleteLineConfirm", { productName: name }))) {
         return;
       }
       setErr(null);
@@ -489,12 +500,12 @@ export default function RecapClient({ commandeId }: { commandeId: string }) {
         await putLignes(next);
         await load();
       } catch (e) {
-        setErr(e instanceof Error ? e.message : "Erreur");
+        setErr(e instanceof Error ? e.message : te("generic"));
       } finally {
         setSaving(false);
       }
     },
-    [editable, lignes, load, putLignes],
+    [editable, lignes, load, putLignes, t, te],
   );
 
   const newLigneFromPick = useCallback(
@@ -571,13 +582,13 @@ export default function RecapClient({ commandeId }: { commandeId: string }) {
         await load();
         return true;
       } catch (e) {
-        setErr(e instanceof Error ? e.message : "Erreur");
+        setErr(e instanceof Error ? e.message : te("generic"));
         return false;
       } finally {
         setSaving(false);
       }
     },
-    [commande, editable, lignes, load, newLigneFromPick, putLignes],
+    [commande, editable, lignes, load, newLigneFromPick, putLignes, te],
   );
 
   const handleProductPicked = useCallback(
@@ -616,7 +627,7 @@ export default function RecapClient({ commandeId }: { commandeId: string }) {
   }, []);
 
   if (loading) {
-    return <p className="px-4 py-4">Chargement…</p>;
+    return <p className="px-4 py-4">{tc("loading")}</p>;
   }
 
   if (err && !commande) {
@@ -630,6 +641,7 @@ export default function RecapClient({ commandeId }: { commandeId: string }) {
   if (!commande) {
     return null;
   }
+  const emDash = tc("emDash");
 
   return (
     <main className="mx-auto w-full max-w-lg px-4 py-4">
@@ -638,7 +650,7 @@ export default function RecapClient({ commandeId }: { commandeId: string }) {
         href="/commandes-fournisseur/saisie"
         color="inherit"
         size="small"
-        startIcon={<ChevronLeftIcon fontSize="small" />}
+        startIcon={<BackChevron fontSize="small" />}
         sx={{
           textTransform: "none",
           mb: 1,
@@ -648,14 +660,14 @@ export default function RecapClient({ commandeId }: { commandeId: string }) {
           fontWeight: 500,
         }}
       >
-        Liste des commandes
+        {t("backToList")}
       </Button>
       <Typography variant="h5" className="!mb-1" sx={{ fontWeight: 600 }}>
-        Récapitulatif
+        {t("title")}
       </Typography>
       <div className="!mb-4 flex flex-col gap-1">
         <Typography variant="subtitle1" sx={{ fontWeight: 600 }} component="p" className="!m-0">
-          Fournisseur : {supplierLabel(commande)}
+          {tc("supplierColon", { label: supplierLabel(commande, emDash) })}
         </Typography>
         <Typography variant="subtitle1" color="primary" sx={{ fontWeight: 700 }} component="p" className="!m-0">
           {labelFor("commande_fournisseur", commande.status)}
@@ -671,7 +683,7 @@ export default function RecapClient({ commandeId }: { commandeId: string }) {
       {canExportRecapImage && commande ? (
         <CommandeSaisieRecapExport
           commande={commande}
-          supplierLabel={supplierLabel(commande)}
+          supplierLabel={supplierLabel(commande, emDash)}
           lignes={lignes}
           vendeurs={vendeurs}
           saisieParLabel={saisieParLabel}
@@ -687,7 +699,7 @@ export default function RecapClient({ commandeId }: { commandeId: string }) {
             size="small"
             sx={{ textTransform: "none" }}
           >
-            Parcours produits
+            {t("productTour")}
           </Button>
           <Button
             type="button"
@@ -697,14 +709,14 @@ export default function RecapClient({ commandeId }: { commandeId: string }) {
             disabled={saving}
             sx={{ textTransform: "none" }}
           >
-            Ajouter un produit
+            {tc("addProduct")}
           </Button>
         </div>
       ) : null}
       {editable ? (
       <List dense disablePadding>
         {lignes.map((l, i) => {
-          const u = l.uniteVente ?? "—";
+          const u = l.uniteVente ?? emDash;
           const isCond = Boolean(l.product_packaging_id);
           const pq = l.packContentQty;
           const packUdv = l.condPackUniteVente ?? u;
@@ -719,9 +731,9 @@ export default function RecapClient({ commandeId }: { commandeId: string }) {
             },
             l.qte,
           );
-          const catKey = (l.categoryLabel ?? "").trim() || "Sans catégorie";
+          const catKey = (l.categoryLabel ?? "").trim() || tc("noCategory");
           const prevCat =
-            i > 0 ? ((lignes[i - 1]!.categoryLabel ?? "").trim() || "Sans catégorie") : null;
+            i > 0 ? ((lignes[i - 1]!.categoryLabel ?? "").trim() || tc("noCategory")) : null;
           const showCategoryHeader = i === 0 || catKey !== prevCat;
           return (
             <Fragment key={l.id}>
@@ -769,6 +781,9 @@ export default function RecapClient({ commandeId }: { commandeId: string }) {
                           uniteVente={u}
                           hideUnit={isCond}
                           soitLine={soitCond}
+                          decreaseByOneAria={tc("decreaseByOneAria")}
+                          minQtyRemoveLineAria={tc("minQtyRemoveLineAria")}
+                          quantityProductAria={tc("quantityProductAria")}
                           onChange={(q) => setLigneQte(i, q)}
                         />
                       </div>
@@ -776,7 +791,7 @@ export default function RecapClient({ commandeId }: { commandeId: string }) {
                         type="button"
                         size="small"
                         color="error"
-                        aria-label="Supprimer la ligne"
+                        aria-label={tc("removeLineAria")}
                         onClick={() => void onDeleteLigne(i)}
                         disabled={saving}
                         className="!mt-0.5"
@@ -797,7 +812,7 @@ export default function RecapClient({ commandeId }: { commandeId: string }) {
                         size="small"
                         color={l.line_comment ? "info" : "default"}
                         aria-label={
-                          l.line_comment ? "Modifier le commentaire" : "Ajouter un commentaire"
+                          l.line_comment ? tc("editCommentAria") : tc("addCommentAria")
                         }
                         onClick={() => openLineComment(i)}
                         disabled={saving}
@@ -828,14 +843,14 @@ export default function RecapClient({ commandeId }: { commandeId: string }) {
             <TableRow>
               <TableCell>Produit</TableCell>
               <TableCell align="right" sx={{ minWidth: 72 }}>
-                Quantité
+                {tc("quantity")}
               </TableCell>
-              <TableCell sx={{ minWidth: 120 }}>UdV / cond.</TableCell>
+              <TableCell sx={{ minWidth: 120 }}>{tc("udvCond")}</TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
             {lignes.map((l, i) => {
-              const u = l.uniteVente ?? "—";
+              const u = l.uniteVente ?? emDash;
               const isCond = Boolean(l.product_packaging_id);
               const pq = l.packContentQty;
               const packUdv = l.condPackUniteVente ?? u;
@@ -851,11 +866,11 @@ export default function RecapClient({ commandeId }: { commandeId: string }) {
                 l.qte,
               );
               const udvMain =
-                isCond && l.condTitre ? l.condTitre : u !== "—" ? u : "—";
+                isCond && l.condTitre ? l.condTitre : u !== emDash ? u : emDash;
               const udvSub = soitCond;
-              const catKey = (l.categoryLabel ?? "").trim() || "Sans catégorie";
+              const catKey = (l.categoryLabel ?? "").trim() || tc("noCategory");
               const prevCat =
-                i > 0 ? ((lignes[i - 1]!.categoryLabel ?? "").trim() || "Sans catégorie") : null;
+                i > 0 ? ((lignes[i - 1]!.categoryLabel ?? "").trim() || tc("noCategory")) : null;
               const showCategoryHeader = i === 0 || catKey !== prevCat;
               return (
                 <Fragment key={l.id}>
@@ -900,7 +915,7 @@ export default function RecapClient({ commandeId }: { commandeId: string }) {
                         }}
                       >
                         <Typography variant="body2" className="font-medium tabular-nums">
-                          {formatSoit(l.qte)}
+                          {formatSoit(l.qte, formatNumber)}
                         </Typography>
                         {l.line_comment ? (
                           <LigneSaisieComments
@@ -939,8 +954,8 @@ export default function RecapClient({ commandeId }: { commandeId: string }) {
       {lignes.length === 0 ? (
         <Typography variant="body2" color="text.secondary" className="!mb-4">
           {editable
-            ? "Aucune ligne. Utilisez le parcours produits ou « Ajouter un produit »."
-            : "Aucune ligne. Passez par le parcours produits."}
+            ? t("emptyEditable")
+            : t("emptyReadOnly")}
         </Typography>
       ) : null}
 
@@ -948,7 +963,7 @@ export default function RecapClient({ commandeId }: { commandeId: string }) {
         fullWidth
         multiline
         minRows={2}
-        label="Commentaire commande"
+        label={t("orderCommentLabel")}
         value={comment}
         onChange={(e) => setComment(e.target.value)}
         onBlur={() => {
@@ -962,19 +977,19 @@ export default function RecapClient({ commandeId }: { commandeId: string }) {
       <div className="flex flex-col gap-2">
         {editable ? (
           <Button variant="contained" color="success" fullWidth onClick={() => void onValidate()} disabled={saving} sx={{ textTransform: "none" }}>
-            {saving ? "…" : "Valider la commande"}
+            {saving ? tc("loadingEllipsis") : t("validateOrder")}
           </Button>
         ) : null}
 
         {commande.status === "validee" ? (
           <Button variant="outlined" color="warning" fullWidth onClick={() => void onRouvrir()} disabled={saving} sx={{ textTransform: "none" }}>
-            {saving ? "…" : "Modifier (retour en saisie)"}
+            {saving ? tc("loadingEllipsis") : t("reopenForEdit")}
           </Button>
         ) : null}
 
         {commande.status === "integree" ? (
           <Typography variant="body2" color="text.secondary">
-            Cette commande a été prise en compte par le gestionnaire. Modification impossible.
+            {t("integratedNotice")}
           </Typography>
         ) : null}
 
@@ -988,13 +1003,13 @@ export default function RecapClient({ commandeId }: { commandeId: string }) {
             disabled={saving}
             sx={{ textTransform: "none" }}
           >
-            Annuler la commande
+            {t("cancelOrder")}
           </Button>
         ) : null}
 
         {commande.status === "annulee" ? (
           <Typography variant="body2" color="text.secondary">
-            Cette commande a été annulée. Aucune modification n&apos;est possible.
+            {t("cancelledNotice")}
           </Typography>
         ) : null}
       </div>
@@ -1010,11 +1025,10 @@ export default function RecapClient({ commandeId }: { commandeId: string }) {
       ) : null}
 
       <Dialog open={cancelDialogOpen} onClose={() => setCancelDialogOpen(false)} fullWidth maxWidth="sm">
-        <DialogTitle sx={{ pb: 0.5 }}>Confirmer l&apos;annulation</DialogTitle>
+        <DialogTitle sx={{ pb: 0.5 }}>{t("cancelDialog.title")}</DialogTitle>
         <DialogContent>
           <Typography variant="body2" color="text.secondary">
-            Cette action est définitive : la commande passera au statut «{" "}
-            {labelFor("commande_fournisseur", "annulee")} » et ne pourra plus être modifiée.
+            {t("cancelDialog.body", { statusLabel: labelFor("commande_fournisseur", "annulee") })}
           </Typography>
         </DialogContent>
         <DialogActions className="!px-3 !pb-2">
@@ -1025,7 +1039,7 @@ export default function RecapClient({ commandeId }: { commandeId: string }) {
             sx={{ textTransform: "none" }}
             disabled={saving}
           >
-            Retour
+            {tCommon("back")}
           </Button>
           <Button
             type="button"
@@ -1035,7 +1049,7 @@ export default function RecapClient({ commandeId }: { commandeId: string }) {
             onClick={() => void executeCancelOrder()}
             sx={{ textTransform: "none" }}
           >
-            {saving ? "…" : "Confirmer l'annulation"}
+            {saving ? tc("loadingEllipsis") : t("cancelDialog.confirm")}
           </Button>
         </DialogActions>
       </Dialog>
@@ -1043,8 +1057,8 @@ export default function RecapClient({ commandeId }: { commandeId: string }) {
       <Dialog open={lineCommentIndex !== null} onClose={closeLineComment} fullWidth maxWidth="sm">
         <DialogTitle sx={{ pb: 0.5 }}>
           {lineCommentDraft.trim().length > 0 || (lineCommentIndex !== null && lignes[lineCommentIndex]?.line_comment)
-            ? "Commentaire ligne"
-            : "Ajouter un commentaire"}
+            ? tc("commentLine")
+            : tc("addComment")}
         </DialogTitle>
         <DialogContent>
           {lineCommentIndex !== null ? (
@@ -1057,11 +1071,11 @@ export default function RecapClient({ commandeId }: { commandeId: string }) {
             multiline
             minRows={2}
             maxRows={6}
-            label="Commentaire"
+            label={tc("comment")}
             value={lineCommentDraft}
             onChange={(e) => setLineCommentDraft(e.target.value)}
             disabled={saving}
-            placeholder="Ex. préférence de calibrage, remplacement…"
+            placeholder={tc("commentPlaceholder")}
           />
         </DialogContent>
         <DialogActions
@@ -1078,7 +1092,7 @@ export default function RecapClient({ commandeId }: { commandeId: string }) {
               onClick={() => void deleteLineComment()}
               sx={{ textTransform: "none" }}
             >
-              {saving ? "…" : "Supprimer"}
+              {saving ? tc("loadingEllipsis") : tCommon("delete")}
             </Button>
           ) : (
             <span aria-hidden />
@@ -1091,7 +1105,7 @@ export default function RecapClient({ commandeId }: { commandeId: string }) {
               sx={{ textTransform: "none" }}
               disabled={saving}
             >
-              Annuler
+              {tCommon("cancel")}
             </Button>
             <Button
               type="button"
@@ -1100,14 +1114,14 @@ export default function RecapClient({ commandeId }: { commandeId: string }) {
               onClick={() => void saveLineComment()}
               sx={{ textTransform: "none" }}
             >
-              {saving ? "…" : "Enregistrer"}
+              {saving ? tc("loadingEllipsis") : tCommon("save")}
             </Button>
           </div>
         </DialogActions>
       </Dialog>
 
       <Dialog open={condDialogOpen} onClose={handleCondDialogClose} fullWidth maxWidth="sm">
-        <DialogTitle sx={{ pb: 0.5 }}>Quantité et conditionnement</DialogTitle>
+        <DialogTitle sx={{ pb: 0.5 }}>{t("condDialog.title")}</DialogTitle>
         <DialogContent>
           {pendingProduct ? (
             <>
@@ -1121,7 +1135,7 @@ export default function RecapClient({ commandeId }: { commandeId: string }) {
         </DialogContent>
         <DialogActions className="!px-3 !pb-2">
           <Button type="button" color="inherit" onClick={handleCondDialogClose} sx={{ textTransform: "none" }}>
-            Annuler
+            {tCommon("cancel")}
           </Button>
           <Button
             type="button"
@@ -1131,7 +1145,7 @@ export default function RecapClient({ commandeId }: { commandeId: string }) {
             onClick={handleCondDialogConfirm}
             sx={{ textTransform: "none" }}
           >
-            {hasExistingLinesForPending ? "Enregistrer" : "Ajouter"}
+            {hasExistingLinesForPending ? t("condDialog.saveExisting") : t("condDialog.addNew")}
           </Button>
         </DialogActions>
       </Dialog>

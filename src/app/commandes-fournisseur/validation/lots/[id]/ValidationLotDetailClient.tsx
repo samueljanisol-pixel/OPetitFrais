@@ -2,6 +2,7 @@
 
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { useTranslations } from "next-intl";
 import {
   Box,
   Button,
@@ -19,7 +20,6 @@ import {
   Typography,
 } from "@mui/material";
 import { alpha } from "@mui/material/styles";
-import ChevronLeftIcon from "@mui/icons-material/ChevronLeft";
 import DeleteOutlineOutlinedIcon from "@mui/icons-material/DeleteOutlineOutlined";
 import ProductArabicSubtitle from "@/components/ProductArabicSubtitle";
 import AppLink from "@/components/AppLink";
@@ -37,6 +37,8 @@ import {
 } from "@/features/commandes-fournisseur/parcours-product-quantity";
 import { DecimalQtyTextField } from "@/components/commandes-fournisseur/DecimalQtyTextField";
 import LigneCommentaireSaisieControls from "@/components/commandes-fournisseur/LigneCommentaireSaisieControls";
+import { useAppFormat } from "@/lib/i18n/useAppFormat";
+import { useBackChevronIcon } from "@/lib/i18n/useBackChevronIcon";
 import type {
   CommentaireMagasinCell,
   SaisieLigneTarget,
@@ -177,6 +179,7 @@ function normalizeProduct(raw: ProductE | unknown): ProductE {
 function buildMergedCommandComments(
   lot: Lot,
   cmdComments: Record<string, string>,
+  storeCommentSeparator: string,
 ): string {
   const lines: string[] = [];
   for (const inc of lot.commande_fournisseur_lot_inclusion ?? []) {
@@ -188,13 +191,20 @@ function buildMergedCommandComments(
     if (!txt) {
       continue;
     }
-    lines.push(`${magLabel(cf.magasins)} : ${txt}`);
+    lines.push(`${magLabel(cf.magasins)}${storeCommentSeparator}${txt}`);
   }
   return lines.join("\n");
 }
 
 export default function ValidationLotDetailClient({ lotId }: { lotId: string }) {
   const router = useRouter();
+  const tLotDetail = useTranslations("backoffice.commandes.validation.lotDetail");
+  const tCommandesCommon = useTranslations("backoffice.commandes.common");
+  const tCommandesErrors = useTranslations("backoffice.commandes.errors");
+  const tCommon = useTranslations("common");
+  const { formatDate, formatNumber } = useAppFormat();
+  const BackChevronIcon = useBackChevronIcon();
+  const genericError = tCommandesErrors("generic");
   const { labelFor } = useStatusLabels();
   const { loading, can } = useSessionPermissions();
   const [lot, setLot] = useState<Lot | null>(null);
@@ -237,7 +247,7 @@ export default function ValidationLotDetailClient({ lotId }: { lotId: string }) 
         error?: string;
       };
       if (!res.ok) {
-        setErr(j.error ?? "Erreur");
+        setErr(j.error ?? genericError);
         setLot(null);
         return;
       }
@@ -245,11 +255,11 @@ export default function ValidationLotDetailClient({ lotId }: { lotId: string }) 
       setLignes(j.lignes ?? []);
       setVendeurs(j.vendeurs ?? []);
     } catch (e) {
-      setErr(e instanceof Error ? e.message : "Erreur");
+      setErr(e instanceof Error ? e.message : genericError);
     } finally {
       setDataLoading(false);
     }
-  }, [lotId]);
+  }, [lotId, genericError]);
 
   useEffect(() => {
     if (!loading && !can("commandes_fournisseur.consolidation")) {
@@ -321,17 +331,17 @@ export default function ValidationLotDetailClient({ lotId }: { lotId: string }) 
         });
         const j = (await res.json()) as { error?: string };
         if (!res.ok) {
-          setErr(j.error ?? "Erreur");
+          setErr(j.error ?? genericError);
           await load();
         }
       } catch (e) {
-        setErr(e instanceof Error ? e.message : "Erreur");
+        setErr(e instanceof Error ? e.message : genericError);
         await load();
       } finally {
         setRowSaving(null);
       }
     },
-    [lotId, load],
+    [lotId, load, genericError],
   );
 
   const updateLocalQte = useCallback(
@@ -376,16 +386,16 @@ export default function ValidationLotDetailClient({ lotId }: { lotId: string }) 
       });
       const j = (await res.json()) as { error?: string };
       if (!res.ok) {
-        setErr(j.error ?? "Erreur");
+        setErr(j.error ?? genericError);
         return;
       }
       void router.push("/commandes-fournisseur/validation");
     } catch (e) {
-      setErr(e instanceof Error ? e.message : "Erreur");
+      setErr(e instanceof Error ? e.message : genericError);
     } finally {
       setSaving(false);
     }
-  }, [lot, lotId, router]);
+  }, [lot, lotId, router, genericError]);
 
   const executeReopenBrouillon = useCallback(async () => {
     if (!lot || lot.status !== "prete") {
@@ -404,17 +414,17 @@ export default function ValidationLotDetailClient({ lotId }: { lotId: string }) 
       });
       const j = (await res.json()) as { error?: string };
       if (!res.ok) {
-        setErr(j.error ?? "Erreur");
+        setErr(j.error ?? genericError);
         return;
       }
       void router.refresh();
       await load();
     } catch (e) {
-      setErr(e instanceof Error ? e.message : "Erreur");
+      setErr(e instanceof Error ? e.message : genericError);
     } finally {
       setSaving(false);
     }
-  }, [lot, lotId, load, router]);
+  }, [lot, lotId, load, router, genericError]);
 
   const onPrete = async () => {
     if (!lot || lot.status !== "brouillon") {
@@ -431,13 +441,13 @@ export default function ValidationLotDetailClient({ lotId }: { lotId: string }) 
       });
       const j = (await res.json()) as { error?: string };
       if (!res.ok) {
-        setErr(j.error ?? "Erreur");
+        setErr(j.error ?? genericError);
         return;
       }
       void router.refresh();
       await load();
     } catch (e) {
-      setErr(e instanceof Error ? e.message : "Erreur");
+      setErr(e instanceof Error ? e.message : genericError);
     } finally {
       setSaving(false);
     }
@@ -462,17 +472,17 @@ export default function ValidationLotDetailClient({ lotId }: { lotId: string }) 
         });
         const j = (await res.json()) as { error?: string };
         if (!res.ok) {
-          setErr(j.error ?? "Erreur");
+          setErr(j.error ?? genericError);
           return;
         }
         await load();
       } catch (e) {
-        setErr(e instanceof Error ? e.message : "Erreur");
+        setErr(e instanceof Error ? e.message : genericError);
       } finally {
         setSaving(false);
       }
     },
-    [lot, lotId, load],
+    [lot, lotId, load, genericError],
   );
 
   const handleProductChosenFromPicker = useCallback(
@@ -537,17 +547,17 @@ export default function ValidationLotDetailClient({ lotId }: { lotId: string }) 
       });
       const j = (await res.json()) as { error?: string };
       if (!res.ok) {
-        setErr(j.error ?? "Erreur");
+        setErr(j.error ?? genericError);
         return;
       }
       closeDeleteLigneDialog();
       await load();
     } catch (e) {
-      setErr(e instanceof Error ? e.message : "Erreur");
+      setErr(e instanceof Error ? e.message : genericError);
     } finally {
       setRowSaving(null);
     }
-  }, [closeDeleteLigneDialog, load, lot, lotId, pendingDeleteLigne]);
+  }, [closeDeleteLigneDialog, load, lot, lotId, pendingDeleteLigne, genericError]);
 
   const patchLotCommentaire = useCallback(
     async (nextRaw: string) => {
@@ -571,19 +581,19 @@ export default function ValidationLotDetailClient({ lotId }: { lotId: string }) 
         });
         const j = (await res.json()) as { error?: string };
         if (!res.ok) {
-          setErr(j.error ?? "Erreur");
+          setErr(j.error ?? genericError);
           await load();
           return;
         }
         await load();
       } catch (e) {
-        setErr(e instanceof Error ? e.message : "Erreur");
+        setErr(e instanceof Error ? e.message : genericError);
         await load();
       } finally {
         setLotCommentSaving(false);
       }
     },
-    [lot, lotId, load],
+    [lot, lotId, load, genericError],
   );
 
   const patchCommandeCommentaire = useCallback(
@@ -615,19 +625,19 @@ export default function ValidationLotDetailClient({ lotId }: { lotId: string }) 
         });
         const j = (await res.json()) as { error?: string };
         if (!res.ok) {
-          setErr(j.error ?? "Erreur");
+          setErr(j.error ?? genericError);
           await load();
           return;
         }
         await load();
       } catch (e) {
-        setErr(e instanceof Error ? e.message : "Erreur");
+        setErr(e instanceof Error ? e.message : genericError);
         await load();
       } finally {
         setCmdCommentSavingId(null);
       }
     },
-    [lot, load],
+    [lot, load, genericError],
   );
 
   const handlePreremplirLotDepuisCommandes = useCallback(() => {
@@ -635,9 +645,13 @@ export default function ValidationLotDetailClient({ lotId }: { lotId: string }) 
     if (!lotCur || lotCur.status !== "brouillon") {
       return;
     }
-    const block = buildMergedCommandComments(lotCur, cmdComments);
+    const block = buildMergedCommandComments(
+      lotCur,
+      cmdComments,
+      tCommandesCommon("storeCommentSeparator"),
+    );
     if (!block.trim()) {
-      setErr("Aucun commentaire de commande à intégrer.");
+      setErr(tCommandesErrors("noOrderCommentsToMerge"));
       return;
     }
     setErr(null);
@@ -649,7 +663,14 @@ export default function ValidationLotDetailClient({ lotId }: { lotId: string }) 
     }
     setPendingMergeBlock(block);
     setMergeLotDialogOpen(true);
-  }, [lot, cmdComments, lotCommentDraft, patchLotCommentaire]);
+  }, [
+    lot,
+    cmdComments,
+    lotCommentDraft,
+    patchLotCommentaire,
+    tCommandesCommon,
+    tCommandesErrors,
+  ]);
 
   const applyMergeLotComment = useCallback(
     (mode: "append" | "replace") => {
@@ -670,7 +691,7 @@ export default function ValidationLotDetailClient({ lotId }: { lotId: string }) 
   );
 
   if (loading) {
-    return <p className="px-4 py-6">Chargement…</p>;
+    return <p className="px-4 py-6">{tCommandesCommon("loading")}</p>;
   }
   if (!can("commandes_fournisseur.consolidation")) {
     return null;
@@ -681,7 +702,7 @@ export default function ValidationLotDetailClient({ lotId }: { lotId: string }) 
       <main className="px-4 py-6">
         <Typography color="error">{err}</Typography>
         <Button component={AppLink} href="/commandes-fournisseur/validation" className="!mt-4" sx={{ textTransform: "none" }}>
-          Retour
+          {tCommandesCommon("back")}
         </Button>
       </main>
     );
@@ -691,8 +712,13 @@ export default function ValidationLotDetailClient({ lotId }: { lotId: string }) 
   }
 
   const rSup = one(lot.ref_supplier as { label?: string } | { label?: string }[]);
-  const supplierName = rSup && "label" in rSup && rSup.label ? String(rSup.label) : "—";
+  const supplierName = rSup && "label" in rSup && rSup.label ? String(rSup.label) : tCommandesCommon("emDash");
   const editable = lot.status === "brouillon";
+  const readyAtText = lot.marque_prete_at
+    ? tLotDetail("readyAtSuffix", {
+        date: formatDate(lot.marque_prete_at, { dateStyle: "short", timeStyle: "short" }),
+      })
+    : "";
 
   return (
     <main className="mx-auto w-full max-w-5xl overflow-x-auto px-4 py-6">
@@ -701,7 +727,7 @@ export default function ValidationLotDetailClient({ lotId }: { lotId: string }) 
         href="/commandes-fournisseur/validation"
         color="inherit"
         size="small"
-        startIcon={<ChevronLeftIcon fontSize="small" />}
+        startIcon={<BackChevronIcon fontSize="small" />}
         sx={{
           textTransform: "none",
           mb: 1,
@@ -711,14 +737,14 @@ export default function ValidationLotDetailClient({ lotId }: { lotId: string }) 
           fontWeight: 500,
         }}
       >
-        Liste des commandes
+        {tLotDetail("backToList")}
       </Button>
       <Typography variant="h5" className="!mb-1" sx={{ fontWeight: 600 }} component="h1">
-        Lot — {supplierName}
+        {tLotDetail("title", { supplier: supplierName })}
       </Typography>
       <Typography variant="body2" color="text.secondary" className="!mb-4">
-        Statut : <strong>{labelFor("commande_fournisseur_lot", lot.status)}</strong>
-        {lot.marque_prete_at ? ` — prêt le ${new Date(lot.marque_prete_at).toLocaleString("fr-FR")}` : null}
+        <strong>{tLotDetail("statusLine", { statusLabel: labelFor("commande_fournisseur_lot", lot.status) })}</strong>
+        {readyAtText}
       </Typography>
 
       {lot.status === "prete" ? (
@@ -731,7 +757,7 @@ export default function ValidationLotDetailClient({ lotId }: { lotId: string }) 
             onClick={() => setReopenBrouillonDialogOpen(true)}
             sx={{ textTransform: "none" }}
           >
-            Revenir en saisie
+            {tLotDetail("reopenDraft")}
           </Button>
         </div>
       ) : null}
@@ -744,7 +770,7 @@ export default function ValidationLotDetailClient({ lotId }: { lotId: string }) 
 
       {dataLoading ? (
         <Typography color="text.secondary" className="!mb-4">
-          Chargement du détail…
+          {tLotDetail("loadingDetail")}
         </Typography>
       ) : null}
 
@@ -758,30 +784,30 @@ export default function ValidationLotDetailClient({ lotId }: { lotId: string }) 
             disabled={saving}
             sx={{ textTransform: "none" }}
           >
-            Ajouter un produit
+            {tCommandesCommon("addProduct")}
           </Button>
         </div>
       ) : null}
       {lignes.length === 0 ? (
         <Typography color="text.secondary" variant="body2" className="!mb-4">
-          Aucune ligne produit.
+          {tLotDetail("emptyLines")}
         </Typography>
       ) : (
         <div className="!mb-6 overflow-x-auto">
           <Table size="small">
             <TableHead>
               <TableRow>
-                <TableCell sx={{ minWidth: 200 }}>Produit</TableCell>
+                <TableCell sx={{ minWidth: 200 }}>{tCommandesCommon("product")}</TableCell>
                 {magasinColumns.map((m) => (
                   <TableCell key={m.id} align="right" sx={{ minWidth: 88, whiteSpace: "nowrap" }}>
                     {m.label}
                   </TableCell>
                 ))}
                 <TableCell align="right" sx={{ fontWeight: 600, minWidth: 56 }}>
-                  Total
+                  {tLotDetail("tableTotal")}
                 </TableCell>
                 <TableCell align="left" sx={{ fontWeight: 600, minWidth: 148 }}>
-                  UdV / cond.
+                  {tCommandesCommon("udvCond")}
                 </TableCell>
                 {editable ? (
                   <TableCell align="center" width={48} padding="checkbox">
@@ -792,9 +818,11 @@ export default function ValidationLotDetailClient({ lotId }: { lotId: string }) 
             </TableHead>
             <TableBody>
               {lignes.map((l, i) => {
-                const catKey = (l.categoryLabel ?? "").trim() || "Sans catégorie";
+                const catKey = (l.categoryLabel ?? "").trim() || tCommandesCommon("noCategory");
                 const prevCat =
-                  i > 0 ? ((lignes[i - 1]?.categoryLabel ?? "").trim() || "Sans catégorie") : null;
+                  i > 0
+                    ? ((lignes[i - 1]?.categoryLabel ?? "").trim() || tCommandesCommon("noCategory"))
+                    : null;
                 const showCategoryHeader = i === 0 || catKey !== prevCat;
                 const p = normalizeProduct(l.product);
                 const display = buildLotProductDisplayInfo(
@@ -874,11 +902,17 @@ export default function ValidationLotDetailClient({ lotId }: { lotId: string }) 
                                 }
                               }}
                               sx={{ width: 88, "& .MuiInputBase-input": { textAlign: "right", py: 0.65 } }}
-                              slotProps={{ htmlInput: { "aria-label": `Quantité ${col.label}` } }}
+                              slotProps={{
+                                htmlInput: {
+                                  "aria-label": tCommandesCommon("quantityForStoreAria", {
+                                    storeLabel: col.label,
+                                  }),
+                                },
+                              }}
                             />
                           ) : (
                             <Typography variant="body2" component="span">
-                              {v.toLocaleString("fr-FR", {
+                              {formatNumber(v, {
                                 minimumFractionDigits: 0,
                                 maximumFractionDigits: 2,
                               })}
@@ -924,7 +958,7 @@ export default function ValidationLotDetailClient({ lotId }: { lotId: string }) 
                     })}
                     <TableCell align="right" sx={{ verticalAlign: "middle" }}>
                       <Typography variant="body2" component="span" sx={{ fontWeight: 700 }}>
-                        {tot.toLocaleString("fr-FR", { minimumFractionDigits: 0, maximumFractionDigits: 2 })}
+                        {formatNumber(tot, { minimumFractionDigits: 0, maximumFractionDigits: 2 })}
                       </Typography>
                     </TableCell>
                     <TableCell
@@ -978,7 +1012,7 @@ export default function ValidationLotDetailClient({ lotId }: { lotId: string }) 
                           type="button"
                           size="small"
                           color="error"
-                          aria-label="Supprimer la ligne"
+                          aria-label={tCommandesCommon("removeLineAria")}
                           disabled={saving || rowSaving === l.id}
                           onClick={() => openDeleteLigneDialog(l.id, productName(p))}
                         >
@@ -1016,7 +1050,7 @@ export default function ValidationLotDetailClient({ lotId }: { lotId: string }) 
             onClick={() => setCancelLotDialogOpen(true)}
             sx={{ textTransform: "none" }}
           >
-            Annuler le lot
+            {tLotDetail("cancelLot")}
           </Button>
           <Button
             type="button"
@@ -1026,14 +1060,14 @@ export default function ValidationLotDetailClient({ lotId }: { lotId: string }) 
             onClick={() => void onPrete()}
             sx={{ textTransform: "none" }}
           >
-            {saving ? "…" : "Marquer prêt pour l’achat"}
+            {saving ? tCommandesCommon("loadingEllipsis") : tLotDetail("markReadyForPurchase")}
           </Button>
         </div>
       ) : null}
 
       <div className="!mt-10 border-t border-slate-200 pt-6">
         <Typography variant="subtitle2" className="!mb-1" sx={{ fontWeight: 600 }}>
-          Commentaire du lot
+          {tLotDetail("lotCommentSection")}
         </Typography>
         {editable ? (
           <TextField
@@ -1042,7 +1076,7 @@ export default function ValidationLotDetailClient({ lotId }: { lotId: string }) 
             minRows={4}
             maxRows={16}
             className="!mb-2"
-            placeholder="Commentaire général sur ce lot consolidé…"
+            placeholder={tLotDetail("lotCommentPlaceholder")}
             value={lotCommentDraft}
             onChange={(e) => setLotCommentDraft(e.target.value)}
             disabled={lotCommentSaving}
@@ -1060,7 +1094,7 @@ export default function ValidationLotDetailClient({ lotId }: { lotId: string }) 
               </Typography>
             ) : (
               <Typography variant="body2" color="text.secondary" sx={{ fontStyle: "italic" }}>
-                Aucun commentaire
+                {tCommandesCommon("noComment")}
               </Typography>
             )}
           </div>
@@ -1077,13 +1111,13 @@ export default function ValidationLotDetailClient({ lotId }: { lotId: string }) 
               onClick={() => handlePreremplirLotDepuisCommandes()}
               sx={{ textTransform: "none" }}
             >
-              Préremplir depuis les commentaires
+              {tLotDetail("prefillFromOrders")}
             </Button>
           </div>
         ) : null}
 
         <Typography variant="subtitle2" className="!mb-1" sx={{ fontWeight: 600 }}>
-          Commandes incluses
+          {tLotDetail("includedOrdersSection")}
         </Typography>
         <div className="flex flex-col gap-3">
           {(lot.commande_fournisseur_lot_inclusion ?? []).map((inc) => {
@@ -1097,7 +1131,9 @@ export default function ValidationLotDetailClient({ lotId }: { lotId: string }) 
                 <Typography variant="body2" className="!mb-1 !font-medium">
                   {magLabel(cf.magasins)}{" "}
                   <span className="font-normal text-slate-500">
-                    ({labelFor("commande_fournisseur", cf.status)})
+                    {tLotDetail("orderStatusInline", {
+                      statusLabel: labelFor("commande_fournisseur", cf.status),
+                    })}
                   </span>
                 </Typography>
                 {editable ? (
@@ -1107,7 +1143,7 @@ export default function ValidationLotDetailClient({ lotId }: { lotId: string }) 
                     minRows={2}
                     maxRows={8}
                     size="small"
-                    placeholder="Commentaire pour cette commande…"
+                    placeholder={tLotDetail("orderCommentPlaceholder")}
                     value={cmdText}
                     onChange={(e) =>
                       setCmdComments((prev) => ({ ...prev, [cf.id]: e.target.value }))
@@ -1123,7 +1159,7 @@ export default function ValidationLotDetailClient({ lotId }: { lotId: string }) 
                   </Typography>
                 ) : (
                   <Typography variant="body2" color="text.secondary" sx={{ fontStyle: "italic" }}>
-                    Aucun commentaire
+                    {tCommandesCommon("noComment")}
                   </Typography>
                 )}
               </div>
@@ -1141,11 +1177,10 @@ export default function ValidationLotDetailClient({ lotId }: { lotId: string }) 
         fullWidth
         maxWidth="sm"
       >
-        <DialogTitle sx={{ pb: 0.5 }}>Commentaire du lot déjà renseigné</DialogTitle>
+        <DialogTitle sx={{ pb: 0.5 }}>{tLotDetail("mergeDialog.title")}</DialogTitle>
         <DialogContent>
           <Typography variant="body2" color="text.secondary" className="!mb-2">
-            Souhaitez-vous ajouter la synthèse des commentaires sous le texte actuel, ou remplacer le commentaire du
-            lot ?
+            {tLotDetail("mergeDialog.body")}
           </Typography>
           <Typography
             variant="body2"
@@ -1167,7 +1202,7 @@ export default function ValidationLotDetailClient({ lotId }: { lotId: string }) 
             sx={{ textTransform: "none" }}
             disabled={lotCommentSaving}
           >
-            Annuler
+            {tCommandesCommon("cancel")}
           </Button>
           <Button
             type="button"
@@ -1176,7 +1211,7 @@ export default function ValidationLotDetailClient({ lotId }: { lotId: string }) 
             sx={{ textTransform: "none" }}
             disabled={lotCommentSaving}
           >
-            Ajouter sous le texte
+            {tLotDetail("mergeDialog.append")}
           </Button>
           <Button
             type="button"
@@ -1185,17 +1220,18 @@ export default function ValidationLotDetailClient({ lotId }: { lotId: string }) 
             sx={{ textTransform: "none" }}
             disabled={lotCommentSaving}
           >
-            Remplacer
+            {tLotDetail("mergeDialog.replace")}
           </Button>
         </DialogActions>
       </Dialog>
 
       <Dialog open={reopenBrouillonDialogOpen} onClose={() => setReopenBrouillonDialogOpen(false)} fullWidth maxWidth="sm">
-        <DialogTitle sx={{ pb: 0.5 }}>Revenir en Saisie</DialogTitle>
+        <DialogTitle sx={{ pb: 0.5 }}>{tLotDetail("reopenDialog.title")}</DialogTitle>
         <DialogContent>
           <Typography variant="body2" color="text.secondary">
-            Le lot repassera au statut « {labelFor("commande_fournisseur_lot", "brouillon")} » pour que vous puissiez
-            ajuster la consolidation (matrice, commentaires, produits). Continuer ?
+            {tLotDetail("reopenDialog.body", {
+              statusLabel: labelFor("commande_fournisseur_lot", "brouillon"),
+            })}
           </Typography>
         </DialogContent>
         <DialogActions className="!px-3 !pb-2">
@@ -1206,7 +1242,7 @@ export default function ValidationLotDetailClient({ lotId }: { lotId: string }) 
             sx={{ textTransform: "none" }}
             disabled={saving}
           >
-            Retour
+            {tLotDetail("reopenDialog.back")}
           </Button>
           <Button
             type="button"
@@ -1216,7 +1252,7 @@ export default function ValidationLotDetailClient({ lotId }: { lotId: string }) 
             onClick={() => void executeReopenBrouillon()}
             sx={{ textTransform: "none" }}
           >
-            {saving ? "…" : "Confirmer : revenir en saisie"}
+            {saving ? tCommandesCommon("loadingEllipsis") : tLotDetail("reopenDialog.confirm")}
           </Button>
         </DialogActions>
       </Dialog>
@@ -1227,12 +1263,11 @@ export default function ValidationLotDetailClient({ lotId }: { lotId: string }) 
         fullWidth
         maxWidth="sm"
       >
-        <DialogTitle sx={{ pb: 0.5 }}>Supprimer la ligne produit</DialogTitle>
+        <DialogTitle sx={{ pb: 0.5 }}>{tLotDetail("deleteLineDialog.title")}</DialogTitle>
         <DialogContent>
           {pendingDeleteLigne ? (
             <Typography variant="body2" color="text.secondary">
-              Retirer « {pendingDeleteLigne.productLabel} » de ce lot ? Les quantités par magasin de cette
-              ligne seront supprimées.
+              {tLotDetail("deleteLineDialog.body", { productLabel: pendingDeleteLigne.productLabel })}
             </Typography>
           ) : null}
         </DialogContent>
@@ -1244,7 +1279,7 @@ export default function ValidationLotDetailClient({ lotId }: { lotId: string }) 
             sx={{ textTransform: "none" }}
             disabled={saving || rowSaving != null}
           >
-            Annuler
+            {tCommon("cancel")}
           </Button>
           <Button
             type="button"
@@ -1254,17 +1289,18 @@ export default function ValidationLotDetailClient({ lotId }: { lotId: string }) 
             onClick={() => void executeDeleteLigne()}
             sx={{ textTransform: "none" }}
           >
-            {rowSaving != null ? "…" : "Supprimer"}
+            {rowSaving != null ? tCommandesCommon("loadingEllipsis") : tCommon("delete")}
           </Button>
         </DialogActions>
       </Dialog>
 
       <Dialog open={cancelLotDialogOpen} onClose={() => setCancelLotDialogOpen(false)} fullWidth maxWidth="sm">
-        <DialogTitle sx={{ pb: 0.5 }}>Confirmer l&apos;annulation du lot</DialogTitle>
+        <DialogTitle sx={{ pb: 0.5 }}>{tLotDetail("cancelLotDialog.title")}</DialogTitle>
         <DialogContent>
           <Typography variant="body2" color="text.secondary">
-            Les commandes incluses redeviennent « {labelFor("commande_fournisseur", "validee")} » hors lot. Le lot
-            brouillon sera supprimé. Cette action ne peut pas être annulée ici.
+            {tLotDetail("cancelLotDialog.body", {
+              statusLabel: labelFor("commande_fournisseur", "validee"),
+            })}
           </Typography>
         </DialogContent>
         <DialogActions className="!px-3 !pb-2">
@@ -1275,7 +1311,7 @@ export default function ValidationLotDetailClient({ lotId }: { lotId: string }) 
             sx={{ textTransform: "none" }}
             disabled={saving}
           >
-            Retour
+            {tLotDetail("cancelLotDialog.back")}
           </Button>
           <Button
             type="button"
@@ -1285,7 +1321,7 @@ export default function ValidationLotDetailClient({ lotId }: { lotId: string }) 
             onClick={() => void executeCancelLot()}
             sx={{ textTransform: "none" }}
           >
-            {saving ? "…" : "Confirmer l'annulation du lot"}
+            {saving ? tCommandesCommon("loadingEllipsis") : tLotDetail("cancelLotDialog.confirm")}
           </Button>
         </DialogActions>
       </Dialog>
@@ -1294,12 +1330,12 @@ export default function ValidationLotDetailClient({ lotId }: { lotId: string }) 
         open={pickerOpen}
         onClose={() => setPickerOpen(false)}
         supplierId={lot.supplier_id}
-        alreadyPresentLabel="Déjà dans le lot"
+        alreadyPresentLabel={tCommandesCommon("alreadyInLot")}
         onSelect={handleProductChosenFromPicker}
       />
 
       <Dialog open={condDialogOpen} onClose={handleCondLotDialogClose} fullWidth maxWidth="sm">
-        <DialogTitle sx={{ pb: 0.5 }}>Conditionnement</DialogTitle>
+        <DialogTitle sx={{ pb: 0.5 }}>{tLotDetail("condDialog.title")}</DialogTitle>
         <DialogContent>
           {pendingProduct ? (
             <>
@@ -1308,7 +1344,7 @@ export default function ValidationLotDetailClient({ lotId }: { lotId: string }) 
               </Typography>
               <ProductArabicSubtitle nameAr={pendingProduct.name_ar} matchNameLine />
               <Typography variant="body2" color="text.secondary" className="!mb-3">
-                Pré-sélection comme à la saisie magasin ; vous pouvez choisir à l’unité ou un autre conditionnement.
+                {tLotDetail("condDialog.hint")}
               </Typography>
               {condPanelProps ? (
                 <ParcoursProductQuantityPanel {...condPanelProps} hideQuantityControls />
@@ -1318,7 +1354,7 @@ export default function ValidationLotDetailClient({ lotId }: { lotId: string }) 
         </DialogContent>
         <DialogActions className="!px-3 !pb-2">
           <Button type="button" color="inherit" onClick={handleCondLotDialogClose} sx={{ textTransform: "none" }}>
-            Annuler
+            {tCommandesCommon("cancel")}
           </Button>
           <Button
             type="button"
@@ -1328,7 +1364,7 @@ export default function ValidationLotDetailClient({ lotId }: { lotId: string }) 
             onClick={() => void handleCondLotDialogConfirm()}
             sx={{ textTransform: "none" }}
           >
-            Ajouter au lot
+            {tLotDetail("addToLot")}
           </Button>
         </DialogActions>
       </Dialog>

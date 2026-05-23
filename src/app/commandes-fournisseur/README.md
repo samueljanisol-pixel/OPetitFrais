@@ -49,6 +49,17 @@ Le GET lot validation renvoie aussi `vendeurs` (`ref_supplier_vendeur` du fourni
 
 Les lignes produit du lot sont **triées comme au récap commande** (`ref_category.sort_order`, libellé, nom produit) et le GET renvoie **`categoryLabel`** par ligne. Dans la matrice, une **ligne d’en-tête** par groupe (fond vert léger, comme le récap) sépare les familles (ex. Fruit, « Sans catégorie » si besoin).
 
+### Internationalisation (détail lot validation)
+
+L’écran `/commandes-fournisseur/validation/lots/[id]` utilise `next-intl` pour tous les libellés UI visibles (actions, dialogues, placeholders, états de chargement et textes d’aide) via les namespaces :
+
+- `backoffice.commandes.validation.lotDetail`
+- `backoffice.commandes.common`
+- `backoffice.commandes.errors`
+- `common`
+
+Le composant client s’appuie aussi sur `useAppFormat()` (dates/nombres selon locale) et `useBackChevronIcon()` (icône de retour LTR/RTL).
+
 ### Colonne UdV / conditionnement (validation)
 
 Comme au **récap saisie** : si la ligne est en conditionnement (`product_packaging_id`), la colonne affiche le libellé colis (`condTitre`, ex. « Carton (12 Kg) ») et éventuellement **« Soit … »** sous le total ; sinon l’**unité de vente** du produit (ex. Kg).
@@ -63,6 +74,23 @@ Comme au **récap saisie** : si la ligne est en conditionnement (`product_packag
 Sur chaque ligne : grille fixe **−1 | qté (4,25 rem) | unité (2,25 rem réservée) | +1** — champs qté alignés verticalement ; libellé **conditionnement** (`condTitre`) au-dessus des boutons ± ; **« Soit … »** en 2ᵉ rangée sous la qté (`col-span-2`, une seule ligne). L’unité dans **« Soit … »** est l’**UdV du conditionnement** (`product_packaging.ref_sales_unit`), pas celle du produit.
 
 **Commande validée ou intégrée** : bouton **Exporter en image** (même format que le récap validation lot, un PNG par vendeur) — voir `saisie/[id]/recap/README.md`. L’affichage liste de la page n’est pas modifié.
+
+### Internationalisation UI (saisie / parcours / listes)
+
+Les écrans suivants utilisent `next-intl` (sans texte FR codé en dur dans les composants) :
+
+- `/commandes-fournisseur/saisie/nouvelle`
+- `/commandes-fournisseur/saisie/[id]/parcours`
+- `/commandes-fournisseur/validation`
+- `/commandes-fournisseur/achat`
+
+Namespaces utilisés : `backoffice.commandes.saisie.nouvelle`, `backoffice.commandes.saisie.magasinStrip`, `backoffice.commandes.parcours`, `backoffice.commandes.validation.index`, `backoffice.commandes.achat.list`, `backoffice.commandes.components.ligneCommentaireSaisieControls`, `backoffice.commandes.quantityPanel`, `backoffice.commandes.common`, `backoffice.commandes.errors`, `common`.
+
+Conventions appliquées comme sur les autres écrans :
+
+- `useBackChevronIcon()` pour les boutons retour.
+- `useAppFormat()` pour les dates/nombres affichés.
+- séparateurs de commentaires magasin via clé de traduction (`storeCommentSeparator`) dans les composants d’affichage.
 
 ### Plusieurs conditionnements pour un même produit
 
@@ -115,3 +143,7 @@ Les quantités stockées en base sont en **`numeric(14,2)`** (au plus **2 décim
   - `PATCH /api/commandes-fournisseur/achat/suppliers/[supplierId]/vendeurs/[vendeurId]` avec `{ label }` : renommage réservé à la permission **`commandes_fournisseur.vendeurs_renommer`** (cohérence RLS dans la migration SQL associée).
 
 Sur **détail lot achat**, un bouton « crayon » à côté du titre du vendeur permet le renommage lorsque cette permission est accordée.
+
+### Internationalisation UI (achat détail)
+
+L’écran `/commandes-fournisseur/achat/lots/[id]` utilise désormais `next-intl` pour tous les libellés affichés (actions, colonnes, dialogues, messages d’erreur/succès, placeholders et ARIA) via les namespaces `backoffice.commandes.achat.detail`, `backoffice.commandes.common`, `backoffice.commandes.errors` et `common`. Le formatage des dates/nombres passe par `useAppFormat` (plus de locale codée en dur), le bouton retour suit `useBackChevronIcon`, et l’affichage du statut lot utilise `useStatusLabels` (`labelFor`).

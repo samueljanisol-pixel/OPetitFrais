@@ -1,0 +1,421 @@
+{
+  "common": {
+    "loading": "Chargement…",
+    "loadingEllipsis": "…",
+    "back": "Retour",
+    "cancel": "Annuler",
+    "save": "Enregistrer",
+    "delete": "Supprimer",
+    "close": "Fermer",
+    "add": "Ajouter",
+    "error": "Erreur",
+    "languageSwitcher": "Changer de langue",
+    "currency": "DH",
+    "emDash": "—",
+    "remove": "Retirer",
+    "refresh": "Actualiser",
+    "open": "Ouvrir",
+    "replace": "Remplacer",
+    "home": "Accueil",
+    "homeWithChevron": "< Accueil",
+    "networkError": "Erreur réseau"
+  },
+  "backoffice": {
+    "shell": {
+      "loading": "Chargement…",
+      "profile": "Profil",
+      "profileWithName": "Profil : {name}",
+      "homeTitle": "O' Petit Frais — accueil",
+      "homeAria": "O' Petit Frais — accueil"
+    },
+    "home": {
+      "products": "Produits",
+      "stats": "Statistique",
+      "supplierOrders": "Commandes fournisseur",
+      "logout": "Déconnexion",
+      "settings": "Paramètres",
+      "settingsAria": "Paramètres",
+      "homeAria": "O' Petit Frais — accueil"
+    },
+    "accessDenied": {
+      "title": "Accès refusé",
+      "body": "Votre compte ne dispose pas des droits nécessaires pour cette page. Contactez un administrateur.",
+      "backHome": "Retour à l'accueil"
+    },
+    "login": {
+      "brand": "O' Petit Frais",
+      "title": "Connexion",
+      "hint": "Utilisez votre adresse e-mail ou votre identifiant (login magasin).",
+      "identifierLabel": "E-mail ou identifiant",
+      "identifierPlaceholder": "ex: moi@exemple.com ou caisse1",
+      "passwordLabel": "Mot de passe",
+      "connect": "Se connecter",
+      "connecting": "Connexion en cours…",
+      "networkError": "Erreur réseau"
+    },
+    "auth": {
+      "errors": {
+        "invalid_credentials": "Identifiant ou mot de passe incorrect",
+        "email_not_confirmed": "Adresse e-mail non confirmée — vérifiez votre boîte de réception",
+        "user_not_found": "Aucun compte ne correspond à cet identifiant",
+        "signup_disabled": "La création de compte est désactivée",
+        "rate_limit": "Trop de tentatives — réessayez dans quelques minutes",
+        "connection_failed": "Connexion impossible",
+        "unknown": "Connexion impossible"
+      }
+    },
+    "status": {
+      "commande_fournisseur": {
+        "en_saisie": "En saisie",
+        "validee": "Validée",
+        "integree": "Intégrée",
+        "annulee": "Annulée"
+      },
+      "commande_fournisseur_lot": {
+        "brouillon": "Brouillon",
+        "prete": "Prête",
+        "terminee": "Terminée"
+      },
+      "listSections": {
+        "inProgress": "En cours",
+        "integratedReadOnly": "Prises en compte (non modifiables)",
+        "cancelled": "Annulées"
+      },
+      "orderListSecondary": "{statusLabel} — {dateTime}",
+      "productCount": "{count, plural, one {# produit} other {# produits}}"
+    },
+    "commandes": {
+      "common": {
+        "loading": "Chargement…",
+        "loadingEllipsis": "…",
+        "error": "Erreur",
+        "back": "Retour",
+        "home": "Accueil",
+        "homeWithChevron": "< Accueil",
+        "cancel": "Annuler",
+        "save": "Enregistrer",
+        "delete": "Supprimer",
+        "close": "Fermer",
+        "add": "Ajouter",
+        "supplier": "Fournisseur",
+        "supplierColon": "Fournisseur : {label}",
+        "product": "Produit",
+        "quantity": "Quantité",
+        "quantityShort": "Qté",
+        "quantityNeed": "Qté besoin",
+        "quantityPurchase": "Qté ach.",
+        "quantityPurchaseAria": "Quantité achat",
+        "quantityProductAria": "Quantité produit",
+        "quantityColisAria": "Quantité colis",
+        "quantityForStoreAria": "Quantité {storeLabel}",
+        "quantityForUnitAria": "Quantité {unitLabel}",
+        "udvCond": "UdV / cond.",
+        "udv": "UdV",
+        "total": "Total",
+        "remove": "Retirer",
+        "removeLineAria": "Supprimer la ligne",
+        "removeFeeLineAria": "Supprimer cette ligne",
+        "comment": "Commentaire",
+        "commentLine": "Commentaire ligne",
+        "addComment": "Ajouter un commentaire",
+        "editCommentAria": "Modifier le commentaire",
+        "addCommentAria": "Ajouter un commentaire",
+        "commentPlaceholder": "Ex. préférence de calibrage, remplacement…",
+        "noComment": "Aucun commentaire",
+        "noCategory": "Sans catégorie",
+        "emDash": "—",
+        "addProduct": "Ajouter un produit",
+        "alreadyInLot": "Déjà dans le lot",
+        "alreadyInOrder": "Déjà dans la commande",
+        "packaging": "Conditionnement",
+        "qtyAndPackaging": "Quantité et conditionnement",
+        "price": "Prix",
+        "pricePlaceholder": "0,00",
+        "label": "Libellé",
+        "amount": "Montant",
+        "decreaseByOneAria": "Diminuer de 1",
+        "minQtyRemoveLineAria": "Quantité minimale, supprimez la ligne pour retirer",
+        "refresh": "Actualiser",
+        "open": "Ouvrir",
+        "status": "Statut",
+        "statusColon": "Statut :",
+        "statusStrong": "Statut : {status}",
+        "readyOn": "Prête le",
+        "closedOn": "Clôturée le",
+        "readyOnDate": "Prête le {date}",
+        "closedOnDate": "Clôturée le {date}",
+        "preparedOn": "préparée :",
+        "closureOn": "clôture :",
+        "readyAt": "prêt le {date}",
+        "soitLine": "Soit {qty} {unit}",
+        "storeCommentSeparator": " : ",
+        "allSuppliers": "(tous)",
+        "noLines": "Aucune ligne",
+        "exportImage": "Exporter en image",
+        "exportImageSection": "Export image",
+        "purchasePrice": "Prix achat",
+        "fees": "Frais",
+        "summary": "Synthèse",
+        "amountDh": "{amount} DH",
+        "qtySeparator": " · "
+      },
+      "landing": {
+        "title": "Commandes fournisseur",
+        "subtitle": "Choisissez l'espace à ouvrir",
+        "navSaisie": "Saisie",
+        "navValidation": "Validation",
+        "navAchat": "Achat"
+      },
+      "saisie": {
+        "index": {
+          "title": "Commandes Fournisseur",
+          "newOrder": "Nouvelle",
+          "loadingOrders": "Chargement des commandes…",
+          "emptyOrders": "Aucune commande. Créez-en une.",
+          "backHome": "Accueil"
+        },
+        "magasinStrip": {
+          "activeStore": "Magasin actif",
+          "activeStoreValue": "Magasin actif : {name}"
+        },
+        "nouvelle": {
+          "title": "Nouvelle commande",
+          "creating": "Création…",
+          "startEntry": "Commencer la saisie",
+          "noStoreShort": "Aucun magasin rattaché."
+        }
+      },
+      "parcours": {
+        "loading": "Chargement du parcours…",
+        "backToRecap": "Revenir au récap",
+        "recapLink": "Récapitulatif",
+        "noActiveProducts": "Aucun produit actif pour ce fournisseur.",
+        "productSheet": "Fiche produit",
+        "previous": "Précédent",
+        "next": "Suivant",
+        "finish": "Terminer",
+        "position": "{current} / {total}"
+      },
+      "recap": {
+        "backToList": "Liste des commandes",
+        "title": "Récapitulatif",
+        "productTour": "Parcours produits",
+        "emptyEditable": "Aucune ligne. Utilisez le parcours produits ou « Ajouter un produit ».",
+        "emptyReadOnly": "Aucune ligne. Passez par le parcours produits.",
+        "orderCommentLabel": "Commentaire commande",
+        "validateOrder": "Valider la commande",
+        "reopenForEdit": "Modifier (retour en saisie)",
+        "integratedNotice": "Cette commande a été prise en compte par le gestionnaire. Modification impossible.",
+        "cancelOrder": "Annuler la commande",
+        "cancelledNotice": "Cette commande a été annulée. Aucune modification n'est possible.",
+        "deleteLineConfirm": "Supprimer la ligne « {productName} » de cette commande ?\n\nCette action est définitive.",
+        "cancelDialog": {
+          "title": "Confirmer l'annulation",
+          "body": "Cette action est définitive : la commande passera au statut « {statusLabel} » et ne pourra plus être modifiée.",
+          "back": "Retour",
+          "confirm": "Confirmer l'annulation"
+        },
+        "condDialog": {
+          "title": "Quantité et conditionnement",
+          "saveExisting": "Enregistrer",
+          "addNew": "Ajouter"
+        }
+      },
+      "validation": {
+        "index": {
+          "title": "Validation Commandes Fournisseur",
+          "pendingSection": "Commandes en attente de validation",
+          "pendingEmpty": "Aucune commande validée en attente.",
+          "createLot": "Constituer un lot",
+          "pendingRow": "{supplier} — {store} — {dateTime} — {productCount}",
+          "lotsSection": "Lots en cours",
+          "lotsEmpty": "Aucun lot.",
+          "lotRow": "{supplier} — {statusLabel} — {dateTime}"
+        },
+        "lotDetail": {
+          "backToList": "Liste des commandes",
+          "title": "Lot — {supplier}",
+          "statusLine": "Statut : {statusLabel}",
+          "readyAtSuffix": " — prêt le {date}",
+          "reopenDraft": "Revenir en saisie",
+          "loadingDetail": "Chargement du détail…",
+          "emptyLines": "Aucune ligne produit.",
+          "tableTotal": "Total",
+          "markReadyForPurchase": "Marquer prêt pour l'achat",
+          "cancelLot": "Annuler le lot",
+          "lotCommentSection": "Commentaire du lot",
+          "lotCommentPlaceholder": "Commentaire général sur ce lot consolidé…",
+          "prefillFromOrders": "Préremplir depuis les commentaires",
+          "includedOrdersSection": "Commandes incluses",
+          "orderCommentPlaceholder": "Commentaire pour cette commande…",
+          "orderStatusInline": "({statusLabel})",
+          "mergedCommentLine": "{store} : {comment}",
+          "condDialogHint": "Pré-sélection comme à la saisie magasin ; vous pouvez choisir à l'unité ou un autre conditionnement.",
+          "addToLot": "Ajouter au lot",
+          "vendorRecapSection": "Récapitulatif par vendeur",
+          "vendorRecapEmpty": "Aucune ligne pour le récap vendeurs.",
+          "mergeDialog": {
+            "title": "Commentaire du lot déjà renseigné",
+            "body": "Souhaitez-vous ajouter la synthèse des commentaires sous le texte actuel, ou remplacer le commentaire du lot ?",
+            "append": "Ajouter sous le texte",
+            "replace": "Remplacer"
+          },
+          "reopenDialog": {
+            "title": "Revenir en Saisie",
+            "body": "Le lot repassera au statut « {statusLabel} » pour que vous puissiez ajuster la consolidation (matrice, commentaires, produits). Continuer ?",
+            "back": "Retour",
+            "confirm": "Confirmer : revenir en saisie"
+          },
+          "deleteLineDialog": {
+            "title": "Supprimer la ligne produit",
+            "body": "Retirer « {productLabel} » de ce lot ? Les quantités par magasin de cette ligne seront supprimées."
+          },
+          "cancelLotDialog": {
+            "title": "Confirmer l'annulation du lot",
+            "body": "Les commandes incluses redeviennent « {statusLabel} » hors lot. Le lot brouillon sera supprimé. Cette action ne peut pas être annulée ici.",
+            "back": "Retour",
+            "confirm": "Confirmer l'annulation du lot"
+          },
+          "condDialog": {
+            "title": "Conditionnement",
+            "hint": "Pré-sélection comme à la saisie magasin ; vous pouvez choisir à l'unité ou un autre conditionnement.",
+            "addToLot": "Ajouter au lot"
+          }
+        }
+      },
+      "achat": {
+        "list": {
+          "title": "Achat — lots",
+          "subtitle": "Lots prêts à saisie et achat ; après clôture, lecture seule.",
+          "filterAria": "Filtre statut lots",
+          "filterPending": "À traiter",
+          "filterAll": "Tous (prêts + terminés)",
+          "loadingLots": "Chargement des lots…",
+          "emptyLots": "Aucun lot pour ce filtre.",
+          "lotStatusLine": "Statut : {status} — Prête le {readyDate}",
+          "lotStatusClosed": " — Clôturée le {closedDate}"
+        },
+        "detail": {
+          "backToLots": "Liste des lots",
+          "saving": "Enregistrement…",
+          "statusLine": "Statut : {status} — préparée : {readyDate} — clôture : {closedDate}",
+          "readOnlyNotice": "Lot terminé : affichage en lecture seule.",
+          "close": "Clôturer",
+          "closing": "Clôture…",
+          "productsWithoutVendor": "Produits sans vendeur",
+          "allProductsHaveVendor": "Tous les produits ont un vendeur.",
+          "chooseVendor": "Choisir un vendeur…",
+          "assignVendorToSelection": "Attribuer le vendeur à la sélection ({count})",
+          "newVendor": "Nouveau vendeur",
+          "renameVendorAria": "Renommer le vendeur {label}",
+          "vendorTotal": "Total achats : {amount}",
+          "purchasePrice": "Prix achat",
+          "feesSection": "Frais",
+          "feesHintEditable": "Frais généraux au lot (ajouter des lignes libellé / montant en DH).",
+          "feesHintReadOnly": "Frais généraux au lot",
+          "noFees": "Aucun frais enregistré.",
+          "addFeeLine": "Ajouter une ligne de frais",
+          "totalFees": "Total frais : {amount}",
+          "summarySection": "Synthèse",
+          "summarySupplierLines": "{supplier} (montants lignes)",
+          "summaryNoVendorLines": "Produits sans vendeur (montants lignes)",
+          "summaryTotalProducts": "Total produits :",
+          "summaryFees": "Frais :",
+          "summaryGrandTotal": "Total : {amount}",
+          "amountDh": "{amount} DH",
+          "savedSuccess": "Modifications enregistrées.",
+          "lotClosedSuccess": "Lot clôturé.",
+          "condDialogHint": "Pré-sélection comme à la validation ; vous pouvez choisir à l'unité ou un autre conditionnement.",
+          "condDialogTitle": "Conditionnement",
+          "addToLot": "Ajouter au lot",
+          "confirmZeroDialog": {
+            "title": "Quantités achat à 0",
+            "body1": "Certaines lignes ont une quantité achat égale à 0.",
+            "body2": "Confirmez-vous la clôture tout de même ?",
+            "confirm": "Confirmer la clôture"
+          },
+          "renameVendorDialog": {
+            "title": "Renommer le vendeur",
+            "displayNameLabel": "Nom affiché"
+          },
+          "newVendorDialog": {
+            "title": "Nouveau vendeur fournisseur",
+            "displayNameLabel": "Nom affiché",
+            "add": "Ajouter"
+          }
+        }
+      },
+      "quantityPanel": {
+        "unitButton": "À l'unité ({unit})",
+        "unitButtonWithQty": "À l'unité ({unit}) · {qty}",
+        "packButton": "{label} ({packQty} {unit})",
+        "packButtonWithQty": "{label} ({packQty} {unit}) · {qty}",
+        "matrixQtyHint": "Les quantités se saisissent par magasin dans la matrice du lot.",
+        "matrixQtyHintShort": "Les quantités se saisissent par magasin dans la matrice.",
+        "packagingOnly": "Ce produit ne se commande qu'en conditionnement pour votre magasin.",
+        "unitLabelKg": "Kg",
+        "unitLabelDefault": "Unité",
+        "needLabel": "Besoin : {qty}"
+      },
+      "components": {
+        "ligneCommentaireSaisieControls": {
+          "dialogTitleEdit": "Commentaire ligne",
+          "dialogTitleAdd": "Ajouter un commentaire"
+        },
+        "productPicker": {
+          "title": "Rechercher un produit",
+          "limitToSupplier": "Limiter au fournisseur prévu pour cette commande / ce lot",
+          "nameOrCodeLabel": "Nom ou code",
+          "placeholderSupplierOnly": "Tapez au moins une lettre…",
+          "placeholderCatalog": "2 caractères min. ou catégorie…",
+          "categoryLabel": "Catégorie",
+          "allCategories": "Toutes les catégories",
+          "hintCatalog": "Recherche sur tout le catalogue : indiquez un critère ou choisissez une catégorie.",
+          "hintSupplierOnly": "Catalogue du fournisseur attendu uniquement (décochez pour élargir).",
+          "noResults": "Aucun produit correspondant.",
+          "networkError": "Erreur réseau"
+        },
+        "export": {
+          "orderHeader": "Commande Fournisseur : {supplier}",
+          "orderDate": "Commande du {date}",
+          "orderedBy": "par {name}",
+          "footerCommentLot": "Commentaire lot",
+          "footerCommentOrder": "Commentaire commande",
+          "magasinColumnQuantity": "Quantité",
+          "vendorRecapTitle": "Récapitulatif par vendeur"
+        }
+      },
+      "errors": {
+        "generic": "Erreur",
+        "loadFailed": "Erreur de chargement",
+        "networkUnavailable": "Réseau indisponible",
+        "networkUnavailableDot": "Réseau indisponible.",
+        "networkSaveFailed": "Réseau indisponible lors de l'enregistrement.",
+        "networkCloseFailed": "Réseau indisponible lors de la clôture.",
+        "saveFailed": "Sauvegarde impossible",
+        "saveLinesFailed": "Sauvegarde lignes",
+        "commentFailed": "Commentaire",
+        "validationFailed": "Validation",
+        "cancellationFailed": "Annulation",
+        "reopenFailed": "Réouverture",
+        "lotsListFailed": "Erreur listes lots",
+        "lotNotFound": "Lot introuvable",
+        "saveRegistrationFailed": "Enregistrement impossible",
+        "reloadFeesFailed": "Rechargement frais impossible",
+        "closeFailed": "Clôture impossible",
+        "createVendorFailed": "Création impossible",
+        "updateVendorFailed": "Modification impossible",
+        "invalidVendorResponse": "Réponse serveur invalide après création du vendeur",
+        "missingSupplier": "Fournisseur manquant",
+        "chooseSupplier": "Choisissez un fournisseur",
+        "selectAtLeastOneOrder": "Sélectionnez au moins une commande",
+        "noStoreLinked": "Aucun magasin n'est rattaché à votre profil.",
+        "noStoreLinkedShort": "Aucun magasin rattaché.",
+        "noOrderCommentsToMerge": "Aucun commentaire de commande à intégrer.",
+        "storeNotFoundForComment": "Magasin introuvable pour ce commentaire.",
+        "productNotFoundForComment": "Produit introuvable pour ce commentaire."
+      }
+    }
+  },
+  "shop": {}
+}

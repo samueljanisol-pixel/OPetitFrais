@@ -1,6 +1,7 @@
 "use client";
 
 import { Box, Typography } from "@mui/material";
+import { useTranslations } from "next-intl";
 import { alpha } from "@mui/material/styles";
 import type { SaisieCommentEntry } from "@/lib/commandes-fournisseur/ligne-saisie-comments";
 
@@ -14,6 +15,7 @@ type Props = {
 };
 
 function CommentChip({ text, magasinPrefix }: { text: string; magasinPrefix?: string }) {
+  const tc = useTranslations("backoffice.commandes.common");
   return (
     <Box
       sx={{
@@ -44,7 +46,7 @@ function CommentChip({ text, magasinPrefix }: { text: string; magasinPrefix?: st
             <Box component="span" sx={{ fontWeight: 700 }}>
               {magasinPrefix}
             </Box>
-            {" : "}
+            {tc("storeCommentSeparator")}
             {text}
           </>
         ) : (
@@ -62,6 +64,7 @@ export default function LigneSaisieComments({
   variant = "default",
   className,
 }: Props) {
+  const tc = useTranslations("backoffice.commandes.common");
   const trimmedLine =
     typeof lineComment === "string" && lineComment.trim().length > 0
       ? lineComment.trim()
@@ -111,7 +114,7 @@ export default function LigneSaisieComments({
           {comments.length > 1 || trimmedLine ? (
             <>
               <span className="font-medium">{c.magasinLabel}</span>
-              {" : "}
+              {tc("storeCommentSeparator")}
               {c.comment}
             </>
           ) : (

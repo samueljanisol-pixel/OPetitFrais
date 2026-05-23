@@ -1,0 +1,421 @@
+{
+  "common": {
+    "loading": "كيتسنا…",
+    "loadingEllipsis": "…",
+    "back": "رجع",
+    "cancel": "إلغاء",
+    "save": "سجّل",
+    "delete": "مسح",
+    "close": "سد",
+    "add": "زيد",
+    "error": "خطأ",
+    "languageSwitcher": "بدّل اللغة",
+    "currency": "DH",
+    "emDash": "—",
+    "remove": "حيد",
+    "refresh": "جدّد",
+    "open": "حل",
+    "replace": "بدّل",
+    "home": "الرئيسية",
+    "homeWithChevron": "< الرئيسية",
+    "networkError": "خطأ فالشبكة"
+  },
+  "backoffice": {
+    "shell": {
+      "loading": "كيتسنا…",
+      "profile": "البروفيل",
+      "profileWithName": "البروفيل : {name}",
+      "homeTitle": "O' Petit Frais — الرئيسية",
+      "homeAria": "O' Petit Frais — الرئيسية"
+    },
+    "home": {
+      "products": "المنتجات",
+      "stats": "الإحصائيات",
+      "supplierOrders": "طلبيات المزود",
+      "logout": "خرج",
+      "settings": "الإعدادات",
+      "settingsAria": "الإعدادات",
+      "homeAria": "O' Petit Frais — الرئيسية"
+    },
+    "accessDenied": {
+      "title": "الوصول ممنوع",
+      "body": "الحساب ديالك ما عندوش الصلاحيات باش يدخل لهاد الصفحة. تواصل مع الأدمن.",
+      "backHome": "رجع للرئيسية"
+    },
+    "login": {
+      "brand": "O' Petit Frais",
+      "title": "دخول",
+      "hint": "استعمل الإيميل ديالك ولا الـ login ديال المحل.",
+      "identifierLabel": "إيميل ولا login",
+      "identifierPlaceholder": "مثلا: moi@exemple.com ولا caisse1",
+      "passwordLabel": "كلمة السر",
+      "connect": "دخل",
+      "connecting": "كيتسنا الدخول…",
+      "networkError": "خطأ فالشبكة"
+    },
+    "auth": {
+      "errors": {
+        "invalid_credentials": "الـ login ولا كلمة السر غالطين",
+        "email_not_confirmed": "الإيميل ما تأكدش — شوف inbox ديالك",
+        "user_not_found": "ما كاين حتى حساب بهاد الـ login",
+        "signup_disabled": "إنشاء الحسابات مسدود",
+        "rate_limit": "محاولات بزاف — عاود من بعد شوية",
+        "connection_failed": "ما قدرناش ندخلو",
+        "unknown": "ما قدرناش ندخلو"
+      }
+    },
+    "status": {
+      "commande_fournisseur": {
+        "en_saisie": "فالإدخال",
+        "validee": "مصادق عليها",
+        "integree": "مدمجة",
+        "annulee": "annulée"
+      },
+      "commande_fournisseur_lot": {
+        "brouillon": "مسودة",
+        "prete": "جاهزة",
+        "terminee": "كملات"
+      },
+      "listSections": {
+        "inProgress": "فالخدمة",
+        "integratedReadOnly": "مأخوذة بعين الاعتبار (ما تقدرش تبدّل)",
+        "cancelled": "annulées"
+      },
+      "orderListSecondary": "{statusLabel} — {dateTime}",
+      "productCount": "{count, plural, one {# منتج} other {# منتجات}}"
+    },
+    "commandes": {
+      "common": {
+        "loading": "كيتسنا…",
+        "loadingEllipsis": "…",
+        "error": "خطأ",
+        "back": "رجع",
+        "home": "الرئيسية",
+        "homeWithChevron": "< الرئيسية",
+        "cancel": "إلغاء",
+        "save": "سجّل",
+        "delete": "مسح",
+        "close": "سد",
+        "add": "زيد",
+        "supplier": "المزود",
+        "supplierColon": "المزود : {label}",
+        "product": "المنتج",
+        "quantity": "الكمية",
+        "quantityShort": "كم.",
+        "quantityNeed": "كم. الحاجة",
+        "quantityPurchase": "كم. الشرا",
+        "quantityPurchaseAria": "كمية الشرا",
+        "quantityProductAria": "كمية المنتج",
+        "quantityColisAria": "كمية الكولي",
+        "quantityForStoreAria": "كمية {storeLabel}",
+        "quantityForUnitAria": "كمية {unitLabel}",
+        "udvCond": "و.ب / كوند.",
+        "udv": "و.ب",
+        "total": "المجموع",
+        "remove": "حيد",
+        "removeLineAria": "مسح السطر",
+        "removeFeeLineAria": "مسح هاد السطر",
+        "comment": "تعليق",
+        "commentLine": "تعليق السطر",
+        "addComment": "زيد تعليق",
+        "editCommentAria": "بدّل التعليق",
+        "addCommentAria": "زيد تعليق",
+        "commentPlaceholder": "مثلا: تفضيل فالكاليبر، بديل…",
+        "noComment": "ما كاين حتى تعليق",
+        "noCategory": "بلا فئة",
+        "emDash": "—",
+        "addProduct": "زيد منتج",
+        "alreadyInLot": "موجود فاللوط",
+        "alreadyInOrder": "موجود فالطلبية",
+        "packaging": "التغليف",
+        "qtyAndPackaging": "الكمية والتغليف",
+        "price": "الثمن",
+        "pricePlaceholder": "0,00",
+        "label": "الاسم",
+        "amount": "المبلغ",
+        "decreaseByOneAria": "نقص 1",
+        "minQtyRemoveLineAria": "الكمية صغيرة، مسح السطر باش تحيد",
+        "refresh": "جدّد",
+        "open": "حل",
+        "status": "الحالة",
+        "statusColon": "الحالة :",
+        "statusStrong": "الحالة : {status}",
+        "readyOn": "جاهزة نهار",
+        "closedOn": "تسدات نهار",
+        "readyOnDate": "جاهزة نهار {date}",
+        "closedOnDate": "تسدات نهار {date}",
+        "preparedOn": "متحضّرة :",
+        "closureOn": "الإغلاق :",
+        "readyAt": "جاهزة نهار {date}",
+        "soitLine": "يعني {qty} {unit}",
+        "storeCommentSeparator": " : ",
+        "allSuppliers": "(الكل)",
+        "noLines": "ما كاين حتى سطر",
+        "exportImage": "صوّر كصورة",
+        "exportImageSection": "تصدير صورة",
+        "purchasePrice": "ثمن الشرا",
+        "fees": "المصاريف",
+        "summary": "الملخّص",
+        "amountDh": "{amount} DH",
+        "qtySeparator": " · "
+      },
+      "landing": {
+        "title": "طلبيات المزود",
+        "subtitle": "اختار الفضاء اللي بغيتي تحل",
+        "navSaisie": "الإدخال",
+        "navValidation": "التصديق",
+        "navAchat": "الشرا"
+      },
+      "saisie": {
+        "index": {
+          "title": "طلبيات المزود",
+          "newOrder": "جديدة",
+          "loadingOrders": "كيتسنا الطلبيات…",
+          "emptyOrders": "ما كاين حتى طلبية. dir وحدة.",
+          "backHome": "الرئيسية"
+        },
+        "magasinStrip": {
+          "activeStore": "المحل النشط",
+          "activeStoreValue": "المحل النشط : {name}"
+        },
+        "nouvelle": {
+          "title": "طلبية جديدة",
+          "creating": "كيتسنا الإنشاء…",
+          "startEntry": "بدا الإدخال",
+          "noStoreShort": "ما كاين حتى محل مربوط."
+        }
+      },
+      "parcours": {
+        "loading": "كيتسنا المسار…",
+        "backToRecap": "رجع للملخّص",
+        "recapLink": "الملخّص",
+        "noActiveProducts": "ما كاين حتى منتج نشط لهاد المزود.",
+        "productSheet": "بطاقة المنتج",
+        "previous": "اللي قبل",
+        "next": "اللي بعد",
+        "finish": "كمل",
+        "position": "{current} / {total}"
+      },
+      "recap": {
+        "backToList": "لائحة الطلبيات",
+        "title": "الملخّص",
+        "productTour": "مسار المنتجات",
+        "emptyEditable": "ما كاين حتى سطر. استعمل مسار المنتجات ولا « زيد منتج ».",
+        "emptyReadOnly": "ما كاين حتى سطر. مرّ من مسار المنتجات.",
+        "orderCommentLabel": "تعليق الطلبية",
+        "validateOrder": "صادق على الطلبية",
+        "reopenForEdit": "بدّل (رجع للإدخال)",
+        "integratedNotice": "هاد الطلبية تاخدات بعين الاعتبار من المسير. ما تقدرش تبدّل.",
+        "cancelOrder": "annuler الطلبية",
+        "cancelledNotice": "هاد الطلبية annulée. ما تقدرش تبدّل والو.",
+        "deleteLineConfirm": "مسح السطر « {productName} » من هاد الطلبية ؟\n\nهاد العملية نهائية.",
+        "cancelDialog": {
+          "title": "أكّد annulation",
+          "body": "هاد العملية نهائية : الطلبية غادي تولي « {statusLabel} » وما تقدرش تبدّل من بعد.",
+          "back": "رجع",
+          "confirm": "أكّد annulation"
+        },
+        "condDialog": {
+          "title": "الكمية والتغليف",
+          "saveExisting": "سجّل",
+          "addNew": "زيد"
+        }
+      },
+      "validation": {
+        "index": {
+          "title": "تصديق طلبيات المزود",
+          "pendingSection": "طلبيات كتسنا التصديق",
+          "pendingEmpty": "ما كاين حتى طلبية مصادق عليها كتسنا.",
+          "createLot": "كوّن لوط",
+          "pendingRow": "{supplier} — {store} — {dateTime} — {productCount}",
+          "lotsSection": "لوطات فالخدمة",
+          "lotsEmpty": "ما كاين حتى لوط.",
+          "lotRow": "{supplier} — {statusLabel} — {dateTime}"
+        },
+        "lotDetail": {
+          "backToList": "لائحة الطلبيات",
+          "title": "لوط — {supplier}",
+          "statusLine": "الحالة : {statusLabel}",
+          "readyAtSuffix": " — جاهز نهار {date}",
+          "reopenDraft": "رجع للإدخال",
+          "loadingDetail": "كيتسنا التفاصيل…",
+          "emptyLines": "ما كاين حتى سطر منتج.",
+          "tableTotal": "المجموع",
+          "markReadyForPurchase": "علّم جاهز للشرا",
+          "cancelLot": "annuler اللوط",
+          "lotCommentSection": "تعليق اللوط",
+          "lotCommentPlaceholder": "تعليق عام على هاد اللوط المدمج…",
+          "prefillFromOrders": "عمّر من التعليقات",
+          "includedOrdersSection": "الطلبيات المدمجة",
+          "orderCommentPlaceholder": "تعليق لهاد الطلبية…",
+          "orderStatusInline": "({statusLabel})",
+          "mergedCommentLine": "{store} : {comment}",
+          "condDialogHint": "الاختيار الأول بحال فالإدخال فالمحل؛ تقدر تختار بالوحدة ولا تغليف آخر.",
+          "addToLot": "زيد لللوط",
+          "vendorRecapSection": "ملخّص حسب البائع",
+          "vendorRecapEmpty": "ما كاين حتى سطر للملخّص ديال البائعين.",
+          "mergeDialog": {
+            "title": "تعليق اللوط معمّر من قبل",
+            "body": "بغيتي تزيد ملخّص التعليقات تحت النص الحالي، ولا تبدّل تعليق اللوط ؟",
+            "append": "زيد تحت النص",
+            "replace": "بدّل"
+          },
+          "reopenDialog": {
+            "title": "رجع للإدخال",
+            "body": "اللوط غادي يرجع « {statusLabel} » باش تقدر تعدّل التجميع (المatrice، التعليقات، المنتجات). تكمل ؟",
+            "back": "رجع",
+            "confirm": "أكّد : رجع للإدخال"
+          },
+          "deleteLineDialog": {
+            "title": "مسح سطر المنتج",
+            "body": "تحيد « {productLabel} » من هاد اللوط ؟ الكميات حسب المحل ديال هاد السطر غادي يتمحيو."
+          },
+          "cancelLotDialog": {
+            "title": "أكّد annulation اللوط",
+            "body": "الطلبيات المدمجة كترجع « {statusLabel} » برا اللوط. اللوط المسودة غادي يتمحى. ما تقدرش ترجع هاد العملية هنا.",
+            "back": "رجع",
+            "confirm": "أكّد annulation اللوط"
+          },
+          "condDialog": {
+            "title": "التغليف",
+            "hint": "الاختيار الأول بحال فالإدخال فالمحل؛ تقدر تختار بالوحدة ولا تغليف آخر.",
+            "addToLot": "زيد لللوط"
+          }
+        }
+      },
+      "achat": {
+        "list": {
+          "title": "الشرا — لوطات",
+          "subtitle": "لوطات جاهزين للإدخال والشرا؛ من بعد الإغلاق، للقراة فقط.",
+          "filterAria": "فلتر حالة اللوطات",
+          "filterPending": "خاصهم المعالجة",
+          "filterAll": "الكل (جاهزين + كملو)",
+          "loadingLots": "كيتسنا اللوطات…",
+          "emptyLots": "ما كاين حتى لوط لهاد الفلتر.",
+          "lotStatusLine": "الحالة : {status} — جاهزة نهار {readyDate}",
+          "lotStatusClosed": " — تسدات نهار {closedDate}"
+        },
+        "detail": {
+          "backToLots": "لائحة اللوطات",
+          "saving": "كيتسنا التسجيل…",
+          "statusLine": "الحالة : {status} — متحضّرة : {readyDate} — الإغلاق : {closedDate}",
+          "readOnlyNotice": "اللوط كمل : للقراة فقط.",
+          "close": "سد",
+          "closing": "كيتسنا الإغلاق…",
+          "productsWithoutVendor": "منتجات بلا بائع",
+          "allProductsHaveVendor": "كل المنتجات عندهم بائع.",
+          "chooseVendor": "اختار بائع…",
+          "assignVendorToSelection": "عطي البائع للاختيار ({count})",
+          "newVendor": "بائع جديد",
+          "renameVendorAria": "بدّل سمية البائع {label}",
+          "vendorTotal": "مجموع الشرا : {amount}",
+          "purchasePrice": "ثمن الشرا",
+          "feesSection": "المصاريف",
+          "feesHintEditable": "مصاريف عامة ديال اللوط (زيد سطور بالاسم والمبلغ بالدرهم).",
+          "feesHintReadOnly": "مصاريف عامة ديال اللوط",
+          "noFees": "ما كاين حتى مصروف مسجّل.",
+          "addFeeLine": "زيد سطر مصروف",
+          "totalFees": "مجموع المصاريف : {amount}",
+          "summarySection": "الملخّص",
+          "summarySupplierLines": "{supplier} (مبالغ السطور)",
+          "summaryNoVendorLines": "منتجات بلا بائع (مبالغ السطور)",
+          "summaryTotalProducts": "مجموع المنتجات :",
+          "summaryFees": "المصاريف :",
+          "summaryGrandTotal": "المجموع : {amount}",
+          "amountDh": "{amount} DH",
+          "savedSuccess": "التعديلات تسجّلات.",
+          "lotClosedSuccess": "اللوط تسد.",
+          "condDialogHint": "الاختيار الأول بحال فالتصديق؛ تقدر تختار بالوحدة ولا تغليف آخر.",
+          "condDialogTitle": "التغليف",
+          "addToLot": "زيد لللوط",
+          "confirmZeroDialog": {
+            "title": "كميات الشرا = 0",
+            "body1": "شي سطور عندهم كمية شرا = 0.",
+            "body2": "واش كتأكّد الإغلاق على أي حال ؟",
+            "confirm": "أكّد الإغلاق"
+          },
+          "renameVendorDialog": {
+            "title": "بدّل سمية البائع",
+            "displayNameLabel": "السمية المعروضة"
+          },
+          "newVendorDialog": {
+            "title": "بائع مزود جديد",
+            "displayNameLabel": "السمية المعروضة",
+            "add": "زيد"
+          }
+        }
+      },
+      "quantityPanel": {
+        "unitButton": "بالوحدة ({unit})",
+        "unitButtonWithQty": "بالوحدة ({unit}) · {qty}",
+        "packButton": "{label} ({packQty} {unit})",
+        "packButtonWithQty": "{label} ({packQty} {unit}) · {qty}",
+        "matrixQtyHint": "الكميات كتدخل حسب المحل فالمatrice ديال اللوط.",
+        "matrixQtyHintShort": "الكميات كتدخل حسب المحل فالمatrice.",
+        "packagingOnly": "هاد المنتج كيتطلب غير بالتغليف للمحل ديالك.",
+        "unitLabelKg": "Kg",
+        "unitLabelDefault": "وحدة",
+        "needLabel": "الحاجة : {qty}"
+      },
+      "components": {
+        "ligneCommentaireSaisieControls": {
+          "dialogTitleEdit": "تعليق السطر",
+          "dialogTitleAdd": "زيد تعليق"
+        },
+        "productPicker": {
+          "title": "قلّب على منتج",
+          "limitToSupplier": "حدّد للمزود المخصّص لهاد الطلبية / اللوط",
+          "nameOrCodeLabel": "السمية ولا الكود",
+          "placeholderSupplierOnly": "كتب حرف على الأقل…",
+          "placeholderCatalog": "2 حروف على الأقل ولا فئة…",
+          "categoryLabel": "الفئة",
+          "allCategories": "كل الفئات",
+          "hintCatalog": "البحث فالكتالوغ كامل : دخل معيار ولا اختار فئة.",
+          "hintSupplierOnly": "كتالوغ ديال المزود المتوقع فقط (فك التحديد باش توسّع).",
+          "noResults": "ما لقيناش منتج مطابق.",
+          "networkError": "خطأ فالشبكة"
+        },
+        "export": {
+          "orderHeader": "طلبية المزود : {supplier}",
+          "orderDate": "طلبية د {date}",
+          "orderedBy": "من {name}",
+          "footerCommentLot": "تعليق اللوط",
+          "footerCommentOrder": "تعليق الطلبية",
+          "magasinColumnQuantity": "الكمية",
+          "vendorRecapTitle": "ملخّص حسب البائع"
+        }
+      },
+      "errors": {
+        "generic": "خطأ",
+        "loadFailed": "خطأ فالتحميل",
+        "networkUnavailable": "الشبكة ما خدامة",
+        "networkUnavailableDot": "الشبكة ما خدامة.",
+        "networkSaveFailed": "الشبكة ما خدامة فالتسجيل.",
+        "networkCloseFailed": "الشبكة ما خدامة فالإغلاق.",
+        "saveFailed": "ما قدرناش نسجّلو",
+        "saveLinesFailed": "ما قدرناش نسجّلو السطور",
+        "commentFailed": "التعليق",
+        "validationFailed": "التصديق",
+        "cancellationFailed": "annuler ما مشا",
+        "reopenFailed": "إعادة الفتح",
+        "lotsListFailed": "خطأ فلائحة اللوطات",
+        "lotNotFound": "اللوط ما لقيناه",
+        "saveRegistrationFailed": "ما قدرناش نسجّلو",
+        "reloadFeesFailed": "ما قدرناش نعاودو نشارجيو المصاريف",
+        "closeFailed": "ما قدرناش نسدّو",
+        "createVendorFailed": "ما قدرناش نصيبتو",
+        "updateVendorFailed": "ما قدرناش نبدّلو",
+        "invalidVendorResponse": "السيرفر ردّ جواب ما صالحش من بعد إنشاء البائع",
+        "missingSupplier": "المزود ناقص",
+        "chooseSupplier": "اختار مزود",
+        "selectAtLeastOneOrder": "اختار طلبية على الأقل",
+        "noStoreLinked": "ما كاين حتى محل مربوط بالبروفيل ديالك.",
+        "noStoreLinkedShort": "ما كاين حتى محل مربوط.",
+        "noOrderCommentsToMerge": "ما كاين حتى تعليق طلبية باش ندمجو.",
+        "storeNotFoundForComment": "المحل ما لقيناه لهاد التعليق.",
+        "productNotFoundForComment": "المنتج ما لقيناه لهاد التعليق."
+      }
+    }
+  },
+  "shop": {}
+}

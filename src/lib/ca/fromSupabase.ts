@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { HISTORIQUE_FROM_ISO } from "./constants";
 import type { CaResponse, HistoriqueDayRow, HistoriquePayload, PanierMag } from "./types";
 
 function isoDateMinusDays(iso: string, days: number) {
@@ -83,6 +84,34 @@ function alignPanierHeureByMag(
   return out;
 }
 
+async function fetchMaxDailyCaTotal(
+  supabase: SupabaseClient,
+  from: string,
+  to: string,
+  magIn?: string[],
+): Promise<number | null> {
+  let hq = supabase.from("ca_day").select("date,magasin,total").gte("date", from).lte("date", to);
+  if (magIn !== undefined) {
+    hq = magIn.length === 0 ? hq.in("magasin", ["__none__"]) : hq.in("magasin", magIn);
+  }
+  const { data, error } = await hq;
+  if (error) return null;
+
+  const byDate = new Map<string, number>();
+  for (const r of data ?? []) {
+    const d = normalizeDateCell(r.date);
+    const t = typeof r.total === "number" ? r.total : Number(r.total);
+    if (!Number.isFinite(t)) continue;
+    byDate.set(d, (byDate.get(d) ?? 0) + t);
+  }
+
+  let max: number | null = null;
+  for (const total of byDate.values()) {
+    if (max === null || total > max) max = total;
+  }
+  return max;
+}
+
 export async function fetchCaDashboardFromSupabase(
   supabase: SupabaseClient,
   date: string,
@@ -94,6 +123,7 @@ export async function fetchCaDashboardFromSupabase(
   const ym = date.slice(0, 7);
   const dateJ1 = isoDateMinusDays(date, 1);
   const dateJ7 = isoDateMinusDays(date, 7);
+  const todayIso = new Date().toISOString().slice(0, 10);
 
   let dayQb = supabase.from("ca_day").select("magasin,total,nb_paniers").eq("date", date);
   let j1Qb = supabase.from("ca_day").select("magasin,total").eq("date", dateJ1);
@@ -108,7 +138,7 @@ export async function fetchCaDashboardFromSupabase(
     hourQb = hourQb.in("magasin", magIn);
   }
 
-  const [dayQ, j1Q, j7Q, monthQ, prodQ, hourQ] = await Promise.all([
+  const [dayQ, j1Q, j7Q, monthQ, prodQ, hourQ, maxDayTotal] = await Promise.all([
     dayQb,
     j1Qb,
     j7Qb,
@@ -117,6 +147,7 @@ export async function fetchCaDashboardFromSupabase(
       ? Promise.resolve({ data: [] as { article: string; qty: number; total: number }[], error: null })
       : supabase.from("ca_product_day").select("article,qty,total").eq("date", date),
     hourQb,
+    fetchMaxDailyCaTotal(supabase, HISTORIQUE_FROM_ISO, todayIso, magIn),
   ]);
 
   const firstErr =
@@ -197,8 +228,15 @@ export async function fetchCaDashboardFromSupabase(
   const byCa = [...productLines].sort((a, b) => b.ca - a.ca).slice(0, 10);
   const byQty = [...productLines].sort((a, b) => b.qty - a.qty).slice(0, 10);
 
+  const isRecordDay =
+    Number.isFinite(dayAgg.totalGlobal) &&
+    dayAgg.totalGlobal > 0 &&
+    maxDayTotal !== null &&
+    dayAgg.totalGlobal >= maxDayTotal;
+
   const data: CaResponse = {
     totalGlobal: dayAgg.totalGlobal,
+    isRecordDay,
     magasins,
     month: {
       ym,

@@ -3,6 +3,7 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type { SessionPayload } from "@/lib/auth/session-types";
 import { buildSessionDisplayLabel } from "@/lib/auth/display-label";
 import { loadMagasinsForUser } from "@/lib/magasins/load-magasins-for-user";
+import { normalizeLocale } from "@/i18n/config";
 
 export async function GET() {
   try {
@@ -18,7 +19,7 @@ export async function GET() {
 
     const { data: profile } = await supabase
       .from("profiles")
-      .select("login, prenom, nom, role_id, roles(name, slug, is_full_access)")
+      .select("login, prenom, nom, role_id, ui_locale, roles(name, slug, is_full_access)")
       .eq("user_id", user.id)
       .maybeSingle();
 
@@ -69,6 +70,7 @@ export async function GET() {
       permissions,
       magasins,
       displayLabel,
+      uiLocale: normalizeLocale(profile?.ui_locale),
     };
 
     return NextResponse.json({ session: payload });
