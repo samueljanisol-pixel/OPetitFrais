@@ -5,6 +5,10 @@ import {
   Box,
   Button,
   Checkbox,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
   FormControl,
   FormControlLabel,
   InputLabel,
@@ -32,6 +36,7 @@ import { useSessionPermissions } from '@/lib/auth/useSessionPermissions'
 import { ProductPackagingSettingsDialog, type MagasinMini } from '@/app/produits/ProductPackagingSettingsDialog'
 import { packagingConditionnementLabel } from '@/lib/commandes-fournisseur/product-display'
 import { hasPackagingCombo, packagingDbErrorMessage } from '@/lib/products/packaging-errors'
+import { productPackagingArchiveUpdate } from '@/lib/products/packaging-archive'
 
 type Props = { productId: string | null; /** Retour après enregistrement (ex. parcours commande). */
   returnTo?: string | null }
@@ -58,8 +63,13 @@ export default function ProductFormClient({ productId, returnTo = null }: Props)
   const isNew = productId == null
   const supabase = useMemo(() => createSupabaseBrowserClient(), [])
   const router = useRouter()
-  const { canWriteProducts, loading: permLoading } = useSessionPermissions()
+  const { canWriteProducts, canCommandesFournisseurSaisie, loading: permLoading } =
+    useSessionPermissions()
   const readOnly = !canWriteProducts
+  /** Depuis le parcours commande : saisie autorisée sur les conditionnements sans produits.write. */
+  const canEditPackaging =
+    canWriteProducts || (returnTo != null && canCommandesFournisseurSaisie)
+  const packagingReadOnly = !canEditPackaging
   const [loading, setLoading] = useState(!isNew)
   const [saving, setSaving] = useState(false)
   const [err, setErr] = useState<string | null>(null)
@@ -86,6 +96,8 @@ export default function ProductFormClient({ productId, returnTo = null }: Props)
   const [vendeurs, setVendeurs] = useState<RefVendeurRow[]>([])
   const [magasins, setMagasins] = useState<MagasinMini[]>([])
   const [packDialog, setPackDialog] = useState<PackagingLine | null>(null)
+  const [pendingRemovePack, setPendingRemovePack] = useState<PackagingLine | null>(null)
+  const [removePackSaving, setRemovePackSaving] = useState(false)
   const [hist, setHist] = useState<ProductPriceHistoryRow[]>([])
   const [histError, setHistError] = useState<string | null>(null)
   const [histHasMore, setHistHasMore] = useState(false)
@@ -140,6 +152,7 @@ export default function ProductFormClient({ productId, returnTo = null }: Props)
       .from('product_packaging')
       .select(PACKAGING_SELECT)
       .eq('product_id', productId)
+      .is('archived_at', null)
     setPacks((pg as PackagingLine[]) ?? [])
   }, [supabase, productId])
 
@@ -179,6 +192,7 @@ export default function ProductFormClient({ productId, returnTo = null }: Props)
       .from('product_packaging')
       .select(PACKAGING_SELECT)
       .eq('product_id', productId)
+      .is('archived_at', null)
     setPacks((pg as PackagingLine[]) ?? [])
     setLoading(false)
   }, [supabase, productId])
@@ -361,7 +375,7 @@ export default function ProductFormClient({ productId, returnTo = null }: Props)
   }
 
   const addPackaging = async () => {
-    if (readOnly) return
+    if (packagingReadOnly) return
     if (!productId) {
       setErr('Enregistrez le produit avant d’ajouter un conditionnement.')
       return
@@ -407,30 +421,41 @@ export default function ProductFormClient({ productId, returnTo = null }: Props)
   }
 
   const removePack = async (id: string) => {
-    if (readOnly) return
-    const pack = packs.find(x => x.id === id)
-    const condLabel = pack
-      ? packagingConditionnementLabel({
-          id: pack.id,
-          quantity: pack.quantity,
-          nom: pack.nom,
-          ref_conditionnement: pack.ref_conditionnement,
-          ref_sales_unit: pack.ref_sales_unit,
-        })
-      : 'ce conditionnement'
-    if (
-      !window.confirm(
-        `Retirer le conditionnement « ${condLabel} » de ce produit ?\n\nLes paramètres vente/achat associés seront supprimés.`,
-      )
-    ) {
-      return
-    }
-    const { error: e1 } = await supabase.from('product_packaging').delete().eq('id', id)
+    if (packagingReadOnly) return
+    setErr(null)
+    const { error: e1 } = await supabase
+      .from('product_packaging')
+      .update(productPackagingArchiveUpdate() as never)
+      .eq('id', id)
+      .is('archived_at', null)
     if (e1) {
       setErr(e1.message)
       return
     }
     setPacks(prev => prev.filter(x => x.id !== id))
+  }
+
+  const openRemovePackDialog = (pack: PackagingLine) => {
+    if (packagingReadOnly) return
+    setPendingRemovePack(pack)
+  }
+
+  const closeRemovePackDialog = () => {
+    if (removePackSaving) return
+    setPendingRemovePack(null)
+  }
+
+  const confirmRemovePack = async () => {
+    const pack = pendingRemovePack
+    if (!pack || packagingReadOnly) return
+    setRemovePackSaving(true)
+    setErr(null)
+    try {
+      await removePack(pack.id)
+      setPendingRemovePack(null)
+    } finally {
+      setRemovePackSaving(false)
+    }
   }
 
   if (loading || permLoading)
@@ -454,9 +479,15 @@ export default function ProductFormClient({ productId, returnTo = null }: Props)
         {err ? (
           <div className="mb-3 rounded border border-rose-200 bg-rose-50 p-2 text-sm text-rose-900">{err}</div>
         ) : null}
-        {readOnly && !isNew ? (
+        {readOnly && !isNew && packagingReadOnly ? (
           <div className="mb-3 rounded border border-slate-200 bg-slate-50 p-2 text-sm text-slate-800">
             Lecture seule — vous n&apos;avez pas la permission de modifier ce produit.
+          </div>
+        ) : null}
+        {readOnly && !isNew && canEditPackaging ? (
+          <div className="mb-3 rounded border border-sky-200 bg-sky-50 p-2 text-sm text-sky-950">
+            Fiche produit en lecture seule — vous pouvez toutefois gérer les conditionnements (ajout, paramètres,
+            retrait) pour la commande en cours.
           </div>
         ) : null}
 
@@ -677,16 +708,17 @@ export default function ProductFormClient({ productId, returnTo = null }: Props)
         </fieldset>
 
         {!isNew && productId ? (
-          <Box sx={{ mt: 4 }} component="fieldset" disabled={readOnly} className="m-0 min-w-0 border-0 p-0 disabled:opacity-80">
+          <Box sx={{ mt: 4 }} className="m-0 min-w-0 border-0 p-0">
             <Typography variant="h6" sx={{ mb: 1 }}>
               Conditionnements
             </Typography>
             <div className="mb-2 flex flex-col flex-wrap items-stretch gap-2 sm:flex-row sm:items-end">
-              <FormControl size="small" sx={{ minWidth: 200 }}>
+              <FormControl size="small" sx={{ minWidth: 200 }} disabled={packagingReadOnly}>
                 <InputLabel>Conditionnement</InputLabel>
                 <Select
                   value={addCond}
                   label="Conditionnement"
+                  disabled={packagingReadOnly}
                   onChange={e => setAddCond(e.target.value)}
                 >
                   {conds.map(c => (
@@ -702,6 +734,7 @@ export default function ProductFormClient({ productId, returnTo = null }: Props)
                 value={addNom}
                 onChange={e => setAddNom(e.target.value)}
                 placeholder="Optionnel"
+                disabled={packagingReadOnly}
                 sx={{ minWidth: 160, flex: '1 1 160px' }}
                 helperText="Prioritaire sur le libellé réf. (commandes, achat…)"
               />
@@ -710,14 +743,16 @@ export default function ProductFormClient({ productId, returnTo = null }: Props)
                 label="Quantité"
                 value={addQty}
                 onChange={e => setAddQty(e.target.value)}
+                disabled={packagingReadOnly}
                 sx={{ width: 100 }}
                 slotProps={muiSlotPropsDecimalKeypad}
               />
-              <FormControl size="small" sx={{ minWidth: 120 }}>
+              <FormControl size="small" sx={{ minWidth: 120 }} disabled={packagingReadOnly}>
                 <InputLabel>UdV</InputLabel>
                 <Select
                   value={addUnit}
                   label="UdV"
+                  disabled={packagingReadOnly}
                   onChange={e => setAddUnit(e.target.value)}
                 >
                   {units.map(u => (
@@ -727,7 +762,14 @@ export default function ProductFormClient({ productId, returnTo = null }: Props)
                   ))}
                 </Select>
               </FormControl>
-              <Button type="button" variant="outlined" size="small" onClick={() => void addPackaging()} sx={{ textTransform: 'none' }}>
+              <Button
+                type="button"
+                variant="outlined"
+                size="small"
+                disabled={packagingReadOnly}
+                onClick={() => void addPackaging()}
+                sx={{ textTransform: 'none' }}
+              >
                 Ajouter
               </Button>
             </div>
@@ -760,15 +802,24 @@ export default function ProductFormClient({ productId, returnTo = null }: Props)
                     <td className="p-2">{x.available_for_purchase !== false ? 'Oui' : 'Non'}</td>
                     <td className="p-2">
                       <Button
+                        type="button"
                         size="small"
                         variant="outlined"
+                        disabled={packagingReadOnly}
                         onClick={() => setPackDialog(x)}
                         sx={{ textTransform: 'none' }}
                       >
                         Paramètres
                       </Button>
-                      <Button size="small" color="error" onClick={() => void removePack(x.id)} sx={{ textTransform: 'none', ml: 0.5 }}>
-                        Retirer
+                      <Button
+                        type="button"
+                        size="small"
+                        color="error"
+                        disabled={packagingReadOnly}
+                        onClick={() => openRemovePackDialog(x)}
+                        sx={{ textTransform: 'none', ml: 0.5 }}
+                      >
+                        Archiver
                       </Button>
                     </td>
                   </tr>
@@ -778,7 +829,7 @@ export default function ProductFormClient({ productId, returnTo = null }: Props)
             <ProductPackagingSettingsDialog
               open={packDialog != null}
               onClose={() => setPackDialog(null)}
-              readOnly={readOnly}
+              readOnly={packagingReadOnly}
               line={packDialog}
               siblingLines={packDialog ? packs.filter(p => p.id !== packDialog.id) : []}
               magasins={magasins}
@@ -787,6 +838,46 @@ export default function ProductFormClient({ productId, returnTo = null }: Props)
               vendeurs={vendeurs}
               onSaved={() => void reloadPacks()}
             />
+            <Dialog open={pendingRemovePack != null} onClose={closeRemovePackDialog} fullWidth maxWidth="sm">
+              <DialogTitle sx={{ pb: 0.5 }}>Archiver le conditionnement</DialogTitle>
+              <DialogContent>
+                {pendingRemovePack ? (
+                  <Typography variant="body2" color="text.secondary">
+                    Archiver «{' '}
+                    {packagingConditionnementLabel({
+                      id: pendingRemovePack.id,
+                      quantity: pendingRemovePack.quantity,
+                      nom: pendingRemovePack.nom,
+                      ref_conditionnement: pendingRemovePack.ref_conditionnement,
+                      ref_sales_unit: pendingRemovePack.ref_sales_unit,
+                    })}{' '}
+                    » ? Il ne sera plus proposé à la saisie ni au catalogue, mais restera visible
+                    sur les commandes et lots qui l’utilisent déjà.
+                  </Typography>
+                ) : null}
+              </DialogContent>
+              <DialogActions className="!px-3 !pb-2">
+                <Button
+                  type="button"
+                  color="inherit"
+                  onClick={closeRemovePackDialog}
+                  disabled={removePackSaving}
+                  sx={{ textTransform: 'none' }}
+                >
+                  Annuler
+                </Button>
+                <Button
+                  type="button"
+                  variant="contained"
+                  color="error"
+                  disabled={removePackSaving}
+                  onClick={() => void confirmRemovePack()}
+                  sx={{ textTransform: 'none' }}
+                >
+                  {removePackSaving ? '…' : 'Archiver'}
+                </Button>
+              </DialogActions>
+            </Dialog>
           </Box>
         ) : null}
 

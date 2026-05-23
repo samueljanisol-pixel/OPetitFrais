@@ -1,7 +1,9 @@
 import { NextResponse } from "next/server";
-import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { createSupabaseServerClient, createSupabaseServiceRoleClient } from "@/lib/supabase/server";
 import { requireApiPermission } from "@/lib/auth/require-permission-api";
 import { findExistingLotLigneId } from "@/lib/commandes-fournisseur/lot-ligne-duplicate-query";
+import { insertLotLignesMerged } from "@/lib/commandes-fournisseur/insert-lot-lignes";
+import { normalizeEntityId, normalizeProductPackagingId } from "@/lib/commandes-fournisseur/commande-ligne-key";
 import { vendeurIdForProduct } from "@/lib/commandes-fournisseur/product-vendeur";
 
 type Ctx = { params: Promise<{ id: string }> };
@@ -26,13 +28,14 @@ export async function POST(req: Request, ctx: Ctx) {
   if (!productId) {
     return NextResponse.json({ error: "productId requis" }, { status: 400 });
   }
+  const productIdNorm = normalizeEntityId(productId);
+  if (!productIdNorm) {
+    return NextResponse.json({ error: "productId invalide" }, { status: 400 });
+  }
 
   let packagingId: string | null = null;
   if (body.productPackagingId !== undefined && body.productPackagingId !== null) {
-    const raw = String(body.productPackagingId).trim();
-    if (raw.length > 0) {
-      packagingId = raw;
-    }
+    packagingId = normalizeProductPackagingId(String(body.productPackagingId).trim());
   }
 
   const supabase = await createSupabaseServerClient();
@@ -57,7 +60,7 @@ export async function POST(req: Request, ctx: Ctx) {
   const { data: product, error: pe } = await supabase
     .from("product")
     .select("id, supplier_id, active")
-    .eq("id", productId)
+    .eq("id", productIdNorm)
     .maybeSingle();
   if (pe) {
     return NextResponse.json({ error: pe.message }, { status: 500 });
@@ -79,7 +82,8 @@ export async function POST(req: Request, ctx: Ctx) {
       .from("product_packaging")
       .select("id")
       .eq("id", packagingId)
-      .eq("product_id", productId)
+      .eq("product_id", productIdNorm)
+      .is("archived_at", null)
       .maybeSingle();
     if (pkgE) {
       return NextResponse.json({ error: pkgE.message }, { status: 500 });
@@ -91,7 +95,7 @@ export async function POST(req: Request, ctx: Ctx) {
 
   let dup: { id: string } | null;
   try {
-    dup = await findExistingLotLigneId(supabase, lotId, productId, packagingId);
+    dup = await findExistingLotLigneId(supabase, lotId, productIdNorm, packagingId);
   } catch (e) {
     return NextResponse.json(
       { error: e instanceof Error ? e.message : "Erreur" },
@@ -105,27 +109,44 @@ export async function POST(req: Request, ctx: Ctx) {
     );
   }
 
-  const vendeurId = await vendeurIdForProduct(supabase, productId, lotSupplierId);
+  const vendeurId = await vendeurIdForProduct(supabase, productIdNorm, lotSupplierId);
 
-  const { data: inserted, error: insL } = await supabase
-    .from("commande_fournisseur_lot_ligne")
-    .insert({
+  let writeSupabase;
+  try {
+    writeSupabase = createSupabaseServiceRoleClient();
+  } catch {
+    return NextResponse.json(
+      { error: "Configuration serveur incomplète (SUPABASE_SERVICE_ROLE_KEY)." },
+      { status: 500 },
+    );
+  }
+
+  const insRes = await insertLotLignesMerged(writeSupabase, lotId, [
+    {
       lot_id: lotId,
-      product_id: productId,
+      product_id: productIdNorm,
       product_packaging_id: packagingId,
       qte_achat: 0,
-      qte_besoin_fige: 0,
-      vendeur_id: vendeurId,
-    })
-    .select("id")
-    .single();
-
-  if (insL) {
-    return NextResponse.json({ error: insL.message }, { status: 500 });
+      ...(vendeurId ? { vendeur_id: vendeurId } : {}),
+    },
+  ]);
+  if ("error" in insRes) {
+    if (insRes.error.includes("déjà") || insRes.error.includes("doublon")) {
+      return NextResponse.json({ error: "Ce conditionnement est déjà dans le lot." }, { status: 409 });
+    }
+    return NextResponse.json({ error: insRes.error }, { status: 500 });
   }
-  const lotLigneId = inserted?.id as string | undefined;
+  const lotLigneId = [...insRes.keyToLotLigneId.values()][0];
   if (!lotLigneId) {
     return NextResponse.json({ error: "Insertion ligne lot impossible" }, { status: 500 });
+  }
+
+  const { error: figeErr } = await writeSupabase
+    .from("commande_fournisseur_lot_ligne")
+    .update({ qte_besoin_fige: 0 })
+    .eq("id", lotLigneId);
+  if (figeErr) {
+    return NextResponse.json({ error: figeErr.message }, { status: 500 });
   }
 
   return NextResponse.json({ ok: true, lotLigneId });

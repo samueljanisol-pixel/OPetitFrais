@@ -1,4 +1,4 @@
-/** Contrainte unique : (product_id, conditionnement_id, sales_unit_id). */
+/** Contrainte unique partielle : (product_id, conditionnement_id, sales_unit_id) si archived_at IS NULL. */
 
 export function isPackagingUniqueViolation(
   message: string | undefined,

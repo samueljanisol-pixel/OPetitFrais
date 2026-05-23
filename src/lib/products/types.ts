@@ -66,6 +66,8 @@ export type ProductPackagingRow = {
   /** Nom affiché (prioritaire sur ref_conditionnement.label). */
   nom?: string | null
   created_at: string
+  /** Archivage logique : masqué du catalogue, conservé pour l’historique. */
+  archived_at?: string | null
   available_for_sale?: boolean
   available_for_purchase?: boolean
   product_packaging_magasin?: ProductPackagingMagasinRow[] | ProductPackagingMagasinRow | null

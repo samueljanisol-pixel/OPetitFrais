@@ -2,7 +2,7 @@
 
 import type { ProductDisplayInfo } from "@/lib/commandes-fournisseur/product-display";
 
-/** Quantité de base (= unités de vente produit selon « Soit »). */
+/** Quantité de base (= quantité × contenu colis ; unité affichée dans « Soit » = UdV conditionnement). */
 export function qtyBaseFromLotLine(qteAchat: number, display: ProductDisplayInfo): number {
   if (!Number.isFinite(qteAchat) || qteAchat < 0) return 0;
   const { isCond, packContentQty } = display;

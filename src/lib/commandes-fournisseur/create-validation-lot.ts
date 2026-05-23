@@ -1,8 +1,12 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { createSupabaseServiceRoleClient } from "@/lib/supabase/server";
 import {
-  commandeLigneKey,
+  dedupeLotLigneInserts,
+  lotLignePostgresUniqueKey,
+  normalizeEntityId,
   normalizeProductPackagingId,
 } from "@/lib/commandes-fournisseur/commande-ligne-key";
+import { insertLotLignesMerged } from "@/lib/commandes-fournisseur/insert-lot-lignes";
 import { vendeurIdsByProductIds } from "@/lib/commandes-fournisseur/product-vendeur";
 import { fallbackStatusLabel } from "@/lib/statusLabels/defaults";
 
@@ -57,7 +61,17 @@ export async function createValidationLot(
   const supplierId = commandes[0]!.supplier_id as string;
   const magByCmd = new Map(commandes.map((c) => [c.id as string, c.magasin_id as string]));
 
-  const { data: lotRow, error: le } = await supabase
+  let writeSupabase: SupabaseClient;
+  try {
+    writeSupabase = createSupabaseServiceRoleClient();
+  } catch {
+    return {
+      error:
+        "Configuration serveur incomplète (SUPABASE_SERVICE_ROLE_KEY). Impossible de créer le lot en toute sécurité.",
+    };
+  }
+
+  const { data: lotRow, error: le } = await writeSupabase
     .from("commande_fournisseur_lot")
     .insert({
       supplier_id: supplierId,
@@ -72,9 +86,9 @@ export async function createValidationLot(
   const lotId = lotRow.id as string;
 
   const inclusions = unique.map((commandeId) => ({ lot_id: lotId, commande_id: commandeId }));
-  const { error: ie } = await supabase.from("commande_fournisseur_lot_inclusion").insert(inclusions);
+  const { error: ie } = await writeSupabase.from("commande_fournisseur_lot_inclusion").insert(inclusions);
   if (ie) {
-    await supabase.from("commande_fournisseur_lot").delete().eq("id", lotId);
+    await writeSupabase.from("commande_fournisseur_lot").delete().eq("id", lotId);
     return { error: ie.message };
   }
 
@@ -83,17 +97,20 @@ export async function createValidationLot(
     .select("commande_id, product_id, product_packaging_id, qte")
     .in("commande_id", unique);
   if (ligErr) {
-    await supabase.from("commande_fournisseur_lot").delete().eq("id", lotId);
+    await writeSupabase.from("commande_fournisseur_lot").delete().eq("id", lotId);
     return { error: ligErr.message };
   }
 
   const byLineKey = new Map<string, LotAggCell>();
   for (const row of lignes ?? []) {
-    const pid = row.product_id as string;
+    const pid = normalizeEntityId(row.product_id as string);
+    if (!pid) {
+      continue;
+    }
     const packagingId = normalizeProductPackagingId(
       (row as { product_packaging_id?: string | null }).product_packaging_id,
     );
-    const key = commandeLigneKey(pid, packagingId);
+    const key = lotLignePostgresUniqueKey(pid, packagingId);
     const q = Number(row.qte) || 0;
     const mid = magByCmd.get(row.commande_id as string);
     if (!mid) continue;
@@ -113,7 +130,7 @@ export async function createValidationLot(
       .update({ lot_id: lotId, status: "integree" })
       .in("id", unique);
     if (upErr) {
-      await supabase.from("commande_fournisseur_lot").delete().eq("id", lotId);
+      await writeSupabase.from("commande_fournisseur_lot").delete().eq("id", lotId);
       return { error: upErr.message };
     }
     return { lotId };
@@ -122,41 +139,26 @@ export async function createValidationLot(
   const productIds = [...new Set(lineKeys.map((k) => byLineKey.get(k)!.productId))];
   const vendeurByProduct = await vendeurIdsByProductIds(supabase, productIds, supplierId);
 
-  const toInsertLignes = lineKeys.map((key) => {
-    const cell = byLineKey.get(key)!;
-    const vendeurId = vendeurByProduct.get(cell.productId) ?? null;
-    return {
-      lot_id: lotId,
-      product_id: cell.productId,
-      qte_achat: cell.total,
-      ...(cell.packagingId ? { product_packaging_id: cell.packagingId } : {}),
-      ...(vendeurId ? { vendeur_id: vendeurId } : {}),
-    };
-  });
-
-  const { data: insLl, error: llErr } = await supabase
-    .from("commande_fournisseur_lot_ligne")
-    .insert(toInsertLignes)
-    .select("id, product_id, product_packaging_id");
-  if (llErr || !insLl) {
-    await supabase.from("commande_fournisseur_lot").delete().eq("id", lotId);
-    const msg = llErr?.message ?? "Écriture des lignes lot impossible";
-    if (msg.includes("commande_fournisseur_lot_ligne_lot_id_product_id_key")) {
+  const toInsertLignes = dedupeLotLigneInserts(
+    lineKeys.map((key) => {
+      const cell = byLineKey.get(key)!;
+      const vendeurId = vendeurByProduct.get(cell.productId) ?? null;
       return {
-        error:
-          "Impossible de créer le lot : la base utilise encore l’ancienne règle « un produit par lot ». Appliquez la migration supabase/migrations/20260625120000_lot_ligne_unique_product_packaging.sql (Supabase SQL Editor ou supabase db push), puis réessayez.",
+        lot_id: lotId,
+        product_id: cell.productId,
+        product_packaging_id: cell.packagingId,
+        qte_achat: cell.total,
+        ...(vendeurId ? { vendeur_id: vendeurId } : {}),
       };
-    }
-    return { error: msg };
-  }
+    }),
+  );
 
-  const keyToLotLigne = new Map<string, string>();
-  for (const r of insLl as { id: string; product_id: string; product_packaging_id?: string | null }[]) {
-    keyToLotLigne.set(
-      commandeLigneKey(r.product_id, normalizeProductPackagingId(r.product_packaging_id)),
-      r.id,
-    );
+  const insRes = await insertLotLignesMerged(writeSupabase, lotId, toInsertLignes);
+  if ("error" in insRes) {
+    await writeSupabase.from("commande_fournisseur_lot").delete().eq("id", lotId);
+    return { error: insRes.error };
   }
+  const keyToLotLigne = insRes.keyToLotLigneId;
 
   const magRows: { lot_ligne_id: string; magasin_id: string; qte: number }[] = [];
   for (const key of lineKeys) {
@@ -171,19 +173,19 @@ export async function createValidationLot(
   }
 
   if (magRows.length > 0) {
-    const { error: mErr } = await supabase.from("commande_fournisseur_lot_ligne_magasin").insert(magRows);
+    const { error: mErr } = await writeSupabase.from("commande_fournisseur_lot_ligne_magasin").insert(magRows);
     if (mErr) {
-      await supabase.from("commande_fournisseur_lot").delete().eq("id", lotId);
+      await writeSupabase.from("commande_fournisseur_lot").delete().eq("id", lotId);
       return { error: mErr.message };
     }
   }
 
-  const { error: upErr } = await supabase
+  const { error: upErr } = await writeSupabase
     .from("commande_fournisseur")
     .update({ lot_id: lotId, status: "integree" })
     .in("id", unique);
   if (upErr) {
-    await supabase.from("commande_fournisseur_lot").delete().eq("id", lotId);
+    await writeSupabase.from("commande_fournisseur_lot").delete().eq("id", lotId);
     return { error: upErr.message };
   }
 

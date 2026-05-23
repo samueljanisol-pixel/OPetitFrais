@@ -60,7 +60,9 @@ Comme au **récap saisie** : si la ligne est en conditionnement (`product_packag
 
 ## Récap commande (`saisie/[id]/recap`)
 
-Sur chaque ligne : grille fixe **−1 | qté (4,25 rem) | unité (2,25 rem réservée) | +1** — champs qté alignés verticalement ; libellé **conditionnement** (`condTitre`) au-dessus des boutons ± ; **« Soit … »** en 2ᵉ rangée sous la qté (`col-span-2`, une seule ligne).
+Sur chaque ligne : grille fixe **−1 | qté (4,25 rem) | unité (2,25 rem réservée) | +1** — champs qté alignés verticalement ; libellé **conditionnement** (`condTitre`) au-dessus des boutons ± ; **« Soit … »** en 2ᵉ rangée sous la qté (`col-span-2`, une seule ligne). L’unité dans **« Soit … »** est l’**UdV du conditionnement** (`product_packaging.ref_sales_unit`), pas celle du produit.
+
+**Commande validée ou intégrée** : bouton **Exporter en image** (même format que le récap validation lot, un PNG par vendeur) — voir `saisie/[id]/recap/README.md`. L’affichage liste de la page n’est pas modifié.
 
 ### Plusieurs conditionnements pour un même produit
 
@@ -72,7 +74,7 @@ Une commande peut contenir **plusieurs lignes** pour le même `product_id` si le
 
 ### Création de lot (consolidation)
 
-À la création, chaque ligne de commande est agrégée par **(produit, conditionnement)** : une ligne de lot par couple, avec `product_packaging_id` repris de la saisie. Plusieurs conditionnements du même produit → plusieurs lignes dans le lot (migration `20260625120000_lot_ligne_unique_product_packaging.sql`).
+À la création, chaque ligne de commande est agrégée par **(produit, conditionnement)** via la fonction SQL `upsert_commande_fournisseur_lot_ligne` (migrations `20260626120000` + correctif `20260626130000_lot_ligne_upsert_rpc_on_conflict.sql`). **Exécuter le correctif dans Supabase SQL Editor** si la constitution de lot échoue encore sur l’index unique.
 
 Ajout manuel au lot (brouillon / achat) : refus uniquement si le **même conditionnement** est déjà présent.
 

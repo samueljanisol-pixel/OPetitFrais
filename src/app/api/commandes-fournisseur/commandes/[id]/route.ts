@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
-import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { createSupabaseServerClient, createSupabaseServiceRoleClient } from "@/lib/supabase/server";
+import { profileRowDisplayLabel } from "@/lib/auth/display-label";
 import { requireAnyApiPermission, requireApiPermission } from "@/lib/auth/require-permission-api";
 import { userHasMagasin } from "@/lib/commandes-fournisseur/api-helpers";
 import {
@@ -29,7 +30,7 @@ export async function GET(_req: Request, ctx: Ctx) {
   const { data: cmd, error } = await supabase
     .from("commande_fournisseur")
     .select(
-      "id, magasin_id, supplier_id, status, commentaire, lot_id, validated_at, cancelled_at, cancelled_by, created_at, updated_at, ref_supplier(id, code, label), magasins(id, code, nom)",
+      "id, magasin_id, supplier_id, status, commentaire, lot_id, created_by, validated_at, cancelled_at, cancelled_by, created_at, updated_at, ref_supplier(id, code, label), magasins(id, code, nom)",
     )
     .eq("id", id)
     .maybeSingle();
@@ -75,6 +76,7 @@ export async function GET(_req: Request, ctx: Ctx) {
     name: string;
     name_ar: string | null;
     code: string;
+    vendeur_id: string | null;
     ref_sales_unit: unknown;
     ref_category?: unknown;
   };
@@ -82,7 +84,7 @@ export async function GET(_req: Request, ctx: Ctx) {
   if (pids.length > 0) {
     const { data: prods } = await supabase
       .from("product")
-      .select("id, name, name_ar, code, ref_sales_unit(label), ref_category(label, sort_order)")
+      .select("id, name, name_ar, code, vendeur_id, ref_sales_unit(label), ref_category(label, sort_order)")
       .in("id", pids);
     productMap = Object.fromEntries((prods ?? []).map((p) => [p.id, p as ProductRow]));
   }
@@ -127,8 +129,40 @@ export async function GET(_req: Request, ctx: Ctx) {
 
   const lignesSorted = lignesOrderedByCategory(rawLignes, productMap);
 
+  const { data: vendeurs, error: ve } = await supabase
+    .from("ref_supplier_vendeur")
+    .select("id, label")
+    .eq("supplier_id", cmd.supplier_id as string)
+    .order("sort_order")
+    .order("label");
+
+  if (ve) {
+    return NextResponse.json({ error: ve.message }, { status: 500 });
+  }
+
+  let saisieParLabel: string | null = null;
+  const createdBy = cmd.created_by as string | null | undefined;
+  if (typeof createdBy === "string" && createdBy.length > 0) {
+    try {
+      const service = createSupabaseServiceRoleClient();
+      const { data: creator } = await service
+        .from("profiles")
+        .select("login, prenom, nom")
+        .eq("user_id", createdBy)
+        .maybeSingle();
+      saisieParLabel = profileRowDisplayLabel(creator, createdBy);
+    } catch {
+      saisieParLabel = null;
+    }
+  }
+
   return NextResponse.json({
     commande: cmd,
+    saisieParLabel,
+    vendeurs: (vendeurs ?? []).map((v) => ({
+      id: v.id as string,
+      label: (v as { label: string }).label,
+    })),
     lignes: lignesSorted.map((l) => {
       const product = productMap[l.product_id as string] ?? null;
       const packId = l.product_packaging_id as string | null;
@@ -136,14 +170,17 @@ export async function GET(_req: Request, ctx: Ctx) {
       const pr = packId ? packMap[packId] : null;
       const packQty = pr ? (typeof pr.quantity === "string" ? parseFloat(pr.quantity) : Number(pr.quantity)) : 0;
       const condTitre = pr && pr.id ? buildPackagingCondTitre(pr) : null;
+      const condPackUniteVente = pr ? labelFromRef(pr.ref_sales_unit) : null;
       const cat = product ? parseCategoryFromRef(product.ref_category) : { label: "", sort_order: null };
       const categoryLabel = categoryDisplayLabel(cat);
       return {
         ...l,
+        vendeur_id: product?.vendeur_id ?? null,
         product: product
           ? { id: product.id, name: product.name, code: product.code, name_ar: product.name_ar }
           : null,
         uniteVente,
+        condPackUniteVente: condPackUniteVente && condPackUniteVente !== "—" ? condPackUniteVente : null,
         condTitre,
         packContentQty: pr && pr.id && Number.isFinite(packQty) ? packQty : null,
         packSalesUnitIsUnite: pr ? isPackSalesUnitUnite(pr.ref_sales_unit) : false,

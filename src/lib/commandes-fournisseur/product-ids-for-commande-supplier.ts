@@ -12,7 +12,8 @@ export async function productIdsLinkedToCommandeSupplier(
   const { data: viaCond, error: e1 } = await supabase
     .from("product_packaging")
     .select("product_id, ref_conditionnement!inner(supplier_id)")
-    .eq("ref_conditionnement.supplier_id", supplierId);
+    .eq("ref_conditionnement.supplier_id", supplierId)
+    .is("archived_at", null);
   if (!e1) {
     for (const row of viaCond ?? []) {
       const pid = (row as { product_id?: string }).product_id;
@@ -24,8 +25,9 @@ export async function productIdsLinkedToCommandeSupplier(
 
   const { data: viaLink, error: e2 } = await supabase
     .from("product_packaging_supplier")
-    .select("product_packaging!inner(product_id)")
-    .eq("supplier_id", supplierId);
+    .select("product_packaging!inner(product_id, archived_at)")
+    .eq("supplier_id", supplierId)
+    .is("product_packaging.archived_at", null);
   if (!e2) {
     for (const row of viaLink ?? []) {
       const pp = (row as { product_packaging?: { product_id?: string } | { product_id?: string }[] })

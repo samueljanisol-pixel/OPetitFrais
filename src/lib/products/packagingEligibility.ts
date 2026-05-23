@@ -52,9 +52,11 @@ import {
   packagingMatchesCommandeSupplier,
   type PackagingWithSupplierLinks,
 } from "@/lib/products/packagingSupplierMatch";
+import { filterActivePackaging } from "@/lib/products/packaging-archive";
 
 export type ProductPackagingForFilter = PackagingWithSupplierLinks & {
   id: string;
+  archived_at?: string | null;
   available_for_sale?: boolean | null;
   available_for_purchase?: boolean | null;
   product_packaging_magasin?: PackagingMagasinOverrideRelation;
@@ -66,7 +68,7 @@ export function filterPackagingForCommandePurchase<T extends ProductPackagingFor
   commandSupplierId?: string | null,
   productSupplierId?: string | null,
 ): T[] {
-  const list = packs ?? [];
+  const list = filterActivePackaging(packs ?? []);
   return list.filter(
     (pp) =>
       effectivePurchasableForMagasin(pp.available_for_purchase, magasinId, pp.product_packaging_magasin) &&
@@ -78,7 +80,7 @@ export function filterPackagingForRetailSale<T extends ProductPackagingForFilter
   packs: T[] | null | undefined,
   magasinId: string | null | undefined,
 ): T[] {
-  const list = packs ?? [];
+  const list = filterActivePackaging(packs ?? []);
   return list.filter((pp) =>
     effectiveSellableForMagasin(pp.available_for_sale, magasinId, pp.product_packaging_magasin),
   );

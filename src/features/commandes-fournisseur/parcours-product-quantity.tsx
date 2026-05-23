@@ -377,7 +377,7 @@ export function ParcoursProductQuantityPanel({
           const condWithPackSpec = `${condName} (${formatQtyDisplay(pq)} ${pkUnit})`;
           const soitLine =
             v > 0 && !isPackSalesUnitUnite(pkg.ref_sales_unit)
-              ? `Soit ${formatQtyDisplay(total)} ${productUnit}`
+              ? `Soit ${formatQtyDisplay(total)} ${pkUnit}`
               : null;
           return (
             <PackQteControl

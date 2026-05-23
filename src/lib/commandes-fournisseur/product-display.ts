@@ -63,7 +63,10 @@ export function buildPackagingCondTitre(pack: PackagingRowForDisplay): string {
 }
 
 export type ProductDisplayInfo = {
+  /** UdV du produit (ligne à l’unité). */
   uniteVente: string;
+  /** UdV du conditionnement retenu (pour « Soit … » quand isCond). */
+  condPackUniteVente: string | null;
   condTitre: string | null;
   packContentQty: number | null;
   isCond: boolean;
@@ -89,6 +92,7 @@ export function buildLotProductDisplayInfo(
 ): ProductDisplayInfo {
   const noCond = {
     uniteVente: "—" as string,
+    condPackUniteVente: null as string | null,
     condTitre: null as string | null,
     packContentQty: null as number | null,
     isCond: false,
@@ -113,9 +117,11 @@ export function buildLotProductDisplayInfo(
   }
   const packQty = typeof pr.quantity === "string" ? parseFloat(pr.quantity) : Number(pr.quantity);
   const packSalesUnitIsUnite = isPackSalesUnitUnite(pr.ref_sales_unit);
+  const condPackUniteVente = labelFromRef(pr.ref_sales_unit);
   const condTitre = buildPackagingCondTitre(pr);
   return {
     uniteVente,
+    condPackUniteVente,
     condTitre,
     packContentQty: Number.isFinite(packQty) ? packQty : null,
     isCond: true,
@@ -127,7 +133,7 @@ export function buildSoitLine(
   display: ProductDisplayInfo,
   qteForSoit: number,
 ): string | null {
-  const { isCond, packContentQty, uniteVente, packSalesUnitIsUnite } = display;
+  const { isCond, packContentQty, uniteVente, condPackUniteVente, packSalesUnitIsUnite } = display;
   if (
     !isCond ||
     packSalesUnitIsUnite ||
@@ -137,5 +143,6 @@ export function buildSoitLine(
   ) {
     return null;
   }
-  return `Soit ${formatPackQty(qteForSoit * packContentQty)} ${uniteVente}`;
+  const udvSoit = condPackUniteVente ?? uniteVente;
+  return `Soit ${formatPackQty(qteForSoit * packContentQty)} ${udvSoit}`;
 }

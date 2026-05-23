@@ -383,7 +383,7 @@ export default function ParcoursClient({ commandeId }: { commandeId: string }) {
   }
 
   return (
-    <main className="mx-auto flex min-h-[calc(100dvh-5rem)] w-full max-w-md flex-col px-3 py-3">
+    <main className="mx-auto flex min-h-0 w-full max-w-md flex-1 flex-col overflow-hidden px-3 py-3">
       <div className="relative !mb-2 flex min-h-[36px] shrink-0 items-center">
         <Button
           component={AppLink}
@@ -435,7 +435,7 @@ export default function ParcoursClient({ commandeId }: { commandeId: string }) {
         ) : null}
       </div>
 
-      <div className="flex min-h-0 flex-1 flex-col">
+      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-y-contain">
         <Typography
           variant="body2"
           color="text.secondary"
@@ -468,14 +468,19 @@ export default function ParcoursClient({ commandeId }: { commandeId: string }) {
         </Typography>
         <ProductArabicSubtitle nameAr={current.name_ar} centered className="!mb-3" />
 
-        <div className="flex min-h-[min(17rem,42dvh)] flex-1 flex-col gap-3 pb-2">
+        <div className="flex flex-col gap-3 pb-2">
           {currentBlocks}
         </div>
       </div>
 
       <Box
-        className="mt-8 flex shrink-0 flex-col gap-4 pt-5"
-        sx={{ borderTop: 1, borderColor: "divider" }}
+        className="flex shrink-0 flex-col gap-4 pt-4"
+        sx={{
+          borderTop: 1,
+          borderColor: "divider",
+          bgcolor: "background.paper",
+          pb: "max(0.75rem, env(safe-area-inset-bottom))",
+        }}
       >
         <div className="flex min-h-[2.75rem] flex-row items-center justify-between gap-2">
           <Button

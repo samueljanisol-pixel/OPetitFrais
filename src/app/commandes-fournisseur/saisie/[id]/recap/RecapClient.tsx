@@ -3,6 +3,7 @@
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
+  Box,
   Button,
   Dialog,
   DialogActions,
@@ -14,6 +15,11 @@ import {
   ListItem,
   Divider,
   IconButton,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableRow,
 } from "@mui/material";
 import { alpha } from "@mui/material/styles";
 import ChevronLeftIcon from "@mui/icons-material/ChevronLeft";
@@ -38,6 +44,8 @@ import { DecimalQtyTextField } from "@/components/commandes-fournisseur/DecimalQ
 import { commandeLigneKey } from "@/lib/commandes-fournisseur/commande-ligne-key";
 import { buildSoitLine } from "@/lib/commandes-fournisseur/product-display";
 import { clampQtyToApiRange, roundQty2 } from "@/lib/commandes-fournisseur/qty-parse";
+import CommandeSaisieRecapExport from "@/features/commandes-fournisseur/CommandeSaisieRecapExport";
+import type { VendeurRef } from "@/lib/commandes-fournisseur/validation-lot-vendeur-recap";
 
 type Ligne = {
   id: string;
@@ -46,9 +54,12 @@ type Ligne = {
   qte: number;
   line_comment: string | null;
   hors_fournisseur: boolean;
+  vendeur_id?: string | null;
   product: { name: string; code: string; name_ar?: string | null } | null;
-  /** Unité de vente du produit (réf. produit) : à l’unité et « Soit » pour conditionnements. */
+  /** Unité de vente du produit (réf. produit) : affichage à l’unité. */
   uniteVente?: string;
+  /** UdV du conditionnement (pour « Soit … »). */
+  condPackUniteVente?: string | null;
   condTitre?: string | null;
   /** Quantité contenu par conditionnement (product_packaging.quantity), pour le calcul Soit. */
   packContentQty?: number | null;
@@ -201,6 +212,8 @@ export default function RecapClient({ commandeId }: { commandeId: string }) {
   const { labelFor } = useStatusLabels();
   const [commande, setCommande] = useState<Commande | null>(null);
   const [lignes, setLignes] = useState<Ligne[]>([]);
+  const [vendeurs, setVendeurs] = useState<VendeurRef[]>([]);
+  const [saisieParLabel, setSaisieParLabel] = useState<string | null>(null);
   const [comment, setComment] = useState("");
   const [err, setErr] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -238,7 +251,13 @@ export default function RecapClient({ commandeId }: { commandeId: string }) {
     setLoading(true);
     try {
       const res = await fetch(`/api/commandes-fournisseur/commandes/${commandeId}`, { credentials: "include" });
-      const j = (await res.json()) as { commande?: Commande; lignes?: Ligne[]; error?: string };
+      const j = (await res.json()) as {
+        commande?: Commande;
+        lignes?: Ligne[];
+        vendeurs?: VendeurRef[];
+        saisieParLabel?: string | null;
+        error?: string;
+      };
       if (!res.ok) {
         setErr(j.error ?? "Erreur");
         return;
@@ -248,6 +267,8 @@ export default function RecapClient({ commandeId }: { commandeId: string }) {
         setComment(j.commande.commentaire ?? "");
       }
       setLignes(j.lignes ?? []);
+      setVendeurs(j.vendeurs ?? []);
+      setSaisieParLabel(typeof j.saisieParLabel === "string" ? j.saisieParLabel : null);
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Erreur");
     } finally {
@@ -260,6 +281,10 @@ export default function RecapClient({ commandeId }: { commandeId: string }) {
   }, [load]);
 
   const editable = commande?.status === "en_saisie";
+  const canExportRecapImage =
+    !editable &&
+    lignes.length > 0 &&
+    (commande?.status === "validee" || commande?.status === "integree");
 
   const putLignes = useCallback(
     async (list: Ligne[]) => {
@@ -643,6 +668,16 @@ export default function RecapClient({ commandeId }: { commandeId: string }) {
         </Typography>
       ) : null}
 
+      {canExportRecapImage && commande ? (
+        <CommandeSaisieRecapExport
+          commande={commande}
+          supplierLabel={supplierLabel(commande)}
+          lignes={lignes}
+          vendeurs={vendeurs}
+          saisieParLabel={saisieParLabel}
+        />
+      ) : null}
+
       {editable ? (
         <div className="!mb-2 flex flex-row flex-wrap items-center justify-between gap-2">
           <Button
@@ -666,14 +701,17 @@ export default function RecapClient({ commandeId }: { commandeId: string }) {
           </Button>
         </div>
       ) : null}
+      {editable ? (
       <List dense disablePadding>
         {lignes.map((l, i) => {
           const u = l.uniteVente ?? "—";
           const isCond = Boolean(l.product_packaging_id);
           const pq = l.packContentQty;
+          const packUdv = l.condPackUniteVente ?? u;
           const soitCond = buildSoitLine(
             {
               uniteVente: u,
+              condPackUniteVente: isCond ? packUdv : null,
               condTitre: l.condTitre ?? null,
               packContentQty: isCond ? (pq ?? null) : null,
               isCond,
@@ -722,7 +760,6 @@ export default function RecapClient({ commandeId }: { commandeId: string }) {
                   <ProductArabicSubtitle nameAr={l.product?.name_ar} matchNameLine />
                 </div>
                 <div className="flex shrink-0 flex-col items-end gap-0.5">
-                  {editable ? (
                     <>
                     <div className="flex items-start gap-0.5">
                       <div className="flex flex-col items-stretch gap-0.5">
@@ -769,48 +806,7 @@ export default function RecapClient({ commandeId }: { commandeId: string }) {
                         <CommentOutlinedIcon fontSize="small" />
                       </IconButton>
                     </div>
-                  </>
-                  ) : (
-                    <div className="flex flex-col items-end gap-0.5 pr-0.5 tabular-nums">
-                      {l.condTitre ? <RecapCondTitre label={l.condTitre} /> : null}
-                      <div className={QTE_GRID_ROW}>
-                        <span aria-hidden />
-                        <Typography variant="body2" className="text-center font-medium tabular-nums">
-                          {formatSoit(l.qte)}
-                        </Typography>
-                        {isCond ? (
-                          <span className={QTE_UNIT_CELL} aria-hidden />
-                        ) : (
-                          <Typography variant="body2" color="text.secondary" className={QTE_UNIT_CELL}>
-                            {u}
-                          </Typography>
-                        )}
-                        <span aria-hidden />
-                      </div>
-                      {soitCond ? (
-                        <div className={QTE_GRID_ROW}>
-                          <span aria-hidden />
-                          <Typography
-                            variant="body2"
-                            color="text.secondary"
-                            component="p"
-                            className={QTE_SOIT_CELL}
-                          >
-                            {soitCond}
-                          </Typography>
-                          <span aria-hidden />
-                        </div>
-                      ) : null}
-                      {l.line_comment ? (
-                        <LigneSaisieComments
-                          comments={[]}
-                          lineComment={l.line_comment}
-                          variant="chip"
-                          className="!mt-0.5"
-                        />
-                      ) : null}
-                    </div>
-                  )}
+                    </>
                 </div>
               </div>
               <Divider className="!my-2" />
@@ -819,6 +815,126 @@ export default function RecapClient({ commandeId }: { commandeId: string }) {
           );
         })}
       </List>
+      ) : (
+        <Table
+          size="small"
+          className="!mb-2"
+          sx={{
+            "& .MuiTableCell-root": { py: 1, px: 1, verticalAlign: "top" },
+            "& .MuiTableHead-root .MuiTableCell-root": { fontWeight: 700 },
+          }}
+        >
+          <TableHead>
+            <TableRow>
+              <TableCell>Produit</TableCell>
+              <TableCell align="right" sx={{ minWidth: 72 }}>
+                Quantité
+              </TableCell>
+              <TableCell sx={{ minWidth: 120 }}>UdV / cond.</TableCell>
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            {lignes.map((l, i) => {
+              const u = l.uniteVente ?? "—";
+              const isCond = Boolean(l.product_packaging_id);
+              const pq = l.packContentQty;
+              const packUdv = l.condPackUniteVente ?? u;
+              const soitCond = buildSoitLine(
+                {
+                  uniteVente: u,
+                  condPackUniteVente: isCond ? packUdv : null,
+                  condTitre: l.condTitre ?? null,
+                  packContentQty: isCond ? (pq ?? null) : null,
+                  isCond,
+                  packSalesUnitIsUnite: l.packSalesUnitIsUnite === true,
+                },
+                l.qte,
+              );
+              const udvMain =
+                isCond && l.condTitre ? l.condTitre : u !== "—" ? u : "—";
+              const udvSub = soitCond;
+              const catKey = (l.categoryLabel ?? "").trim() || "Sans catégorie";
+              const prevCat =
+                i > 0 ? ((lignes[i - 1]!.categoryLabel ?? "").trim() || "Sans catégorie") : null;
+              const showCategoryHeader = i === 0 || catKey !== prevCat;
+              return (
+                <Fragment key={l.id}>
+                  {showCategoryHeader ? (
+                    <TableRow>
+                      <TableCell
+                        colSpan={3}
+                        sx={{
+                          py: 0.85,
+                          bgcolor: (t) =>
+                            t.palette.mode === "dark"
+                              ? alpha(t.palette.success.main, 0.18)
+                              : alpha(t.palette.success.main, 0.1),
+                        }}
+                      >
+                        <Typography
+                          variant="subtitle2"
+                          color="success"
+                          component="div"
+                          sx={{ fontWeight: 700, letterSpacing: "0.02em" }}
+                        >
+                          {catKey}
+                        </Typography>
+                      </TableCell>
+                    </TableRow>
+                  ) : null}
+                  <TableRow>
+                    <TableCell>
+                      <Typography variant="body2" className="!font-medium">
+                        {l.product?.name ?? l.product_id}
+                      </Typography>
+                      <ProductArabicSubtitle nameAr={l.product?.name_ar} matchNameLine />
+                    </TableCell>
+                    <TableCell align="right">
+                      <Box
+                        sx={{
+                          display: "inline-flex",
+                          flexDirection: "column",
+                          alignItems: "flex-end",
+                          gap: 0.5,
+                          fontVariantNumeric: "tabular-nums",
+                        }}
+                      >
+                        <Typography variant="body2" className="font-medium tabular-nums">
+                          {formatSoit(l.qte)}
+                        </Typography>
+                        {l.line_comment ? (
+                          <LigneSaisieComments
+                            comments={[]}
+                            lineComment={l.line_comment}
+                            variant="chip"
+                          />
+                        ) : null}
+                      </Box>
+                    </TableCell>
+                    <TableCell>
+                      <Box sx={{ display: "inline-flex", flexDirection: "column", gap: 0.25 }}>
+                        <Typography variant="body2" component="div" sx={{ lineHeight: 1.3 }}>
+                          {udvMain}
+                        </Typography>
+                        {udvSub ? (
+                          <Typography
+                            variant="body2"
+                            color="text.secondary"
+                            component="div"
+                            sx={{ lineHeight: 1.3 }}
+                          >
+                            {udvSub}
+                          </Typography>
+                        ) : null}
+                      </Box>
+                    </TableCell>
+                  </TableRow>
+                </Fragment>
+              );
+            })}
+          </TableBody>
+        </Table>
+      )}
 
       {lignes.length === 0 ? (
         <Typography variant="body2" color="text.secondary" className="!mb-4">

@@ -38,3 +38,27 @@ export function buildSessionDisplayLabel(
 
   return "Utilisateur";
 }
+
+/** Libellé affichable à partir d’une ligne `profiles` (hors session courante). */
+export function profileRowDisplayLabel(
+  profile: {
+    login?: string | null;
+    prenom?: string | null;
+    nom?: string | null;
+  } | null
+  | undefined,
+  userId?: string | null,
+): string | null {
+  if (!profile) {
+    return null;
+  }
+  const label = buildSessionDisplayLabel({
+    userId: userId ?? "",
+    email: null,
+    login: profile.login ?? null,
+    prenom: profile.prenom ?? "",
+    nom: profile.nom ?? "",
+    roleName: null,
+  });
+  return label.trim().length > 0 ? label : null;
+}
