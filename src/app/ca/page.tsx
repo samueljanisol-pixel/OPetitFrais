@@ -267,9 +267,12 @@ export default function CaDashboardPage() {
 
   const month = data?.month
 
+  const showFireworks =
+    !!data.isRecordDay || Object.values(data.isRecordDayByMag ?? {}).some(Boolean)
+
   return (
     <>
-      {data.isRecordDay ? <FireworksOverlay active={!!data.isRecordDay} /> : null}
+      {showFireworks ? <FireworksOverlay active /> : null}
       <main className="min-h-[calc(100vh-0px)] bg-gradient-to-br from-emerald-50 via-white to-rose-50 px-6 py-10">
       <div className="mx-auto w-full max-w-5xl">
         <header className="flex w-full flex-col gap-5">
@@ -519,6 +522,8 @@ export default function CaDashboardPage() {
                 <span>{formatPercent(percentOfGlobal(magTotals.total))} du global</span>
                 <span className="font-medium text-slate-700">Part du CA global (jour)</span>
               </div>
+
+              {data.isRecordDayByMag?.[mag] ? <RecordCaBanner variant="magasin" /> : null}
 
               {(() => {
                 const pj = data.panierJour?.[mag]

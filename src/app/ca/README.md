@@ -6,9 +6,13 @@ Page du CA du jour sélectionné, avec comparaisons, détail par magasin et TOP 
 
 La carte **Total global** affiche un bandeau de félicitations (`RecordCaBanner`) et une animation de feux d'artifice en arrière-plan (`FireworksOverlay`) lorsque le CA du jour atteint ou dépasse le record historique (depuis `HISTORIQUE_FROM_ISO` dans `src/lib/ca/constants.ts`).
 
-L'animation respecte `prefers-reduced-motion` (désactivée si l'utilisateur préfère moins d'animations).
+L'animation respecte `prefers-reduced-motion` (désactivée si l'utilisateur préfère moins d'animations). Elle se déclenche pour un record global **ou** un record magasin.
 
-La détection est calculée côté Supabase dans `fetchCaDashboardFromSupabase` (`isRecordDay` sur `CaResponse`), avec le même filtre magasin que le reste du tableau de bord (caissier limité à ses magasins).
+La détection est calculée côté Supabase dans `fetchCaDashboardFromSupabase` :
+- `isRecordDay` sur `CaResponse` (global)
+- `isRecordDayByMag` par code magasin
+
+Chaque bloc magasin affiche un bandeau **Record magasin !** lorsque le CA du jour atteint le record historique de ce magasin.
 
 ## Données
 

@@ -84,32 +84,51 @@ function alignPanierHeureByMag(
   return out;
 }
 
-async function fetchMaxDailyCaTotal(
+async function fetchMaxDailyCaRecords(
   supabase: SupabaseClient,
   from: string,
   to: string,
   magIn?: string[],
-): Promise<number | null> {
+): Promise<{ globalMax: number | null; maxByMag: Record<string, number> }> {
   let hq = supabase.from("ca_day").select("date,magasin,total").gte("date", from).lte("date", to);
   if (magIn !== undefined) {
     hq = magIn.length === 0 ? hq.in("magasin", ["__none__"]) : hq.in("magasin", magIn);
   }
   const { data, error } = await hq;
-  if (error) return null;
+  if (error) return { globalMax: null, maxByMag: {} };
 
   const byDate = new Map<string, number>();
+  const byMagDate = new Map<string, Map<string, number>>();
+
   for (const r of data ?? []) {
     const d = normalizeDateCell(r.date);
+    const mag = String(r.magasin ?? "");
     const t = typeof r.total === "number" ? r.total : Number(r.total);
     if (!Number.isFinite(t)) continue;
+
     byDate.set(d, (byDate.get(d) ?? 0) + t);
+
+    if (!mag) continue;
+    if (!byMagDate.has(mag)) byMagDate.set(mag, new Map());
+    const magDays = byMagDate.get(mag)!;
+    magDays.set(d, (magDays.get(d) ?? 0) + t);
   }
 
-  let max: number | null = null;
+  let globalMax: number | null = null;
   for (const total of byDate.values()) {
-    if (max === null || total > max) max = total;
+    if (globalMax === null || total > globalMax) globalMax = total;
   }
-  return max;
+
+  const maxByMag: Record<string, number> = {};
+  for (const [mag, days] of byMagDate) {
+    let max: number | null = null;
+    for (const total of days.values()) {
+      if (max === null || total > max) max = total;
+    }
+    if (max !== null) maxByMag[mag] = max;
+  }
+
+  return { globalMax, maxByMag };
 }
 
 export async function fetchCaDashboardFromSupabase(
@@ -138,7 +157,7 @@ export async function fetchCaDashboardFromSupabase(
     hourQb = hourQb.in("magasin", magIn);
   }
 
-  const [dayQ, j1Q, j7Q, monthQ, prodQ, hourQ, maxDayTotal] = await Promise.all([
+  const [dayQ, j1Q, j7Q, monthQ, prodQ, hourQ, maxDayRecords] = await Promise.all([
     dayQb,
     j1Qb,
     j7Qb,
@@ -147,7 +166,7 @@ export async function fetchCaDashboardFromSupabase(
       ? Promise.resolve({ data: [] as { article: string; qty: number; total: number }[], error: null })
       : supabase.from("ca_product_day").select("article,qty,total").eq("date", date),
     hourQb,
-    fetchMaxDailyCaTotal(supabase, HISTORIQUE_FROM_ISO, todayIso, magIn),
+    fetchMaxDailyCaRecords(supabase, HISTORIQUE_FROM_ISO, todayIso, magIn),
   ]);
 
   const firstErr =
@@ -231,12 +250,22 @@ export async function fetchCaDashboardFromSupabase(
   const isRecordDay =
     Number.isFinite(dayAgg.totalGlobal) &&
     dayAgg.totalGlobal > 0 &&
-    maxDayTotal !== null &&
-    dayAgg.totalGlobal >= maxDayTotal;
+    maxDayRecords.globalMax !== null &&
+    dayAgg.totalGlobal >= maxDayRecords.globalMax;
+
+  const isRecordDayByMag: Record<string, boolean> = {};
+  for (const mag of Object.keys(dayCaByMag)) {
+    const ca = dayCaByMag[mag] ?? 0;
+    const max = maxDayRecords.maxByMag[mag];
+    if (Number.isFinite(ca) && ca > 0 && max !== undefined && ca >= max) {
+      isRecordDayByMag[mag] = true;
+    }
+  }
 
   const data: CaResponse = {
     totalGlobal: dayAgg.totalGlobal,
     isRecordDay,
+    isRecordDayByMag,
     magasins,
     month: {
       ym,

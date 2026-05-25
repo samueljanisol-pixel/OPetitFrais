@@ -165,6 +165,21 @@ export default function HistoriqueCA() {
       }
     }
 
+    const recordByMag = new Map<string, { date: string; total: number }>()
+    for (const d of days) {
+      for (const [mag, rawTotal] of Object.entries(d.magasins)) {
+        const total = typeof rawTotal === 'number' ? rawTotal : Number(rawTotal)
+        if (!Number.isFinite(total)) continue
+        const cur = recordByMag.get(mag)
+        if (!cur || total > cur.total) {
+          recordByMag.set(mag, { date: d.date, total })
+        }
+      }
+    }
+    const recordDaysByMagasin = Array.from(recordByMag.entries())
+      .map(([mag, { date, total }]) => ({ mag, date, total }))
+      .sort((a, b) => a.mag.localeCompare(b.mag))
+
     return {
       days,
       totalGlobal,
@@ -172,6 +187,7 @@ export default function HistoriqueCA() {
       avgPerMonth,
       monthList,
       recordDay,
+      recordDaysByMagasin,
       from,
       to,
       dataFrom: data.from,
@@ -191,6 +207,15 @@ export default function HistoriqueCA() {
       weekday: 'long',
       day: 'numeric',
       month: 'long',
+      year: 'numeric',
+      timeZone: 'UTC',
+    }).format(isoToUtcDate(iso))
+
+  const shortDayLabel = (iso: string) =>
+    new Intl.DateTimeFormat('fr-FR', {
+      weekday: 'long',
+      day: 'numeric',
+      month: 'short',
       year: 'numeric',
       timeZone: 'UTC',
     }).format(isoToUtcDate(iso))
@@ -338,6 +363,32 @@ export default function HistoriqueCA() {
               ) : null}
             </div>
           </div>
+
+          {computed.recordDaysByMagasin.length > 0 ? (
+            <div className="w-full min-w-0">
+              <div className="text-[10px] font-medium uppercase tracking-wide text-slate-500">
+                Jour record par magasin
+              </div>
+              <div className="mt-1.5 grid w-full min-w-0 grid-cols-2 gap-1.5 sm:grid-cols-3 lg:grid-cols-4">
+                {computed.recordDaysByMagasin.map(rec => (
+                  <div
+                    key={rec.mag}
+                    className="min-w-0 rounded-lg border border-amber-200/70 bg-amber-50/50 px-2 py-1.5"
+                  >
+                    <div className="truncate text-[9px] font-medium uppercase tracking-wide text-amber-900/75">
+                      {labelMagasin(rec.mag)}
+                    </div>
+                    <div className="mt-0.5 truncate text-xs font-semibold text-slate-900">
+                      {formatMAD(rec.total)}
+                    </div>
+                    <div className="mt-0.5 truncate text-[9px] capitalize text-slate-500">
+                      {shortDayLabel(rec.date)}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : null}
         </header>
 
         <section className="mt-8 grid gap-4">

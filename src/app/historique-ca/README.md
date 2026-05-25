@@ -14,8 +14,9 @@ Les boutons **2026**, **2025** et **Tous** restreignent les agrégats et le dét
 | Moyenne / jour | Total global ÷ nombre de jours |
 | Moyenne / mois | Total global ÷ nombre de mois avec données |
 | Jour record | Meilleur CA journalier sur la période filtrée, avec la date affichée |
+| Jour record par magasin | Meilleur CA journalier de chaque magasin sur la période filtrée, avec montant et date |
 
-Le jour record est recalculé à chaque changement de filtre (2026, 2025, Tous).
+Le jour record global et les records par magasin sont recalculés à chaque changement de filtre (2026, 2025, Tous).
 
 ## Données
 

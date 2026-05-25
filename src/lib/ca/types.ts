@@ -4,6 +4,8 @@ export type CaResponse = {
   totalGlobal: number
   /** Vrai si le CA du jour sélectionné atteint ou dépasse le record sur la période historique. */
   isRecordDay?: boolean
+  /** Par code magasin : vrai si le CA du jour atteint ou dépasse le record du magasin. */
+  isRecordDayByMag?: Record<string, boolean>
   magasins: Record<string, Record<string, number>>
   month?: {
     ym: string
