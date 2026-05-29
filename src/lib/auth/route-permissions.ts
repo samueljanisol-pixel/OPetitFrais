@@ -12,7 +12,7 @@ const rules: RouteRule[] = [
   { match: (p) => p.startsWith("/produits/nouveau"), permission: "produits.write" },
   { match: (p) => p.startsWith("/produits/") && p !== "/produits/", permission: "produits.read" },
   { match: (p) => p.startsWith("/produits"), permission: "produits.read" },
-  { match: (p) => p.startsWith("/historique-ca") || p.startsWith("/ca"), permission: "ventes.read" },
+  { match: (p) => p.startsWith("/historique-ca") || p.startsWith("/ca") || p.startsWith("/analyse-stats"), permission: "ventes.read" },
   { match: (p) => p.startsWith("/referentiel"), permission: "parametres.read" },
   {
     match: (p) => p.startsWith("/commandes-fournisseur/achat"),

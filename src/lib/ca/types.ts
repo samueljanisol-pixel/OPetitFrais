@@ -60,3 +60,44 @@ export type HistoriquePayload =
       to: string
       days: HistoriqueDayRow[]
     }
+
+export type VentesAnalyseFilters = {
+  from: string
+  to: string
+  magasinCodes?: string[]
+  categoryIds: string[]
+  supplierIds: string[]
+  productNames: string[]
+}
+
+export type VentesAnalyseGroupBy = 'produit' | 'categorie' | 'fournisseur' | 'magasin'
+
+export type VentesAnalyseLine = {
+  name: string
+  ca: number
+  qty: number
+  magasin: string
+  categoryId: string | null
+  categoryLabel: string | null
+  supplierId: string | null
+  supplierLabel: string | null
+}
+
+export type VentesAnalyseRow = {
+  label: string
+  ca: number
+  qty: number
+}
+
+export type VentesAnalyseDailyRow = {
+  date: string
+  total: number
+}
+
+export type VentesAnalyseResult = {
+  from: string
+  to: string
+  lines: VentesAnalyseLine[]
+  dailyCa: VentesAnalyseDailyRow[]
+  rawLineCount: number
+}

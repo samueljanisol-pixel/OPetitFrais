@@ -293,6 +293,12 @@ export default function HistoriqueCA() {
               >
                 Statistique
               </Link>
+              <Link
+                href="/analyse-stats"
+                className="inline-flex min-h-10 items-center rounded-lg border-2 border-emerald-200 bg-white px-3 py-1.5 text-sm font-bold text-emerald-800 shadow-sm transition hover:border-emerald-400 hover:bg-emerald-50"
+              >
+                Analyse Stats
+              </Link>
             </div>
             <p className="mt-1 text-sm text-slate-600">
               Données chargées : <span className="font-medium">{computed.dataFrom}</span> →{' '}

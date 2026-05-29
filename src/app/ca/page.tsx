@@ -368,6 +368,16 @@ export default function CaDashboardPage() {
               Historique
             </Button>
             <Button
+              component={AppLink}
+              href="/analyse-stats"
+              variant="contained"
+              color="success"
+              size="medium"
+              sx={{ borderRadius: 3, textTransform: 'none', fontWeight: 600 }}
+            >
+              Analyse Stats
+            </Button>
+            <Button
               type="button"
               variant="outlined"
               color="success"
