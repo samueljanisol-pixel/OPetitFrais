@@ -1,7 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { HISTORIQUE_FROM_ISO } from "./constants";
-import type { CaResponse, CaRecordRef, CaTopProduitLine, HistoriqueDayRow, HistoriquePayload, PanierMag } from "./types";
-import { buildTopProduitRankings, computeTopProduitRankings, filterTopProduitLines } from "./topProduits";
+import type { CaResponse, CaRecordRef, CaTopProduitLine, CaTopProduitsPayload, HistoriqueDayRow, HistoriquePayload, PanierMag } from "./types";
+import { buildTopProduitRankings, filterTopProduitLines } from "./topProduits";
 
 function isoDateMinusDays(iso: string, days: number) {
   const [yy, mm, dd] = iso.split("-").map((x) => Number(x));
@@ -189,7 +189,7 @@ async function buildTopProduitsForDate(
   supabase: SupabaseClient,
   date: string,
   magIn?: string[],
-): Promise<CaResponse["topProduits"]> {
+): Promise<CaTopProduitsPayload> {
   let prodQb = supabase.from("ca_product_day").select("article,qty,total,magasin").eq("date", date);
   if (magIn !== undefined) {
     prodQb = magIn.length === 0 ? prodQb.in("magasin", ["__none__"]) : prodQb.in("magasin", magIn);

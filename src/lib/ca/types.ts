@@ -11,6 +11,15 @@ export type CaTopProduitLine = {
   categoryLabel: string | null
 }
 
+export type CaTopProduitsPayload = {
+  available: boolean
+  lines: CaTopProduitLine[]
+  filterMagasins: string[]
+  filterCategories: Array<{ id: string; label: string }>
+  byCa: Array<{ name: string; ca: number; qty: number }>
+  byQty: Array<{ name: string; ca: number; qty: number }>
+}
+
 export type CaResponse = {
   totalGlobal: number
   /** Vrai si le CA du jour sélectionné atteint ou dépasse le record sur la période historique. */
@@ -34,14 +43,7 @@ export type CaResponse = {
   /** Index = heure (0 = minuit), valeurs = nombre de paniers sur la date sélectionnée. */
   panierHeureByMag?: Record<string, number[]>
   compare?: { date: string; j1: { date: string; totalGlobal: number }; j7: { date: string; totalGlobal: number } }
-  topProduits?: {
-    available: boolean
-    lines: CaTopProduitLine[]
-    filterMagasins: string[]
-    filterCategories: Array<{ id: string; label: string }>
-    byCa: Array<{ name: string; ca: number; qty: number }>
-    byQty: Array<{ name: string; ca: number; qty: number }>
-  }
+  topProduits?: CaTopProduitsPayload
   error?: string
 }
 
