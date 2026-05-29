@@ -163,7 +163,7 @@ export async function syncDateToSupabase(date: string) {
     const paniersJourByMag: Record<string, number> = {};
     const paniersMoisByMag: Record<string, number> = {};
     const panierHeureByMag: Record<string, number[]> = {};
-    const productAgg = new Map<string, { qty: number; total: number }>();
+    const productByMag = new Map<string, Map<string, { qty: number; total: number }>>();
 
     for (const mag of magasins) {
       const magasinPath = `/ventes/${mag.name}`;
@@ -204,9 +204,11 @@ export async function syncDateToSupabase(date: string) {
             }
 
             const lines = extractProductLines(parsed);
+            if (!productByMag.has(mag.name)) productByMag.set(mag.name, new Map());
+            const magProducts = productByMag.get(mag.name)!;
             for (const l of lines) {
-              const prev = productAgg.get(l.name) ?? { qty: 0, total: 0 };
-              productAgg.set(l.name, { qty: prev.qty + l.qty, total: prev.total + l.ca });
+              const prev = magProducts.get(l.name) ?? { qty: 0, total: 0 };
+              magProducts.set(l.name, { qty: prev.qty + l.qty, total: prev.total + l.ca });
             }
           } else if (isMonth) {
             const monthCa = extractMonthCaFromJson(parsed);
@@ -258,12 +260,15 @@ export async function syncDateToSupabase(date: string) {
       if (hourErr) throw new Error(hourErr.message);
     }
 
-    const prodRows = Array.from(productAgg.entries()).map(([article, v]) => ({
-      date,
-      article,
-      qty: v.qty,
-      total: v.total,
-    }));
+    const { error: delProdErr } = await supabase.from("ca_product_day").delete().eq("date", date);
+    if (delProdErr) throw new Error(delProdErr.message);
+
+    const prodRows: Array<{ date: string; magasin: string; article: string; qty: number; total: number }> = [];
+    for (const [magasin, map] of productByMag) {
+      for (const [article, v] of map) {
+        prodRows.push({ date, magasin, article, qty: v.qty, total: v.total });
+      }
+    }
     if (prodRows.length) {
       const { error } = await supabase.from("ca_product_day").upsert(prodRows);
       if (error) throw new Error(error.message);

@@ -32,11 +32,12 @@ create table if not exists public.ca_panier_hour (
 
 create table if not exists public.ca_product_day (
   date date not null,
+  magasin text not null,
   article text not null,
   qty numeric not null default 0,
   total numeric not null default 0,
   inserted_at timestamptz not null default now(),
-  primary key (date, article)
+  primary key (date, magasin, article)
 );
 
 create table if not exists public.sync_runs (

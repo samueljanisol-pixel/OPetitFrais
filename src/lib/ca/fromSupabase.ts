@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { HISTORIQUE_FROM_ISO } from "./constants";
-import type { CaResponse, HistoriqueDayRow, HistoriquePayload, PanierMag } from "./types";
+import type { CaResponse, CaRecordRef, CaTopProduitLine, HistoriqueDayRow, HistoriquePayload, PanierMag } from "./types";
+import { buildTopProduitRankings, computeTopProduitRankings, filterTopProduitLines } from "./topProduits";
 
 function isoDateMinusDays(iso: string, days: number) {
   const [yy, mm, dd] = iso.split("-").map((x) => Number(x));
@@ -84,18 +85,39 @@ function alignPanierHeureByMag(
   return out;
 }
 
+function findPreviousRecord(
+  dayTotals: Array<{ date: string; total: number }>,
+  currentTotal: number,
+): CaRecordRef | null {
+  let best: CaRecordRef | null = null
+  for (const row of dayTotals) {
+    if (row.total >= currentTotal) continue
+    if (!best || row.total > best.total) {
+      best = { date: row.date, total: row.total }
+    }
+  }
+  return best
+}
+
 async function fetchMaxDailyCaRecords(
   supabase: SupabaseClient,
   from: string,
   to: string,
   magIn?: string[],
-): Promise<{ globalMax: number | null; maxByMag: Record<string, number> }> {
+): Promise<{
+  globalMax: number | null
+  maxByMag: Record<string, number>
+  globalDayTotals: Array<{ date: string; total: number }>
+  magDayTotals: Record<string, Array<{ date: string; total: number }>>
+}> {
   let hq = supabase.from("ca_day").select("date,magasin,total").gte("date", from).lte("date", to);
   if (magIn !== undefined) {
     hq = magIn.length === 0 ? hq.in("magasin", ["__none__"]) : hq.in("magasin", magIn);
   }
   const { data, error } = await hq;
-  if (error) return { globalMax: null, maxByMag: {} };
+  if (error) {
+    return { globalMax: null, maxByMag: {}, globalDayTotals: [], magDayTotals: {} };
+  }
 
   const byDate = new Map<string, number>();
   const byMagDate = new Map<string, Map<string, number>>();
@@ -128,7 +150,114 @@ async function fetchMaxDailyCaRecords(
     if (max !== null) maxByMag[mag] = max;
   }
 
-  return { globalMax, maxByMag };
+  const globalDayTotals = Array.from(byDate.entries())
+    .map(([date, total]) => ({ date, total }))
+    .sort((a, b) => a.date.localeCompare(b.date));
+
+  const magDayTotals: Record<string, Array<{ date: string; total: number }>> = {};
+  for (const [mag, days] of byMagDate) {
+    magDayTotals[mag] = Array.from(days.entries())
+      .map(([date, total]) => ({ date, total }))
+      .sort((a, b) => a.date.localeCompare(b.date));
+  }
+
+  return { globalMax, maxByMag, globalDayTotals, magDayTotals };
+}
+
+type ProductCategoryRow = {
+  name: string | null
+  category_id: string | null
+  ref_category: { id: string; label: string | null } | Array<{ id: string; label: string | null }> | null
+}
+
+function categoryFromProductRow(row: ProductCategoryRow): { id: string; label: string } | null {
+  const rc = row.ref_category;
+  if (!rc) return null;
+  const cat = Array.isArray(rc) ? rc[0] : rc;
+  if (!cat?.id) return null;
+  return { id: cat.id, label: cat.label ?? "—" };
+}
+
+/** Magasins du jour (ca_day) + magasins présents dans ca_product_day. */
+function mergeTopMagasinFilterList(productMagasins: string[], dayMagasins: string[]): string[] {
+  return [...new Set([...dayMagasins, ...productMagasins].filter((m) => m && m !== "__all__"))].sort((a, b) =>
+    a.localeCompare(b),
+  );
+}
+
+async function buildTopProduitsForDate(
+  supabase: SupabaseClient,
+  date: string,
+  magIn?: string[],
+): Promise<CaResponse["topProduits"]> {
+  let prodQb = supabase.from("ca_product_day").select("article,qty,total,magasin").eq("date", date);
+  if (magIn !== undefined) {
+    prodQb = magIn.length === 0 ? prodQb.in("magasin", ["__none__"]) : prodQb.in("magasin", magIn);
+  }
+
+  const [{ data: prodRows, error: prodErr }, { data: productRows, error: productErr }] = await Promise.all([
+    prodQb,
+    supabase.from("product").select("name, category_id, ref_category(id, label)"),
+  ]);
+
+  if (prodErr || productErr) {
+    return {
+      available: false,
+      lines: [],
+      filterMagasins: [],
+      filterCategories: [],
+      byCa: [],
+      byQty: [],
+    };
+  }
+
+  const categoryByName = new Map<string, { id: string; label: string }>();
+  for (const row of (productRows ?? []) as ProductCategoryRow[]) {
+    if (!row.name) continue;
+    const cat = categoryFromProductRow(row);
+    if (!cat) continue;
+    categoryByName.set(row.name.trim().toLowerCase(), cat);
+  }
+
+  const lines: CaTopProduitLine[] = [];
+  for (const r of prodRows ?? []) {
+    const name = String(r.article ?? "").trim();
+    const ca = typeof r.total === "number" ? r.total : Number(r.total);
+    const qty = typeof r.qty === "number" ? r.qty : Number(r.qty);
+    const magasin = String(r.magasin ?? "__all__");
+    if (!name || (!Number.isFinite(ca) && !Number.isFinite(qty))) continue;
+    const cat = categoryByName.get(name.toLowerCase()) ?? null;
+    lines.push({
+      name,
+      ca: Number.isFinite(ca) ? ca : 0,
+      qty: Number.isFinite(qty) ? qty : 0,
+      magasin,
+      categoryId: cat?.id ?? null,
+      categoryLabel: cat?.label ?? null,
+    });
+  }
+
+  const filterMagasins = [...new Set(lines.map(l => l.magasin).filter(m => m !== "__all__"))].sort();
+  const categoriesMap = new Map<string, string>();
+  for (const line of lines) {
+    if (line.categoryId && line.categoryLabel) {
+      categoriesMap.set(line.categoryId, line.categoryLabel);
+    }
+  }
+  const filterCategories = Array.from(categoriesMap.entries())
+    .map(([id, label]) => ({ id, label }))
+    .sort((a, b) => a.label.localeCompare(b.label, "fr"));
+
+  const defaultRankings = buildTopProduitRankings(filterTopProduitLines(lines, "all", "all"));
+
+  return {
+    available: lines.length > 0,
+    lines,
+    filterMagasins,
+    filterCategories,
+    byCa: defaultRankings.byCa,
+    byQty: defaultRankings.byQty,
+  };
 }
 
 export async function fetchCaDashboardFromSupabase(
@@ -157,20 +286,17 @@ export async function fetchCaDashboardFromSupabase(
     hourQb = hourQb.in("magasin", magIn);
   }
 
-  const [dayQ, j1Q, j7Q, monthQ, prodQ, hourQ, maxDayRecords] = await Promise.all([
+  const [dayQ, j1Q, j7Q, monthQ, hourQ, maxDayRecords, topProduits] = await Promise.all([
     dayQb,
     j1Qb,
     j7Qb,
     monthQb,
-    codes !== undefined
-      ? Promise.resolve({ data: [] as { article: string; qty: number; total: number }[], error: null })
-      : supabase.from("ca_product_day").select("article,qty,total").eq("date", date),
     hourQb,
     fetchMaxDailyCaRecords(supabase, HISTORIQUE_FROM_ISO, todayIso, magIn),
+    buildTopProduitsForDate(supabase, date, magIn),
   ]);
 
-  const firstErr =
-    dayQ.error || j1Q.error || j7Q.error || monthQ.error || prodQ.error || hourQ.error;
+  const firstErr = dayQ.error || j1Q.error || j7Q.error || monthQ.error || hourQ.error;
   if (firstErr) return { error: firstErr.message };
 
   const dayAgg = sumDayRows(dayQ.data);
@@ -181,6 +307,11 @@ export async function fetchCaDashboardFromSupabase(
   for (const [mag, t] of Object.entries(dayAgg.byMag)) {
     magasins[mag] = { total: t };
   }
+
+  topProduits.filterMagasins = mergeTopMagasinFilterList(
+    topProduits.filterMagasins,
+    Object.keys(magasins),
+  );
 
   const monthByMag: Record<string, number> = {};
   const monthNbByMag: Record<string, number> = {};
@@ -235,37 +366,34 @@ export async function fetchCaDashboardFromSupabase(
     Object.keys(magasins),
   );
 
-  const prodRows = prodQ.data ?? [];
-  const productLines = prodRows
-    .map((r) => ({
-      name: String(r.article ?? ""),
-      ca: typeof r.total === "number" ? r.total : Number(r.total),
-      qty: typeof r.qty === "number" ? r.qty : Number(r.qty),
-    }))
-    .filter((r) => r.name && (Number.isFinite(r.ca) || Number.isFinite(r.qty)));
-
-  const byCa = [...productLines].sort((a, b) => b.ca - a.ca).slice(0, 10);
-  const byQty = [...productLines].sort((a, b) => b.qty - a.qty).slice(0, 10);
-
   const isRecordDay =
     Number.isFinite(dayAgg.totalGlobal) &&
     dayAgg.totalGlobal > 0 &&
     maxDayRecords.globalMax !== null &&
     dayAgg.totalGlobal >= maxDayRecords.globalMax;
 
+  const previousRecordDay = isRecordDay
+    ? findPreviousRecord(maxDayRecords.globalDayTotals, dayAgg.totalGlobal)
+    : null;
+
   const isRecordDayByMag: Record<string, boolean> = {};
+  const previousRecordDayByMag: Record<string, CaRecordRef> = {};
   for (const mag of Object.keys(dayCaByMag)) {
     const ca = dayCaByMag[mag] ?? 0;
     const max = maxDayRecords.maxByMag[mag];
     if (Number.isFinite(ca) && ca > 0 && max !== undefined && ca >= max) {
       isRecordDayByMag[mag] = true;
+      const prev = findPreviousRecord(maxDayRecords.magDayTotals[mag] ?? [], ca);
+      if (prev) previousRecordDayByMag[mag] = prev;
     }
   }
 
   const data: CaResponse = {
     totalGlobal: dayAgg.totalGlobal,
     isRecordDay,
+    previousRecordDay,
     isRecordDayByMag,
+    previousRecordDayByMag,
     magasins,
     month: {
       ym,
@@ -282,11 +410,7 @@ export async function fetchCaDashboardFromSupabase(
       j1: { date: dateJ1, totalGlobal: j1Agg.totalGlobal },
       j7: { date: dateJ7, totalGlobal: j7Agg.totalGlobal },
     },
-    topProduits: {
-      available: productLines.length > 0,
-      byCa,
-      byQty,
-    },
+    topProduits,
   };
 
   return { data };

@@ -9,10 +9,18 @@ La carte **Total global** affiche un bandeau de félicitations (`RecordCaBanner`
 L'animation respecte `prefers-reduced-motion` (désactivée si l'utilisateur préfère moins d'animations). Elle se déclenche pour un record global **ou** un record magasin.
 
 La détection est calculée côté Supabase dans `fetchCaDashboardFromSupabase` :
-- `isRecordDay` sur `CaResponse` (global)
-- `isRecordDayByMag` par code magasin
+- `isRecordDay` / `previousRecordDay` (global)
+- `isRecordDayByMag` / `previousRecordDayByMag` par code magasin
 
-Chaque bloc magasin affiche un bandeau **Record magasin !** lorsque le CA du jour atteint le record historique de ce magasin.
+Chaque bandeau record affiche le **dernier record battu** (montant + date) lorsqu'un record antérieur existait.
+
+## TOP 10 produits
+
+Filtres **Magasin** et **Catégorie** (liste issue du catalogue `product` / `ref_category`, rapprochée par nom d’article).
+
+- Table `ca_product_day` : clé `(date, magasin, article)` — migration `20260629120000_ca_product_day_magasin.sql`.
+- Sync FTP : ventes produit ventilées par magasin ; **relancer la sync** des jours concernés pour activer le filtre magasin (données legacy `__all__` = agrégat global).
+- **Tous les magasins** : colonnes par magasin + **Total** dans les deux tableaux (CA et quantité).
 
 ## Données
 
