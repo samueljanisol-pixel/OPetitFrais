@@ -6,7 +6,7 @@ import { syncDateToSupabase } from "@/lib/sync/ftpToSupabase";
 // - Remplit/MAJ:
 //   - ca_day(date, magasin, total, nb_paniers)
 //   - ca_month(ym, magasin, total, nb_paniers)  (à partir de ventes_YYYY-MM.json)
-//   - ca_product_day(date, article, qty, total)
+//   - ca_product_day(date, magasin, article, qty, total)
 //   - ca_panier_hour(date, magasin, hour, nb) depuis panier_heure des JSON jour
 
 export async function POST(req: Request) {

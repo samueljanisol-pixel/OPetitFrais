@@ -25,6 +25,11 @@ function ftpEnv() {
   return { host, user, password };
 }
 
+function normalizeMagasinCode(raw: unknown): string | null {
+  const code = typeof raw === "string" ? raw.trim() : String(raw ?? "").trim();
+  return code.length > 0 ? code : null;
+}
+
 /** Alimente `/api/supabase/sync/status` (table `sync_runs`). */
 export async function recordSyncRun(payload: {
   started_at: string;
@@ -166,7 +171,10 @@ export async function syncDateToSupabase(date: string) {
     const productByMag = new Map<string, Map<string, { qty: number; total: number }>>();
 
     for (const mag of magasins) {
-      const magasinPath = `/ventes/${mag.name}`;
+      const magCode = normalizeMagasinCode(mag.name);
+      if (!magCode) continue;
+
+      const magasinPath = `/ventes/${magCode}`;
       const caisses = await ftp.list(magasinPath);
 
       for (const c of caisses) {
@@ -193,30 +201,32 @@ export async function syncDateToSupabase(date: string) {
 
           if (isDay) {
             const tj = extractTotalJourFromJson(parsed);
-            dayByMagasin[mag.name] = (dayByMagasin[mag.name] ?? 0) + tj;
+            dayByMagasin[magCode] = (dayByMagasin[magCode] ?? 0) + tj;
 
             const buckets = extractPanierHeureBuckets(parsed);
             let nbJour = extractNbPaniers(parsed);
             if (!nbJour && buckets.length) nbJour = buckets.reduce((a, b) => a + b, 0);
-            if (nbJour > 0) paniersJourByMag[mag.name] = (paniersJourByMag[mag.name] ?? 0) + nbJour;
+            if (nbJour > 0) paniersJourByMag[magCode] = (paniersJourByMag[magCode] ?? 0) + nbJour;
             if (buckets.length) {
-              panierHeureByMag[mag.name] = mergePanierHeureBuckets(panierHeureByMag[mag.name], buckets);
+              panierHeureByMag[magCode] = mergePanierHeureBuckets(panierHeureByMag[magCode], buckets);
             }
 
             const lines = extractProductLines(parsed);
-            if (!productByMag.has(mag.name)) productByMag.set(mag.name, new Map());
-            const magProducts = productByMag.get(mag.name)!;
+            if (!productByMag.has(magCode)) productByMag.set(magCode, new Map());
+            const magProducts = productByMag.get(magCode)!;
             for (const l of lines) {
-              const prev = magProducts.get(l.name) ?? { qty: 0, total: 0 };
-              magProducts.set(l.name, { qty: prev.qty + l.qty, total: prev.total + l.ca });
+              const article = l.name.trim();
+              if (!article) continue;
+              const prev = magProducts.get(article) ?? { qty: 0, total: 0 };
+              magProducts.set(article, { qty: prev.qty + l.qty, total: prev.total + l.ca });
             }
           } else if (isMonth) {
             const monthCa = extractMonthCaFromJson(parsed);
             if (monthCa > 0) {
-              monthByMagasin[mag.name] = (monthByMagasin[mag.name] ?? 0) + monthCa;
+              monthByMagasin[magCode] = (monthByMagasin[magCode] ?? 0) + monthCa;
             }
             const nbMois = extractNbPaniers(parsed);
-            if (nbMois > 0) paniersMoisByMag[mag.name] = (paniersMoisByMag[mag.name] ?? 0) + nbMois;
+            if (nbMois > 0) paniersMoisByMag[magCode] = (paniersMoisByMag[magCode] ?? 0) + nbMois;
           }
         }
       }
@@ -265,12 +275,18 @@ export async function syncDateToSupabase(date: string) {
 
     const prodRows: Array<{ date: string; magasin: string; article: string; qty: number; total: number }> = [];
     for (const [magasin, map] of productByMag) {
+      const magCode = normalizeMagasinCode(magasin);
+      if (!magCode) continue;
       for (const [article, v] of map) {
-        prodRows.push({ date, magasin, article, qty: v.qty, total: v.total });
+        const name = article.trim();
+        if (!name) continue;
+        prodRows.push({ date, magasin: magCode, article: name, qty: v.qty, total: v.total });
       }
     }
     if (prodRows.length) {
-      const { error } = await supabase.from("ca_product_day").upsert(prodRows);
+      const { error } = await supabase.from("ca_product_day").upsert(prodRows, {
+        onConflict: "date,magasin,article",
+      });
       if (error) throw new Error(error.message);
     }
 

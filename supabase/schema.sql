@@ -32,7 +32,7 @@ create table if not exists public.ca_panier_hour (
 
 create table if not exists public.ca_product_day (
   date date not null,
-  magasin text not null,
+  magasin text not null default '__all__',
   article text not null,
   qty numeric not null default 0,
   total numeric not null default 0,
