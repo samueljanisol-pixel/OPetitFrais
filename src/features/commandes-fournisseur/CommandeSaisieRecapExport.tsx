@@ -2,6 +2,7 @@
 
 import { useMemo } from "react";
 import { Typography } from "@mui/material";
+import { useTranslations } from "next-intl";
 import VendeurRecapExportBlock from "@/features/commandes-fournisseur/VendeurRecapExportBlock";
 import {
   buildCommandeSaisieRecapGroups,
@@ -33,6 +34,11 @@ export default function CommandeSaisieRecapExport({
   vendeurs,
   saisieParLabel,
 }: Props) {
+  const tStatus = useTranslations("backoffice.status");
+  const productCountLabel = useMemo(
+    () => (lignes.length > 0 ? tStatus("productCount", { count: lignes.length }) : null),
+    [lignes.length, tStatus],
+  );
   const magasinColumn = useMemo(() => magasinMxColumnFromCommande(commande), [commande]);
   const magasinName = useMemo(() => magasinLabelFromCommande(commande), [commande]);
   const commandeDate = useMemo(() => commandeSaisieDateInfo(commande), [commande]);
@@ -65,6 +71,7 @@ export default function CommandeSaisieRecapExport({
           magasinColumnHeader="Quantité"
           headerMagasinName={magasinName}
           commandeParLabel={saisieParLabel}
+          productCountLabel={productCountLabel}
         />
       ))}
     </div>

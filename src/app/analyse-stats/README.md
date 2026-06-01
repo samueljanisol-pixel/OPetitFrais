@@ -36,14 +36,14 @@ Le bouton **Analyser** déclenche le chargement (pas de requête à chaque chang
 ## Affichage
 
 - **KPIs** : CA total produits, quantité, moyenne CA/jour, nb lignes
-- **Graphique** : histogramme SVG CA journalier (`CaJourHistogram`) — source `ca_day`
+- **Graphique** : histogramme SVG journalier (`CaJourHistogram`) — ventes produit filtrées, bascule CA / quantité (même contrôle que le tableau)
 - **Tableau** : regroupement produit / catégorie / fournisseur / magasin, tri CA ou quantité
 
 ## Limites connues
 
 - **Rapprochement par nom** : un article caisse absent du catalogue apparaît en « Sans catégorie / fournisseur » (identique au TOP 10 CA).
 - **Filtre magasin** : nécessite des données ventilées par magasin (`M1`, `M2`, …). Relancer la sync FTP des jours concernés si seules des lignes `__all__` existent.
-- **Graphique vs tableau** : le graphique reflète le CA magasin (`ca_day`) ; le tableau agrège les ventes produit (`ca_product_day`). Un léger écart est possible.
+- **Graphique vs tableau** : les deux utilisent les ventes produit filtrées (`ca_product_day` via RPC) et la métrique sélectionnée (CA ou quantité).
 - **Volume** : au-delà de ~5000 lignes brutes RPC, un avertissement invite à réduire la période ou affiner les filtres.
 
 ## Composants

@@ -81,7 +81,7 @@
         "integratedReadOnly": "Prises en compte (non modifiables)",
         "cancelled": "Annulées"
       },
-      "orderListSecondary": "{statusLabel} — {dateTime}",
+      "orderListSecondary": "{statusLabel} — {dateTime} — {productCount}",
       "productCount": "{count, plural, one {# produit} other {# produits}}"
     },
     "commandes": {

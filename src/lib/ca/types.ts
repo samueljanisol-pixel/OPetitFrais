@@ -73,6 +73,7 @@ export type VentesAnalyseFilters = {
 export type VentesAnalyseGroupBy = 'produit' | 'categorie' | 'fournisseur' | 'magasin'
 
 export type VentesAnalyseLine = {
+  date: string
   name: string
   ca: number
   qty: number

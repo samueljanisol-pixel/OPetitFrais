@@ -1,16 +1,19 @@
 'use client'
 
-import { useEffect, useId, useMemo, useState } from 'react'
+import { useId, useMemo } from 'react'
 
 export type CaJourPoint = {
   date: string
   total: number
 }
 
+export type CaJourMetric = 'ca' | 'qty'
+
 type Props = {
   points: CaJourPoint[]
   className?: string
   title?: string
+  metric?: CaJourMetric
 }
 
 const VIEW_W = 640
@@ -28,8 +31,9 @@ function shortDateLabel(iso: string): string {
 /**
  * Histogramme CA journalier en SVG (même approche que PaniersHeureHistogram).
  */
-export default function CaJourHistogram({ points, className, title }: Props) {
+export default function CaJourHistogram({ points, className, title, metric = 'ca' }: Props) {
   const capId = useId()
+  const isCa = metric === 'ca'
   const sorted = useMemo(
     () => [...points].sort((a, b) => a.date.localeCompare(b.date)),
     [points],
@@ -56,8 +60,14 @@ export default function CaJourHistogram({ points, className, title }: Props) {
   const yTicks = 4
   const tickVals = Array.from({ length: yTicks + 1 }, (_, i) => Math.round((max * i) / yTicks))
 
-  const formatDh = (v: number) =>
-    new Intl.NumberFormat('fr-FR', { maximumFractionDigits: 0 }).format(v)
+  const formatValue = (v: number) =>
+    isCa
+      ? new Intl.NumberFormat('fr-FR', { maximumFractionDigits: 0 }).format(v)
+      : new Intl.NumberFormat('fr-FR', { maximumFractionDigits: 2 }).format(v)
+
+  const valueSuffix = isCa ? ' DH' : ''
+  const chartLabel = isCa ? 'CA par jour' : 'Quantité par jour'
+  const ariaTotal = isCa ? `${formatValue(total)} DH` : formatValue(total)
 
   return (
     <figure className={className}>
@@ -73,7 +83,7 @@ export default function CaJourHistogram({ points, className, title }: Props) {
           aria-label={
             title
               ? undefined
-              : `Évolution du chiffre d'affaires sur ${n} jour(s), total ${formatDh(total)} DH`
+              : `Évolution ${isCa ? 'du CA' : 'des quantités'} sur ${n} jour(s), total ${ariaTotal}`
           }
           width="100%"
           height={VIEW_H}
@@ -83,7 +93,7 @@ export default function CaJourHistogram({ points, className, title }: Props) {
           xmlns="http://www.w3.org/2000/svg"
         >
           {!title ? (
-            <title>{`CA journalier — ${n} jour(s), total ${formatDh(total)} DH`}</title>
+            <title>{`${chartLabel} — ${n} jour(s), total ${ariaTotal}`}</title>
           ) : null}
 
           {tickVals.map((tv, ti) => {
@@ -98,7 +108,7 @@ export default function CaJourHistogram({ points, className, title }: Props) {
                   className="fill-slate-400"
                   style={{ fontSize: 10 }}
                 >
-                  {formatDh(tv)}
+                  {formatValue(tv)}
                 </text>
               </g>
             )
@@ -125,7 +135,7 @@ export default function CaJourHistogram({ points, className, title }: Props) {
                 fillOpacity={v > 0 ? 0.88 : 0.12}
                 className="text-emerald-600"
               >
-                <title>{`${date} — ${formatDh(v)} DH`}</title>
+                <title>{`${date} — ${formatValue(v)}${valueSuffix}`}</title>
               </rect>
               {i % labelEvery === 0 ? (
                 <text
@@ -148,7 +158,7 @@ export default function CaJourHistogram({ points, className, title }: Props) {
             className="fill-slate-600"
             style={{ fontSize: 11, fontWeight: 600 }}
           >
-            CA par jour — total {formatDh(total)} DH
+            {chartLabel} — total {formatValue(total)}{valueSuffix}
           </text>
         </svg>
       </div>

@@ -17,6 +17,7 @@ type CmdRow = {
   id: string;
   status: string;
   created_at: string;
+  lineCount?: number;
   ref_supplier: { label: string } | { label: string }[] | null;
 };
 
@@ -37,6 +38,19 @@ function isAnnulee(status: string): boolean {
 
 function sortCmdByCreatedDesc(a: CmdRow, b: CmdRow): number {
   return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+}
+
+function orderSecondaryText(
+  c: CmdRow,
+  labelFor: (scope: "commande_fournisseur", status: string) => string,
+  formatDate: (iso: string) => string,
+  tStatusList: ReturnType<typeof useTranslations<"backoffice.status">>,
+): string {
+  return tStatusList("orderListSecondary", {
+    statusLabel: labelFor("commande_fournisseur", c.status),
+    dateTime: formatDate(c.created_at),
+    productCount: tStatusList("productCount", { count: c.lineCount ?? 0 }),
+  });
 }
 
 export default function SaisieIndexPage() {
@@ -187,10 +201,7 @@ export default function SaisieIndexPage() {
                     >
                       <ListItemText
                         primary={supplierLabel(c, emDash)}
-                        secondary={tStatusList("orderListSecondary", {
-                          statusLabel: labelFor("commande_fournisseur", c.status),
-                          dateTime: formatDate(c.created_at),
-                        })}
+                        secondary={orderSecondaryText(c, labelFor, formatDate, tStatusList)}
                       />
                     </ListItemButton>
                   </ListItem>
@@ -219,10 +230,7 @@ export default function SaisieIndexPage() {
                     >
                       <ListItemText
                         primary={supplierLabel(c, emDash)}
-                        secondary={tStatusList("orderListSecondary", {
-                          statusLabel: labelFor("commande_fournisseur", c.status),
-                          dateTime: formatDate(c.created_at),
-                        })}
+                        secondary={orderSecondaryText(c, labelFor, formatDate, tStatusList)}
                       />
                     </ListItemButton>
                   </ListItem>
@@ -251,10 +259,7 @@ export default function SaisieIndexPage() {
                     >
                       <ListItemText
                         primary={supplierLabel(c, emDash)}
-                        secondary={tStatusList("orderListSecondary", {
-                          statusLabel: labelFor("commande_fournisseur", c.status),
-                          dateTime: formatDate(c.created_at),
-                        })}
+                        secondary={orderSecondaryText(c, labelFor, formatDate, tStatusList)}
                       />
                     </ListItemButton>
                   </ListItem>

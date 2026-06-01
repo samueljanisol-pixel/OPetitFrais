@@ -27,10 +27,11 @@ export type ProductCatalogEntry = {
 };
 
 type RpcProductLine = {
-  article: string;
-  magasin: string;
-  qty: unknown;
-  total: unknown;
+  sale_date: unknown
+  article: string
+  magasin: string
+  qty: unknown
+  total: unknown
 };
 
 function refFromRow(
@@ -83,12 +84,14 @@ export async function fetchProductCatalogMap(
 function enrichRpcLine(row: RpcProductLine, catalog: Map<string, ProductCatalogEntry>): VentesAnalyseLine | null {
   const name = String(row.article ?? "").trim();
   const magasin = String(row.magasin ?? "").trim();
+  const date = normalizeDateCell(row.sale_date);
   const ca = typeof row.total === "number" ? row.total : Number(row.total);
   const qty = typeof row.qty === "number" ? row.qty : Number(row.qty);
-  if (!name || !magasin) return null;
+  if (!name || !magasin || !date) return null;
 
   const cat = catalog.get(name.toLowerCase()) ?? null;
   return {
+    date,
     name,
     ca: Number.isFinite(ca) ? ca : 0,
     qty: Number.isFinite(qty) ? qty : 0,
@@ -201,6 +204,22 @@ export function groupAnalyseLines(lines: VentesAnalyseLine[], groupBy: VentesAna
   return Array.from(byKey.values()).sort((a, b) => b.ca - a.ca || a.label.localeCompare(b.label, "fr"));
 }
 
+export type VentesAnalyseMetric = "ca" | "qty";
+
+export function buildDailySeriesFromLines(
+  lines: VentesAnalyseLine[],
+  metric: VentesAnalyseMetric,
+): VentesAnalyseDailyRow[] {
+  const byDate = new Map<string, number>();
+  for (const line of lines) {
+    const v = metric === "ca" ? line.ca : line.qty;
+    byDate.set(line.date, (byDate.get(line.date) ?? 0) + v);
+  }
+  return Array.from(byDate.entries())
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([date, total]) => ({ date, total }));
+}
+
 export async function fetchAnalyseDailyCa(
   supabase: SupabaseClient,
   from: string,
@@ -233,13 +252,11 @@ export async function fetchVentesAnalyse(
 ): Promise<{ data: VentesAnalyseResult } | { error: string }> {
   const magasinCodes = filters.magasinCodes;
 
-  const [linesRes, dailyRes] = await Promise.all([
+  const [linesRes] = await Promise.all([
     fetchAnalyseProductLines(supabase, filters.from, filters.to, magasinCodes),
-    fetchAnalyseDailyCa(supabase, filters.from, filters.to, magasinCodes),
   ]);
 
   if ("error" in linesRes) return { error: linesRes.error };
-  if ("error" in dailyRes) return { error: dailyRes.error };
 
   const filtered = applyAnalyseFilters(linesRes.lines, filters);
 
@@ -248,7 +265,7 @@ export async function fetchVentesAnalyse(
       from: filters.from,
       to: filters.to,
       lines: filtered,
-      dailyCa: dailyRes,
+      dailyCa: buildDailySeriesFromLines(filtered, "ca"),
       rawLineCount: linesRes.rawLineCount,
     },
   };

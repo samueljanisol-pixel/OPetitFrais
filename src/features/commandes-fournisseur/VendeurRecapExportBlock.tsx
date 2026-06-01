@@ -57,6 +57,8 @@ type Props = {
   headerMagasinName?: string | null;
   /** Sous la date : « par {utilisateur} ». */
   commandeParLabel?: string | null;
+  /** Ex. « 12 produits » — affiché au-dessus du tableau dans l’image. */
+  productCountLabel?: string | null;
 };
 
 export default function VendeurRecapExportBlock({
@@ -72,6 +74,7 @@ export default function VendeurRecapExportBlock({
   magasinColumnHeader,
   headerMagasinName,
   commandeParLabel,
+  productCountLabel,
 }: Props) {
   const captureRef = useRef<HTMLDivElement>(null);
   const [exporting, setExporting] = useState(false);
@@ -101,6 +104,7 @@ export default function VendeurRecapExportBlock({
     vendeurTrim.length > 0 &&
     vendeurTrim.localeCompare(supplierTrim, "fr", { sensitivity: "accent" }) !== 0;
   const parLabel = commandeParLabel?.trim() ?? "";
+  const productCount = productCountLabel?.trim() ?? "";
 
   const captureContent = (
     <Box ref={captureRef} sx={captureRootSx}>
@@ -133,9 +137,18 @@ export default function VendeurRecapExportBlock({
         <Typography
           variant="caption"
           color="text.secondary"
-          sx={{ display: "block", mb: 1.5, whiteSpace: "nowrap" }}
+          sx={{ display: "block", mb: productCount.length > 0 ? 0.25 : 1.5, whiteSpace: "nowrap" }}
         >
           par {parLabel}
+        </Typography>
+      ) : null}
+      {productCount.length > 0 ? (
+        <Typography
+          variant="body2"
+          color="text.secondary"
+          sx={{ display: "block", mb: 1.5, fontWeight: 600, whiteSpace: "nowrap" }}
+        >
+          {productCount}
         </Typography>
       ) : null}
       <Table size="small" sx={exportTableSx}>

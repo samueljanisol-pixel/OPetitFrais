@@ -36,7 +36,7 @@ export async function GET(req: Request) {
   let q = supabase
     .from("commande_fournisseur")
     .select(
-      "id, magasin_id, supplier_id, status, commentaire, validated_at, created_at, updated_at, ref_supplier(id, code, label)",
+      "id, magasin_id, supplier_id, status, commentaire, validated_at, created_at, updated_at, ref_supplier(id, code, label), commande_fournisseur_ligne(id)",
     )
     .order("created_at", { ascending: false });
 
@@ -49,7 +49,14 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  return NextResponse.json({ commandes: data ?? [] });
+  const commandes = (data ?? []).map((r) => {
+    const ll = (r as { commande_fournisseur_ligne?: { id: string }[] | null }).commande_fournisseur_ligne;
+    const arr = Array.isArray(ll) ? ll : ll ? [ll] : [];
+    const { commande_fournisseur_ligne: _drop, ...rest } = r as Record<string, unknown>;
+    return { ...rest, lineCount: arr.length };
+  });
+
+  return NextResponse.json({ commandes });
 }
 
 export async function POST(req: Request) {

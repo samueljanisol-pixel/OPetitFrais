@@ -221,6 +221,7 @@ export default function RecapClient({ commandeId }: { commandeId: string }) {
   const t = useTranslations("backoffice.commandes.recap");
   const tc = useTranslations("backoffice.commandes.common");
   const te = useTranslations("backoffice.commandes.errors");
+  const tStatus = useTranslations("backoffice.status");
   const tCommon = useTranslations("common");
   const BackChevron = useBackChevronIcon();
   const { formatNumber } = useAppFormat();
@@ -712,6 +713,11 @@ export default function RecapClient({ commandeId }: { commandeId: string }) {
             {tc("addProduct")}
           </Button>
         </div>
+      ) : null}
+      {lignes.length > 0 ? (
+        <Typography variant="body2" color="text.secondary" className="!mb-2" sx={{ fontWeight: 600 }}>
+          {tStatus("productCount", { count: lignes.length })}
+        </Typography>
       ) : null}
       {editable ? (
       <List dense disablePadding>

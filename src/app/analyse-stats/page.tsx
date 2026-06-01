@@ -30,6 +30,7 @@ import CaJourHistogram from '@/components/CaJourHistogram'
 import SyncStatusFooter from '@/components/SyncStatusFooter'
 import VentesProductChipsFilter from '@/components/VentesProductChipsFilter'
 import {
+  buildDailySeriesFromLines,
   fetchVentesAnalyse,
   groupAnalyseLines,
   LARGE_RESULT_THRESHOLD,
@@ -206,6 +207,11 @@ export default function AnalyseStatsPage() {
       return vb - va || a.label.localeCompare(b.label, 'fr')
     })
   }, [result, groupBy, sortKey])
+
+  const dailyChartPoints = useMemo(() => {
+    if (!result) return []
+    return buildDailySeriesFromLines(result.lines, sortKey)
+  }, [result, sortKey])
 
   const kpis = useMemo(() => {
     if (!result) return null
@@ -447,6 +453,46 @@ export default function AnalyseStatsPage() {
 
         {hasRun && !loading && result && kpis ? (
           <>
+            <Paper
+              elevation={0}
+              sx={{
+                px: 2.5,
+                py: 1.5,
+                mb: 3,
+                borderRadius: 3,
+                border: 1,
+                borderColor: 'divider',
+                display: 'flex',
+                flexWrap: 'wrap',
+                alignItems: 'center',
+                gap: 1.5,
+              }}
+            >
+              <Typography variant="subtitle2" sx={{ fontWeight: 600, flex: 1, minWidth: 120 }}>
+                Affichage
+              </Typography>
+              <Stack direction="row" spacing={1}>
+                <Button
+                  size="small"
+                  variant={sortKey === 'ca' ? 'contained' : 'outlined'}
+                  color="success"
+                  onClick={() => setSortKey('ca')}
+                  sx={{ textTransform: 'none', fontWeight: 600 }}
+                >
+                  Tri CA
+                </Button>
+                <Button
+                  size="small"
+                  variant={sortKey === 'qty' ? 'contained' : 'outlined'}
+                  color="success"
+                  onClick={() => setSortKey('qty')}
+                  sx={{ textTransform: 'none', fontWeight: 600 }}
+                >
+                  Tri qté
+                </Button>
+              </Stack>
+            </Paper>
+
             <div className="mb-6 grid grid-cols-2 gap-2 sm:grid-cols-4 sm:gap-3">
               <div className="min-w-0 rounded-2xl border border-emerald-100 bg-white/80 px-3 py-4 shadow-sm backdrop-blur sm:px-5">
                 <div className="text-[10px] font-medium uppercase tracking-wide text-emerald-700/80 sm:text-xs">
@@ -481,44 +527,28 @@ export default function AnalyseStatsPage() {
               </div>
             </div>
 
-            {result.dailyCa.length > 0 ? (
+            {dailyChartPoints.length > 0 ? (
               <Paper elevation={0} sx={{ p: 2.5, mb: 3, borderRadius: 3, border: 1, borderColor: 'divider' }}>
                 <CaJourHistogram
-                  points={result.dailyCa}
-                  title="Évolution du CA journalier (ca_day)"
+                  points={dailyChartPoints}
+                  metric={sortKey}
+                  title={
+                    sortKey === 'ca'
+                      ? 'Évolution du CA journalier (ventes produit)'
+                      : 'Évolution des quantités journalières (ventes produit)'
+                  }
                 />
                 <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1 }}>
-                  Le graphique reflète le CA magasin (`ca_day`). Le tableau ci-dessous agrège les ventes produit
-                  (`ca_product_day`).
+                  Graphique et tableau utilisent les mêmes filtres et la métrique sélectionnée (CA ou quantité).
                 </Typography>
               </Paper>
             ) : null}
 
             <Paper elevation={0} sx={{ borderRadius: 3, border: 1, borderColor: 'divider', overflow: 'hidden' }}>
-              <Box sx={{ px: 2.5, py: 2, display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 1 }}>
-                <Typography variant="subtitle1" sx={{ fontWeight: 600, flex: 1 }}>
+              <Box sx={{ px: 2.5, py: 2 }}>
+                <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
                   Résultats — {GROUP_OPTIONS.find((g) => g.value === groupBy)?.label}
                 </Typography>
-                <Stack direction="row" spacing={1}>
-                  <Button
-                    size="small"
-                    variant={sortKey === 'ca' ? 'contained' : 'outlined'}
-                    color="success"
-                    onClick={() => setSortKey('ca')}
-                    sx={{ textTransform: 'none' }}
-                  >
-                    Tri CA
-                  </Button>
-                  <Button
-                    size="small"
-                    variant={sortKey === 'qty' ? 'contained' : 'outlined'}
-                    color="success"
-                    onClick={() => setSortKey('qty')}
-                    sx={{ textTransform: 'none' }}
-                  >
-                    Tri qté
-                  </Button>
-                </Stack>
               </Box>
               {tableRows.length === 0 ? (
                 <Box sx={{ p: 3, textAlign: 'center' }}>

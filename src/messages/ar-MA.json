@@ -81,7 +81,7 @@
         "integratedReadOnly": "مأخوذة بعين الاعتبار (ما تقدرش تبدّل)",
         "cancelled": "annulées"
       },
-      "orderListSecondary": "{statusLabel} — {dateTime}",
+      "orderListSecondary": "{statusLabel} — {dateTime} — {productCount}",
       "productCount": "{count, plural, one {# منتج} other {# منتجات}}"
     },
     "commandes": {
