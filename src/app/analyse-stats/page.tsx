@@ -74,6 +74,11 @@ function resolveMagasinCodesForQuery(
   return selected;
 }
 
+function percentOfPart(part: number, whole: number): number | null {
+  if (!Number.isFinite(part) || !Number.isFinite(whole) || whole <= 0) return null;
+  return (part / whole) * 100;
+}
+
 export default function AnalyseStatsPage() {
   const { session, loading: sessionLoading } = useSessionPermissions()
   const todayIso = useMemo(() => new Date().toISOString().split('T')[0], [])
@@ -227,6 +232,12 @@ export default function AnalyseStatsPage() {
     }
     return fillDailyRange(result.from, result.to, buildDailySeriesFromLines(result.lines, 'qty'))
   }, [result, sortKey])
+
+  /** Catégorie / fournisseur / produit : sans eux, % filtre = % période (colonne inutile). */
+  const hasScopedProductFilters = useMemo(
+    () => categoryIds.length > 0 || supplierIds.length > 0 || productNames.length > 0,
+    [categoryIds, supplierIds, productNames],
+  )
 
   const kpis = useMemo(() => {
     if (!result) return null
@@ -583,6 +594,18 @@ export default function AnalyseStatsPage() {
                           {GROUP_OPTIONS.find((g) => g.value === groupBy)?.label ?? 'Libellé'}
                         </TableCell>
                         <TableCell align="right">CA</TableCell>
+                        {sortKey === 'ca' ? (
+                          <>
+                            {hasScopedProductFilters ? (
+                              <TableCell align="right" sx={{ whiteSpace: 'nowrap' }}>
+                                % filtre
+                              </TableCell>
+                            ) : null}
+                            <TableCell align="right" sx={{ whiteSpace: 'nowrap' }}>
+                              % période
+                            </TableCell>
+                          </>
+                        ) : null}
                         <TableCell align="right">Quantité</TableCell>
                       </TableRow>
                     </TableHead>
@@ -593,6 +616,18 @@ export default function AnalyseStatsPage() {
                             {groupBy === 'magasin' ? labelMagasin(row.label, availableMagasins) : row.label}
                           </TableCell>
                           <TableCell align="right">{formatMAD(row.ca)}</TableCell>
+                          {sortKey === 'ca' && kpis ? (
+                            <>
+                              {hasScopedProductFilters ? (
+                                <TableCell align="right">
+                                  {formatPercent(percentOfPart(row.ca, kpis.totalCa))}
+                                </TableCell>
+                              ) : null}
+                              <TableCell align="right">
+                                {formatPercent(percentOfPart(row.ca, kpis.totalCaPeriod))}
+                              </TableCell>
+                            </>
+                          ) : null}
                           <TableCell align="right">{formatQty(row.qty)}</TableCell>
                         </TableRow>
                       ))}

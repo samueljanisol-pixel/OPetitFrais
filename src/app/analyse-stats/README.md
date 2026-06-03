@@ -38,7 +38,7 @@ Le bouton **Analyser** déclenche le chargement (pas de requête à chaque chang
 
 - **KPIs** : CA total (filtres) avec **% du CA période** (même dates et magasins, sans filtre catégorie/fournisseur/produit), moyenne CA/jour, nb lignes tableau
 - **Graphique** : histogramme SVG journalier — ventes filtrées, bascule CA / quantité
-- **Tableau** : regroupement produit / catégorie / fournisseur / magasin, tri CA ou quantité
+- **Tableau** : regroupement produit / catégorie / fournisseur / magasin ; en **Tri CA**, colonne **% période** (part du CA ligne / CA période) ; **% filtre** uniquement si catégorie, fournisseur ou produit est sélectionné (part / CA total filtres)
 
 ## Limites connues
 
