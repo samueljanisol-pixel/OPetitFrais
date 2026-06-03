@@ -2,6 +2,7 @@ import { Client } from "basic-ftp";
 import os from "node:os";
 import path from "node:path";
 import { promises as fs } from "node:fs";
+import { fetchProductCatalogIndex, resolveProductIdByCode } from "@/lib/ca/productCatalogMatch";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/server";
 import {
   extractMonthCaFromJson,
@@ -168,7 +169,7 @@ export async function syncDateToSupabase(date: string) {
     const paniersJourByMag: Record<string, number> = {};
     const paniersMoisByMag: Record<string, number> = {};
     const panierHeureByMag: Record<string, number[]> = {};
-    const productByMag = new Map<string, Map<string, { qty: number; total: number }>>();
+    const productByMag = new Map<string, Map<string, { qty: number; total: number; code: string | null }>>();
 
     for (const mag of magasins) {
       const magCode = normalizeMagasinCode(mag.name);
@@ -215,10 +216,14 @@ export async function syncDateToSupabase(date: string) {
             if (!productByMag.has(magCode)) productByMag.set(magCode, new Map());
             const magProducts = productByMag.get(magCode)!;
             for (const l of lines) {
-              const article = l.name.trim();
+              const article = l.name.trim() || l.code?.trim() || "";
               if (!article) continue;
-              const prev = magProducts.get(article) ?? { qty: 0, total: 0 };
-              magProducts.set(article, { qty: prev.qty + l.qty, total: prev.total + l.ca });
+              const prev = magProducts.get(article) ?? { qty: 0, total: 0, code: null };
+              magProducts.set(article, {
+                qty: prev.qty + l.qty,
+                total: prev.total + l.ca,
+                code: prev.code ?? l.code,
+              });
             }
           } else if (isMonth) {
             const monthCa = extractMonthCaFromJson(parsed);
@@ -273,14 +278,30 @@ export async function syncDateToSupabase(date: string) {
     const { error: delProdErr } = await supabase.from("ca_product_day").delete().eq("date", date);
     if (delProdErr) throw new Error(delProdErr.message);
 
-    const prodRows: Array<{ date: string; magasin: string; article: string; qty: number; total: number }> = [];
+    const catalog = await fetchProductCatalogIndex(supabase);
+
+    const prodRows: Array<{
+      date: string;
+      magasin: string;
+      article: string;
+      product_id: string | null;
+      qty: number;
+      total: number;
+    }> = [];
     for (const [magasin, map] of productByMag) {
       const magCode = normalizeMagasinCode(magasin);
       if (!magCode) continue;
       for (const [article, v] of map) {
         const name = article.trim();
         if (!name) continue;
-        prodRows.push({ date, magasin: magCode, article: name, qty: v.qty, total: v.total });
+        prodRows.push({
+          date,
+          magasin: magCode,
+          article: name,
+          product_id: resolveProductIdByCode(catalog, v.code, name),
+          qty: v.qty,
+          total: v.total,
+        });
       }
     }
     if (prodRows.length) {

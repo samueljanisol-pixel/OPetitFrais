@@ -1,10 +1,29 @@
 'use client'
 
-import { useState } from 'react'
-import { Button, CircularProgress, Typography } from '@mui/material'
-import { SHEET_DB_EXPORT_PATH, SHEET_IMPORT_ENABLED, SHEET_JSON_EXPORT_URL } from './config'
+import { useCallback, useState } from 'react'
+import {
+  Button,
+  Checkbox,
+  CircularProgress,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
+  FormControlLabel,
+  FormGroup,
+  Typography,
+} from '@mui/material'
+import { SHEET_IMPORT_ENABLED } from './config'
 import { applySheetImport } from './applySheetImport'
 import { parseSheetJsonToRows } from './mapSheetRow'
+import {
+  DEFAULT_SHEET_IMPORT_FIELDS,
+  hasAnyImportField,
+  SHEET_IMPORT_FIELD_KEYS,
+  SHEET_IMPORT_FIELD_LABELS,
+  type SheetImportFieldKey,
+  type SheetImportFields,
+} from './sheet-import-fields'
 import { createSupabaseBrowserClient } from '@/lib/supabase/client'
 
 type Props = { onDone: () => void; canWriteProducts?: boolean }
@@ -14,10 +33,28 @@ export function SheetImportBar({ onDone, canWriteProducts = false }: Props) {
   const [msg, setMsg] = useState<string | null>(null)
   const [ftpLoading, setFtpLoading] = useState(false)
   const [ftpMsg, setFtpMsg] = useState<string | null>(null)
-  if (!SHEET_IMPORT_ENABLED) return null
+  const [dialogOpen, setDialogOpen] = useState(false)
+  const [fields, setFields] = useState<SheetImportFields>({ ...DEFAULT_SHEET_IMPORT_FIELDS })
 
-  const run = async () => {
-    if (!window.confirm("Importer l’export Google Sheet (fusion par Code ou par Nom si code vide) ?")) return
+  const canRun = hasAnyImportField(fields)
+
+  const setField = useCallback((key: SheetImportFieldKey, checked: boolean) => {
+    setFields((prev) => ({ ...prev, [key]: checked }))
+  }, [])
+
+  const setAllFields = useCallback((checked: boolean) => {
+    setFields(
+      SHEET_IMPORT_FIELD_KEYS.reduce(
+        (acc, key) => {
+          acc[key] = checked
+          return acc
+        },
+        {} as SheetImportFields,
+      ),
+    )
+  }, [])
+
+  const runImport = async (selectedFields: SheetImportFields) => {
     setLoading(true)
     setMsg(null)
     const supabase = createSupabaseBrowserClient()
@@ -34,9 +71,17 @@ export function SheetImportBar({ onDone, canWriteProducts = false }: Props) {
         onDone()
         return
       }
-      const { created, updated, errors: applyErrs } = await applySheetImport(supabase, rows)
+      const { created, updated, skipped, errors: applyErrs } = await applySheetImport(
+        supabase,
+        rows,
+        selectedFields,
+      )
+      const selectedLabels = SHEET_IMPORT_FIELD_KEYS.filter((k) => selectedFields[k]).map(
+        (k) => SHEET_IMPORT_FIELD_LABELS[k],
+      )
       const parts = [
-        `Créés : ${created}, mis à jour : ${updated}.`,
+        `Champs : ${selectedLabels.join(', ') || '—'}.`,
+        `Créés : ${created}, mis à jour : ${updated}${skipped > 0 ? `, ignorés : ${skipped}` : ''}.`,
         ...parseErrs,
         ...applyErrs,
       ].filter(Boolean)
@@ -47,6 +92,12 @@ export function SheetImportBar({ onDone, canWriteProducts = false }: Props) {
     } finally {
       setLoading(false)
     }
+  }
+
+  const onConfirmImport = () => {
+    if (!canRun) return
+    setDialogOpen(false)
+    void runImport(fields)
   }
 
   const runFtpPhotos = async () => {
@@ -104,38 +155,97 @@ export function SheetImportBar({ onDone, canWriteProducts = false }: Props) {
     }
   }
 
+  if (!SHEET_IMPORT_ENABLED) return null
+
   return (
-    <div className="mb-4 flex flex-col gap-1 rounded-lg border border-amber-200 bg-amber-50/90 p-3 text-sm text-amber-950">
-      <div className="flex flex-wrap items-center gap-2">
-        <Button
-          type="button"
-          size="small"
-          variant="contained"
-          color="warning"
-          disabled={loading || ftpLoading}
-          onClick={() => void run()}
-          sx={{ textTransform: 'none' }}
-        >
-          {loading ? <CircularProgress size={18} color="inherit" className="mr-1" /> : null}
-          Importer depuis Google Sheet
-        </Button>
-        {canWriteProducts ? (
+    <>
+      <div className="mb-4 flex flex-col gap-1 rounded-lg border border-amber-200 bg-amber-50/90 p-3 text-sm text-amber-950">
+        <div className="flex flex-wrap items-center gap-2">
           <Button
             type="button"
             size="small"
-            variant="outlined"
+            variant="contained"
             color="warning"
             disabled={loading || ftpLoading}
-            onClick={() => void runFtpPhotos()}
+            onClick={() => {
+              setFields({ ...DEFAULT_SHEET_IMPORT_FIELDS })
+              setDialogOpen(true)
+            }}
             sx={{ textTransform: 'none' }}
           >
-            {ftpLoading ? <CircularProgress size={18} color="inherit" className="mr-1" /> : null}
-            Importer photos (FTP)
+            {loading ? <CircularProgress size={18} color="inherit" className="mr-1" /> : null}
+            Importer depuis Google Sheet
           </Button>
+          {canWriteProducts ? (
+            <Button
+              type="button"
+              size="small"
+              variant="outlined"
+              color="warning"
+              disabled={loading || ftpLoading}
+              onClick={() => void runFtpPhotos()}
+              sx={{ textTransform: 'none' }}
+            >
+              {ftpLoading ? <CircularProgress size={18} color="inherit" className="mr-1" /> : null}
+              Importer photos (FTP)
+            </Button>
+          ) : null}
+        </div>
+        {msg ? <p className="text-amber-900/90 leading-snug whitespace-pre-wrap">{msg}</p> : null}
+        {ftpMsg ? (
+          <p className="text-amber-900/95 leading-snug whitespace-pre-wrap border-t border-amber-200/80 pt-2 mt-1">
+            {ftpMsg}
+          </p>
         ) : null}
       </div>
-      {msg ? <p className="text-amber-900/90 leading-snug whitespace-pre-wrap">{msg}</p> : null}
-      {ftpMsg ? <p className="text-amber-900/95 leading-snug whitespace-pre-wrap border-t border-amber-200/80 pt-2 mt-1">{ftpMsg}</p> : null}
-    </div>
+
+      <Dialog open={dialogOpen} onClose={() => !loading && setDialogOpen(false)} fullWidth maxWidth="xs">
+        <DialogTitle sx={{ pb: 1 }}>Import Google Sheet</DialogTitle>
+        <DialogContent dividers>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+            Correspondance produit par <strong>Code</strong> ou par <strong>Nom</strong> si le code feuille est vide.
+            Les champs cochés s’appliquent aux <strong>produits existants</strong> uniquement ; un{' '}
+            <strong>nouveau produit</strong> est toujours créé avec toutes les colonnes de la feuille.
+          </Typography>
+          <div className="mb-2 flex flex-wrap gap-2">
+            <Button type="button" size="small" variant="text" onClick={() => setAllFields(true)} sx={{ textTransform: 'none', px: 1 }}>
+              Tout cocher
+            </Button>
+            <Button type="button" size="small" variant="text" onClick={() => setAllFields(false)} sx={{ textTransform: 'none', px: 1 }}>
+              Tout décocher
+            </Button>
+          </div>
+          <FormGroup>
+            {SHEET_IMPORT_FIELD_KEYS.map((key) => (
+              <FormControlLabel
+                key={key}
+                control={
+                  <Checkbox
+                    checked={fields[key]}
+                    onChange={(e) => setField(key, e.target.checked)}
+                    size="small"
+                  />
+                }
+                label={SHEET_IMPORT_FIELD_LABELS[key]}
+              />
+            ))}
+          </FormGroup>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, py: 2 }}>
+          <Button onClick={() => setDialogOpen(false)} disabled={loading} sx={{ textTransform: 'none' }}>
+            Annuler
+          </Button>
+          <Button
+            variant="contained"
+            color="warning"
+            disabled={!canRun || loading}
+            onClick={onConfirmImport}
+            sx={{ textTransform: 'none' }}
+          >
+            Importer
+          </Button>
+        </DialogActions>
+      </Dialog>
+    </>
   )
 }

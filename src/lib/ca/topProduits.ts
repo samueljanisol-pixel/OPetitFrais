@@ -44,7 +44,7 @@ export function aggregateTopProduitLines(lines: CaTopProduitLine[]): CaTopProdui
   const byName = new Map<string, CaTopProduitLine>()
 
   for (const line of source) {
-    const key = line.name.trim().toLowerCase()
+    const key = line.productId ?? line.name.trim().toLowerCase()
     const cur = byName.get(key)
     if (!cur) {
       byName.set(key, { ...line })
@@ -52,6 +52,7 @@ export function aggregateTopProduitLines(lines: CaTopProduitLine[]): CaTopProdui
     }
     byName.set(key, {
       ...cur,
+      name: cur.productId ? cur.name : line.name,
       ca: cur.ca + line.ca,
       qty: cur.qty + line.qty,
     })

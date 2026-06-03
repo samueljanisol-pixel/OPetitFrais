@@ -16,10 +16,10 @@ Chaque bandeau record affiche le **dernier record battu** (montant + date) lorsq
 
 ## TOP 10 produits
 
-Filtres **Magasin** et **Catégorie** (liste issue du catalogue `product` / `ref_category`, rapprochée par nom d’article).
+Filtres **Magasin** et **Catégorie** (catalogue `product` via `ca_product_day.product_id`, lien **par code produit**).
 
-- Table `ca_product_day` : clé `(date, magasin, article)` — migration `20260629120000_ca_product_day_magasin.sql`.
-- Sync FTP : ventes produit ventilées par magasin ; **relancer la sync** des jours concernés pour activer le filtre magasin (données legacy `__all__` = agrégat global).
+- Table `ca_product_day` : clé `(date, magasin, article)` + `product_id` → `product` (migration `20260630120000_ca_product_day_product_id.sql`).
+- Sync FTP : ventes produit ventilées par magasin ; `product_id` rempli à l’import (`src/lib/ca/productCatalogMatch.ts`). **Relancer la sync** des jours concernés après migration.
 - **Tous les magasins** : colonnes par magasin + **Total** dans les deux tableaux (CA et quantité).
 
 ## Données

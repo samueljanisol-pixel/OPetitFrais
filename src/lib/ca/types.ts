@@ -7,6 +7,7 @@ export type CaTopProduitLine = {
   ca: number
   qty: number
   magasin: string
+  productId?: string | null
   categoryId: string | null
   categoryLabel: string | null
 }
@@ -75,6 +76,7 @@ export type VentesAnalyseGroupBy = 'produit' | 'categorie' | 'fournisseur' | 'ma
 export type VentesAnalyseLine = {
   date: string
   name: string
+  productId: string | null
   ca: number
   qty: number
   magasin: string

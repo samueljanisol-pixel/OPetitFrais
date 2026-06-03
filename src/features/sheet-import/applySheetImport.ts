@@ -2,6 +2,11 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import { insertProductPriceHistoryRow } from '@/lib/products/priceHistory'
 import type { RefRow } from '@/lib/products/types'
 import type { SheetRowParsed } from './mapSheetRow'
+import {
+  DEFAULT_SHEET_IMPORT_FIELDS,
+  hasAnyImportField,
+  type SheetImportFields,
+} from './sheet-import-fields'
 
 type Refs = {
   byUnitLabel: Map<string, string>
@@ -52,18 +57,75 @@ function resolveId(maps: Map<string, string>[], raw: string): string | null {
 export type SheetImportResult = {
   created: number
   updated: number
+  skipped: number
   errors: string[]
 }
 
+function buildProductPatch(
+  row: SheetRowParsed,
+  fields: SheetImportFields,
+  refs: Refs,
+): { patch: Record<string, unknown>; errors: string[] } {
+  const errors: string[] = []
+  const patch: Record<string, unknown> = {}
+
+  if (fields.nom) {
+    patch.name = row.nom
+  }
+  if (fields.prix) {
+    patch.price = row.prix
+  }
+  if (fields.actif) {
+    patch.active = row.actif
+  }
+  if (fields.arabe) {
+    patch.name_ar = row.arabe
+  }
+  if (fields.code && row.code.trim()) {
+    patch.code = row.code.trim()
+  }
+  if (fields.udv) {
+    const salesUnitId = resolveId([refs.byUnitLabel, refs.byUnitCode], row.udv)
+    if (!salesUnitId) {
+      errors.push(`« ${row.nom} » : UdV « ${row.udv} » introuvable en base.`)
+    } else {
+      patch.sales_unit_id = salesUnitId
+    }
+  }
+  if (fields.categorie) {
+    const categoryId = resolveId([refs.byCatLabel, refs.byCatCode], row.categorie)
+    if (!categoryId) {
+      errors.push(`« ${row.nom} » : catégorie « ${row.categorie} » introuvable.`)
+    } else {
+      patch.category_id = categoryId
+    }
+  }
+  if (fields.fournisseur) {
+    const supplierId = resolveId([refs.bySupLabel, refs.bySupCode], row.fournisseur)
+    if (!supplierId) {
+      errors.push(`« ${row.nom} » : fournisseur « ${row.fournisseur} » introuvable.`)
+    } else {
+      patch.supplier_id = supplierId
+    }
+  }
+
+  return { patch, errors }
+}
+
 /**
- * N’applique que les champs de l’export : actif, code, nom, prix, udv, catégorie, fournisseur, arabe.
+ * N’applique que les champs cochés pour les produits existants.
+ * Les nouveaux produits sont toujours créés avec toutes les colonnes de la feuille.
  * Correspondance par `code` produit, sinon par `nom` (insensible à la casse) si le code feuille est vide.
  */
 export async function applySheetImport(
   supabase: SupabaseClient,
   parsed: SheetRowParsed[],
+  fields: SheetImportFields = DEFAULT_SHEET_IMPORT_FIELDS,
 ): Promise<SheetImportResult> {
   const errors: string[] = []
+  if (!hasAnyImportField(fields)) {
+    return { created: 0, updated: 0, skipped: 0, errors: ['Aucun champ sélectionné pour l’import.'] }
+  }
   const [{ data: units }, { data: cats }, { data: sups }, { data: products }] = await Promise.all([
     supabase.from('ref_sales_unit').select('*'),
     supabase.from('ref_category').select('*'),
@@ -71,7 +133,7 @@ export async function applySheetImport(
     supabase.from('product').select('id, code, name'),
   ])
   if (!units?.length || !cats?.length || !sups?.length) {
-    return { created: 0, updated: 0, errors: ['Référentiels (UdV / catégorie / fournisseur) introuvables.'] }
+    return { created: 0, updated: 0, skipped: 0, errors: ['Référentiels (UdV / catégorie / fournisseur) introuvables.'] }
   }
   const refs = buildRefs(
     units as RefRow[],
@@ -88,32 +150,13 @@ export async function applySheetImport(
 
   let created = 0
   let updated = 0
+  let skipped = 0
 
   for (const row of parsed) {
-    const salesUnitId = resolveId([refs.byUnitLabel, refs.byUnitCode], row.udv)
-    const categoryId = resolveId([refs.byCatLabel, refs.byCatCode], row.categorie)
-    const supplierId = resolveId([refs.bySupLabel, refs.bySupCode], row.fournisseur)
-    if (!salesUnitId) {
-      errors.push(`« ${row.nom} » : UdV « ${row.udv} » introuvable en base.`)
+    const { patch, errors: patchErrors } = buildProductPatch(row, fields, refs)
+    if (patchErrors.length > 0) {
+      errors.push(...patchErrors)
       continue
-    }
-    if (!categoryId) {
-      errors.push(`« ${row.nom} » : catégorie « ${row.categorie} » introuvable.`)
-      continue
-    }
-    if (!supplierId) {
-      errors.push(`« ${row.nom} » : fournisseur « ${row.fournisseur} » introuvable.`)
-      continue
-    }
-
-    const base = {
-      name: row.nom,
-      price: row.prix,
-      sales_unit_id: salesUnitId,
-      category_id: categoryId,
-      supplier_id: supplierId,
-      name_ar: row.arabe,
-      active: row.actif,
     }
 
     const codeNorm = row.code ? norm(row.code) : ''
@@ -121,26 +164,27 @@ export async function applySheetImport(
       (codeNorm && byCode.get(codeNorm)) || (!codeNorm && byName.get(norm(row.nom))) || null
 
     if (id) {
-      const { data: before } = await supabase
-        .from('product')
-        .select('price, cost_purchase')
-        .eq('id', id)
-        .single()
+      if (Object.keys(patch).length === 0) {
+        skipped += 1
+        continue
+      }
+      const { data: before } = fields.prix
+        ? await supabase
+            .from('product')
+            .select('price, cost_purchase')
+            .eq('id', id)
+            .single()
+        : { data: null }
       const { data: upd, error: e0 } = await supabase
         .from('product')
-        .update(
-          {
-            ...base,
-            name_ar: row.arabe,
-          } as never,
-        )
+        .update(patch as never)
         .eq('id', id)
         .select('price, cost_purchase')
         .single()
       if (e0) errors.push(`Mise à jour « ${row.nom} » : ${e0.message}`)
       else {
         updated += 1
-        if (upd) {
+        if (fields.prix && upd) {
           const snap = upd as { price: number; cost_purchase: number | null }
           const bef = before as { price: number; cost_purchase: number | null } | null
           const priceOrCostChanged =
@@ -158,16 +202,22 @@ export async function applySheetImport(
         }
       }
     } else {
+      const { patch: fullPatch, errors: createErrors } = buildProductPatch(
+        row,
+        DEFAULT_SHEET_IMPORT_FIELDS,
+        refs,
+      )
+      if (createErrors.length > 0) {
+        errors.push(...createErrors)
+        continue
+      }
       const insert: Record<string, unknown> = {
-        ...base,
+        ...fullPatch,
         margin: null,
         cost_purchase: null,
         cost_manufacturing: null,
         cost_packaging: null,
         image_path: null,
-      }
-      if (row.code && row.code.trim()) {
-        insert.code = row.code.trim()
       }
       const { data: ins, error: e1 } = await supabase
         .from('product')
@@ -191,5 +241,5 @@ export async function applySheetImport(
     }
   }
 
-  return { created, updated, errors }
+  return { created, updated, skipped, errors }
 }

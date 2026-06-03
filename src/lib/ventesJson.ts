@@ -12,22 +12,33 @@ function pickString(v: unknown) {
   return typeof v === "string" && v.trim() ? v.trim() : "";
 }
 
-export function extractProductLines(payload: unknown): Array<{ name: string; ca: number; qty: number }> {
+export type VentesProductLine = { name: string; code: string | null; ca: number; qty: number };
+
+export function extractProductLines(payload: unknown): VentesProductLine[] {
   if (!payload || typeof payload !== "object") return [];
   const root = payload as Record<string, unknown>;
-  const out: Array<{ name: string; ca: number; qty: number }> = [];
+  const out: VentesProductLine[] = [];
 
   const ventes = root["ventes"];
   if (ventes && typeof ventes === "object" && !Array.isArray(ventes)) {
-    for (const v of Object.values(ventes as Record<string, unknown>)) {
+    for (const [entryKey, v] of Object.entries(ventes as Record<string, unknown>)) {
       if (!v || typeof v !== "object") continue;
       const r = v as Record<string, unknown>;
       const name = pickString(r.article) || pickString(r.libelle) || pickString(r.designation) || pickString(r.name);
+      const keyCode = typeof entryKey === "string" && entryKey.trim() ? entryKey.trim() : "";
+      const code =
+        pickString(r.code) ||
+        pickString(r.Code) ||
+        pickString(r.CODE) ||
+        pickString(r.ref) ||
+        pickString(r.reference) ||
+        keyCode ||
+        null;
       const qty = asNumber(r.qte) || asNumber(r.qty) || asNumber(r.quantite) || asNumber(r.quantity);
       const ca = asNumber(r.total) || asNumber(r.ca) || asNumber(r.montant) || asNumber(r.amount) || asNumber(r.total_ttc);
-      if (!name) continue;
+      if (!name && !code) continue;
       if (qty === 0 && ca === 0) continue;
-      out.push({ name, ca, qty });
+      out.push({ name: name || code || "", code, ca, qty });
     }
   }
 

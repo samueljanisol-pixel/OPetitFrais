@@ -1,4 +1,9 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import {
+  catalogEntryForProductId,
+  fetchProductCatalogIndex,
+  type ProductCatalogIndex,
+} from "./productCatalogMatch";
 import type {
   VentesAnalyseDailyRow,
   VentesAnalyseFilters,
@@ -11,37 +16,14 @@ import type {
 const SANS_CATEGORIE = "__none_cat__";
 const SANS_FOURNISSEUR = "__none_sup__";
 
-type ProductCatalogRow = {
-  name: string | null;
-  category_id: string | null;
-  supplier_id: string | null;
-  ref_category: { id: string; label: string | null } | Array<{ id: string; label: string | null }> | null;
-  ref_supplier: { id: string; label: string | null } | Array<{ id: string; label: string | null }> | null;
-};
-
-export type ProductCatalogEntry = {
-  categoryId: string | null;
-  categoryLabel: string | null;
-  supplierId: string | null;
-  supplierLabel: string | null;
-};
-
 type RpcProductLine = {
   sale_date: unknown
   article: string
+  product_id: string | null
   magasin: string
   qty: unknown
   total: unknown
 };
-
-function refFromRow(
-  raw: { id: string; label: string | null } | Array<{ id: string; label: string | null }> | null,
-): { id: string; label: string } | null {
-  if (!raw) return null;
-  const row = Array.isArray(raw) ? raw[0] : raw;
-  if (!row?.id) return null;
-  return { id: row.id, label: row.label ?? "—" };
-}
 
 function normalizeDateCell(v: unknown): string {
   if (typeof v === "string") return v.slice(0, 10);
@@ -49,51 +31,52 @@ function normalizeDateCell(v: unknown): string {
   return String(v).slice(0, 10);
 }
 
-export async function fetchProductCatalogMap(
-  supabase: SupabaseClient,
-): Promise<Map<string, ProductCatalogEntry>> {
-  const { data: productRows, error } = await supabase
-    .from("product")
-    .select("name, category_id, supplier_id, ref_category(id, label), ref_supplier(id, label)");
-
-  if (error) {
-    return new Map();
+function lineFromCatalog(
+  catalog: ProductCatalogIndex,
+  article: string,
+  productId: string | null,
+): Pick<
+  VentesAnalyseLine,
+  "name" | "productId" | "categoryId" | "categoryLabel" | "supplierId" | "supplierLabel"
+> {
+  const linked =
+    catalogEntryForProductId(catalog, productId) ?? catalog.resolveByCode(null, article);
+  if (linked) {
+    return {
+      name: linked.name,
+      productId: linked.productId,
+      categoryId: linked.categoryId,
+      categoryLabel: linked.categoryLabel,
+      supplierId: linked.supplierId,
+      supplierLabel: linked.supplierLabel,
+    };
   }
-
-  const map = new Map<string, ProductCatalogEntry>();
-  for (const row of (productRows ?? []) as ProductCatalogRow[]) {
-    if (!row.name) continue;
-    const cat = refFromRow(row.ref_category);
-    const sup = refFromRow(row.ref_supplier);
-    map.set(row.name.trim().toLowerCase(), {
-      categoryId: cat?.id ?? row.category_id ?? null,
-      categoryLabel: cat?.label ?? null,
-      supplierId: sup?.id ?? row.supplier_id ?? null,
-      supplierLabel: sup?.label ?? null,
-    });
-  }
-  return map;
+  return {
+    name: article,
+    productId: null,
+    categoryId: null,
+    categoryLabel: null,
+    supplierId: null,
+    supplierLabel: null,
+  };
 }
 
-function enrichRpcLine(row: RpcProductLine, catalog: Map<string, ProductCatalogEntry>): VentesAnalyseLine | null {
-  const name = String(row.article ?? "").trim();
+function enrichRpcLine(row: RpcProductLine, catalog: ProductCatalogIndex): VentesAnalyseLine | null {
+  const article = String(row.article ?? "").trim();
   const magasin = String(row.magasin ?? "").trim();
   const date = normalizeDateCell(row.sale_date);
   const ca = typeof row.total === "number" ? row.total : Number(row.total);
   const qty = typeof row.qty === "number" ? row.qty : Number(row.qty);
-  if (!name || !magasin || !date) return null;
+  const productId = typeof row.product_id === "string" && row.product_id.length > 0 ? row.product_id : null;
+  if (!article || !magasin || !date) return null;
 
-  const cat = catalog.get(name.toLowerCase()) ?? null;
+  const meta = lineFromCatalog(catalog, article, productId);
   return {
     date,
-    name,
+    ...meta,
     ca: Number.isFinite(ca) ? ca : 0,
     qty: Number.isFinite(qty) ? qty : 0,
     magasin,
-    categoryId: cat?.categoryId ?? null,
-    categoryLabel: cat?.categoryLabel ?? null,
-    supplierId: cat?.supplierId ?? null,
-    supplierLabel: cat?.supplierLabel ?? null,
   };
 }
 
@@ -110,7 +93,7 @@ export async function fetchAnalyseProductLines(
         ? (["__none__"] as string[])
         : magasinCodes;
 
-  const catalog = await fetchProductCatalogMap(supabase);
+  const catalog = await fetchProductCatalogIndex(supabase);
 
   const allRows: RpcProductLine[] = [];
   let offset = 0;
@@ -200,7 +183,7 @@ export function groupAnalyseLines(lines: VentesAnalyseLine[], groupBy: VentesAna
         label = line.supplierLabel ?? "Sans fournisseur";
         break;
       default:
-        key = line.name.trim().toLowerCase();
+        key = line.productId ?? line.name.trim().toLowerCase();
         label = line.name;
         break;
     }

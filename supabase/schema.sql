@@ -34,6 +34,7 @@ create table if not exists public.ca_product_day (
   date date not null,
   magasin text not null default '__all__',
   article text not null,
+  product_id uuid references public.product (id) on delete set null,
   qty numeric not null default 0,
   total numeric not null default 0,
   inserted_at timestamptz not null default now(),

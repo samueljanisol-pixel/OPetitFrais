@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { HISTORIQUE_FROM_ISO } from "./constants";
+import { catalogEntryForProductId, fetchProductCatalogIndex } from "./productCatalogMatch";
 import type { CaResponse, CaRecordRef, CaTopProduitLine, CaTopProduitsPayload, HistoriqueDayRow, HistoriquePayload, PanierMag } from "./types";
 import { buildTopProduitRankings, filterTopProduitLines } from "./topProduits";
 
@@ -164,20 +165,6 @@ async function fetchMaxDailyCaRecords(
   return { globalMax, maxByMag, globalDayTotals, magDayTotals };
 }
 
-type ProductCategoryRow = {
-  name: string | null
-  category_id: string | null
-  ref_category: { id: string; label: string | null } | Array<{ id: string; label: string | null }> | null
-}
-
-function categoryFromProductRow(row: ProductCategoryRow): { id: string; label: string } | null {
-  const rc = row.ref_category;
-  if (!rc) return null;
-  const cat = Array.isArray(rc) ? rc[0] : rc;
-  if (!cat?.id) return null;
-  return { id: cat.id, label: cat.label ?? "—" };
-}
-
 /** Magasins du jour (ca_day) + magasins présents dans ca_product_day. */
 function mergeTopMagasinFilterList(productMagasins: string[], dayMagasins: string[]): string[] {
   return [...new Set([...dayMagasins, ...productMagasins].filter((m) => m && m !== "__all__"))].sort((a, b) =>
@@ -190,17 +177,17 @@ async function buildTopProduitsForDate(
   date: string,
   magIn?: string[],
 ): Promise<CaTopProduitsPayload> {
-  let prodQb = supabase.from("ca_product_day").select("article,qty,total,magasin").eq("date", date);
+  let prodQb = supabase.from("ca_product_day").select("article,product_id,qty,total,magasin").eq("date", date);
   if (magIn !== undefined) {
     prodQb = magIn.length === 0 ? prodQb.in("magasin", ["__none__"]) : prodQb.in("magasin", magIn);
   }
 
-  const [{ data: prodRows, error: prodErr }, { data: productRows, error: productErr }] = await Promise.all([
+  const [{ data: prodRows, error: prodErr }, catalog] = await Promise.all([
     prodQb,
-    supabase.from("product").select("name, category_id, ref_category(id, label)"),
+    fetchProductCatalogIndex(supabase),
   ]);
 
-  if (prodErr || productErr) {
+  if (prodErr) {
     return {
       available: false,
       lines: [],
@@ -211,29 +198,26 @@ async function buildTopProduitsForDate(
     };
   }
 
-  const categoryByName = new Map<string, { id: string; label: string }>();
-  for (const row of (productRows ?? []) as ProductCategoryRow[]) {
-    if (!row.name) continue;
-    const cat = categoryFromProductRow(row);
-    if (!cat) continue;
-    categoryByName.set(row.name.trim().toLowerCase(), cat);
-  }
-
   const lines: CaTopProduitLine[] = [];
   for (const r of prodRows ?? []) {
-    const name = String(r.article ?? "").trim();
+    const article = String(r.article ?? "").trim();
     const ca = typeof r.total === "number" ? r.total : Number(r.total);
     const qty = typeof r.qty === "number" ? r.qty : Number(r.qty);
     const magasin = String(r.magasin ?? "__all__");
-    if (!name || (!Number.isFinite(ca) && !Number.isFinite(qty))) continue;
-    const cat = categoryByName.get(name.toLowerCase()) ?? null;
+    const productId =
+      typeof r.product_id === "string" && r.product_id.length > 0 ? r.product_id : null;
+    if (!article || (!Number.isFinite(ca) && !Number.isFinite(qty))) continue;
+
+    const linked =
+      catalogEntryForProductId(catalog, productId) ?? catalog.resolveByCode(null, article);
     lines.push({
-      name,
+      name: linked?.name ?? article,
+      productId: linked?.productId ?? productId,
       ca: Number.isFinite(ca) ? ca : 0,
       qty: Number.isFinite(qty) ? qty : 0,
       magasin,
-      categoryId: cat?.id ?? null,
-      categoryLabel: cat?.label ?? null,
+      categoryId: linked?.categoryId ?? null,
+      categoryLabel: linked?.categoryLabel ?? null,
     });
   }
 

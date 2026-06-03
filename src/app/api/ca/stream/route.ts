@@ -3,6 +3,7 @@ import type { NextRequest } from "next/server";
 import os from "node:os";
 import path from "node:path";
 import { promises as fs } from "node:fs";
+import { extractProductLines } from "@/lib/ventesJson";
 
 export const runtime = "nodejs";
 
@@ -30,28 +31,6 @@ function asNumber(v: unknown) {
 
 function pickString(v: unknown) {
   return typeof v === "string" && v.trim() ? v.trim() : "";
-}
-
-function extractProductLines(payload: unknown): Array<{ name: string; ca: number; qty: number }> {
-  if (!payload || typeof payload !== "object") return [];
-  const root = payload as Record<string, unknown>;
-  const out: Array<{ name: string; ca: number; qty: number }> = [];
-
-  const ventes = root["ventes"];
-  if (ventes && typeof ventes === "object" && !Array.isArray(ventes)) {
-    for (const v of Object.values(ventes as Record<string, unknown>)) {
-      if (!v || typeof v !== "object") continue;
-      const r = v as Record<string, unknown>;
-      const name = pickString(r.article) || pickString(r.libelle) || pickString(r.designation) || pickString(r.name);
-      const qty = asNumber(r.qte) || asNumber(r.qty) || asNumber(r.quantite) || asNumber(r.quantity);
-      const ca = asNumber(r.total) || asNumber(r.ca) || asNumber(r.montant) || asNumber(r.amount) || asNumber(r.total_ttc);
-      if (!name) continue;
-      if (qty === 0 && ca === 0) continue;
-      out.push({ name, ca, qty });
-    }
-  }
-
-  return out;
 }
 
 /** Nombre de paniers / tickets en tête de fichier JSON (jour ou mois). */

@@ -13,7 +13,7 @@ Page d’analyse des ventes produit sur une plage de dates, avec filtres et regr
 | Source | Usage |
 |--------|--------|
 | `ca_product_day` via RPC `ca_analyse_product_lines` | Ventes produit (KPIs, graphique, tableau) — pagination côté client |
-| `product` + `ref_category` + `ref_supplier` | Enrichissement catégorie / fournisseur par **nom** (`product.name` ≈ `ca_product_day.article`, insensible à la casse) |
+| `product` + `ref_category` + `ref_supplier` | Lien via `ca_product_day.product_id` = `product.code` (JSON `code` caisse ou article numérique) |
 
 ### RPC
 
@@ -42,7 +42,8 @@ Le bouton **Analyser** déclenche le chargement (pas de requête à chaque chang
 
 ## Limites connues
 
-- **Rapprochement par nom** : un article caisse absent du catalogue apparaît en « Sans catégorie / fournisseur » (identique au TOP 10 CA).
+- **Lien catalogue** : uniquement par **code produit** (`product.code`). Dans les JSON Sud Bois, le code est la **clé** de `ventes` (ex. `"91": { "article": "Avocat Local", … }`), lue par `ventesJson.ts`. Padding numérique `91` → `000091`.
+- Après migration : relancer `npm run sync:day -- <date>` ou `sync:all` sur les jours à jour pour peupler `product_id` sur les nouvelles syncs.
 - **Filtre magasin** : nécessite des données ventilées par magasin (`M1`, `M2`, …). Relancer la sync FTP des jours concernés si seules des lignes `__all__` existent.
 - **Graphique vs historique** : les totaux filtres proviennent des ventes produit (`ca_product_day`), pas de `ca_day` ; un écart avec l’historique CA global reste possible.
 
