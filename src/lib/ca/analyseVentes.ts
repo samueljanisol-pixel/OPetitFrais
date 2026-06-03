@@ -49,12 +49,6 @@ function normalizeDateCell(v: unknown): string {
   return String(v).slice(0, 10);
 }
 
-function magasinFilterArg(codes: string[] | undefined): string[] | null {
-  if (codes === undefined) return null;
-  if (codes.length === 0) return ["__none__"];
-  return codes;
-}
-
 export async function fetchProductCatalogMap(
   supabase: SupabaseClient,
 ): Promise<Map<string, ProductCatalogEntry>> {
@@ -109,29 +103,48 @@ export async function fetchAnalyseProductLines(
   to: string,
   magasinCodes?: string[],
 ): Promise<{ lines: VentesAnalyseLine[]; rawLineCount: number } | { error: string }> {
-  const pMagasins = magasinFilterArg(magasinCodes);
+  const pMagasins =
+    magasinCodes === undefined
+      ? null
+      : magasinCodes.length === 0
+        ? (["__none__"] as string[])
+        : magasinCodes;
 
-  const [{ data: rpcRows, error: rpcErr }, catalog] = await Promise.all([
-    supabase.rpc("ca_analyse_product_lines", {
-      p_from: from,
-      p_to: to,
-      p_magasins: pMagasins,
-    }),
-    fetchProductCatalogMap(supabase),
-  ]);
+  const catalog = await fetchProductCatalogMap(supabase);
 
-  if (rpcErr) {
-    return { error: rpcErr.message };
+  const allRows: RpcProductLine[] = [];
+  let offset = 0;
+
+  for (;;) {
+    const { data: chunk, error: rpcErr } = await supabase
+      .rpc("ca_analyse_product_lines", {
+        p_from: from,
+        p_to: to,
+        p_magasins: pMagasins,
+      })
+      .range(offset, offset + RPC_PAGE_SIZE - 1);
+
+    if (rpcErr) {
+      return { error: rpcErr.message };
+    }
+
+    const rows = (chunk ?? []) as RpcProductLine[];
+    allRows.push(...rows);
+    if (rows.length < RPC_PAGE_SIZE) break;
+    offset += RPC_PAGE_SIZE;
+    if (offset > 500_000) {
+      return { error: "Trop de lignes produit sur cette période ; réduisez la plage ou affinez les filtres." };
+    }
   }
 
-  const rawLineCount = (rpcRows ?? []).length;
+  const rawLineCount = allRows.length;
   const lines: VentesAnalyseLine[] = [];
-  for (const row of (rpcRows ?? []) as RpcProductLine[]) {
+  for (const row of allRows) {
     const line = enrichRpcLine(row, catalog);
     if (line) lines.push(line);
   }
 
-  return { lines, rawLineCount };
+  return { lines: filterLinesByMagasinCodes(lines, magasinCodes), rawLineCount };
 }
 
 export function applyAnalyseFilters(
@@ -226,24 +239,38 @@ export async function fetchAnalyseDailyCa(
   to: string,
   magasinCodes?: string[],
 ): Promise<VentesAnalyseDailyRow[] | { error: string }> {
-  let hq = supabase.from("ca_day").select("date,magasin,total").gte("date", from).lte("date", to);
-  if (magasinCodes !== undefined) {
-    hq = magasinCodes.length === 0 ? hq.in("magasin", ["__none__"]) : hq.in("magasin", magasinCodes);
+  const PAGE = 1000;
+  const allRows: { date: unknown; magasin: string; total: unknown }[] = [];
+  let offset = 0;
+
+  for (;;) {
+    let hq = supabase.from("ca_day").select("date,magasin,total").gte("date", from).lte("date", to);
+    if (magasinCodes !== undefined) {
+      hq = magasinCodes.length === 0 ? hq.in("magasin", ["__none__"]) : hq.in("magasin", magasinCodes);
+    }
+    const { data: rows, error } = await hq.order("date", { ascending: true }).range(offset, offset + PAGE - 1);
+    if (error) return { error: error.message };
+    const chunk = rows ?? [];
+    allRows.push(...chunk);
+    if (chunk.length < PAGE) break;
+    offset += PAGE;
   }
-  const { data: rows, error } = await hq.order("date", { ascending: true });
-  if (error) return { error: error.message };
 
   const byDate = new Map<string, number>();
-  for (const r of rows ?? []) {
+  for (const r of allRows) {
     const d = normalizeDateCell(r.date);
     const t = typeof r.total === "number" ? r.total : Number(r.total);
     if (!Number.isFinite(t)) continue;
     byDate.set(d, (byDate.get(d) ?? 0) + t);
   }
 
-  return Array.from(byDate.entries())
-    .sort(([a], [b]) => a.localeCompare(b))
-    .map(([date, total]) => ({ date, total }));
+  return fillDailyRange(
+    from,
+    to,
+    Array.from(byDate.entries())
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([date, total]) => ({ date, total })),
+  );
 }
 
 export async function fetchVentesAnalyse(
@@ -260,17 +287,77 @@ export async function fetchVentesAnalyse(
 
   const filtered = applyAnalyseFilters(linesRes.lines, filters);
 
+  const totalCaPeriod = linesRes.lines.reduce((acc, l) => acc + (Number.isFinite(l.ca) ? l.ca : 0), 0);
+  const totalCaFiltered = filtered.reduce((acc, l) => acc + (Number.isFinite(l.ca) ? l.ca : 0), 0);
+  const caPercentOfPeriod =
+    totalCaPeriod > 0 ? Math.min(100, (totalCaFiltered / totalCaPeriod) * 100) : null;
+
+  const dailyCa = fillDailyRange(
+    filters.from,
+    filters.to,
+    buildDailySeriesFromLines(filtered, "ca"),
+  );
+
   return {
     data: {
       from: filters.from,
       to: filters.to,
       lines: filtered,
-      dailyCa: buildDailySeriesFromLines(filtered, "ca"),
+      dailyCa,
       rawLineCount: linesRes.rawLineCount,
+      totalCaPeriod,
+      caPercentOfPeriod,
     },
   };
 }
 
 export { SANS_CATEGORIE, SANS_FOURNISSEUR };
 
-export const LARGE_RESULT_THRESHOLD = 5000;
+const RPC_PAGE_SIZE = 1000;
+
+/** Jours où des ventes par magasin existent : on ignore __all__ ces jours-là (comme TOP 10 CA). */
+export function applyLegacyMagasinRule(lines: VentesAnalyseLine[]): VentesAnalyseLine[] {
+  const datesWithPerMag = new Set<string>();
+  for (const l of lines) {
+    if (l.magasin !== "__all__") datesWithPerMag.add(l.date);
+  }
+  return lines.filter((l) => l.magasin !== "__all__" || !datesWithPerMag.has(l.date));
+}
+
+/** Filtre magasin explicite : pas de lignes __all__. */
+export function filterLinesByMagasinCodes(
+  lines: VentesAnalyseLine[],
+  magasinCodes: string[] | undefined,
+): VentesAnalyseLine[] {
+  if (magasinCodes === undefined) {
+    return applyLegacyMagasinRule(lines);
+  }
+  if (magasinCodes.length === 0) {
+    return [];
+  }
+  const set = new Set(magasinCodes);
+  return lines.filter((l) => l.magasin !== "__all__" && set.has(l.magasin));
+}
+
+function isoDateAddDays(iso: string, days: number): string {
+  const [yy, mm, dd] = iso.split("-").map((x) => Number(x));
+  const t = Date.UTC(yy, mm - 1, dd) + days * 24 * 60 * 60 * 1000;
+  const d = new Date(t);
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-${String(d.getUTCDate()).padStart(2, "0")}`;
+}
+
+/** Tous les jours de la plage pour le graphique (jours sans vente = 0). */
+export function fillDailyRange(
+  from: string,
+  to: string,
+  points: VentesAnalyseDailyRow[],
+): VentesAnalyseDailyRow[] {
+  const map = new Map(points.map((p) => [p.date, p.total]));
+  const out: VentesAnalyseDailyRow[] = [];
+  let cur = from;
+  while (cur <= to) {
+    out.push({ date: cur, total: map.get(cur) ?? 0 });
+    cur = isoDateAddDays(cur, 1);
+  }
+  return out;
+}

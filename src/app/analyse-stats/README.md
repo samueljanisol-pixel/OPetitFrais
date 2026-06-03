@@ -12,15 +12,16 @@ Page d’analyse des ventes produit sur une plage de dates, avec filtres et regr
 
 | Source | Usage |
 |--------|--------|
-| `ca_product_day` via RPC `ca_analyse_product_lines` | Ventes produit agrégées `(article, magasin)` sur la période |
-| `ca_day` | Graphique CA journalier par magasin |
+| `ca_product_day` via RPC `ca_analyse_product_lines` | Ventes produit (KPIs, graphique, tableau) — pagination côté client |
 | `product` + `ref_category` + `ref_supplier` | Enrichissement catégorie / fournisseur par **nom** (`product.name` ≈ `ca_product_day.article`, insensible à la casse) |
 
 ### RPC
 
 Migration : `supabase/migrations/20260629140000_ca_analyse_product_lines_rpc.sql`
 
-- Exclut les lignes legacy `magasin = '__all__'`
+- Exclut les lignes legacy `magasin = '__all__'` sauf si aucune vente par magasin ce jour-là (comme TOP 10 CA).
+- **Tous les magasins** sélectionnés : pas de filtre SQL magasin (`p_magasins` null) pour inclure tout le CA en base.
+- Pagination RPC par paquets de 1000 lignes (évite la limite PostgREST).
 - Filtre magasin optionnel (`p_magasins`)
 - Logique client : `src/lib/ca/analyseVentes.ts`
 
@@ -35,16 +36,15 @@ Le bouton **Analyser** déclenche le chargement (pas de requête à chaque chang
 
 ## Affichage
 
-- **KPIs** : CA total produits, quantité, moyenne CA/jour, nb lignes
-- **Graphique** : histogramme SVG journalier (`CaJourHistogram`) — ventes produit filtrées, bascule CA / quantité (même contrôle que le tableau)
+- **KPIs** : CA total (filtres) avec **% du CA période** (même dates et magasins, sans filtre catégorie/fournisseur/produit), moyenne CA/jour, nb lignes tableau
+- **Graphique** : histogramme SVG journalier — ventes filtrées, bascule CA / quantité
 - **Tableau** : regroupement produit / catégorie / fournisseur / magasin, tri CA ou quantité
 
 ## Limites connues
 
 - **Rapprochement par nom** : un article caisse absent du catalogue apparaît en « Sans catégorie / fournisseur » (identique au TOP 10 CA).
 - **Filtre magasin** : nécessite des données ventilées par magasin (`M1`, `M2`, …). Relancer la sync FTP des jours concernés si seules des lignes `__all__` existent.
-- **Graphique vs tableau** : les deux utilisent les ventes produit filtrées (`ca_product_day` via RPC) et la métrique sélectionnée (CA ou quantité).
-- **Volume** : au-delà de ~5000 lignes brutes RPC, un avertissement invite à réduire la période ou affiner les filtres.
+- **Graphique vs historique** : les totaux filtres proviennent des ventes produit (`ca_product_day`), pas de `ca_day` ; un écart avec l’historique CA global reste possible.
 
 ## Composants
 

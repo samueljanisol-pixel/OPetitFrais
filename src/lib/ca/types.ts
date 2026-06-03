@@ -101,4 +101,8 @@ export type VentesAnalyseResult = {
   lines: VentesAnalyseLine[]
   dailyCa: VentesAnalyseDailyRow[]
   rawLineCount: number
+  /** CA total sur la période (magasins + dates), sans filtre catégorie / fournisseur / produit. */
+  totalCaPeriod: number
+  /** Part du CA filtré par rapport à totalCaPeriod (0–100), null si totalCaPeriod = 0. */
+  caPercentOfPeriod: number | null
 }

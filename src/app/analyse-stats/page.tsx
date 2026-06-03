@@ -32,8 +32,8 @@ import VentesProductChipsFilter from '@/components/VentesProductChipsFilter'
 import {
   buildDailySeriesFromLines,
   fetchVentesAnalyse,
+  fillDailyRange,
   groupAnalyseLines,
-  LARGE_RESULT_THRESHOLD,
   SANS_CATEGORIE,
   SANS_FOURNISSEUR,
 } from '@/lib/ca/analyseVentes'
@@ -65,9 +65,13 @@ function labelMagasin(raw: string, magasins: SessionMagasin[]): string {
   return raw
 }
 
-function resolveMagasinCodes(selected: string[], available: SessionMagasin[]): string[] {
-  if (selected.length > 0) return selected
-  return available.map((m) => m.code)
+function resolveMagasinCodesForQuery(
+  selected: string[],
+  available: SessionMagasin[],
+): string[] | undefined {
+  if (available.length === 0) return [];
+  if (selected.length === 0 || selected.length >= available.length) return undefined;
+  return selected;
 }
 
 export default function AnalyseStatsPage() {
@@ -142,6 +146,14 @@ export default function AnalyseStatsPage() {
     }
   }, [])
 
+  const formatPercent = useMemo(
+    () => (value: number | null) => {
+      if (value == null || !Number.isFinite(value)) return '—'
+      return new Intl.NumberFormat('fr-FR', { maximumFractionDigits: 1 }).format(value) + ' %'
+    },
+    [],
+  )
+
   const formatQty = useMemo(
     () => (value: unknown) => {
       const n = typeof value === 'number' ? value : Number(value)
@@ -164,7 +176,7 @@ export default function AnalyseStatsPage() {
       const supabase = createSupabaseBrowserClient()
       const magasinCodes = isCaissier
         ? availableMagasins.map((m) => m.code)
-        : resolveMagasinCodes(selectedMagasinCodes, availableMagasins)
+        : resolveMagasinCodesForQuery(selectedMagasinCodes, availableMagasins)
 
       const res = await fetchVentesAnalyse(supabase, {
         from,
@@ -210,19 +222,28 @@ export default function AnalyseStatsPage() {
 
   const dailyChartPoints = useMemo(() => {
     if (!result) return []
-    return buildDailySeriesFromLines(result.lines, sortKey)
+    if (sortKey === 'ca') {
+      return result.dailyCa
+    }
+    return fillDailyRange(result.from, result.to, buildDailySeriesFromLines(result.lines, 'qty'))
   }, [result, sortKey])
 
   const kpis = useMemo(() => {
     if (!result) return null
     const totalCa = result.lines.reduce((acc, l) => acc + l.ca, 0)
-    const totalQty = result.lines.reduce((acc, l) => acc + l.qty, 0)
-    const dayCount = result.dailyCa.length
-    const avgCaPerDay = dayCount > 0 ? totalCa / dayCount : 0
-    return { totalCa, totalQty, dayCount, avgCaPerDay, rowCount: tableRows.length }
+    const daysInRange = result.dailyCa.length
+    const daysWithCa = result.dailyCa.filter((d) => d.total > 0).length
+    const avgCaPerDay = daysWithCa > 0 ? totalCa / daysWithCa : 0
+    return {
+      totalCa,
+      daysInRange,
+      daysWithCa,
+      avgCaPerDay,
+      rowCount: tableRows.length,
+      caPercentOfPeriod: result.caPercentOfPeriod,
+      totalCaPeriod: result.totalCaPeriod,
+    }
   }, [result, tableRows.length])
-
-  const largeResultWarning = result != null && result.rawLineCount >= LARGE_RESULT_THRESHOLD
 
   const handleMagasinChange = (e: SelectChangeEvent<string[]>) => {
     const v = e.target.value
@@ -442,15 +463,6 @@ export default function AnalyseStatsPage() {
           </Paper>
         ) : null}
 
-        {largeResultWarning ? (
-          <Paper sx={{ p: 2, mb: 3, borderRadius: 2, bgcolor: 'warning.50', border: 1, borderColor: 'warning.200' }}>
-            <Typography variant="body2" color="warning.dark">
-              Volume élevé ({result?.rawLineCount} lignes brutes). Réduisez la période ou affinez les filtres si les
-              résultats semblent incomplets.
-            </Typography>
-          </Paper>
-        ) : null}
-
         {hasRun && !loading && result && kpis ? (
           <>
             <Paper
@@ -493,21 +505,26 @@ export default function AnalyseStatsPage() {
               </Stack>
             </Paper>
 
-            <div className="mb-6 grid grid-cols-2 gap-2 sm:grid-cols-4 sm:gap-3">
+            <div className="mb-6 grid grid-cols-1 gap-2 sm:grid-cols-3 sm:gap-3">
               <div className="min-w-0 rounded-2xl border border-emerald-100 bg-white/80 px-3 py-4 shadow-sm backdrop-blur sm:px-5">
                 <div className="text-[10px] font-medium uppercase tracking-wide text-emerald-700/80 sm:text-xs">
-                  CA total (produits)
+                  CA total (filtres)
                 </div>
                 <div className="mt-1 break-words text-lg font-semibold text-slate-900 sm:text-2xl">
                   {formatMAD(kpis.totalCa)}
                 </div>
-              </div>
-              <div className="min-w-0 rounded-2xl border border-slate-200 bg-white/80 px-3 py-4 shadow-sm backdrop-blur sm:px-5">
-                <div className="text-[10px] font-medium uppercase tracking-wide text-slate-600 sm:text-xs">
-                  Quantité totale
-                </div>
-                <div className="mt-1 break-words text-lg font-semibold text-slate-900 sm:text-2xl">
-                  {formatQty(kpis.totalQty)}
+                <div className="mt-1 text-[10px] text-slate-600 sm:text-[11px]">
+                  {kpis.caPercentOfPeriod != null ? (
+                    <>
+                      <span className="font-semibold text-emerald-800">
+                        {formatPercent(kpis.caPercentOfPeriod)}
+                      </span>
+                      {' du CA période '}
+                      <span className="font-medium">({formatMAD(kpis.totalCaPeriod)})</span>
+                    </>
+                  ) : (
+                    '— % du CA période'
+                  )}
                 </div>
               </div>
               <div className="min-w-0 rounded-2xl border border-slate-200 bg-white/80 px-3 py-4 shadow-sm backdrop-blur sm:px-5">
@@ -517,7 +534,9 @@ export default function AnalyseStatsPage() {
                 <div className="mt-1 break-words text-lg font-semibold text-slate-900 sm:text-2xl">
                   {formatMAD(kpis.avgCaPerDay)}
                 </div>
-                <div className="mt-1 text-[10px] text-slate-500 sm:text-[11px]">{kpis.dayCount} jour(s) avec CA</div>
+                <div className="mt-1 text-[10px] text-slate-500 sm:text-[11px]">
+                  {kpis.daysWithCa} jour(s) avec CA sur {kpis.daysInRange}
+                </div>
               </div>
               <div className="min-w-0 rounded-2xl border border-slate-200 bg-white/80 px-3 py-4 shadow-sm backdrop-blur sm:px-5">
                 <div className="text-[10px] font-medium uppercase tracking-wide text-slate-600 sm:text-xs">
@@ -534,12 +553,13 @@ export default function AnalyseStatsPage() {
                   metric={sortKey}
                   title={
                     sortKey === 'ca'
-                      ? 'Évolution du CA journalier (ventes produit)'
-                      : 'Évolution des quantités journalières (ventes produit)'
+                      ? 'Évolution du CA journalier (filtres)'
+                      : 'Évolution des quantités journalières (filtres)'
                   }
                 />
                 <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1 }}>
-                  Graphique et tableau utilisent les mêmes filtres et la métrique sélectionnée (CA ou quantité).
+                  KPIs, graphique et tableau reflètent les filtres actifs (magasins, catégories, fournisseurs,
+                  produits).
                 </Typography>
               </Paper>
             ) : null}
