@@ -5,6 +5,8 @@ type Props = {
   nameAr: string | null | undefined;
   /** Centré (écran parcours titre produit). */
   centered?: boolean;
+  /** Conserve la hauteur du bloc si `name_ar` est vide (parcours : pas de saut de mise en page). */
+  reserveSpace?: boolean;
   /** Même bloc que le nom français en liste récap. */
   matchNameLine?: boolean;
   variant?: "body2" | "caption" | "subtitle2" | "h6";
@@ -64,18 +66,43 @@ function resolveArabicTypography(
   };
 }
 
-/** Ligne de nom en arabe sous le nom français ; masquée si vide. */
+/** Hauteur d’une ligne arabe parcours (subtitle1 centré). */
+const PARCOURS_ARABIC_SLOT_MIN_HEIGHT = "1.6875rem";
+
+/** Ligne de nom en arabe sous le nom français ; masquée si vide (sauf `reserveSpace`). */
 export default function ProductArabicSubtitle({
   nameAr,
   centered,
+  reserveSpace,
   matchNameLine,
   variant = "body2",
   className,
 }: Props) {
   const t = typeof nameAr === "string" ? nameAr.trim() : "";
-  if (!t) return null;
-
   const resolved = resolveArabicTypography(centered, matchNameLine, variant);
+
+  if (!t) {
+    if (!reserveSpace) return null;
+    return (
+      <Typography
+        variant={resolved.variant}
+        color={resolved.color}
+        className={className}
+        component="p"
+        aria-hidden
+        sx={{
+          mt: centered ? 0.5 : 0,
+          display: "block",
+          width: "100%",
+          minHeight: centered ? PARCOURS_ARABIC_SLOT_MIN_HEIGHT : undefined,
+          visibility: "hidden",
+          ...resolved.sx,
+        }}
+      >
+        {"\u00a0"}
+      </Typography>
+    );
+  }
 
   return (
     <Typography
@@ -90,6 +117,7 @@ export default function ProductArabicSubtitle({
         display: "block",
         width: "100%",
         textAlign: centered ? "center" : "right",
+        minHeight: reserveSpace && centered ? PARCOURS_ARABIC_SLOT_MIN_HEIGHT : undefined,
         ...resolved.sx,
       }}
     >

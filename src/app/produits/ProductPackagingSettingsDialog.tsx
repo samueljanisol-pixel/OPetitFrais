@@ -29,6 +29,7 @@ export type PackagingLineForSettings = {
   quantity: number
   sales_unit_id: string
   nom?: string | null
+  nom_ar?: string | null
   available_for_sale?: boolean | null
   available_for_purchase?: boolean | null
   product_packaging_magasin?: Array<{ magasin_id: string; sellable: boolean; purchasable: boolean }> | null
@@ -77,9 +78,13 @@ export function ProductPackagingSettingsDialog({
   const [err, setErr] = useState<string | null>(null)
   const [newVendeurLabel, setNewVendeurLabel] = useState('')
   const [creatingVendeur, setCreatingVendeur] = useState(false)
+  const [createVendeurDialogOpen, setCreateVendeurDialogOpen] = useState(false)
+  const [createVendeurDialogErr, setCreateVendeurDialogErr] = useState<string | null>(null)
+  const [createVendeurSupplierPick, setCreateVendeurSupplierPick] = useState('')
 
   const [quantity, setQuantity] = useState('1')
   const [packNom, setPackNom] = useState('')
+  const [packNomAr, setPackNomAr] = useState('')
   const [salesUnitId, setSalesUnitId] = useState('')
   const [sale, setSale] = useState(true)
   const [purchase, setPurchase] = useState(true)
@@ -93,6 +98,7 @@ export function ProductPackagingSettingsDialog({
     setErr(null)
     setQuantity(String(line.quantity))
     setPackNom(typeof line.nom === 'string' ? line.nom : '')
+    setPackNomAr(typeof line.nom_ar === 'string' ? line.nom_ar : '')
     setSalesUnitId(line.sales_unit_id)
     setSale(line.available_for_sale !== false)
     setPurchase(line.available_for_purchase !== false)
@@ -120,33 +126,53 @@ export function ProductPackagingSettingsDialog({
     setMagRows(byMag)
   }, [open, line, magasins])
 
+  useEffect(() => {
+    if (!open) setCreateVendeurDialogOpen(false)
+  }, [open])
+
   const vendeursEligibles = useMemo(() => {
     if (supplierIds.size === 0) return []
     return vendeurs.filter(v => supplierIds.has(v.supplier_id))
   }, [vendeurs, supplierIds])
 
-  const createVendeurSupplierId = useMemo(() => {
+  const selectedPackSuppliers = useMemo(
+    () => suppliers.filter(s => supplierIds.has(s.id)),
+    [suppliers, supplierIds],
+  )
+
+  const defaultCreateVendeurSupplierId = useMemo(() => {
     if (supplierIds.size === 1) return [...supplierIds][0] ?? null
     const pid = productSupplierId?.trim()
     if (pid && supplierIds.has(pid)) return pid
     if (supplierIds.size > 0) return [...supplierIds][0] ?? null
-    return pid || null
+    return null
   }, [supplierIds, productSupplierId])
 
-  const createVendeur = async () => {
-    if (readOnly) return
-    const label = newVendeurLabel.trim()
-    const supplierId = createVendeurSupplierId
-    if (!supplierId) {
+  const openCreateVendeurDialog = () => {
+    if (supplierIds.size === 0) {
       setErr('Cochez au moins un fournisseur du colis pour créer un vendeur.')
       return
     }
+    setCreateVendeurDialogErr(null)
+    setNewVendeurLabel('')
+    setCreateVendeurSupplierPick(defaultCreateVendeurSupplierId ?? '')
+    setCreateVendeurDialogOpen(true)
+  }
+
+  const createVendeur = async (): Promise<boolean> => {
+    if (readOnly) return false
+    const label = newVendeurLabel.trim()
+    const supplierId = createVendeurSupplierPick.trim()
+    if (!supplierId) {
+      setCreateVendeurDialogErr('Choisissez un fournisseur.')
+      return false
+    }
     if (!label) {
-      setErr('Libellé du vendeur requis.')
-      return
+      setCreateVendeurDialogErr('Libellé du vendeur requis.')
+      return false
     }
     setCreatingVendeur(true)
-    setErr(null)
+    setCreateVendeurDialogErr(null)
     const { data, error: e0 } = await supabase
       .from('ref_supplier_vendeur')
       .insert({ supplier_id: supplierId, label, sort_order: 0 } as never)
@@ -154,13 +180,19 @@ export function ProductPackagingSettingsDialog({
       .single()
     setCreatingVendeur(false)
     if (e0) {
-      setErr(e0.message)
-      return
+      setCreateVendeurDialogErr(e0.message)
+      return false
     }
     const row = data as RefVendeurRow
     onVendeurCreated?.(row)
     setVendeurIds(prev => new Set(prev).add(row.id))
     setNewVendeurLabel('')
+    return true
+  }
+
+  const confirmCreateVendeur = async () => {
+    const ok = await createVendeur()
+    if (ok) setCreateVendeurDialogOpen(false)
   }
 
   const save = async () => {
@@ -186,12 +218,14 @@ export function ProductPackagingSettingsDialog({
     setErr(null)
     try {
       const nomTrim = packNom.trim()
+      const nomArTrim = packNomAr.trim()
       const { error: e1 } = await supabase
         .from('product_packaging')
         .update({
           quantity: q,
           sales_unit_id: salesUnitId,
           nom: nomTrim.length > 0 ? nomTrim : null,
+          nom_ar: nomArTrim.length > 0 ? nomArTrim : null,
           available_for_sale: sale,
           available_for_purchase: purchase,
         } as never)
@@ -302,12 +336,47 @@ export function ProductPackagingSettingsDialog({
     })
   }
 
+  const setGlobalSale = (checked: boolean) => {
+    setSale(checked)
+    setMagRows(prev => {
+      const next = { ...prev }
+      for (const mag of magasins) {
+        const cur = next[mag.id] ?? { sell: checked, purch: purchase }
+        next[mag.id] = { ...cur, sell: checked }
+      }
+      return next
+    })
+  }
+
+  const setGlobalPurchase = (checked: boolean) => {
+    setPurchase(checked)
+    setMagRows(prev => {
+      const next = { ...prev }
+      for (const mag of magasins) {
+        const cur = next[mag.id] ?? { sell: sale, purch: checked }
+        next[mag.id] = { ...cur, purch: checked }
+      }
+      return next
+    })
+  }
+
   return (
+    <>
     <Dialog open={open} onClose={onClose} fullWidth maxWidth="sm">
       <DialogTitle>Paramètres du conditionnement</DialogTitle>
-      <DialogContent>
+      <DialogContent
+        sx={{
+          pt: 3,
+          overflow: 'visible',
+          '& .MuiInputLabel-root': {
+            bgcolor: 'background.paper',
+            px: 0.5,
+            lineHeight: 1.4,
+          },
+        }}
+      >
         {err ? <Typography color="error" variant="body2" className="!mb-2">{err}</Typography> : null}
-        <div className="mt-1 flex flex-col gap-3">
+        <div className="flex flex-col gap-3">
           <TextField
             fullWidth
             size="small"
@@ -318,6 +387,15 @@ export function ProductPackagingSettingsDialog({
             placeholder="Ex. Cagette rouge"
             helperText="Utilisé partout à la place du libellé du référentiel conditionnement (commandes, achat, export…). Laisser vide pour garder le libellé réf."
           />
+          <TextField
+            fullWidth
+            size="small"
+            label="Nom affiché (arabe)"
+            value={packNomAr}
+            onChange={e => setPackNomAr(e.target.value)}
+            disabled={readOnly}
+            slotProps={{ input: { dir: 'rtl' } }}
+          />
           <div className="flex flex-wrap gap-3">
             <TextField
               size="small"
@@ -327,7 +405,6 @@ export function ProductPackagingSettingsDialog({
               disabled={readOnly}
               sx={{ width: 120 }}
               slotProps={muiSlotPropsDecimalKeypad}
-              helperText="Poids ou quantité du colis"
             />
             <FormControl size="small" sx={{ minWidth: 180 }} disabled={readOnly}>
               <InputLabel id="pack-settings-udv-label">Unité de vente</InputLabel>
@@ -344,16 +421,6 @@ export function ProductPackagingSettingsDialog({
                 ))}
               </Select>
             </FormControl>
-          </div>
-          <div className="flex flex-wrap gap-4">
-            <FormControlLabel
-              control={<Checkbox checked={sale} onChange={e => setSale(e.target.checked)} disabled={readOnly} />}
-              label="Disponible pour la vente (réf.)"
-            />
-            <FormControlLabel
-              control={<Checkbox checked={purchase} onChange={e => setPurchase(e.target.checked)} disabled={readOnly} />}
-              label="Disponible pour l’achat / commande"
-            />
           </div>
           <div>
             <Typography variant="subtitle2" className="!mb-1">Fournisseurs (ligne colis)</Typography>
@@ -387,7 +454,7 @@ export function ProductPackagingSettingsDialog({
                 </Typography>
               ) : vendeursEligibles.length === 0 ? (
                 <Typography variant="body2" color="text.secondary">
-                  Aucun vendeur pour ce(s) fournisseur(s) — onglet Vendeurs dans Paramètres.
+                  Aucun vendeur
                 </Typography>
               ) : (
                 vendeursEligibles.map(v => {
@@ -410,55 +477,65 @@ export function ProductPackagingSettingsDialog({
               )}
             </div>
             {!readOnly ? (
-              <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:items-end">
-                <TextField
-                  size="small"
-                  label="Nouveau vendeur"
-                  value={newVendeurLabel}
-                  onChange={e => setNewVendeurLabel(e.target.value)}
-                  disabled={creatingVendeur || !createVendeurSupplierId}
-                  sx={{ flex: 1, minWidth: 160 }}
-                  helperText={
-                    createVendeurSupplierId ? undefined : "Cochez un fournisseur du colis"
-                  }
-                />
+              <div className="mt-2 flex justify-end">
                 <Button
                   type="button"
                   variant="outlined"
                   size="small"
-                  disabled={creatingVendeur || !createVendeurSupplierId}
-                  onClick={() => void createVendeur()}
-                  sx={{ textTransform: "none", flexShrink: 0 }}
+                  disabled={supplierIds.size === 0}
+                  onClick={openCreateVendeurDialog}
+                  sx={{ textTransform: 'none' }}
                 >
-                  {creatingVendeur ? "…" : "Créer vendeur"}
+                  Créer un vendeur
                 </Button>
               </div>
             ) : null}
           </div>
+          <div className="flex flex-wrap gap-4">
+            <FormControlLabel
+              control={
+                <Checkbox
+                  checked={sale}
+                  onChange={e => setGlobalSale(e.target.checked)}
+                  disabled={readOnly}
+                />
+              }
+              label="Disponible pour la vente (réf.)"
+            />
+            <FormControlLabel
+              control={
+                <Checkbox
+                  checked={purchase}
+                  onChange={e => setGlobalPurchase(e.target.checked)}
+                  disabled={readOnly}
+                />
+              }
+              label="Disponible pour l’achat / commande"
+            />
+          </div>
           <div>
-            <Typography variant="subtitle2" className="!mb-1">
-              Overrides par magasin (vide = utilise les cases globales ci-dessus)
-            </Typography>
             <div className="overflow-auto rounded border border-slate-200">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-slate-200 bg-slate-50 text-left text-xs text-slate-700">
                     <th className="p-2">Magasin</th>
-                    <th className="p-2">Vente</th>
-                    <th className="p-2">Achat</th>
+                    <th className={`p-2 ${!sale ? 'text-slate-400' : ''}`}>Vente</th>
+                    <th className={`p-2 ${!purchase ? 'text-slate-400' : ''}`}>Achat</th>
                   </tr>
                 </thead>
                 <tbody>
                   {magasins.map(m => {
                     const st = magRows[m.id] ?? { sell: sale, purch: purchase }
+                    const sellChecked = sale && st.sell
+                    const purchChecked = purchase && st.purch
                     return (
                       <tr key={m.id} className="border-t border-slate-100">
                         <td className="p-2">{m.nom} ({m.code})</td>
-                        <td className="p-2">
+                        <td className="p-2" style={!sale ? { backgroundColor: 'rgba(0,0,0,0.04)' } : undefined}>
                           <Checkbox
                             size="small"
-                            checked={st.sell}
-                            disabled={readOnly}
+                            checked={sellChecked}
+                            disabled={readOnly || !sale}
                             onChange={e =>
                               setMagRows(prev => ({
                                 ...prev,
@@ -467,11 +544,11 @@ export function ProductPackagingSettingsDialog({
                             }
                           />
                         </td>
-                        <td className="p-2">
+                        <td className="p-2" style={!purchase ? { backgroundColor: 'rgba(0,0,0,0.04)' } : undefined}>
                           <Checkbox
                             size="small"
-                            checked={st.purch}
-                            disabled={readOnly}
+                            checked={purchChecked}
+                            disabled={readOnly || !purchase}
                             onChange={e =>
                               setMagRows(prev => ({
                                 ...prev,
@@ -498,5 +575,72 @@ export function ProductPackagingSettingsDialog({
         ) : null}
       </DialogActions>
     </Dialog>
+
+    <Dialog
+      open={createVendeurDialogOpen}
+      onClose={() => !creatingVendeur && setCreateVendeurDialogOpen(false)}
+      fullWidth
+      maxWidth="xs"
+    >
+      <DialogTitle sx={{ pb: 0.5 }}>Créer un vendeur</DialogTitle>
+      <DialogContent dividers>
+        {createVendeurDialogErr ? (
+          <Typography color="error" variant="body2" className="!mb-2">
+            {createVendeurDialogErr}
+          </Typography>
+        ) : null}
+        <FormControl
+          size="small"
+          fullWidth
+          disabled={creatingVendeur || selectedPackSuppliers.length <= 1}
+          sx={{ mb: 2 }}
+        >
+          <InputLabel id="create-vendeur-supplier-label">Fournisseur</InputLabel>
+          <Select
+            labelId="create-vendeur-supplier-label"
+            label="Fournisseur"
+            value={createVendeurSupplierPick}
+            onChange={e => setCreateVendeurSupplierPick(e.target.value as string)}
+          >
+            {selectedPackSuppliers.map(s => (
+              <MenuItem key={s.id} value={s.id}>
+                {s.label}
+              </MenuItem>
+            ))}
+          </Select>
+        </FormControl>
+        <TextField
+          size="small"
+          label="Libellé du vendeur"
+          value={newVendeurLabel}
+          onChange={e => setNewVendeurLabel(e.target.value)}
+          disabled={creatingVendeur}
+          fullWidth
+          autoFocus={selectedPackSuppliers.length <= 1}
+        />
+      </DialogContent>
+      <DialogActions className="!px-3 !pb-2">
+        <Button
+          type="button"
+          color="inherit"
+          onClick={() => setCreateVendeurDialogOpen(false)}
+          disabled={creatingVendeur}
+          sx={{ textTransform: 'none' }}
+        >
+          Annuler
+        </Button>
+        <Button
+          type="button"
+          variant="contained"
+          color="success"
+          disabled={creatingVendeur || !createVendeurSupplierPick.trim()}
+          onClick={() => void confirmCreateVendeur()}
+          sx={{ textTransform: 'none' }}
+        >
+          {creatingVendeur ? '…' : 'Créer'}
+        </Button>
+      </DialogActions>
+    </Dialog>
+    </>
   )
 }

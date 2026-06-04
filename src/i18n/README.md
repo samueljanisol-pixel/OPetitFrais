@@ -33,7 +33,7 @@ return <Typography>{t("title")}</Typography>;
 3. Synchronisation : login + `PATCH /api/auth/locale` + session API
 4. Fuseau horaire fixe : `Africa/Casablanca` ([`src/i18n/config.ts`](config.ts))
 
-Le sélecteur **FR / عربي** est dans [`LocaleSwitcher`](../components/LocaleSwitcher.tsx) (en-tête et page login).
+Le sélecteur **FR / عربي** est dans [`LocaleSwitcher`](../components/LocaleSwitcher.tsx) (en-tête et page login). Le changement de langue côté client charge les JSON en mémoire (cache + préchargement) **sans** `router.refresh()` — beaucoup plus rapide qu’un rechargement serveur complet.
 
 ## Helpers
 
@@ -53,8 +53,18 @@ Le sélecteur **FR / عربي** est dans [`LocaleSwitcher`](../components/Locale
 
 La boutique réutilisera ce socle avec un route group `(shop)/[locale]/` et le namespace `shop.*`. Pas de préfixe URL sur le backoffice v1.
 
+## Surcharges en base (admin)
+
+Les fichiers JSON restent la **référence par défaut**. Les modifications faites dans **Paramètres → Traductions** sont stockées dans `ref_ui_translation` et fusionnées au chargement :
+
+- Serveur : [`src/lib/i18n/server-overrides.ts`](../lib/i18n/server-overrides.ts) via [`request.ts`](request.ts)
+- Client (changement de langue / après save) : [`load-messages.ts`](../lib/i18n/load-messages.ts) + `refreshMessages()` dans [`locale-client.tsx`](../lib/i18n/locale-client.tsx)
+
+Sections éditables : [`message-catalog.ts`](../lib/i18n/message-catalog.ts). Clés au format pointé (`backoffice.home.title`).
+
 ## Ajouter une clé
 
 1. Ajouter la clé dans `fr.json` et `ar-MA.json` (même arborescence)
-2. Utiliser `useTranslations` dans le composant
-3. Lancer `npm run build` pour vérifier TypeScript
+2. Si la zone est listée dans `TRANSLATION_SECTIONS`, elle apparaît dans l’admin Traductions
+3. Utiliser `useTranslations` dans le composant
+4. Lancer `npm run build` pour vérifier TypeScript

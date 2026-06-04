@@ -1,17 +1,102 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { Button, Typography } from "@mui/material";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import CloseIcon from "@mui/icons-material/Close";
+import { Box, Button, IconButton, Typography } from "@mui/material";
+import { alpha, type SxProps, type Theme } from "@mui/material/styles";
 import { useTranslations } from "next-intl";
 import { DecimalQtyTextField } from "@/components/commandes-fournisseur/DecimalQtyTextField";
 import { clampQtyToApiRange, roundQty2 } from "@/lib/commandes-fournisseur/qty-parse";
 import {
+  formatSoitUniteLabel,
   isPackSalesUnitUnite,
   packagingConditionnementLabel,
 } from "@/lib/commandes-fournisseur/product-display";
 import { commandeAllowsUnitProduct } from "@/lib/products/packagingEligibility";
 import { conditionnementSupplierId } from "@/lib/products/packagingSupplierMatch";
 import { useAppFormat } from "@/lib/i18n/useAppFormat";
+
+const routeChipButtonBaseSx: SxProps<Theme> = { textTransform: "none" };
+
+/** Style renforcé pour la puce du mode actif (conditionnement ou unité). */
+function routeChipButtonSx(isSelected: boolean): SxProps<Theme> {
+  if (!isSelected) {
+    return routeChipButtonBaseSx;
+  }
+  return (theme) => ({
+    textTransform: "none",
+    fontWeight: 700,
+    px: 1.5,
+    py: 0.875,
+    boxShadow: theme.shadows[4],
+    border: `2px solid ${alpha(theme.palette.common.white, 0.45)}`,
+    "&:hover": {
+      boxShadow: theme.shadows[6],
+    },
+  });
+}
+
+/** Pastille qté sur les puces conditionnement / unité (quantité saisie ailleurs). */
+function RouteChipQtyBadge({ qty }: { qty: string }) {
+  return (
+    <Box
+      component="span"
+      sx={{
+        display: "inline-flex",
+        alignItems: "center",
+        justifyContent: "center",
+        ml: 0.5,
+        minWidth: "1.75rem",
+        height: "1.75rem",
+        px: 0.375,
+        borderRadius: "9999px",
+        bgcolor: "#fff",
+        color: "#111",
+        fontWeight: 800,
+        fontSize: "0.8125rem",
+        lineHeight: 1,
+        fontVariantNumeric: "tabular-nums",
+        border: "1.5px solid",
+        borderColor: (theme) =>
+          theme.palette.mode === "dark" ? "rgba(255,255,255,0.35)" : "rgba(0,0,0,0.22)",
+        boxShadow: (theme) =>
+          theme.palette.mode === "dark"
+            ? "0 1px 3px rgba(0,0,0,0.45)"
+            : "0 1px 4px rgba(0,0,0,0.18), 0 0 0 1px rgba(0,0,0,0.06)",
+        flexShrink: 0,
+      }}
+    >
+      {qty}
+    </Box>
+  );
+}
+
+/** Boutons ±1 / ±10 (parcours mobile) — zone tactile plus large. */
+const parcoursQtyStepButtonSx: SxProps<Theme> = {
+  minWidth: "2.85rem",
+  minHeight: "2.75rem",
+  px: 1.125,
+  py: 1,
+  fontSize: "0.9375rem",
+  fontWeight: 600,
+  lineHeight: 1.2,
+};
+
+/** Grille 2×2 : paire du haut + demi-pas en pleine largeur (gauche et droite identiques). */
+const parcoursQtyStepPairGridSx: SxProps<Theme> = (theme) => ({
+  display: "grid",
+  gridTemplateColumns: "repeat(2, minmax(2.85rem, 1fr))",
+  gap: 1,
+  flexShrink: 0,
+  width: `calc(2 * 2.85rem + ${theme.spacing(1)})`,
+});
+
+const parcoursQtyHalfStepButtonSx: SxProps<Theme> = {
+  ...parcoursQtyStepButtonSx,
+  gridColumn: "1 / -1",
+  width: "100%",
+  minWidth: 0,
+};
 
 export type PPack = {
   id: string;
@@ -96,6 +181,117 @@ export function parseCategoryLabel(raw: unknown): string {
   return c?.label?.trim() ? String(c.label) : "—";
 }
 
+const QTY_HALF_STEP = 0.5;
+
+/** Croix rouge à droite du champ (position absolue : le champ reste centré, pas de décalage). */
+function ParcoursQtyInputWithClear({
+  value,
+  onChange,
+  children,
+}: {
+  value: number;
+  onChange: (n: number) => void;
+  children: ReactNode;
+}) {
+  const tc = useTranslations("backoffice.commandes.common");
+  const showClear = roundQty2(value) > 0;
+
+  return (
+    <Box sx={{ position: "relative", display: "inline-flex" }}>
+      {children}
+      <IconButton
+        size="small"
+        color="error"
+        disabled={!showClear}
+        onClick={() => onChange(0)}
+        aria-label={tc("resetQtyToZeroAria")}
+        sx={{
+          position: "absolute",
+          left: "100%",
+          top: "50%",
+          transform: "translateY(-50%)",
+          ml: 0.5,
+          visibility: showClear ? "visible" : "hidden",
+          pointerEvents: showClear ? "auto" : "none",
+        }}
+      >
+        <CloseIcon sx={{ fontSize: "1.125rem" }} />
+      </IconButton>
+    </Box>
+  );
+}
+
+function ParcoursQtyStepControls({
+  value,
+  onChange,
+  center,
+}: {
+  value: number;
+  onChange: (n: number) => void;
+  center: ReactNode;
+}) {
+  const { formatNumber } = useAppFormat();
+  const v = roundQty2(value);
+  const step =
+    (d: number) => () =>
+      onChange(Math.max(0, roundQty2(v + d)));
+  const halfQty = formatNumber(QTY_HALF_STEP, {
+    minimumFractionDigits: 1,
+    maximumFractionDigits: 1,
+  });
+
+  return (
+    <div className="flex w-full min-w-0 items-center gap-1.5">
+      <Box sx={parcoursQtyStepPairGridSx}>
+        <Button
+          size="medium"
+          variant="outlined"
+          onClick={step(-10)}
+          disabled={v < 10}
+          sx={parcoursQtyStepButtonSx}
+        >
+          -10
+        </Button>
+        <Button
+          size="medium"
+          variant="outlined"
+          onClick={step(-1)}
+          disabled={v < 1}
+          sx={parcoursQtyStepButtonSx}
+        >
+          -1
+        </Button>
+        <Button
+          size="medium"
+          variant="outlined"
+          onClick={step(-QTY_HALF_STEP)}
+          disabled={v < QTY_HALF_STEP}
+          sx={parcoursQtyHalfStepButtonSx}
+        >
+          − {halfQty}
+        </Button>
+      </Box>
+      <div className="flex min-w-0 flex-1 items-center justify-center">{center}</div>
+      <Box sx={parcoursQtyStepPairGridSx}>
+        <Button size="medium" variant="outlined" onClick={step(1)} sx={parcoursQtyStepButtonSx}>
+          +1
+        </Button>
+        <Button size="medium" variant="outlined" onClick={step(10)} sx={parcoursQtyStepButtonSx}>
+          +10
+        </Button>
+        <Button
+          size="medium"
+          variant="outlined"
+          onClick={step(QTY_HALF_STEP)}
+          sx={parcoursQtyHalfStepButtonSx}
+        >
+          + {halfQty}
+        </Button>
+      </Box>
+    </div>
+  );
+}
+
 export function UnitQteControl({
   unitLabel,
   value,
@@ -106,46 +302,33 @@ export function UnitQteControl({
   onChange: (n: number) => void;
 }) {
   const tc = useTranslations("backoffice.commandes.common");
-  const step =
-    (d: number) => () =>
-      onChange(Math.max(0, roundQty2(roundQty2(value) + d)));
   return (
     <div className="flex flex-col gap-1">
-      <div className="flex w-full min-w-0 items-center gap-1">
-        <div className="flex shrink-0 gap-0.5">
-          <Button size="small" variant="outlined" onClick={step(-10)} disabled={value < 10} sx={{ minWidth: 0, px: 0.75 }}>
-            -10
-          </Button>
-          <Button size="small" variant="outlined" onClick={step(-1)} disabled={value < 1} sx={{ minWidth: 0, px: 0.75 }}>
-            -1
-          </Button>
-        </div>
-        <div className="flex min-w-0 flex-1 items-center justify-center gap-1 flex-nowrap">
-          <DecimalQtyTextField
-            size="small"
-            value={clampQtyToApiRange(value)}
-            onQtyChange={(n) => onChange(clampQtyToApiRange(n))}
-            sx={{
-              width: "4.75rem",
-              minWidth: "4.75rem",
-              flexShrink: 0,
-              "& .MuiInputBase-input": { textAlign: "center", py: 0.65 },
-            }}
-            slotProps={{ htmlInput: { "aria-label": tc("quantityForUnitAria", { unitLabel }) } }}
-          />
-          <Typography variant="body2" color="text.secondary" className="shrink-0 whitespace-nowrap">
-            {unitLabel}
-          </Typography>
-        </div>
-        <div className="flex shrink-0 gap-0.5">
-          <Button size="small" variant="outlined" onClick={step(1)} sx={{ minWidth: 0, px: 0.75 }}>
-            +1
-          </Button>
-          <Button size="small" variant="outlined" onClick={step(10)} sx={{ minWidth: 0, px: 0.75 }}>
-            +10
-          </Button>
-        </div>
-      </div>
+      <ParcoursQtyStepControls
+        value={value}
+        onChange={onChange}
+        center={
+          <div className="flex min-w-0 items-center justify-center gap-1 flex-nowrap">
+            <ParcoursQtyInputWithClear value={value} onChange={onChange}>
+              <DecimalQtyTextField
+                size="small"
+                value={clampQtyToApiRange(value)}
+                onQtyChange={(n) => onChange(clampQtyToApiRange(n))}
+                sx={{
+                  width: "4.75rem",
+                  minWidth: "4.75rem",
+                  flexShrink: 0,
+                  "& .MuiInputBase-input": { textAlign: "center", py: 0.65 },
+                }}
+                slotProps={{ htmlInput: { "aria-label": tc("quantityForUnitAria", { unitLabel }) } }}
+              />
+            </ParcoursQtyInputWithClear>
+            <Typography variant="body2" color="text.secondary" className="shrink-0 whitespace-nowrap">
+              {unitLabel}
+            </Typography>
+          </div>
+        }
+      />
     </div>
   );
 }
@@ -162,51 +345,45 @@ export function PackQteControl({
   onChange: (n: number) => void;
 }) {
   const tc = useTranslations("backoffice.commandes.common");
-  const step =
-    (d: number) => () =>
-      onChange(Math.max(0, roundQty2(roundQty2(value) + d)));
   return (
     <div className="flex flex-col gap-1">
-      <Typography variant="body2" className="!font-medium leading-snug" component="p">
+      <ParcoursQtyStepControls
+        value={value}
+        onChange={onChange}
+        center={
+          <ParcoursQtyInputWithClear value={value} onChange={onChange}>
+            <DecimalQtyTextField
+              size="small"
+              value={clampQtyToApiRange(value)}
+              onQtyChange={(n) => onChange(clampQtyToApiRange(n))}
+              sx={{
+                width: "4.75rem",
+                minWidth: "4.75rem",
+                flexShrink: 0,
+                "& .MuiInputBase-input": { textAlign: "center", py: 0.65 },
+              }}
+              slotProps={{ htmlInput: { "aria-label": tc("quantityColisAria") } }}
+            />
+          </ParcoursQtyInputWithClear>
+        }
+      />
+      <Typography
+        variant="body2"
+        component="p"
+        className="!font-medium !m-0 text-center leading-snug"
+      >
         {condWithPackSpec}
       </Typography>
-      <div className="flex w-full min-w-0 items-center gap-1">
-        <div className="flex shrink-0 gap-0.5">
-          <Button size="small" variant="outlined" onClick={step(-10)} disabled={value < 10} sx={{ minWidth: 0, px: 0.75 }}>
-            -10
-          </Button>
-          <Button size="small" variant="outlined" onClick={step(-1)} disabled={value < 1} sx={{ minWidth: 0, px: 0.75 }}>
-            -1
-          </Button>
-        </div>
-        <div className="flex min-w-0 flex-1 justify-center">
-          <DecimalQtyTextField
-            size="small"
-            value={clampQtyToApiRange(value)}
-            onQtyChange={(n) => onChange(clampQtyToApiRange(n))}
-            sx={{
-              width: "4.75rem",
-              minWidth: "4.75rem",
-              flexShrink: 0,
-              "& .MuiInputBase-input": { textAlign: "center", py: 0.65 },
-            }}
-            slotProps={{ htmlInput: { "aria-label": tc("quantityColisAria") } }}
-          />
-        </div>
-        <div className="flex shrink-0 gap-0.5">
-          <Button size="small" variant="outlined" onClick={step(1)} sx={{ minWidth: 0, px: 0.75 }}>
-            +1
-          </Button>
-          <Button size="small" variant="outlined" onClick={step(10)} sx={{ minWidth: 0, px: 0.75 }}>
-            +10
-          </Button>
-        </div>
-      </div>
-      {soitLine ? (
-        <Typography variant="body2" color="text.secondary" className="!mt-0.5 text-right">
-          {soitLine}
-        </Typography>
-      ) : null}
+      <Typography
+        variant="body2"
+        color="text.secondary"
+        component="p"
+        className="!mt-0.5 min-h-[1.25rem] text-right"
+        aria-hidden={!soitLine}
+        sx={{ visibility: soitLine ? "visible" : "hidden" }}
+      >
+        {soitLine ?? "\u00a0"}
+      </Typography>
     </div>
   );
 }
@@ -333,16 +510,27 @@ export function ParcoursProductQuantityPanel({
           <Button
             type="button"
             size="small"
-            variant={
-              route === "unit" || getQ(uk) > 0 ? "contained" : "outlined"
-            }
+            variant={route === "unit" ? "contained" : "outlined"}
             color="success"
             onClick={() => onSelectRoute("unit")}
-            sx={{ textTransform: "none" }}
+            sx={routeChipButtonSx(route === "unit")}
           >
-            {getQ(uk) > 0 && route !== "unit"
-              ? t("unitButtonWithQty", { unit: productUnit, qty: formatQty(getQ(uk)) })
-              : t("unitButton", { unit: productUnit })}
+            <Box
+              component="span"
+              sx={{
+                display: "inline-flex",
+                alignItems: "center",
+                flexWrap: "wrap",
+                justifyContent: "center",
+                gap: 0.25,
+                fontWeight: route === "unit" ? 700 : 400,
+              }}
+            >
+              <span>{t("unitButton", { unit: productUnit })}</span>
+              {getQ(uk) > 0 && route !== "unit" ? (
+                <RouteChipQtyBadge qty={formatQty(getQ(uk))} />
+              ) : null}
+            </Box>
           </Button>
         ) : null}
         {packs.map((pkg) => {
@@ -352,24 +540,39 @@ export function ParcoursProductQuantityPanel({
           const formattedPackQty = formatQty(pq);
           const pk = pKeyForProduct(p.id, pkg.id);
           const qPack = getQ(pk);
+          const packSelected = route === pkg.id;
           return (
             <Button
               key={pkg.id}
               type="button"
               size="small"
-              variant={route === pkg.id || qPack > 0 ? "contained" : "outlined"}
+              variant={packSelected ? "contained" : "outlined"}
               color="success"
               onClick={() => onSelectRoute(pkg.id)}
-              sx={{ textTransform: "none" }}
+              sx={routeChipButtonSx(packSelected)}
             >
-              {qPack > 0 && route !== pkg.id
-                ? t("packButtonWithQty", {
+              <Box
+                component="span"
+                sx={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  flexWrap: "wrap",
+                  justifyContent: "center",
+                  gap: 0.25,
+                  fontWeight: packSelected ? 700 : 400,
+                }}
+              >
+                <span>
+                  {t("packButton", {
                     label: shortT,
                     packQty: formattedPackQty,
                     unit: pkUnit,
-                    qty: formatQty(qPack),
-                  })
-                : t("packButton", { label: shortT, packQty: formattedPackQty, unit: pkUnit })}
+                  })}
+                </span>
+                {qPack > 0 && !packSelected ? (
+                  <RouteChipQtyBadge qty={formatQty(qPack)} />
+                ) : null}
+              </Box>
             </Button>
           );
         })}
@@ -401,10 +604,10 @@ export function ParcoursProductQuantityPanel({
             packQty: formatQty(pq),
             unit: pkUnit,
           });
+          const packUdVIsUnite = isPackSalesUnitUnite(pkg.ref_sales_unit);
+          const soitUnit = packUdVIsUnite ? formatSoitUniteLabel(total) : pkUnit;
           const soitLine =
-            v > 0 && !isPackSalesUnitUnite(pkg.ref_sales_unit)
-              ? tc("soitLine", { qty: formatQty(total), unit: pkUnit })
-              : null;
+            v > 0 ? tc("soitLine", { qty: formatQty(total), unit: soitUnit }) : null;
           return (
             <PackQteControl
               condWithPackSpec={condWithPackSpec}

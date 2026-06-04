@@ -9,4 +9,21 @@ Les **vendeurs** (`ref_supplier_vendeur`) sont rattachés à un **fournisseur**.
 
 Un même libellé peut exister chez plusieurs fournisseurs (enregistrements distincts).
 
+## Conditionnements
+
+- Colonne **`label_ar`** (libellé arabe optionnel) sur `ref_conditionnement`. Saisie dans l’onglet **Conditionnements** (dialogue Ajouter / Modifier).
+- Migration : `20260630200000_ref_conditionnement_label_ar.sql`.
+
 Migration : `20260619120000_unify_marchand_vendeur.sql` (fusion de l’ancien `ref_marchand`).
+
+## Traductions (interface)
+
+Onglet **Traductions** dans Paramètres : édition des libellés **par zone** (accueil, login, commandes, etc.) sans modifier les fichiers JSON du dépôt.
+
+- Composant : [`TranslationsAdminPanel.tsx`](TranslationsAdminPanel.tsx)
+- Catalogue des sections : [`src/lib/i18n/message-catalog.ts`](../../lib/i18n/message-catalog.ts)
+- Table `ref_ui_translation` (`message_key`, `locale`, `value`) — migration `20260701120000_ref_ui_translation.sql`
+- API : `GET/PATCH /api/ref/ui-translations` (sections, section, overrides)
+- Une valeur identique au défaut JSON **supprime** la surcharge en base ; au chargement, les surcharges sont fusionnées dans les messages ([`src/i18n/request.ts`](../../i18n/request.ts) côté serveur, [`locale-client.tsx`](../../lib/i18n/locale-client.tsx) après enregistrement).
+
+**Droits** : lecture pour tout utilisateur authentifié ; écriture = permission `parametres.write` ou administrateur (comme les autres référentiels).

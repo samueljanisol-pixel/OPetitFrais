@@ -1,6 +1,6 @@
 /** Affichage unité / conditionnement / « Soit » — aligné sur la logique de l’API commandes (récap). */
 
-type RefMini = { label?: string | null; code?: string | null };
+type RefMini = { label?: string | null; label_ar?: string | null; code?: string | null };
 
 function refMini(raw: unknown): RefMini | null {
   const o = (Array.isArray(raw) ? raw[0] : raw) as RefMini | null | undefined;
@@ -12,13 +12,19 @@ export function labelFromRef(raw: unknown): string {
   return t ? String(t) : "—";
 }
 
-/** UdV conditionnement « Unité » : pas de ligne « Soit … » (déjà compté à l’unité). */
+/** UdV conditionnement = référentiel « Unité » (colis compté en pièces). */
 export function isPackSalesUnitUnite(raw: unknown): boolean {
   const o = refMini(raw);
   if (!o) return false;
   const label = (o.label ?? "").trim().toLowerCase();
   const code = (o.code ?? "").trim().toLowerCase();
   return label === "unité" || label === "unite" || code === "unite";
+}
+
+/** Libellé « unité » / « unités » pour la ligne « Soit … » (conditionnement UdV Unité). */
+export function formatSoitUniteLabel(convertedQty: number): string {
+  if (!Number.isFinite(convertedQty)) return "unité";
+  return Math.abs(convertedQty) > 1 ? "unités" : "unité";
 }
 
 export function formatPackQty(n: number): string {
@@ -32,6 +38,8 @@ export type PackagingRowForDisplay = {
   quantity: string | number;
   /** Nom personnalisé (product_packaging.nom) ; prioritaire sur ref_conditionnement.label. */
   nom?: string | null;
+  /** Nom arabe personnalisé (product_packaging.nom_ar). */
+  nom_ar?: string | null;
   ref_conditionnement?: unknown;
   ref_sales_unit?: unknown;
 };
@@ -51,6 +59,16 @@ export function packagingConditionnementLabel(pack: PackagingRowForDisplay): str
   }
   const ref = labelFromRef(pack.ref_conditionnement);
   return ref !== "—" ? ref : "Colis";
+}
+
+/** Libellé arabe court (nom produit ou référentiel). */
+export function packagingConditionnementLabelAr(pack: PackagingRowForDisplay): string | null {
+  const customAr = typeof pack.nom_ar === "string" ? pack.nom_ar.trim() : "";
+  if (customAr.length > 0) {
+    return customAr;
+  }
+  const refAr = refMini(pack.ref_conditionnement)?.label_ar?.trim();
+  return refAr && refAr.length > 0 ? refAr : null;
 }
 
 /** Ex. « Carton (12 Kg) » — utilisé partout où le conditionnement apparaît. */
@@ -129,20 +147,28 @@ export function buildLotProductDisplayInfo(
   };
 }
 
+/** Unité affichée dans « Soit … » (Kg, L, ou « unité(s) » si colis en pièces). */
+export function soitLineDisplayUnit(display: ProductDisplayInfo, convertedQty: number): string {
+  if (display.packSalesUnitIsUnite) {
+    return formatSoitUniteLabel(convertedQty);
+  }
+  return display.condPackUniteVente ?? display.uniteVente;
+}
+
 export function buildSoitLine(
   display: ProductDisplayInfo,
   qteForSoit: number,
 ): string | null {
-  const { isCond, packContentQty, uniteVente, condPackUniteVente, packSalesUnitIsUnite } = display;
+  const { isCond, packContentQty } = display;
   if (
     !isCond ||
-    packSalesUnitIsUnite ||
     packContentQty == null ||
     !Number.isFinite(packContentQty) ||
     qteForSoit <= 0
   ) {
     return null;
   }
-  const udvSoit = condPackUniteVente ?? uniteVente;
-  return `Soit ${formatPackQty(qteForSoit * packContentQty)} ${udvSoit}`;
+  const converted = qteForSoit * packContentQty;
+  const udvSoit = soitLineDisplayUnit(display, converted);
+  return `Soit ${formatPackQty(converted)} ${udvSoit}`;
 }

@@ -107,6 +107,7 @@
         "quantityPurchaseAria": "كمية الشرا",
         "quantityProductAria": "كمية المنتج",
         "quantityColisAria": "كمية الكولي",
+        "resetQtyToZeroAria": "إرجاع الكمية إلى الصفر",
         "quantityForStoreAria": "كمية {storeLabel}",
         "quantityForUnitAria": "كمية {unitLabel}",
         "udvCond": "و.ب / كوند.",

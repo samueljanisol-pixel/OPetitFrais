@@ -13,6 +13,8 @@ export type RefConditionnementRow = RefRow & {
   width_mm: number | null
   depth_mm: number | null
   supplier_id: string | null
+  /** Libellé arabe optionnel. */
+  label_ar?: string | null
   ref_supplier?: RefRow | null
 }
 
@@ -65,6 +67,8 @@ export type ProductPackagingRow = {
   sales_unit_id: string
   /** Nom affiché (prioritaire sur ref_conditionnement.label). */
   nom?: string | null
+  /** Nom affiché arabe (prioritaire sur ref_conditionnement.label_ar). */
+  nom_ar?: string | null
   created_at: string
   /** Archivage logique : masqué du catalogue, conservé pour l’historique. */
   archived_at?: string | null

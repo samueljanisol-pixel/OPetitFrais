@@ -6,6 +6,10 @@ Route : `/commandes-fournisseur/saisie/[id]/parcours`
 
 - Barre **Précédent / Suivant / Terminer** fixée en bas de l’écran (sous l’en-tête app).
 - Zone produit (catégorie, photo, quantités) **défilable** si le contenu dépasse la hauteur disponible.
+- Emplacement photo **toujours réservé** (`h-36`, max `6rem`) : sans image, zone vide — le libellé et les quantités ne remontent pas.
+- Nom arabe (`name_ar`) : slot réservé sous le titre FR (`ProductArabicSubtitle` + `reserveSpace`) même si vide.
+- Ligne **« Soit … »** (conditionnement) : hauteur réservée même absente (à l’unité ou colis sans conversion).
+- **Croix rouge** à droite du champ qté (position absolue) si qté &gt; 0 : remise à zéro ; le champ reste **centré** entre les ±.
 
 ## Fiche produit
 

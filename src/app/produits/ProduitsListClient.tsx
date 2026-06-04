@@ -33,6 +33,7 @@ import { SHEET_IMPORT_ENABLED, SheetImportBar } from '@/features/sheet-import'
 import { muiSlotPropsDecimalKeypad } from '@/lib/mui/numericTextFieldProps'
 import { insertProductPriceHistoryRow } from '@/lib/products/priceHistory'
 import { useSessionPermissions } from '@/lib/auth/useSessionPermissions'
+import { textIncludesFolded } from '@/lib/text/fold-for-search'
 
 type Row = ProductWithRefs
 
@@ -112,8 +113,10 @@ export default function ProduitsListClient() {
       if (catId && r.category_id !== catId) return false
       if (suppId && r.supplier_id !== suppId) return false
       if (qName.trim()) {
-        const t = qName.trim().toLowerCase()
-        if (!r.name.toLowerCase().includes(t)) return false
+        const q = qName.trim()
+        const nameMatch = textIncludesFolded(r.name, q)
+        const arMatch = r.name_ar ? textIncludesFolded(r.name_ar, q) : false
+        if (!nameMatch && !arMatch) return false
       }
       return true
     })

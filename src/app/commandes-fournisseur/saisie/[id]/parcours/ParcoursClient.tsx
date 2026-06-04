@@ -451,9 +451,9 @@ export default function ParcoursClient({ commandeId }: { commandeId: string }) {
         >
           {catLabel}
         </Typography>
-        {typeof current.photoUrl === "string" && current.photoUrl.length > 0 ? (
-          <div className="mb-3 flex w-full justify-center">
-            <div className="relative h-36 w-full max-w-[6rem]">
+        <div className="mb-3 flex w-full justify-center">
+          <div className="relative h-36 w-full max-w-[6rem] shrink-0">
+            {typeof current.photoUrl === "string" && current.photoUrl.length > 0 ? (
               <Image
                 src={current.photoUrl}
                 alt=""
@@ -461,9 +461,9 @@ export default function ParcoursClient({ commandeId }: { commandeId: string }) {
                 className="object-contain object-center"
                 sizes="(max-width: 448px) 100vw, 12rem"
               />
-            </div>
+            ) : null}
           </div>
-        ) : null}
+        </div>
         <Typography
           variant="h6"
           component="h1"
@@ -472,7 +472,12 @@ export default function ParcoursClient({ commandeId }: { commandeId: string }) {
         >
           {current.name}
         </Typography>
-        <ProductArabicSubtitle nameAr={current.name_ar} centered className="!mb-3" />
+        <ProductArabicSubtitle
+          nameAr={current.name_ar}
+          centered
+          reserveSpace
+          className="!mb-3"
+        />
 
         <div className="flex flex-col gap-3 pb-2">
           {currentBlocks}

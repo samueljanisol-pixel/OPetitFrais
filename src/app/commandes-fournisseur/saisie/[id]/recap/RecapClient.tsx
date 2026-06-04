@@ -65,7 +65,7 @@ type Ligne = {
   condTitre?: string | null;
   /** Quantité contenu par conditionnement (product_packaging.quantity), pour le calcul Soit. */
   packContentQty?: number | null;
-  /** UdV du conditionnement = « Unité » : pas de ligne « Soit … ». */
+  /** UdV du conditionnement = « Unité » : « Soit … » en unité(s), pas en UdV poids/volume. */
   packSalesUnitIsUnite?: boolean;
   /** Libellé catégorie (pour regroupement récap) ; absent avant rechargement après ajout ponctuel. */
   categoryLabel?: string | null;

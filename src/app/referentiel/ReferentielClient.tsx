@@ -25,8 +25,9 @@ import { muiSlotPropsDecimalKeypad } from '@/lib/mui/numericTextFieldProps'
 import MagasinsAdminPanel from './MagasinsAdminPanel'
 import StatusLabelsAdminPanel from './StatusLabelsAdminPanel'
 import StockAdminPanel from './StockAdminPanel'
+import TranslationsAdminPanel from './TranslationsAdminPanel'
 
-type TabId = 'udv' | 'cat' | 'sup' | 'cond' | 'vend' | 'stock' | 'comptes'
+type TabId = 'udv' | 'cat' | 'sup' | 'cond' | 'vend' | 'stock' | 'traductions' | 'comptes'
 
 const tabLabels: Record<TabId, string> = {
   udv: 'Unités de vente',
@@ -35,6 +36,7 @@ const tabLabels: Record<TabId, string> = {
   cond: 'Conditionnements',
   vend: 'Vendeurs',
   stock: 'Stock',
+  traductions: 'Traductions',
   comptes: 'Administration',
 }
 
@@ -110,7 +112,7 @@ export default function ReferentielClient() {
   const { isAdministrator, canAdminUsers, canAdminRoles, canAdminMagasins } = useSessionPermissions()
   const showComptesTab = isAdministrator
   const tabOrder = useMemo(() => {
-    const base: TabId[] = ['udv', 'cat', 'sup', 'cond', 'vend', 'stock']
+    const base: TabId[] = ['udv', 'cat', 'sup', 'cond', 'vend', 'stock', 'traductions']
     if (showComptesTab) base.push('comptes')
     return base
   }, [showComptesTab])
@@ -129,6 +131,7 @@ export default function ReferentielClient() {
   const [deleteBusy, setDeleteBusy] = useState(false)
   const [form, setForm] = useState({
     label: '',
+    label_ar: '',
     h: '',
     w: '',
     d: '',
@@ -171,10 +174,10 @@ export default function ReferentielClient() {
     setIsNew(true)
     if (tab === 'vend') {
       setEditing({ id: '', supplier_id: sup[0]?.id ?? '', label: '', sort_order: 0 } as RefVendeurRow)
-      setForm({ label: '', h: '', w: '', d: '', supplier_id: sup[0]?.id ?? '' })
+      setForm({ label: '', label_ar: '', h: '', w: '', d: '', supplier_id: sup[0]?.id ?? '' })
     } else {
       setEditing({ id: '', code: '', label: '', sort_order: 0, created_at: '' } as RefRow)
-      setForm({ label: '', h: '', w: '', d: '', supplier_id: '' })
+      setForm({ label: '', label_ar: '', h: '', w: '', d: '', supplier_id: '' })
     }
     setOpen(true)
   }
@@ -184,6 +187,7 @@ export default function ReferentielClient() {
     setEditing(r)
     setForm({
       label: r.label,
+      label_ar: 'label_ar' in r && typeof r.label_ar === 'string' ? r.label_ar : '',
       h: 'height_mm' in r && r.height_mm != null ? String(r.height_mm) : '',
       w: 'width_mm' in r && r.width_mm != null ? String(r.width_mm) : '',
       d: 'depth_mm' in r && r.depth_mm != null ? String(r.depth_mm) : '',
@@ -205,16 +209,18 @@ export default function ReferentielClient() {
   }
 
   const save = async () => {
-    if (!editing || tab === 'comptes' || tab === 'stock') return
+    if (!editing || tab === 'comptes' || tab === 'stock' || tab === 'traductions') return
     setErr(null)
     if (tab === 'cond') {
       const h = form.h ? Number(form.h) : null
       const w = form.w ? Number(form.w) : null
       const d = form.d ? Number(form.d) : null
       const supplierId = form.supplier_id.trim() || null
+      const labelArTrim = form.label_ar.trim()
       if (isNew) {
         const { error: e0 } = await supabase.from('ref_conditionnement').insert({
           label: form.label.trim(),
+          label_ar: labelArTrim.length > 0 ? labelArTrim : null,
           height_mm: h,
           width_mm: w,
           depth_mm: d,
@@ -229,6 +235,7 @@ export default function ReferentielClient() {
           .from('ref_conditionnement')
           .update({
             label: form.label.trim(),
+            label_ar: labelArTrim.length > 0 ? labelArTrim : null,
             height_mm: h,
             width_mm: w,
             depth_mm: d,
@@ -295,7 +302,7 @@ export default function ReferentielClient() {
   }
 
   const requestDelete = (row: { id: string; label: string }) => {
-    if (tab === 'comptes' || tab === 'stock') return
+    if (tab === 'comptes' || tab === 'stock' || tab === 'traductions') return
     setDeleteConfirm({ tab, id: row.id, label: row.label })
   }
 
@@ -324,7 +331,7 @@ export default function ReferentielClient() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-emerald-50 via-white to-rose-50 p-4 md:p-8">
-      <div className="mx-auto max-w-4xl">
+      <div className="mx-auto max-w-6xl">
         <div className="mb-2 flex flex-col gap-1">
           <BackNavButton href="/" size="small">
             Accueil
@@ -349,11 +356,12 @@ export default function ReferentielClient() {
             <Tab key={k} value={k} label={tabLabels[k]} />
           ))}
         </Tabs>
-        {tab !== 'comptes' && tab !== 'stock' ? (
+        {tab !== 'comptes' && tab !== 'stock' && tab !== 'traductions' ? (
           <Button variant="contained" color="success" onClick={openNew} sx={{ mb: 2, textTransform: 'none' }}>
             Ajouter — {tabLabels[tab]}
           </Button>
         ) : null}
+        {tab === 'traductions' ? <TranslationsAdminPanel /> : null}
         {tab === 'comptes' ? (
           <>
             <Box className="mb-4 rounded-lg border border-slate-200 bg-white/90 p-4 shadow-sm">
@@ -419,6 +427,19 @@ export default function ReferentielClient() {
             onDelete={requestDelete}
             extras={[
               {
+                header: 'Libellé arabe',
+                render: r => {
+                  const ar = (r as RefConditionnementRow).label_ar?.trim()
+                  return ar && ar.length > 0 ? (
+                    <span dir="rtl" className="block text-right">
+                      {ar}
+                    </span>
+                  ) : (
+                    '—'
+                  )
+                },
+              },
+              {
                 header: 'Dimensions (mm)',
                 render: r =>
                   `${(r as RefConditionnementRow).height_mm ?? '—'} × ${(r as RefConditionnementRow).width_mm ?? '—'} × ${(r as RefConditionnementRow).depth_mm ?? '—'}`,
@@ -473,6 +494,16 @@ export default function ReferentielClient() {
           <DialogContent>
             <div className="mt-1 flex flex-col gap-4">
               <TextField label="Libellé" value={form.label} onChange={e => setForm(f => ({ ...f, label: e.target.value }))} size="small" fullWidth />
+              {tab === 'cond' ? (
+                <TextField
+                  label="Libellé Arabe"
+                  value={form.label_ar}
+                  onChange={e => setForm(f => ({ ...f, label_ar: e.target.value }))}
+                  size="small"
+                  fullWidth
+                  slotProps={{ input: { dir: 'rtl' } }}
+                />
+              ) : null}
               {tab === 'vend' || tab === 'cond' ? (
                 <>
                   <FormControl size="small" fullWidth required={tab === 'vend'}>

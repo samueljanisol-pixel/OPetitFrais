@@ -71,7 +71,7 @@ Comme au **récap saisie** : si la ligne est en conditionnement (`product_packag
 
 ## Récap commande (`saisie/[id]/recap`)
 
-Sur chaque ligne : grille fixe **−1 | qté (4,25 rem) | unité (2,25 rem réservée) | +1** — champs qté alignés verticalement ; libellé **conditionnement** (`condTitre`) au-dessus des boutons ± ; **« Soit … »** en 2ᵉ rangée sous la qté (`col-span-2`, une seule ligne). L’unité dans **« Soit … »** est l’**UdV du conditionnement** (`product_packaging.ref_sales_unit`), pas celle du produit.
+Sur chaque ligne : **−10 / −1 / −0,5** et **+0,5 / +1 / +10** (demi-pas en dessous des grands pas) autour du champ qté ; grille fixe **−1 | qté (4,25 rem) | unité (2,25 rem réservée) | +1** au récap — champs qté alignés verticalement ; libellé **conditionnement** (`condTitre`) au-dessus des boutons ± ; **« Soit … »** en 2ᵉ rangée sous la qté (`col-span-2`, une seule ligne). L’unité dans **« Soit … »** est l’**UdV du conditionnement** (`product_packaging.ref_sales_unit`, ex. Kg), ou **« unité » / « unités »** lorsque l’UdV du colis est **Unité** (ex. « Soit 15 unités » pour 1 colis de 15 pièces). Les **puces** : seul le **mode sélectionné** est plein (vert, bord clair, ombre, texte gras) ; les autres restent en contour, avec la qté déjà saisie dans une **pastille blanche** (chiffre noir) sur les modes non actifs.
 
 **Commande validée ou intégrée** : bouton **Exporter en image** (même format que le récap validation lot, un PNG par vendeur) — voir `saisie/[id]/recap/README.md`. L’affichage liste de la page n’est pas modifié.
 

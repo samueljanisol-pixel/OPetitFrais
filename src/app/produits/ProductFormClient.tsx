@@ -105,8 +105,12 @@ export default function ProductFormClient({ productId, returnTo = null }: Props)
 
   const [addCond, setAddCond] = useState('')
   const [addNom, setAddNom] = useState('')
+  const [addNomAr, setAddNomAr] = useState('')
   const [addQty, setAddQty] = useState('1')
   const [addUnit, setAddUnit] = useState('')
+  const [addPackDialogOpen, setAddPackDialogOpen] = useState(false)
+  const [addPackSaving, setAddPackSaving] = useState(false)
+  const [addPackDialogErr, setAddPackDialogErr] = useState<string | null>(null)
   /** Derniers prix enregistrés en base (pour n’ajouter une ligne d’historique que si vente/achat change). */
   const lastPriceDbRef = useRef<{ price: number; cost_purchase: number | null } | null>(null)
 
@@ -374,25 +378,37 @@ export default function ProductFormClient({ productId, returnTo = null }: Props)
     setImageUrl(productPhotoPublicUrl(supabase, path))
   }
 
-  const addPackaging = async () => {
+  const openAddPackDialog = () => {
     if (packagingReadOnly) return
+    setAddPackDialogErr(null)
+    setAddNom('')
+    setAddNomAr('')
+    setAddQty('1')
+    if (conds[0]) setAddCond(conds[0].id)
+    if (units[0]) setAddUnit(units[0].id)
+    setAddPackDialogOpen(true)
+  }
+
+  const addPackaging = async (): Promise<boolean> => {
+    if (packagingReadOnly) return false
     if (!productId) {
-      setErr('Enregistrez le produit avant d’ajouter un conditionnement.')
-      return
+      setAddPackDialogErr('Enregistrez le produit avant d’ajouter un conditionnement.')
+      return false
     }
     const q = num(addQty)
     if (q == null || q <= 0 || !addCond || !addUnit) {
-      setErr('Conditionnement, quantité > 0 et unité requis.')
-      return
+      setAddPackDialogErr('Conditionnement, quantité > 0 et unité requis.')
+      return false
     }
     if (hasPackagingCombo(packs, addCond, addUnit)) {
-      setErr(
+      setAddPackDialogErr(
         'Ce conditionnement avec cette unité de vente existe déjà. Modifiez la ligne existante (Paramètres) ou choisissez une autre unité.',
       )
-      return
+      return false
     }
-    setErr(null)
+    setAddPackDialogErr(null)
     const nomTrim = addNom.trim()
+    const nomArTrim = addNomAr.trim()
     const { data: ins, error: e1 } = await supabase
       .from('product_packaging')
       .insert({
@@ -401,12 +417,13 @@ export default function ProductFormClient({ productId, returnTo = null }: Props)
         quantity: q,
         sales_unit_id: addUnit,
         nom: nomTrim.length > 0 ? nomTrim : null,
+        nom_ar: nomArTrim.length > 0 ? nomArTrim : null,
       } as never)
       .select('id')
       .single()
     if (e1) {
-      setErr(packagingDbErrorMessage(e1))
-      return
+      setAddPackDialogErr(packagingDbErrorMessage(e1))
+      return false
     }
     const newId = (ins as { id: string } | null)?.id
     const sid = p.supplier_id?.trim()
@@ -417,7 +434,19 @@ export default function ProductFormClient({ productId, returnTo = null }: Props)
       } as never)
     }
     setAddNom('')
+    setAddNomAr('')
     await reloadPacks()
+    return true
+  }
+
+  const confirmAddPackaging = async () => {
+    setAddPackSaving(true)
+    try {
+      const ok = await addPackaging()
+      if (ok) setAddPackDialogOpen(false)
+    } finally {
+      setAddPackSaving(false)
+    }
   }
 
   const removePack = async (id: string) => {
@@ -492,15 +521,17 @@ export default function ProductFormClient({ productId, returnTo = null }: Props)
         ) : null}
 
         <fieldset disabled={readOnly} className="m-0 min-w-0 border-0 p-0 disabled:opacity-80">
-        <div className="flex flex-col gap-4">
+        <div className="flex flex-col gap-3">
           <TextField
             required
+            size="small"
             label="Nom"
             value={p.name ?? ''}
             onChange={e => setP(x => ({ ...x, name: e.target.value }))}
             fullWidth
           />
           <TextField
+            size="small"
             label="Nom (arabe)"
             value={p.name_ar ?? ''}
             onChange={e => setP(x => ({ ...x, name_ar: e.target.value }))}
@@ -508,6 +539,7 @@ export default function ProductFormClient({ productId, returnTo = null }: Props)
             slotProps={{ input: { dir: 'rtl' } }}
           />
           <TextField
+            size="small"
             type="text"
             label="Prix de vente (DH)"
             value={p.price != null ? String(p.price) : ''}
@@ -518,35 +550,37 @@ export default function ProductFormClient({ productId, returnTo = null }: Props)
             fullWidth
             slotProps={muiSlotPropsDecimalKeypad}
           />
-          <FormControl fullWidth>
-            <InputLabel>Unité de vente</InputLabel>
-            <Select
-              value={p.sales_unit_id ?? ''}
-              label="Unité de vente"
-              onChange={e => setP(x => ({ ...x, sales_unit_id: e.target.value }))}
-            >
-              {units.map(u => (
-                <MenuItem key={u.id} value={u.id}>
-                  {u.label}
-                </MenuItem>
-              ))}
-            </Select>
-          </FormControl>
-          <FormControl fullWidth>
-            <InputLabel>Catégorie</InputLabel>
-            <Select
-              value={p.category_id ?? ''}
-              label="Catégorie"
-              onChange={e => setP(x => ({ ...x, category_id: e.target.value }))}
-            >
-              {cats.map(c => (
-                <MenuItem key={c.id} value={c.id}>
-                  {c.label}
-                </MenuItem>
-              ))}
-            </Select>
-          </FormControl>
-          <FormControl fullWidth>
+          <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-start sm:gap-3">
+            <FormControl size="small" sx={{ minWidth: 0, width: '100%', flex: { sm: '1 1 140px' } }}>
+              <InputLabel>Unité de vente</InputLabel>
+              <Select
+                value={p.sales_unit_id ?? ''}
+                label="Unité de vente"
+                onChange={e => setP(x => ({ ...x, sales_unit_id: e.target.value }))}
+              >
+                {units.map(u => (
+                  <MenuItem key={u.id} value={u.id}>
+                    {u.label}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+            <FormControl size="small" sx={{ minWidth: 0, width: '100%', flex: { sm: '1 1 160px' } }}>
+              <InputLabel>Catégorie</InputLabel>
+              <Select
+                value={p.category_id ?? ''}
+                label="Catégorie"
+                onChange={e => setP(x => ({ ...x, category_id: e.target.value }))}
+              >
+                {cats.map(c => (
+                  <MenuItem key={c.id} value={c.id}>
+                    {c.label}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+          </div>
+          <FormControl size="small" fullWidth>
             <InputLabel>Fournisseur</InputLabel>
             <Select
               value={p.supplier_id ?? ''}
@@ -572,7 +606,7 @@ export default function ProductFormClient({ productId, returnTo = null }: Props)
               ))}
             </Select>
           </FormControl>
-          <FormControl fullWidth disabled={!p.supplier_id?.trim()}>
+          <FormControl size="small" fullWidth disabled={!p.supplier_id?.trim()}>
             <InputLabel>Vendeur</InputLabel>
             <Select
               value={p.vendeur_id ?? ''}
@@ -595,6 +629,7 @@ export default function ProductFormClient({ productId, returnTo = null }: Props)
             </Select>
           </FormControl>
           <TextField
+            size="small"
             type="text"
             label="Prix achat"
             value={p.cost_purchase != null ? String(p.cost_purchase) : ''}
@@ -606,6 +641,7 @@ export default function ProductFormClient({ productId, returnTo = null }: Props)
             slotProps={muiSlotPropsDecimalKeypad}
           />
           <TextField
+            size="small"
             type="text"
             label="Prix fabrication"
             value={p.cost_manufacturing != null ? String(p.cost_manufacturing) : ''}
@@ -617,6 +653,7 @@ export default function ProductFormClient({ productId, returnTo = null }: Props)
             slotProps={muiSlotPropsDecimalKeypad}
           />
           <TextField
+            size="small"
             type="text"
             label="Prix emballage"
             value={p.cost_packaging != null ? String(p.cost_packaging) : ''}
@@ -629,6 +666,7 @@ export default function ProductFormClient({ productId, returnTo = null }: Props)
           />
           <div className="flex flex-wrap items-center gap-2">
             <TextField
+              size="small"
               type="text"
               label="Marge (DH)"
               value={p.margin != null ? String(p.margin) : ''}
@@ -643,10 +681,11 @@ export default function ProductFormClient({ productId, returnTo = null }: Props)
               Remplir (vente − coûts)
             </Button>
           </div>
-          <div className="flex flex-wrap gap-4">
+          <div className="flex flex-wrap gap-3">
             <FormControlLabel
               control={
                 <Checkbox
+                  size="small"
                   checked={p.active ?? true}
                   onChange={e => setP(x => ({ ...x, active: e.target.checked }))}
                 />
@@ -656,6 +695,7 @@ export default function ProductFormClient({ productId, returnTo = null }: Props)
             <FormControlLabel
               control={
                 <Checkbox
+                  size="small"
                   checked={p.visible_vitrine ?? true}
                   onChange={e => setP(x => ({ ...x, visible_vitrine: e.target.checked }))}
                 />
@@ -665,6 +705,7 @@ export default function ProductFormClient({ productId, returnTo = null }: Props)
             <FormControlLabel
               control={
                 <Checkbox
+                  size="small"
                   checked={p.allow_unit_in_commande ?? true}
                   onChange={e => setP(x => ({ ...x, allow_unit_in_commande: e.target.checked }))}
                 />
@@ -698,6 +739,7 @@ export default function ProductFormClient({ productId, returnTo = null }: Props)
             type="button"
             variant="contained"
             color="success"
+            size="small"
             disabled={saving || readOnly}
             onClick={() => void save()}
             sx={{ alignSelf: 'flex-start', textTransform: 'none' }}
@@ -712,65 +754,16 @@ export default function ProductFormClient({ productId, returnTo = null }: Props)
             <Typography variant="h6" sx={{ mb: 1 }}>
               Conditionnements
             </Typography>
-            <div className="mb-2 flex flex-col flex-wrap items-stretch gap-2 sm:flex-row sm:items-end">
-              <FormControl size="small" sx={{ minWidth: 200 }} disabled={packagingReadOnly}>
-                <InputLabel>Conditionnement</InputLabel>
-                <Select
-                  value={addCond}
-                  label="Conditionnement"
-                  disabled={packagingReadOnly}
-                  onChange={e => setAddCond(e.target.value)}
-                >
-                  {conds.map(c => (
-                    <MenuItem key={c.id} value={c.id}>
-                      {c.label}
-                    </MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
-              <TextField
-                size="small"
-                label="Nom affiché"
-                value={addNom}
-                onChange={e => setAddNom(e.target.value)}
-                placeholder="Optionnel"
-                disabled={packagingReadOnly}
-                sx={{ minWidth: 160, flex: '1 1 160px' }}
-                helperText="Prioritaire sur le libellé réf. (commandes, achat…)"
-              />
-              <TextField
-                size="small"
-                label="Quantité"
-                value={addQty}
-                onChange={e => setAddQty(e.target.value)}
-                disabled={packagingReadOnly}
-                sx={{ width: 100 }}
-                slotProps={muiSlotPropsDecimalKeypad}
-              />
-              <FormControl size="small" sx={{ minWidth: 120 }} disabled={packagingReadOnly}>
-                <InputLabel>UdV</InputLabel>
-                <Select
-                  value={addUnit}
-                  label="UdV"
-                  disabled={packagingReadOnly}
-                  onChange={e => setAddUnit(e.target.value)}
-                >
-                  {units.map(u => (
-                    <MenuItem key={u.id} value={u.id}>
-                      {u.label}
-                    </MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
+            <div className="mb-2 flex justify-end">
               <Button
                 type="button"
                 variant="outlined"
                 size="small"
                 disabled={packagingReadOnly}
-                onClick={() => void addPackaging()}
+                onClick={openAddPackDialog}
                 sx={{ textTransform: 'none' }}
               >
-                Ajouter
+                Ajouter un conditionnement
               </Button>
             </div>
             <table className="w-full text-sm border border-slate-200 rounded">
@@ -838,6 +831,105 @@ export default function ProductFormClient({ productId, returnTo = null }: Props)
               vendeurs={vendeurs}
               onSaved={() => void reloadPacks()}
             />
+            <Dialog
+              open={addPackDialogOpen}
+              onClose={() => !addPackSaving && setAddPackDialogOpen(false)}
+              fullWidth
+              maxWidth="xs"
+            >
+              <DialogTitle sx={{ pb: 0.5 }}>Ajouter un conditionnement</DialogTitle>
+              <DialogContent dividers>
+                {addPackDialogErr ? (
+                  <Typography color="error" variant="body2" className="!mb-2">
+                    {addPackDialogErr}
+                  </Typography>
+                ) : null}
+                <div className="flex flex-col gap-3">
+                  <FormControl size="small" fullWidth disabled={packagingReadOnly || addPackSaving}>
+                    <InputLabel id="add-pack-cond-label">Conditionnement</InputLabel>
+                    <Select
+                      labelId="add-pack-cond-label"
+                      label="Conditionnement"
+                      value={addCond}
+                      onChange={e => setAddCond(e.target.value)}
+                    >
+                      {conds.map(c => (
+                        <MenuItem key={c.id} value={c.id}>
+                          {c.label}
+                        </MenuItem>
+                      ))}
+                    </Select>
+                  </FormControl>
+                  <TextField
+                    size="small"
+                    label="Nom affiché"
+                    value={addNom}
+                    onChange={e => setAddNom(e.target.value)}
+                    placeholder="Optionnel"
+                    disabled={packagingReadOnly || addPackSaving}
+                    fullWidth
+                    helperText="Prioritaire sur le libellé réf. (commandes, achat…)"
+                  />
+                  <TextField
+                    size="small"
+                    label="Nom affiché (arabe)"
+                    value={addNomAr}
+                    onChange={e => setAddNomAr(e.target.value)}
+                    placeholder="Optionnel"
+                    disabled={packagingReadOnly || addPackSaving}
+                    fullWidth
+                    slotProps={{ input: { dir: 'rtl' } }}
+                  />
+                  <div className="flex flex-wrap gap-2">
+                    <TextField
+                      size="small"
+                      label="Quantité"
+                      value={addQty}
+                      onChange={e => setAddQty(e.target.value)}
+                      disabled={packagingReadOnly || addPackSaving}
+                      sx={{ width: 120 }}
+                      slotProps={muiSlotPropsDecimalKeypad}
+                    />
+                    <FormControl size="small" sx={{ minWidth: 140, flex: 1 }} disabled={packagingReadOnly || addPackSaving}>
+                      <InputLabel id="add-pack-udv-label">UdV</InputLabel>
+                      <Select
+                        labelId="add-pack-udv-label"
+                        label="UdV"
+                        value={addUnit}
+                        onChange={e => setAddUnit(e.target.value)}
+                      >
+                        {units.map(u => (
+                          <MenuItem key={u.id} value={u.id}>
+                            {u.label}
+                          </MenuItem>
+                        ))}
+                      </Select>
+                    </FormControl>
+                  </div>
+                </div>
+              </DialogContent>
+              <DialogActions className="!px-3 !pb-2">
+                <Button
+                  type="button"
+                  color="inherit"
+                  onClick={() => setAddPackDialogOpen(false)}
+                  disabled={addPackSaving}
+                  sx={{ textTransform: 'none' }}
+                >
+                  Annuler
+                </Button>
+                <Button
+                  type="button"
+                  variant="contained"
+                  color="success"
+                  disabled={packagingReadOnly || addPackSaving}
+                  onClick={() => void confirmAddPackaging()}
+                  sx={{ textTransform: 'none' }}
+                >
+                  {addPackSaving ? '…' : 'Ajouter'}
+                </Button>
+              </DialogActions>
+            </Dialog>
             <Dialog open={pendingRemovePack != null} onClose={closeRemovePackDialog} fullWidth maxWidth="sm">
               <DialogTitle sx={{ pb: 0.5 }}>Archiver le conditionnement</DialogTitle>
               <DialogContent>

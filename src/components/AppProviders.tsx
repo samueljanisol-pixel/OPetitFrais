@@ -8,16 +8,11 @@ import { prefixer } from "stylis";
 import rtlPlugin from "@mui/stylis-plugin-rtl";
 import { AppRouterCacheProvider } from "@mui/material-nextjs/v16-appRouter";
 import { NextIntlClientProvider } from "next-intl";
-import { isRtl, type AppLocale } from "@/i18n/config";
+import { isRtl } from "@/i18n/config";
+import { useLocaleClient } from "@/lib/i18n/locale-client";
 
-type AppProvidersProps = {
-  locale: AppLocale;
-  messages: Record<string, unknown>;
-  timeZone: string;
-  children: React.ReactNode;
-};
-
-export default function AppProviders({ locale, messages, timeZone, children }: AppProvidersProps) {
+export default function AppProviders({ children }: { children: React.ReactNode }) {
+  const { locale, messages, timeZone } = useLocaleClient();
   const rtl = isRtl(locale);
 
   const theme = useMemo(

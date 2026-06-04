@@ -122,7 +122,7 @@ export async function GET(_req: Request, ctx: Ctx) {
   if (packIds.length > 0) {
     const { data: packs } = await supabase
       .from("product_packaging")
-      .select("id, quantity, nom, ref_sales_unit(label, code), ref_conditionnement(label)")
+      .select("id, quantity, nom, nom_ar, ref_sales_unit(label, code), ref_conditionnement(label, label_ar)")
       .in("id", packIds);
     packMap = Object.fromEntries((packs ?? []).map((pk) => [pk.id, pk as PackRow]));
   }

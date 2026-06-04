@@ -107,6 +107,7 @@
         "quantityPurchaseAria": "Quantité achat",
         "quantityProductAria": "Quantité produit",
         "quantityColisAria": "Quantité colis",
+        "resetQtyToZeroAria": "Remettre la quantité à zéro",
         "quantityForStoreAria": "Quantité {storeLabel}",
         "quantityForUnitAria": "Quantité {unitLabel}",
         "udvCond": "UdV / cond.",

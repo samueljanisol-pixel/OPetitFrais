@@ -5,6 +5,7 @@ import "./globals.css";
 import SwRegister from "./swRegister";
 import AppShell from "@/components/AppShell";
 import AppProviders from "@/components/AppProviders";
+import { LocaleClientProvider } from "@/lib/i18n/locale-client";
 import { isRtl, normalizeLocale, type AppLocale } from "@/i18n/config";
 
 const geistSans = Geist({
@@ -57,10 +58,16 @@ export default async function RootLayout({
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="flex min-h-full flex-col">
-        <AppProviders locale={locale} messages={messages as Record<string, unknown>} timeZone={timeZone}>
-          <SwRegister />
-          <AppShell>{children}</AppShell>
-        </AppProviders>
+        <LocaleClientProvider
+          initialLocale={locale}
+          initialMessages={messages as Record<string, unknown>}
+          timeZone={timeZone}
+        >
+          <AppProviders>
+            <SwRegister />
+            <AppShell>{children}</AppShell>
+          </AppProviders>
+        </LocaleClientProvider>
       </body>
     </html>
   );
