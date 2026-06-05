@@ -3,6 +3,7 @@ import { HISTORIQUE_FROM_ISO } from "./constants";
 import { catalogEntryForProductId, fetchProductCatalogIndex } from "./productCatalogMatch";
 import type { CaResponse, CaRecordRef, CaTopProduitLine, CaTopProduitsPayload, HistoriqueDayRow, HistoriquePayload, PanierMag } from "./types";
 import { buildTopProduitRankings, filterTopProduitLines } from "./topProduits";
+import { fetchTotalKgQtyForDateRange, monthDateBounds, sumKgQtyFromTopProduitLines } from "./totalKg";
 
 function isoDateMinusDays(iso: string, days: number) {
   const [yy, mm, dd] = iso.split("-").map((x) => Number(x));
@@ -218,6 +219,8 @@ async function buildTopProduitsForDate(
       magasin,
       categoryId: linked?.categoryId ?? null,
       categoryLabel: linked?.categoryLabel ?? null,
+      salesUnitLabel: linked?.salesUnitLabel ?? null,
+      salesUnitCode: linked?.salesUnitCode ?? null,
     });
   }
 
@@ -270,7 +273,8 @@ export async function fetchCaDashboardFromSupabase(
     hourQb = hourQb.in("magasin", magIn);
   }
 
-  const [dayQ, j1Q, j7Q, monthQ, hourQ, maxDayRecords, topProduits] = await Promise.all([
+  const monthBounds = monthDateBounds(ym);
+  const [dayQ, j1Q, j7Q, monthQ, hourQ, maxDayRecords, topProduits, totalKgMois] = await Promise.all([
     dayQb,
     j1Qb,
     j7Qb,
@@ -278,6 +282,7 @@ export async function fetchCaDashboardFromSupabase(
     hourQb,
     fetchMaxDailyCaRecords(supabase, HISTORIQUE_FROM_ISO, todayIso, magIn),
     buildTopProduitsForDate(supabase, date, magIn),
+    fetchTotalKgQtyForDateRange(supabase, monthBounds.from, monthBounds.to, magIn),
   ]);
 
   const firstErr = dayQ.error || j1Q.error || j7Q.error || monthQ.error || hourQ.error;
@@ -372,8 +377,11 @@ export async function fetchCaDashboardFromSupabase(
     }
   }
 
+  const totalKgJour = topProduits.available ? sumKgQtyFromTopProduitLines(topProduits.lines) : 0;
+
   const data: CaResponse = {
     totalGlobal: dayAgg.totalGlobal,
+    totalKgJour,
     isRecordDay,
     previousRecordDay,
     isRecordDayByMag,
@@ -382,6 +390,7 @@ export async function fetchCaDashboardFromSupabase(
     month: {
       ym,
       totalGlobal: monthTotalGlobal,
+      totalKg: totalKgMois,
       magasins: monthByMag,
       panierMois,
       panierMoisGlobal,
@@ -407,7 +416,7 @@ export async function fetchHistoriqueFromSupabase(
   opts?: { magasinCodes?: string[] },
 ): Promise<{ data: HistoriquePayload } | { error: string }> {
   const codes = opts?.magasinCodes;
-  let hq = supabase.from("ca_day").select("date,magasin,total").gte("date", from).lte("date", to);
+  let hq = supabase.from("ca_day").select("date,magasin,total,nb_paniers").gte("date", from).lte("date", to);
   if (codes !== undefined) {
     hq = codes.length === 0 ? hq.in("magasin", ["__none__"]) : hq.in("magasin", codes);
   }
@@ -415,20 +424,35 @@ export async function fetchHistoriqueFromSupabase(
 
   if (error) return { error: error.message };
 
-  const byDate = new Map<string, { totalGlobal: number; magasins: Record<string, number> }>();
+  const byDate = new Map<
+    string,
+    { totalGlobal: number; nbPaniersGlobal: number; magasins: Record<string, number>; magasinsNbPaniers: Record<string, number> }
+  >();
   for (const r of rows ?? []) {
     const d = normalizeDateCell(r.date);
     const t = typeof r.total === "number" ? r.total : Number(r.total);
     if (!Number.isFinite(t)) continue;
-    if (!byDate.has(d)) byDate.set(d, { totalGlobal: 0, magasins: {} });
+    const nbRaw = typeof r.nb_paniers === "number" ? r.nb_paniers : Number(r.nb_paniers);
+    const nb = Number.isFinite(nbRaw) ? nbRaw : 0;
+    if (!byDate.has(d)) {
+      byDate.set(d, { totalGlobal: 0, nbPaniersGlobal: 0, magasins: {}, magasinsNbPaniers: {} });
+    }
     const entry = byDate.get(d)!;
     entry.totalGlobal += t;
+    entry.nbPaniersGlobal += nb;
     entry.magasins[r.magasin] = (entry.magasins[r.magasin] ?? 0) + t;
+    entry.magasinsNbPaniers[r.magasin] = (entry.magasinsNbPaniers[r.magasin] ?? 0) + nb;
   }
 
   const days: HistoriqueDayRow[] = Array.from(byDate.entries())
     .sort(([a], [b]) => a.localeCompare(b))
-    .map(([date, v]) => ({ date, totalGlobal: v.totalGlobal, magasins: v.magasins }));
+    .map(([date, v]) => ({
+      date,
+      totalGlobal: v.totalGlobal,
+      nbPaniersGlobal: v.nbPaniersGlobal,
+      magasins: v.magasins,
+      magasinsNbPaniers: v.magasinsNbPaniers,
+    }));
 
   const payload: HistoriquePayload = { from, to, days };
   return { data: payload };

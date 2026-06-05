@@ -63,6 +63,24 @@ export default function HistoriqueCA() {
     }
   }, [])
 
+  const formatCount = useMemo(
+    () => (value: unknown) => {
+      const n = typeof value === 'number' ? value : Number(value)
+      if (!Number.isFinite(n)) return '—'
+      return new Intl.NumberFormat('fr-FR', { maximumFractionDigits: 0 }).format(n)
+    },
+    [],
+  )
+
+  const formatPct = useMemo(() => {
+    const nf = new Intl.NumberFormat('fr-FR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })
+    return (value: unknown) => {
+      const n = typeof value === 'number' ? value : Number(value)
+      if (!Number.isFinite(n)) return '—'
+      return `${nf.format(n)} %`
+    }
+  }, [])
+
   useEffect(() => {
     if (sessionLoading) return
     let cancelled = false
@@ -112,7 +130,12 @@ export default function HistoriqueCA() {
 
     const days = filteredDays
     const totalGlobal = days.reduce((acc, d) => acc + (Number.isFinite(d.totalGlobal) ? d.totalGlobal : 0), 0)
+    const totalPaniers = days.reduce(
+      (acc, d) => acc + (Number.isFinite(d.nbPaniersGlobal) ? d.nbPaniersGlobal : 0),
+      0,
+    )
     const avgPerDay = days.length ? totalGlobal / days.length : 0
+    const avgPaniersPerDay = days.length ? totalPaniers / days.length : 0
 
     const months = new Map<
       string,
@@ -120,7 +143,11 @@ export default function HistoriqueCA() {
         ym: string
         days: DayRow[]
         total: number
+        totalPaniers: number
         avg: number
+        avgPaniers: number
+        caByMag: Record<string, number>
+        paniersByMag: Record<string, number>
         maxDay?: string
         minDay?: string
       }
@@ -128,15 +155,38 @@ export default function HistoriqueCA() {
 
     for (const d of days) {
       const ym = monthKey(d.date)
-      if (!months.has(ym)) months.set(ym, { ym, days: [], total: 0, avg: 0 })
+      if (!months.has(ym)) {
+        months.set(ym, {
+          ym,
+          days: [],
+          total: 0,
+          totalPaniers: 0,
+          avg: 0,
+          avgPaniers: 0,
+          caByMag: {},
+          paniersByMag: {},
+        })
+      }
       const m = months.get(ym)!
       m.days.push(d)
       m.total += d.totalGlobal
+      m.totalPaniers += Number.isFinite(d.nbPaniersGlobal) ? d.nbPaniersGlobal : 0
+      for (const [mag, rawCa] of Object.entries(d.magasins)) {
+        const ca = typeof rawCa === 'number' ? rawCa : Number(rawCa)
+        if (!Number.isFinite(ca)) continue
+        m.caByMag[mag] = (m.caByMag[mag] ?? 0) + ca
+      }
+      for (const [mag, rawNb] of Object.entries(d.magasinsNbPaniers)) {
+        const nb = typeof rawNb === 'number' ? rawNb : Number(rawNb)
+        if (!Number.isFinite(nb)) continue
+        m.paniersByMag[mag] = (m.paniersByMag[mag] ?? 0) + nb
+      }
     }
 
     for (const m of months.values()) {
       m.days.sort((a, b) => a.date.localeCompare(b.date))
       m.avg = m.days.length ? m.total / m.days.length : 0
+      m.avgPaniers = m.days.length ? m.totalPaniers / m.days.length : 0
       if (m.days.length) {
         let max = m.days[0]
         let min = m.days[0]
@@ -152,6 +202,7 @@ export default function HistoriqueCA() {
     const monthList = Array.from(months.values()).sort((a, b) => b.ym.localeCompare(a.ym))
     const monthCount = monthList.length
     const avgPerMonth = monthCount > 0 ? totalGlobal / monthCount : 0
+    const avgPaniersPerMonth = monthCount > 0 ? totalPaniers / monthCount : 0
 
     const sortedDates = [...days].sort((a, b) => a.date.localeCompare(b.date))
     const from = sortedDates[0]?.date ?? null
@@ -183,8 +234,11 @@ export default function HistoriqueCA() {
     return {
       days,
       totalGlobal,
+      totalPaniers,
       avgPerDay,
+      avgPaniersPerDay,
       avgPerMonth,
+      avgPaniersPerMonth,
       monthList,
       recordDay,
       recordDaysByMagasin,
@@ -368,6 +422,33 @@ export default function HistoriqueCA() {
                 </div>
               ) : null}
             </div>
+            <div className="min-w-0 rounded-2xl border border-violet-100 bg-white/80 px-3 py-4 shadow-sm backdrop-blur sm:px-5">
+              <div className="text-[10px] font-medium uppercase tracking-wide text-violet-700/80 sm:text-xs">
+                Paniers total
+              </div>
+              <div className="mt-1 break-words text-lg font-semibold text-slate-900 sm:text-2xl">
+                {formatCount(computed.totalPaniers)}
+              </div>
+            </div>
+            <div className="min-w-0 rounded-2xl border border-violet-100 bg-white/80 px-3 py-4 shadow-sm backdrop-blur sm:px-5">
+              <div className="text-[10px] font-medium uppercase tracking-wide text-violet-700/80 sm:text-xs">
+                Moy. paniers / jour
+              </div>
+              <div className="mt-1 break-words text-lg font-semibold text-slate-900 sm:text-2xl">
+                {formatCount(computed.avgPaniersPerDay)}
+              </div>
+            </div>
+            <div className="min-w-0 rounded-2xl border border-violet-100 bg-white/80 px-3 py-4 shadow-sm backdrop-blur sm:px-5">
+              <div className="text-[10px] font-medium uppercase tracking-wide text-violet-700/80 sm:text-xs">
+                Moy. paniers / mois
+              </div>
+              <div className="mt-1 break-words text-lg font-semibold text-slate-900 sm:text-2xl">
+                {formatCount(computed.avgPaniersPerMonth)}
+              </div>
+              <div className="mt-1 text-[10px] leading-tight text-slate-500 sm:text-[11px]">
+                {computed.monthList.length} mois avec données
+              </div>
+            </div>
           </div>
 
           {computed.recordDaysByMagasin.length > 0 ? (
@@ -414,15 +495,98 @@ export default function HistoriqueCA() {
                     <div className="text-lg font-semibold capitalize text-slate-900">{monthLabel(m.ym)}</div>
                     <div className="mt-1 text-sm text-slate-600">{m.days.length} jour(s)</div>
                   </div>
-                  <div className="grid gap-2 sm:grid-cols-2">
-                    <div className="rounded-xl bg-emerald-600 px-4 py-2 text-white shadow-sm">
-                      <div className="text-[11px] font-medium uppercase tracking-wide text-white/80">Total mois</div>
-                      <div className="text-lg font-semibold">{formatMAD(m.total)}</div>
+                  <div className="flex w-full min-w-0 flex-col gap-2 sm:max-w-2xl">
+                    <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+                      <div className="rounded-xl bg-emerald-600 px-4 py-2 text-white shadow-sm">
+                        <div className="text-[11px] font-medium uppercase tracking-wide text-white/80">Total mois</div>
+                        <div className="text-lg font-semibold">{formatMAD(m.total)}</div>
+                      </div>
+                      <div className="rounded-xl border border-slate-200 bg-white px-4 py-2 shadow-sm">
+                        <div className="text-[11px] font-medium uppercase tracking-wide text-slate-500">
+                          Moyenne / jour
+                        </div>
+                        <div className="text-lg font-semibold text-slate-900">{formatMAD(m.avg)}</div>
+                      </div>
+                      <div className="rounded-xl border border-violet-200 bg-violet-50/80 px-4 py-2 shadow-sm">
+                        <div className="text-[11px] font-medium uppercase tracking-wide text-violet-800/80">
+                          Paniers (mois)
+                        </div>
+                        <div className="text-lg font-semibold text-slate-900">{formatCount(m.totalPaniers)}</div>
+                      </div>
+                      <div className="rounded-xl border border-violet-200 bg-white px-4 py-2 shadow-sm">
+                        <div className="text-[11px] font-medium uppercase tracking-wide text-violet-700/80">
+                          Moy. paniers / jour
+                        </div>
+                        <div className="text-lg font-semibold text-slate-900">{formatCount(m.avgPaniers)}</div>
+                      </div>
                     </div>
-                    <div className="rounded-xl border border-slate-200 bg-white px-4 py-2 shadow-sm">
-                      <div className="text-[11px] font-medium uppercase tracking-wide text-slate-500">Moyenne / jour</div>
-                      <div className="text-lg font-semibold text-slate-900">{formatMAD(m.avg)}</div>
-                    </div>
+                    {Object.keys(m.caByMag).length > 0 ? (
+                      <div className="w-full min-w-0">
+                        <div className="text-[10px] font-medium uppercase tracking-wide text-slate-500">
+                          CA par magasin (mois)
+                        </div>
+                        <div className="mt-1.5 grid w-full min-w-0 grid-cols-2 gap-1.5 sm:grid-cols-3">
+                          {Object.entries(m.caByMag)
+                            .sort(([a], [b]) => a.localeCompare(b))
+                            .map(([mag, totalCa]) => {
+                              const avgMag = m.days.length ? totalCa / m.days.length : 0
+                              const pctCa = m.total > 0 ? (totalCa / m.total) * 100 : null
+                              return (
+                                <div
+                                  key={`${m.ym}-ca-${mag}`}
+                                  className="min-w-0 rounded-lg border border-slate-200 bg-slate-50 px-2 py-1.5"
+                                >
+                                  <div className="truncate text-[9px] font-medium uppercase tracking-wide text-slate-600">
+                                    {labelMagasin(mag)}
+                                  </div>
+                                  {pctCa != null ? (
+                                    <div className="mt-0.5 truncate text-[10px] font-semibold text-emerald-800">
+                                      {formatPct(pctCa)} <span className="font-normal text-emerald-700/80">du CA</span>
+                                    </div>
+                                  ) : null}
+                                  <div className="mt-0.5 truncate text-xs font-semibold text-slate-900">
+                                    {formatMAD(totalCa)}{' '}
+                                    <span className="font-normal text-slate-500">total</span>
+                                  </div>
+                                  <div className="truncate text-[10px] text-slate-600">
+                                    {formatMAD(avgMag)} <span className="text-slate-500">moy./jour</span>
+                                  </div>
+                                </div>
+                              )
+                            })}
+                        </div>
+                      </div>
+                    ) : null}
+                    {Object.keys(m.paniersByMag).length > 0 ? (
+                      <div className="w-full min-w-0">
+                        <div className="text-[10px] font-medium uppercase tracking-wide text-violet-700/80">
+                          Paniers par magasin (mois)
+                        </div>
+                        <div className="mt-1.5 grid w-full min-w-0 grid-cols-2 gap-1.5 sm:grid-cols-3">
+                          {Object.entries(m.paniersByMag)
+                            .sort(([a], [b]) => a.localeCompare(b))
+                            .map(([mag, nb]) => {
+                              const avgNb = m.days.length ? nb / m.days.length : 0
+                              return (
+                                <div
+                                  key={`${m.ym}-pan-${mag}`}
+                                  className="min-w-0 rounded-lg border border-violet-200/70 bg-violet-50/50 px-2 py-1.5"
+                                >
+                                  <div className="truncate text-[9px] font-medium uppercase tracking-wide text-violet-900/75">
+                                    {labelMagasin(mag)}
+                                  </div>
+                                  <div className="mt-0.5 truncate text-xs font-semibold text-slate-900">
+                                    {formatCount(nb)} <span className="font-normal text-slate-500">total</span>
+                                  </div>
+                                  <div className="truncate text-[10px] text-violet-800">
+                                    {formatCount(avgNb)} <span className="text-violet-700/80">moy./jour</span>
+                                  </div>
+                                </div>
+                              )
+                            })}
+                        </div>
+                      </div>
+                    ) : null}
                   </div>
                 </div>
               </summary>
@@ -433,7 +597,12 @@ export default function HistoriqueCA() {
                   const isMin = m.minDay && d.date === m.minDay
                   const amountClass = isMax ? 'text-emerald-700' : isMin ? 'text-rose-700' : 'text-slate-900'
 
-                  const magasinsSorted = Object.entries(d.magasins).sort(([a], [b]) => a.localeCompare(b))
+                  const magKeys = new Set([
+                    ...Object.keys(d.magasins),
+                    ...Object.keys(d.magasinsNbPaniers),
+                  ])
+                  const magasinsSorted = [...magKeys].sort((a, b) => a.localeCompare(b))
+                  const dayNbPaniers = Number.isFinite(d.nbPaniersGlobal) ? d.nbPaniersGlobal : 0
                   return (
                     <div key={d.date} className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
                       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
@@ -441,18 +610,44 @@ export default function HistoriqueCA() {
                           <div className="text-sm font-semibold capitalize text-slate-900">{dayLabel(d.date)}</div>
                           <div className="mt-1 text-xs text-slate-500">{d.date}</div>
                         </div>
-                        <div className={`text-lg font-semibold ${amountClass}`}>{formatMAD(d.totalGlobal)}</div>
+                        <div className="flex flex-col items-start gap-0.5 sm:items-end">
+                          <div className={`text-lg font-semibold ${amountClass}`}>{formatMAD(d.totalGlobal)}</div>
+                          {dayNbPaniers > 0 ? (
+                            <div className="text-sm font-medium text-violet-800">
+                              {formatCount(dayNbPaniers)} panier{dayNbPaniers > 1 ? 's' : ''}
+                            </div>
+                          ) : null}
+                        </div>
                       </div>
 
                       <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-                        {magasinsSorted.map(([mag, v]) => (
-                          <div key={`${d.date}-${mag}`} className="rounded-lg border border-slate-100 bg-slate-50 px-3 py-2">
-                            <div className="text-[11px] font-medium uppercase tracking-wide text-slate-500">
-                              {labelMagasin(mag)}
+                        {magasinsSorted.map(mag => {
+                          const ca = d.magasins[mag]
+                          const rawNb = d.magasinsNbPaniers[mag]
+                          const nb =
+                            typeof rawNb === 'number' ? rawNb : rawNb != null ? Number(rawNb) : undefined
+                          const hasCa = ca != null && Number.isFinite(ca)
+                          const hasNb = nb != null && Number.isFinite(nb) && nb > 0
+                          if (!hasCa && !hasNb) return null
+                          return (
+                            <div
+                              key={`${d.date}-${mag}`}
+                              className="rounded-lg border border-slate-100 bg-slate-50 px-3 py-2"
+                            >
+                              <div className="text-[11px] font-medium uppercase tracking-wide text-slate-500">
+                                {labelMagasin(mag)}
+                              </div>
+                              {hasCa ? (
+                                <div className="mt-0.5 text-sm font-semibold text-slate-900">{formatMAD(ca)}</div>
+                              ) : null}
+                              {hasNb ? (
+                                <div className="mt-0.5 text-xs font-medium text-violet-800">
+                                  {formatCount(nb)} panier{nb > 1 ? 's' : ''}
+                                </div>
+                              ) : null}
                             </div>
-                            <div className="mt-0.5 text-sm font-semibold text-slate-900">{formatMAD(v)}</div>
-                          </div>
-                        ))}
+                          )
+                        })}
                       </div>
                     </div>
                   )

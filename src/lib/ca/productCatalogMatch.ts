@@ -8,6 +8,7 @@ type ProductCatalogRow = {
   supplier_id: string | null;
   ref_category: { id: string; label: string | null } | Array<{ id: string; label: string | null }> | null;
   ref_supplier: { id: string; label: string | null } | Array<{ id: string; label: string | null }> | null;
+  ref_sales_unit: { label: string | null; code: string | null } | Array<{ label: string | null; code: string | null }> | null;
 };
 
 function refFromRow(
@@ -26,6 +27,17 @@ export function normalizeProductCode(code: string): string {
   return t.toLowerCase();
 }
 
+function salesUnitLabelFromRow(
+  raw: { label: string | null; code: string | null } | Array<{ label: string | null; code: string | null }> | null,
+): string | null {
+  if (!raw) return null;
+  const row = Array.isArray(raw) ? raw[0] : raw;
+  const label = row?.label?.trim();
+  if (label) return label;
+  const code = row?.code?.trim();
+  return code || null;
+}
+
 export type ProductCatalogEntry = {
   productId: string;
   code: string;
@@ -34,6 +46,8 @@ export type ProductCatalogEntry = {
   categoryLabel: string;
   supplierId: string;
   supplierLabel: string;
+  salesUnitLabel: string | null;
+  salesUnitCode: string | null;
 };
 
 export type ProductCatalogIndex = {
@@ -46,7 +60,7 @@ export async function fetchProductCatalogIndex(supabase: SupabaseClient): Promis
   const { data: productRows, error } = await supabase
     .from("product")
     .select(
-      "id, code, name, category_id, supplier_id, ref_category(id, label), ref_supplier(id, label)",
+      "id, code, name, category_id, supplier_id, ref_category(id, label), ref_supplier(id, label), ref_sales_unit(label, code)",
     );
 
   const byId = new Map<string, ProductCatalogEntry>();
@@ -69,6 +83,14 @@ export async function fetchProductCatalogIndex(supabase: SupabaseClient): Promis
         categoryLabel: cat?.label ?? "—",
         supplierId,
         supplierLabel: sup?.label ?? "—",
+        salesUnitLabel: salesUnitLabelFromRow(row.ref_sales_unit),
+        salesUnitCode: (() => {
+          const raw = row.ref_sales_unit;
+          if (!raw) return null;
+          const u = Array.isArray(raw) ? raw[0] : raw;
+          const code = u?.code?.trim();
+          return code || null;
+        })(),
       };
 
       byId.set(row.id, entry);

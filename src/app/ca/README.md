@@ -21,6 +21,23 @@ Filtres **Magasin** et **Catégorie** (catalogue `product` via `ca_product_day.p
 - Table `ca_product_day` : clé `(date, magasin, article)` + `product_id` → `product` (migration `20260630120000_ca_product_day_product_id.sql`).
 - Sync FTP : ventes produit ventilées par magasin ; `product_id` rempli à l’import (`src/lib/ca/productCatalogMatch.ts`). **Relancer la sync** des jours concernés après migration.
 - **Tous les magasins** : colonnes par magasin + **Total** dans les deux tableaux (CA et quantité).
+- Tableau **Par quantité** : colonne **UdV** (unité de vente catalogue, `ref_sales_unit` du produit lié).
+
+## TOP 10 catégories
+
+Sous les tableaux produits : agrégation par **catégorie catalogue** (`ref_category` via `product`), avec le même filtre **Magasin** (pas le filtre catégorie produit).
+
+- Calcul : `src/lib/ca/topCategories.ts` (`computeTopCategorieRankings`).
+- **Tous les magasins** : vue pivot (colonnes magasin + total) pour le CA ; classements séparés par CA et par quantité (10 lignes max chacun).
+- Produits sans catégorie regroupés sous **Sans catégorie**.
+
+## Total kg
+
+Dans les cartes **Total global** (jour) et **Total du mois** :
+
+- Somme des **quantités** des lignes `ca_product_day` dont le produit catalogue a l’UdV **Kg** (`ref_sales_unit.code = kg`).
+- Jour : lignes de la date sélectionnée (même règle anti double-comptage magasin / `__all__` que le TOP produits).
+- Mois : agrégat sur tout le mois calendaire affiché (`src/lib/ca/totalKg.ts`).
 
 ## Données
 

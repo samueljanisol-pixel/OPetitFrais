@@ -308,27 +308,29 @@ export function UnitQteControl({
         value={value}
         onChange={onChange}
         center={
-          <div className="flex min-w-0 items-center justify-center gap-1 flex-nowrap">
-            <ParcoursQtyInputWithClear value={value} onChange={onChange}>
-              <DecimalQtyTextField
-                size="small"
-                value={clampQtyToApiRange(value)}
-                onQtyChange={(n) => onChange(clampQtyToApiRange(n))}
-                sx={{
-                  width: "4.75rem",
-                  minWidth: "4.75rem",
-                  flexShrink: 0,
-                  "& .MuiInputBase-input": { textAlign: "center", py: 0.65 },
-                }}
-                slotProps={{ htmlInput: { "aria-label": tc("quantityForUnitAria", { unitLabel }) } }}
-              />
-            </ParcoursQtyInputWithClear>
-            <Typography variant="body2" color="text.secondary" className="shrink-0 whitespace-nowrap">
-              {unitLabel}
-            </Typography>
-          </div>
+          <ParcoursQtyInputWithClear value={value} onChange={onChange}>
+            <DecimalQtyTextField
+              size="small"
+              value={clampQtyToApiRange(value)}
+              onQtyChange={(n) => onChange(clampQtyToApiRange(n))}
+              sx={{
+                width: "4.75rem",
+                minWidth: "4.75rem",
+                flexShrink: 0,
+                "& .MuiInputBase-input": { textAlign: "center", py: 0.65 },
+              }}
+              slotProps={{ htmlInput: { "aria-label": tc("quantityForUnitAria", { unitLabel }) } }}
+            />
+          </ParcoursQtyInputWithClear>
         }
       />
+      <Typography
+        variant="body2"
+        component="p"
+        className="!font-medium !m-0 text-center leading-snug"
+      >
+        {unitLabel}
+      </Typography>
     </div>
   );
 }

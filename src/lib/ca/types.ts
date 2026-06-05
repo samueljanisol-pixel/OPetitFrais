@@ -10,6 +10,10 @@ export type CaTopProduitLine = {
   productId?: string | null
   categoryId: string | null
   categoryLabel: string | null
+  /** Libellé UdV catalogue (`ref_sales_unit`), null si produit non lié. */
+  salesUnitLabel: string | null
+  /** Code UdV catalogue (ex. `kg`), null si produit non lié. */
+  salesUnitCode: string | null
 }
 
 export type CaTopProduitsPayload = {
@@ -23,6 +27,8 @@ export type CaTopProduitsPayload = {
 
 export type CaResponse = {
   totalGlobal: number
+  /** Somme des quantités vendues (UdV Kg) pour la date sélectionnée. */
+  totalKgJour?: number
   /** Vrai si le CA du jour sélectionné atteint ou dépasse le record sur la période historique. */
   isRecordDay?: boolean
   /** Record battu (date + montant) lorsque `isRecordDay` et qu'un record antérieur existait. */
@@ -35,6 +41,8 @@ export type CaResponse = {
   month?: {
     ym: string
     totalGlobal: number
+    /** Somme des quantités vendues (UdV Kg) sur le mois calendaire. */
+    totalKg?: number
     magasins: Record<string, number>
     panierMois?: Record<string, PanierMag>
     panierMoisGlobal?: PanierMag
@@ -51,7 +59,9 @@ export type CaResponse = {
 export type HistoriqueDayRow = {
   date: string
   totalGlobal: number
+  nbPaniersGlobal: number
   magasins: Record<string, number>
+  magasinsNbPaniers: Record<string, number>
 }
 
 export type HistoriquePayload =

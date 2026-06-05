@@ -10,6 +10,7 @@ Route : `/commandes-fournisseur/saisie/[id]/parcours`
 - Nom arabe (`name_ar`) : slot réservé sous le titre FR (`ProductArabicSubtitle` + `reserveSpace`) même si vide.
 - Ligne **« Soit … »** (conditionnement) : hauteur réservée même absente (à l’unité ou colis sans conversion).
 - **Croix rouge** à droite du champ qté (position absolue) si qté &gt; 0 : remise à zéro ; le champ reste **centré** entre les ±.
+- **À l’unité** : libellé UdV (ex. Kg) **centré sous** la rangée ±, comme le libellé colis en conditionnement.
 
 ## Fiche produit
 

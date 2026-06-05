@@ -10,6 +10,7 @@ import PaniersHeureHistogram from '@/components/PaniersHeureHistogram'
 import RecordCaBanner from '@/components/RecordCaBanner'
 import SyncStatusFooter from '@/components/SyncStatusFooter'
 import { fetchCaDashboardFromSupabase } from '@/lib/ca/fromSupabase'
+import { computeTopCategorieRankings } from '@/lib/ca/topCategories'
 import { computeTopProduitRankings } from '@/lib/ca/topProduits'
 import type { CaResponse } from '@/lib/ca/types'
 import { createSupabaseBrowserClient } from '@/lib/supabase/client'
@@ -65,6 +66,15 @@ export default function CaDashboardPage() {
       const n = typeof value === 'number' ? value : Number(value)
       if (!Number.isFinite(n)) return '—'
       return new Intl.NumberFormat('fr-FR', { maximumFractionDigits: 0 }).format(n)
+    },
+    [],
+  )
+
+  const formatKg = useMemo(
+    () => (value: unknown) => {
+      const n = typeof value === 'number' ? value : Number(value)
+      if (!Number.isFinite(n)) return '—'
+      return `${new Intl.NumberFormat('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n)} kg`
     },
     [],
   )
@@ -147,6 +157,12 @@ export default function CaDashboardPage() {
     )
   }, [data?.topProduits, topMagFilter, topCategoryFilter])
 
+  const topCategoriesComputed = useMemo(() => {
+    const tp = data?.topProduits
+    if (!tp?.available || !tp.lines.length) return null
+    return computeTopCategorieRankings(tp.lines, topMagFilter, tp.filterMagasins)
+  }, [data?.topProduits, topMagFilter])
+
   const topPercentBase = useMemo(() => {
     if (!data) return 0
     if (topMagFilter !== 'all') {
@@ -157,8 +173,11 @@ export default function CaDashboardPage() {
     if (topProduitsComputed?.filteredTotal && topProduitsComputed.filteredTotal > 0) {
       return topProduitsComputed.filteredTotal
     }
+    if (topCategoriesComputed?.filteredTotal && topCategoriesComputed.filteredTotal > 0) {
+      return topCategoriesComputed.filteredTotal
+    }
     return data.totalGlobal
-  }, [data, topMagFilter, topProduitsComputed])
+  }, [data, topMagFilter, topProduitsComputed, topCategoriesComputed])
 
   /* Sans `&& !error` : après échec SSE, `data` reste null → on restait bloqués sur l’écran de chargement au lieu du message d’erreur. */
   if (loading || (!data && !error))
@@ -463,12 +482,10 @@ export default function CaDashboardPage() {
                 </div>
                 )
               })()}
-              <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-rose-100">
-                <div className="h-full w-full rounded-full bg-rose-500/70" />
-              </div>
-              <div className="mt-2 flex items-center justify-between text-xs text-slate-600">
-                <span>100%</span>
-                <span className="font-medium text-slate-700">Référence globale</span>
+              <div className="mt-3 border-t border-emerald-100 pt-3 text-sm text-slate-600">
+                Total kg :{' '}
+                <span className="font-semibold text-slate-800">{formatKg(data.totalKgJour)}</span>
+                <span className="ml-1 text-xs text-slate-500">(produits UdV Kg)</span>
               </div>
             </div>
 
@@ -504,6 +521,11 @@ export default function CaDashboardPage() {
                 </div>
                 )
               })()}
+              <div className="mt-3 border-t border-slate-100 pt-3 text-sm text-slate-600">
+                Total kg :{' '}
+                <span className="font-semibold text-slate-800">{formatKg(month?.totalKg)}</span>
+                <span className="ml-1 text-xs text-slate-500">(produits UdV Kg)</span>
+              </div>
             </div>
           </div>
         </header>
@@ -846,6 +868,7 @@ export default function CaDashboardPage() {
                     <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-600">
                       <tr>
                         <th className="px-3 py-2 text-left">Produit</th>
+                        <th className="whitespace-nowrap px-3 py-2 text-left">UdV</th>
                         {topProduitsComputed.mode === 'pivot'
                           ? topProduitsComputed.magasins.map(mag => (
                               <th key={`qty-h-${mag}`} className="whitespace-nowrap px-3 py-2 text-right">
@@ -866,6 +889,9 @@ export default function CaDashboardPage() {
                         ? topProduitsComputed.byQty.map(r => (
                             <tr key={`qty-${r.name}`} className="border-t border-slate-100">
                               <td className="whitespace-nowrap px-3 py-2 text-slate-900">{r.name}</td>
+                              <td className="whitespace-nowrap px-3 py-2 text-slate-600">
+                                {r.salesUnitLabel ?? '—'}
+                              </td>
                               {topProduitsComputed.magasins.map(mag => {
                                 const v = r.byMag[mag]?.qty ?? 0
                                 return (
@@ -882,6 +908,9 @@ export default function CaDashboardPage() {
                         : topProduitsComputed.byQty.map(r => (
                             <tr key={`qty-${r.name}`} className="border-t border-slate-100">
                               <td className="px-3 py-2 text-slate-900">{r.name}</td>
+                              <td className="whitespace-nowrap px-3 py-2 text-slate-600">
+                                {r.salesUnitLabel ?? '—'}
+                              </td>
                               <td className="px-3 py-2 text-right font-semibold text-slate-900">
                                 {new Intl.NumberFormat('fr-FR').format(r.qty)}
                               </td>
@@ -894,6 +923,165 @@ export default function CaDashboardPage() {
               </div>
             </div>
           )}
+
+          {data.topProduits?.available && topCategoriesComputed ? (
+            <div className="mt-10 border-t border-slate-200 pt-8">
+              <h3 className="text-base font-semibold text-slate-900">TOP 10 catégories</h3>
+              <p className="mt-1 text-sm text-slate-600">
+                Classement par catégorie catalogue (filtre magasin ci-dessus). % = part du CA de référence du
+                jour.
+              </p>
+              {topCategoriesComputed.byCa.length === 0 && topCategoriesComputed.byQty.length === 0 ? (
+                <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
+                  Aucune catégorie pour ce filtre magasin.
+                </div>
+              ) : (
+                <div
+                  className={`mt-5 grid gap-5 ${topCategoriesComputed.mode === 'pivot' ? '' : 'lg:grid-cols-2'}`}
+                >
+                  <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+                    <div className="text-sm font-semibold text-slate-900">Par chiffre d&apos;affaires</div>
+                    <p className="mt-0.5 text-xs text-slate-500">
+                      {topCategoriesComputed.mode === 'pivot'
+                        ? 'CA par magasin et total — % = part du CA global du jour.'
+                        : '% = part du CA filtré (magasin).'}
+                    </p>
+                    <div className="mt-3 overflow-x-auto rounded-lg border border-slate-200">
+                      <table className="min-w-full text-sm">
+                        <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-600">
+                          <tr>
+                            <th className="px-3 py-2 text-left">Catégorie</th>
+                            {topCategoriesComputed.mode === 'pivot'
+                              ? topCategoriesComputed.magasins.map(mag => (
+                                  <th key={`cat-ca-h-${mag}`} className="whitespace-nowrap px-3 py-2 text-right">
+                                    {labelMagasin(mag)}
+                                  </th>
+                                ))
+                              : null}
+                            <th className="whitespace-nowrap px-3 py-2 text-right">
+                              {topCategoriesComputed.mode === 'pivot' ? 'Total' : 'CA'}
+                            </th>
+                            <th className="px-3 py-2 text-right">% jour</th>
+                            {topCategoriesComputed.mode === 'simple' ? (
+                              <th className="px-3 py-2 text-right">Qté</th>
+                            ) : null}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {topCategoriesComputed.mode === 'pivot'
+                            ? topCategoriesComputed.byCa.map(r => (
+                                <tr
+                                  key={`cat-ca-${r.categoryId ?? r.label}`}
+                                  className="border-t border-slate-100"
+                                >
+                                  <td className="whitespace-nowrap px-3 py-2 text-slate-900">{r.label}</td>
+                                  {topCategoriesComputed.magasins.map(mag => {
+                                    const v = r.byMag[mag]?.ca ?? 0
+                                    return (
+                                      <td
+                                        key={`cat-ca-${r.label}-${mag}`}
+                                        className="whitespace-nowrap px-3 py-2 text-right text-slate-700"
+                                      >
+                                        {v > 0 ? formatMAD(v) : '—'}
+                                      </td>
+                                    )
+                                  })}
+                                  <td className="whitespace-nowrap px-3 py-2 text-right font-semibold text-slate-900">
+                                    {formatMAD(r.totalCa)}
+                                  </td>
+                                  <td className="whitespace-nowrap px-3 py-2 text-right text-slate-700">
+                                    {formatPercent(topPercentOfBase(r.totalCa))}
+                                  </td>
+                                </tr>
+                              ))
+                            : topCategoriesComputed.byCa.map(r => (
+                                <tr
+                                  key={`cat-ca-${r.categoryId ?? r.label}`}
+                                  className="border-t border-slate-100"
+                                >
+                                  <td className="px-3 py-2 text-slate-900">{r.label}</td>
+                                  <td className="px-3 py-2 text-right font-semibold text-slate-900">
+                                    {formatMAD(r.ca)}
+                                  </td>
+                                  <td className="px-3 py-2 text-right text-slate-700">
+                                    {formatPercent(topPercentOfBase(r.ca))}
+                                  </td>
+                                  <td className="px-3 py-2 text-right text-slate-700">
+                                    {new Intl.NumberFormat('fr-FR').format(r.qty)}
+                                  </td>
+                                </tr>
+                              ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+
+                  <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+                    <div className="text-sm font-semibold text-slate-900">Par quantité</div>
+                    <div className="mt-3 overflow-x-auto rounded-lg border border-slate-200">
+                      <table className="min-w-full text-sm">
+                        <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-600">
+                          <tr>
+                            <th className="px-3 py-2 text-left">Catégorie</th>
+                            {topCategoriesComputed.mode === 'pivot'
+                              ? topCategoriesComputed.magasins.map(mag => (
+                                  <th key={`cat-qty-h-${mag}`} className="whitespace-nowrap px-3 py-2 text-right">
+                                    {labelMagasin(mag)}
+                                  </th>
+                                ))
+                              : null}
+                            <th className="whitespace-nowrap px-3 py-2 text-right">
+                              {topCategoriesComputed.mode === 'pivot' ? 'Total' : 'Qté'}
+                            </th>
+                            {topCategoriesComputed.mode === 'simple' ? (
+                              <th className="px-3 py-2 text-right">CA</th>
+                            ) : null}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {topCategoriesComputed.mode === 'pivot'
+                            ? topCategoriesComputed.byQty.map(r => (
+                                <tr
+                                  key={`cat-qty-${r.categoryId ?? r.label}`}
+                                  className="border-t border-slate-100"
+                                >
+                                  <td className="whitespace-nowrap px-3 py-2 text-slate-900">{r.label}</td>
+                                  {topCategoriesComputed.magasins.map(mag => {
+                                    const v = r.byMag[mag]?.qty ?? 0
+                                    return (
+                                      <td
+                                        key={`cat-qty-${r.label}-${mag}`}
+                                        className="whitespace-nowrap px-3 py-2 text-right text-slate-700"
+                                      >
+                                        {v > 0 ? new Intl.NumberFormat('fr-FR').format(v) : '—'}
+                                      </td>
+                                    )
+                                  })}
+                                  <td className="whitespace-nowrap px-3 py-2 text-right font-semibold text-slate-900">
+                                    {new Intl.NumberFormat('fr-FR').format(r.totalQty)}
+                                  </td>
+                                </tr>
+                              ))
+                            : topCategoriesComputed.byQty.map(r => (
+                                <tr
+                                  key={`cat-qty-${r.categoryId ?? r.label}`}
+                                  className="border-t border-slate-100"
+                                >
+                                  <td className="px-3 py-2 text-slate-900">{r.label}</td>
+                                  <td className="px-3 py-2 text-right font-semibold text-slate-900">
+                                    {new Intl.NumberFormat('fr-FR').format(r.qty)}
+                                  </td>
+                                  <td className="px-3 py-2 text-right text-slate-700">{formatMAD(r.ca)}</td>
+                                </tr>
+                              ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          ) : null}
         </section>
 
         <SyncStatusFooter />
