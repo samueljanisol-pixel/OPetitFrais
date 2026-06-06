@@ -7,7 +7,7 @@ export type CaJourPoint = {
   total: number
 }
 
-export type CaJourMetric = 'ca' | 'qty'
+export type CaJourMetric = 'ca' | 'qty' | 'benefit'
 
 type Props = {
   points: CaJourPoint[]
@@ -33,7 +33,7 @@ function shortDateLabel(iso: string): string {
  */
 export default function CaJourHistogram({ points, className, title, metric = 'ca' }: Props) {
   const capId = useId()
-  const isCa = metric === 'ca'
+  const isMoney = metric === 'ca' || metric === 'benefit'
   const sorted = useMemo(
     () => [...points].sort((a, b) => a.date.localeCompare(b.date)),
     [points],
@@ -61,13 +61,14 @@ export default function CaJourHistogram({ points, className, title, metric = 'ca
   const tickVals = Array.from({ length: yTicks + 1 }, (_, i) => Math.round((max * i) / yTicks))
 
   const formatValue = (v: number) =>
-    isCa
+    isMoney
       ? new Intl.NumberFormat('fr-FR', { maximumFractionDigits: 0 }).format(v)
       : new Intl.NumberFormat('fr-FR', { maximumFractionDigits: 2 }).format(v)
 
-  const valueSuffix = isCa ? ' DH' : ''
-  const chartLabel = isCa ? 'CA par jour' : 'Quantité par jour'
-  const ariaTotal = isCa ? `${formatValue(total)} DH` : formatValue(total)
+  const valueSuffix = isMoney ? ' DH' : ''
+  const chartLabel =
+    metric === 'ca' ? 'CA par jour' : metric === 'benefit' ? 'Bénéfice par jour' : 'Quantité par jour'
+  const ariaTotal = isMoney ? `${formatValue(total)} DH` : formatValue(total)
 
   return (
     <figure className={className}>
@@ -83,7 +84,7 @@ export default function CaJourHistogram({ points, className, title, metric = 'ca
           aria-label={
             title
               ? undefined
-              : `Évolution ${isCa ? 'du CA' : 'des quantités'} sur ${n} jour(s), total ${ariaTotal}`
+              : `Évolution ${metric === 'ca' ? 'du CA' : metric === 'benefit' ? 'du bénéfice' : 'des quantités'} sur ${n} jour(s), total ${ariaTotal}`
           }
           width="100%"
           height={VIEW_H}

@@ -31,7 +31,8 @@ import type {
 } from '@/lib/products/types'
 import { useRouter } from 'next/navigation'
 import { muiSlotPropsDecimalKeypad } from '@/lib/mui/numericTextFieldProps'
-import { insertProductPriceHistoryRow } from '@/lib/products/priceHistory'
+import { insertProductPriceHistoryRow, pricingSnapshotChanged, type ProductPricingSnapshot } from '@/lib/products/priceHistory'
+import { HISTORIQUE_FROM_ISO } from '@/lib/ca/constants'
 import { useSessionPermissions } from '@/lib/auth/useSessionPermissions'
 import { ProductPackagingSettingsDialog, type MagasinMini } from '@/app/produits/ProductPackagingSettingsDialog'
 import { packagingConditionnementLabel } from '@/lib/commandes-fournisseur/product-display'
@@ -102,6 +103,12 @@ export default function ProductFormClient({ productId, returnTo = null }: Props)
   const [histError, setHistError] = useState<string | null>(null)
   const [histHasMore, setHistHasMore] = useState(false)
   const [histLoadingMore, setHistLoadingMore] = useState(false)
+  const [retroDialogOpen, setRetroDialogOpen] = useState(false)
+  const [retroDate, setRetroDate] = useState(HISTORIQUE_FROM_ISO)
+  const [retroMargin, setRetroMargin] = useState('')
+  const [retroSaving, setRetroSaving] = useState(false)
+  const [retroErr, setRetroErr] = useState<string | null>(null)
+  const todayIso = useMemo(() => new Date().toISOString().slice(0, 10), [])
 
   const [addCond, setAddCond] = useState('')
   const [addNom, setAddNom] = useState('')
@@ -111,8 +118,8 @@ export default function ProductFormClient({ productId, returnTo = null }: Props)
   const [addPackDialogOpen, setAddPackDialogOpen] = useState(false)
   const [addPackSaving, setAddPackSaving] = useState(false)
   const [addPackDialogErr, setAddPackDialogErr] = useState<string | null>(null)
-  /** Derniers prix enregistrés en base (pour n’ajouter une ligne d’historique que si vente/achat change). */
-  const lastPriceDbRef = useRef<{ price: number; cost_purchase: number | null } | null>(null)
+  /** Dernier état tarifaire en base (historique si changement). */
+  const lastPricingDbRef = useRef<ProductPricingSnapshot | null>(null)
 
   const vendeursProduit = useMemo(() => {
     const sid = p.supplier_id?.trim()
@@ -177,9 +184,12 @@ export default function ProductFormClient({ productId, returnTo = null }: Props)
     }
     const row = data as ProductRow
     setP(row)
-    lastPriceDbRef.current = {
+    lastPricingDbRef.current = {
       price: Number(row.price),
       cost_purchase: row.cost_purchase ?? null,
+      cost_manufacturing: row.cost_manufacturing ?? null,
+      cost_packaging: row.cost_packaging ?? null,
+      margin: row.margin ?? null,
     }
     setImageUrl(productPhotoPublicUrl(supabase, row.image_path))
     const { data: ph, error: phErr } = await supabase
@@ -260,6 +270,56 @@ export default function ProductFormClient({ productId, returnTo = null }: Props)
     }))
   }
 
+  const openRetroMarginDialog = () => {
+    if (readOnly || !productId) return
+    setRetroErr(null)
+    setRetroDate(HISTORIQUE_FROM_ISO)
+    setRetroMargin(p.margin != null ? String(p.margin) : '')
+    setRetroDialogOpen(true)
+  }
+
+  const saveRetroMargin = async () => {
+    if (readOnly || !productId) return
+    const marginN = num(retroMargin)
+    if (marginN == null) {
+      setRetroErr('Indiquez une marge (nombre).')
+      return
+    }
+    if (retroDate < HISTORIQUE_FROM_ISO || retroDate > todayIso) {
+      setRetroErr(`Date entre ${HISTORIQUE_FROM_ISO} et aujourd’hui.`)
+      return
+    }
+    const dateTaken = hist.some(
+      h => String(h.valid_from).slice(0, 10) === retroDate.slice(0, 10),
+    )
+    if (dateTaken) {
+      setRetroErr('Une ligne existe déjà pour cette date — choisissez une autre date ou modifiez la marge actuelle du produit.')
+      return
+    }
+    setRetroSaving(true)
+    setRetroErr(null)
+    const snapshot: ProductPricingSnapshot = {
+      price: Number(p.price) || 0,
+      cost_purchase: p.cost_purchase ?? null,
+      cost_manufacturing: p.cost_manufacturing ?? null,
+      cost_packaging: p.cost_packaging ?? null,
+      margin: marginN,
+    }
+    const { error: hErr } = await insertProductPriceHistoryRow(supabase, {
+      product_id: productId,
+      valid_from: retroDate,
+      ...snapshot,
+    })
+    if (hErr) {
+      setRetroErr(hErr.message)
+      setRetroSaving(false)
+      return
+    }
+    setRetroDialogOpen(false)
+    setRetroSaving(false)
+    await loadProduct()
+  }
+
   const save = async () => {
     if (readOnly) return
     if (!p.name?.trim()) {
@@ -307,6 +367,9 @@ export default function ProductFormClient({ productId, returnTo = null }: Props)
         product_id: newId,
         price: Number(p.price) || 0,
         cost_purchase: p.cost_purchase ?? null,
+        cost_manufacturing: p.cost_manufacturing ?? null,
+        cost_packaging: p.cost_packaging ?? null,
+        margin: p.margin ?? null,
       })
       if (h1) {
         setErr(h1.message)
@@ -323,25 +386,24 @@ export default function ProductFormClient({ productId, returnTo = null }: Props)
       setSaving(false)
       return
     }
-    const nextPrice = Number(p.price) || 0
-    const nextCost = p.cost_purchase ?? null
-    const prev = lastPriceDbRef.current
-    const priceOrCostChanged =
-      !prev ||
-      prev.price !== nextPrice ||
-      (prev.cost_purchase ?? null) !== (nextCost ?? null)
-    if (priceOrCostChanged) {
+    const nextSnapshot: ProductPricingSnapshot = {
+      price: Number(p.price) || 0,
+      cost_purchase: p.cost_purchase ?? null,
+      cost_manufacturing: p.cost_manufacturing ?? null,
+      cost_packaging: p.cost_packaging ?? null,
+      margin: p.margin ?? null,
+    }
+    if (pricingSnapshotChanged(lastPricingDbRef.current, nextSnapshot)) {
       const { error: h2 } = await insertProductPriceHistoryRow(supabase, {
         product_id: productId!,
-        price: nextPrice,
-        cost_purchase: nextCost,
+        ...nextSnapshot,
       })
       if (h2) {
         setErr(h2.message)
         setSaving(false)
         return
       }
-      lastPriceDbRef.current = { price: nextPrice, cost_purchase: nextCost }
+      lastPricingDbRef.current = nextSnapshot
     }
     await loadProduct()
     setSaving(false)
@@ -976,11 +1038,27 @@ export default function ProductFormClient({ productId, returnTo = null }: Props)
         {!isNew && productId ? (
           <Box sx={{ mt: 4 }}>
             <Typography variant="h6" sx={{ mb: 1, color: '#0f172a' }}>
-              Historique des prix
+              Historique prix et marges
             </Typography>
             <Typography variant="body2" sx={{ mb: 1, color: 'text.secondary' }}>
-              Une ligne est ajoutée à chaque enregistrement qui modifie le prix de vente ou le prix d’achat.
+              Une ligne est ajoutée à chaque enregistrement qui modifie le prix de vente, un coût ou la marge.
+              Pour estimer le bénéfice sur l’historique des ventes, ajoutez une{' '}
+              <strong>marge rétroactive</strong> (ex. marge moyenne) à partir du début de la période stats (
+              {HISTORIQUE_FROM_ISO}).
             </Typography>
+            {!readOnly ? (
+              <div className="mb-2">
+                <Button
+                  type="button"
+                  variant="outlined"
+                  size="small"
+                  onClick={openRetroMarginDialog}
+                  sx={{ textTransform: 'none' }}
+                >
+                  Marge rétroactive (historique stats)
+                </Button>
+              </div>
+            ) : null}
             {histError ? (
               <p className="rounded border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-900">
                 Impossible de charger l’historique : {histError}
@@ -988,7 +1066,7 @@ export default function ProductFormClient({ productId, returnTo = null }: Props)
             ) : null}
             {!histError && hist.length === 0 ? (
               <p className="rounded border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-800">
-                Aucune ligne pour l’instant. Enregistrez un changement de prix de vente ou d’achat : il apparaîtra ici.
+                Aucune ligne pour l’instant. Enregistrez un changement tarifaire : il apparaîtra ici.
               </p>
             ) : null}
             {!histError && hist.length > 0 ? (
@@ -998,6 +1076,7 @@ export default function ProductFormClient({ productId, returnTo = null }: Props)
                     <th className="p-2">Date</th>
                     <th className="p-2">Prix vente</th>
                     <th className="p-2">Prix achat</th>
+                    <th className="p-2">Marge</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1012,6 +1091,11 @@ export default function ProductFormClient({ productId, returnTo = null }: Props)
                       <td className="p-2 tabular-nums">
                         {h.cost_purchase != null
                           ? `${new Intl.NumberFormat('fr-FR', { maximumFractionDigits: 2 }).format(h.cost_purchase)} DH`
+                          : '—'}
+                      </td>
+                      <td className="p-2 tabular-nums">
+                        {h.margin != null
+                          ? `${new Intl.NumberFormat('fr-FR', { maximumFractionDigits: 2 }).format(h.margin)} DH`
                           : '—'}
                       </td>
                     </tr>
@@ -1033,6 +1117,55 @@ export default function ProductFormClient({ productId, returnTo = null }: Props)
                 </Button>
               </div>
             ) : null}
+            <Dialog open={retroDialogOpen} onClose={() => !retroSaving && setRetroDialogOpen(false)} fullWidth maxWidth="xs">
+              <DialogTitle>Marge rétroactive</DialogTitle>
+              <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 1 }}>
+                <Typography variant="body2" color="text.secondary">
+                  Enregistre une marge en vigueur à partir de la date choisie (pour le calcul bénéfice = qté × marge
+                  dans Statistique / Analyse Stats). Les prix et coûts affichés reprennent l’état actuel du produit.
+                </Typography>
+                {retroErr ? (
+                  <Typography variant="body2" color="error">
+                    {retroErr}
+                  </Typography>
+                ) : null}
+                <TextField
+                  size="small"
+                  label="En vigueur à partir du"
+                  type="date"
+                  value={retroDate}
+                  onChange={e => setRetroDate(e.target.value)}
+                  slotProps={{
+                    htmlInput: { min: HISTORIQUE_FROM_ISO, max: todayIso },
+                    inputLabel: { shrink: true },
+                  }}
+                  fullWidth
+                />
+                <TextField
+                  size="small"
+                  label="Marge unitaire (DH)"
+                  value={retroMargin}
+                  onChange={e => setRetroMargin(e.target.value)}
+                  slotProps={muiSlotPropsDecimalKeypad}
+                  fullWidth
+                  required
+                />
+              </DialogContent>
+              <DialogActions>
+                <Button onClick={() => setRetroDialogOpen(false)} disabled={retroSaving} sx={{ textTransform: 'none' }}>
+                  Annuler
+                </Button>
+                <Button
+                  variant="contained"
+                  color="success"
+                  disabled={retroSaving}
+                  onClick={() => void saveRetroMargin()}
+                  sx={{ textTransform: 'none' }}
+                >
+                  {retroSaving ? 'Enregistrement…' : 'Enregistrer'}
+                </Button>
+              </DialogActions>
+            </Dialog>
           </Box>
         ) : null}
       </div>

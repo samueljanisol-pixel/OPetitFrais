@@ -22,6 +22,14 @@ Filtres **Magasin** et **Catégorie** (catalogue `product` via `ca_product_day.p
 - Sync FTP : ventes produit ventilées par magasin ; `product_id` rempli à l’import (`src/lib/ca/productCatalogMatch.ts`). **Relancer la sync** des jours concernés après migration.
 - **Tous les magasins** : colonnes par magasin + **Total** dans les deux tableaux (CA et quantité).
 - Tableau **Par quantité** : colonne **UdV** (unité de vente catalogue, `ref_sales_unit` du produit lié).
+- Tableau **Par CA** : colonne **Bénéfice** (qty × marge catalogue à la date, via `product_price_history`).
+
+## Bénéfice estimé
+
+Dans les cartes **Total global** (jour) et **Total du mois** :
+
+- Formule : **qty × marge unitaire** à la date de vente (`product_price_history`), uniquement produits avec marge **explicitement** renseignée.
+- Affichage : montant + **% du CA total** + **% du CA avec marge** (CA des seuls produits avec marge connue) ; colonne TOP 10 **Bénéfice** avec % du CA produit.
 
 ## TOP 10 catégories
 

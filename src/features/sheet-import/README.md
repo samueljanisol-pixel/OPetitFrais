@@ -2,7 +2,7 @@
 
 ## Colonnes lues (seules données importées)
 
-`Actif`, `Code`, `Nom`, `Prix`, `UdV`, `Catégorie`, `Fournisseur`, `Arabe` — voir `mapSheetRow.ts` (`SHEET_COLUMNS`).
+`Actif`, `Code`, `Nom`, `Prix`, `Marge DH Actuelle` (alias « Marge DH »), `UdV`, `Catégorie`, `Fournisseur`, `Arabe` — voir `mapSheetRow.ts` (`SHEET_COLUMNS`).
 
 ## Filtre d’import
 

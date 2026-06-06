@@ -4,6 +4,7 @@ export type SheetImportFieldKey =
   | 'code'
   | 'nom'
   | 'prix'
+  | 'marge'
   | 'udv'
   | 'categorie'
   | 'fournisseur'
@@ -16,6 +17,7 @@ export const SHEET_IMPORT_FIELD_LABELS: Record<SheetImportFieldKey, string> = {
   code: 'Code',
   nom: 'Nom',
   prix: 'Prix',
+  marge: 'Marge DH',
   udv: 'UdV',
   categorie: 'Catégorie',
   fournisseur: 'Fournisseur',
@@ -31,6 +33,7 @@ export const DEFAULT_SHEET_IMPORT_FIELDS: SheetImportFields = {
   code: true,
   nom: true,
   prix: true,
+  marge: true,
   udv: true,
   categorie: true,
   fournisseur: true,

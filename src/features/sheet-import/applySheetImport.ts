@@ -1,5 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { insertProductPriceHistoryRow } from '@/lib/products/priceHistory'
+import { insertProductPriceHistoryRow, pricingSnapshotChanged, type ProductPricingSnapshot } from '@/lib/products/priceHistory'
 import type { RefRow } from '@/lib/products/types'
 import type { SheetRowParsed } from './mapSheetRow'
 import {
@@ -54,6 +54,18 @@ function resolveId(maps: Map<string, string>[], raw: string): string | null {
   return null
 }
 
+const PRICING_SELECT = 'price, cost_purchase, cost_manufacturing, cost_packaging, margin'
+
+function pricingFromRow(row: Record<string, unknown>): ProductPricingSnapshot {
+  return {
+    price: Number(row.price) || 0,
+    cost_purchase: (row.cost_purchase as number | null) ?? null,
+    cost_manufacturing: (row.cost_manufacturing as number | null) ?? null,
+    cost_packaging: (row.cost_packaging as number | null) ?? null,
+    margin: (row.margin as number | null) ?? null,
+  }
+}
+
 export type SheetImportResult = {
   created: number
   updated: number
@@ -74,6 +86,9 @@ function buildProductPatch(
   }
   if (fields.prix) {
     patch.price = row.prix
+  }
+  if (fields.marge) {
+    patch.margin = row.marge
   }
   if (fields.actif) {
     patch.active = row.actif
@@ -168,34 +183,26 @@ export async function applySheetImport(
         skipped += 1
         continue
       }
-      const { data: before } = fields.prix
-        ? await supabase
-            .from('product')
-            .select('price, cost_purchase')
-            .eq('id', id)
-            .single()
+      const pricingFieldsChanged = fields.prix || fields.marge
+      const { data: before } = pricingFieldsChanged
+        ? await supabase.from('product').select(PRICING_SELECT).eq('id', id).single()
         : { data: null }
       const { data: upd, error: e0 } = await supabase
         .from('product')
         .update(patch as never)
         .eq('id', id)
-        .select('price, cost_purchase')
+        .select(PRICING_SELECT)
         .single()
       if (e0) errors.push(`Mise à jour « ${row.nom} » : ${e0.message}`)
       else {
         updated += 1
-        if (fields.prix && upd) {
-          const snap = upd as { price: number; cost_purchase: number | null }
-          const bef = before as { price: number; cost_purchase: number | null } | null
-          const priceOrCostChanged =
-            bef == null ||
-            Number(bef.price) !== Number(snap.price) ||
-            (bef.cost_purchase ?? null) !== (snap.cost_purchase ?? null)
-          if (priceOrCostChanged) {
+        if (pricingFieldsChanged && upd) {
+          const snap = pricingFromRow(upd as Record<string, unknown>)
+          const bef = before ? pricingFromRow(before as Record<string, unknown>) : null
+          if (pricingSnapshotChanged(bef, snap)) {
             const { error: hErr } = await insertProductPriceHistoryRow(supabase, {
               product_id: id,
-              price: Number(snap.price),
-              cost_purchase: snap.cost_purchase ?? null,
+              ...snap,
             })
             if (hErr) errors.push(`Historique « ${row.nom} » : ${hErr.message}`)
           }
@@ -213,11 +220,13 @@ export async function applySheetImport(
       }
       const insert: Record<string, unknown> = {
         ...fullPatch,
-        margin: null,
         cost_purchase: null,
         cost_manufacturing: null,
         cost_packaging: null,
         image_path: null,
+      }
+      if (!('margin' in insert)) {
+        insert.margin = row.marge
       }
       const { data: ins, error: e1 } = await supabase
         .from('product')
@@ -232,6 +241,9 @@ export async function applySheetImport(
             product_id: (ins as { id: string }).id,
             price: row.prix,
             cost_purchase: null,
+            cost_manufacturing: null,
+            cost_packaging: null,
+            margin: row.marge,
           })
           if (hIns) errors.push(`Historique « ${row.nom} » : ${hIns.message}`)
           if (ins.code) byCode.set(norm(String(ins.code)), String(ins.id))

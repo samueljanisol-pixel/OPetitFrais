@@ -37,6 +37,8 @@ import {
   SANS_CATEGORIE,
   SANS_FOURNISSEUR,
 } from '@/lib/ca/analyseVentes'
+import { sumBenefitFromLines, sumCaFromLinesWithKnownBenefit } from '@/lib/ca/benefitFromSales'
+import { percentOfPart } from '@/lib/ca/percent'
 import { HISTORIQUE_FROM_ISO } from '@/lib/ca/constants'
 import type { VentesAnalyseGroupBy, VentesAnalyseResult, VentesAnalyseRow } from '@/lib/ca/types'
 import { createSupabaseBrowserClient } from '@/lib/supabase/client'
@@ -44,7 +46,7 @@ import { useSessionPermissions } from '@/lib/auth/useSessionPermissions'
 import type { SessionMagasin } from '@/lib/auth/session-types'
 
 type RefOpt = { id: string; label: string }
-type SortKey = 'ca' | 'qty'
+type SortKey = 'ca' | 'qty' | 'benefit'
 
 const GROUP_OPTIONS: { value: VentesAnalyseGroupBy; label: string }[] = [
   { value: 'produit', label: 'Produit' },
@@ -72,11 +74,6 @@ function resolveMagasinCodesForQuery(
   if (available.length === 0) return [];
   if (selected.length === 0 || selected.length >= available.length) return undefined;
   return selected;
-}
-
-function percentOfPart(part: number, whole: number): number | null {
-  if (!Number.isFinite(part) || !Number.isFinite(whole) || whole <= 0) return null;
-  return (part / whole) * 100;
 }
 
 export default function AnalyseStatsPage() {
@@ -219,8 +216,8 @@ export default function AnalyseStatsPage() {
     if (!result) return []
     const grouped = groupAnalyseLines(result.lines, groupBy)
     return [...grouped].sort((a, b) => {
-      const va = sortKey === 'ca' ? a.ca : a.qty
-      const vb = sortKey === 'ca' ? b.ca : b.qty
+      const va = sortKey === 'ca' ? a.ca : sortKey === 'qty' ? a.qty : a.benefit
+      const vb = sortKey === 'ca' ? b.ca : sortKey === 'qty' ? b.qty : b.benefit
       return vb - va || a.label.localeCompare(b.label, 'fr')
     })
   }, [result, groupBy, sortKey])
@@ -229,6 +226,9 @@ export default function AnalyseStatsPage() {
     if (!result) return []
     if (sortKey === 'ca') {
       return result.dailyCa
+    }
+    if (sortKey === 'benefit') {
+      return fillDailyRange(result.from, result.to, buildDailySeriesFromLines(result.lines, 'benefit'))
     }
     return fillDailyRange(result.from, result.to, buildDailySeriesFromLines(result.lines, 'qty'))
   }, [result, sortKey])
@@ -245,8 +245,12 @@ export default function AnalyseStatsPage() {
     const daysInRange = result.dailyCa.length
     const daysWithCa = result.dailyCa.filter((d) => d.total > 0).length
     const avgCaPerDay = daysWithCa > 0 ? totalCa / daysWithCa : 0
+    const totalBenefit = sumBenefitFromLines(result.lines)
+    const caWithMargin = sumCaFromLinesWithKnownBenefit(result.lines)
     return {
       totalCa,
+      totalBenefit,
+      caWithMargin,
       daysInRange,
       daysWithCa,
       avgCaPerDay,
@@ -513,10 +517,19 @@ export default function AnalyseStatsPage() {
                 >
                   Tri qté
                 </Button>
+                <Button
+                  size="small"
+                  variant={sortKey === 'benefit' ? 'contained' : 'outlined'}
+                  color="success"
+                  onClick={() => setSortKey('benefit')}
+                  sx={{ textTransform: 'none', fontWeight: 600 }}
+                >
+                  Tri bénéfice
+                </Button>
               </Stack>
             </Paper>
 
-            <div className="mb-6 grid grid-cols-1 gap-2 sm:grid-cols-3 sm:gap-3">
+            <div className="mb-6 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4 sm:gap-3">
               <div className="min-w-0 rounded-2xl border border-emerald-100 bg-white/80 px-3 py-4 shadow-sm backdrop-blur sm:px-5">
                 <div className="text-[10px] font-medium uppercase tracking-wide text-emerald-700/80 sm:text-xs">
                   CA total (filtres)
@@ -536,6 +549,34 @@ export default function AnalyseStatsPage() {
                   ) : (
                     '— % du CA période'
                   )}
+                </div>
+              </div>
+              <div className="min-w-0 rounded-2xl border border-sky-100 bg-white/80 px-3 py-4 shadow-sm backdrop-blur sm:px-5">
+                <div className="text-[10px] font-medium uppercase tracking-wide text-sky-700/80 sm:text-xs">
+                  Bénéfice total (filtres)
+                </div>
+                <div className="mt-1 break-words text-lg font-semibold text-slate-900 sm:text-2xl">
+                  {formatMAD(kpis.totalBenefit)}
+                </div>
+                <div className="mt-1 text-[10px] text-slate-600 sm:text-[11px]">
+                  {percentOfPart(kpis.totalBenefit, kpis.totalCa) != null ? (
+                    <>
+                      <span className="font-semibold text-sky-800">
+                        {formatPercent(percentOfPart(kpis.totalBenefit, kpis.totalCa))}
+                      </span>
+                      {' du CA filtré'}
+                    </>
+                  ) : null}
+                  {percentOfPart(kpis.totalBenefit, kpis.caWithMargin) != null ? (
+                    <>
+                      {percentOfPart(kpis.totalBenefit, kpis.totalCa) != null ? ' · ' : null}
+                      <span className="font-semibold text-sky-800">
+                        {formatPercent(percentOfPart(kpis.totalBenefit, kpis.caWithMargin))}
+                      </span>
+                      {' du CA avec marge'}
+                    </>
+                  ) : null}
+                  {' · produits avec marge renseignée uniquement'}
                 </div>
               </div>
               <div className="min-w-0 rounded-2xl border border-slate-200 bg-white/80 px-3 py-4 shadow-sm backdrop-blur sm:px-5">
@@ -565,7 +606,9 @@ export default function AnalyseStatsPage() {
                   title={
                     sortKey === 'ca'
                       ? 'Évolution du CA journalier (filtres)'
-                      : 'Évolution des quantités journalières (filtres)'
+                      : sortKey === 'benefit'
+                        ? 'Évolution du bénéfice journalier (filtres)'
+                        : 'Évolution des quantités journalières (filtres)'
                   }
                 />
                 <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1 }}>
@@ -607,6 +650,7 @@ export default function AnalyseStatsPage() {
                           </>
                         ) : null}
                         <TableCell align="right">Quantité</TableCell>
+                        <TableCell align="right">Bénéfice</TableCell>
                       </TableRow>
                     </TableHead>
                     <TableBody>
@@ -629,6 +673,25 @@ export default function AnalyseStatsPage() {
                             </>
                           ) : null}
                           <TableCell align="right">{formatQty(row.qty)}</TableCell>
+                          <TableCell align="right">
+                            {row.benefit !== 0 ? (
+                              <>
+                                {formatMAD(row.benefit)}
+                                {percentOfPart(row.benefit, row.ca) != null ? (
+                                  <Typography
+                                    component="span"
+                                    variant="caption"
+                                    color="text.secondary"
+                                    sx={{ ml: 0.5 }}
+                                  >
+                                    ({formatPercent(percentOfPart(row.benefit, row.ca))})
+                                  </Typography>
+                                ) : null}
+                              </>
+                            ) : (
+                              '—'
+                            )}
+                          </TableCell>
                         </TableRow>
                       ))}
                     </TableBody>

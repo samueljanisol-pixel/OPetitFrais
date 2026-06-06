@@ -3,6 +3,7 @@
 ## Liste (`ProduitsListClient`)
 
 - Filtre **Recherche (nom)** : insensible à la casse et aux accents (ex. « peche » trouve « Pêche »). Cherche aussi dans `name_ar`.
+- **Import Google Sheet** : colonne feuille **Marge DH Actuelle** (alias « Marge DH ») → `product.margin` ; historique tarifaire si la marge change. Voir `src/features/sheet-import/`.
 
 ## Fiche produit (`ProductFormClient`)
 
@@ -13,6 +14,8 @@
 - **Fournisseur** puis **Vendeur** (liste filtrée sur le fournisseur du produit, option « Aucun »).
 - Le vendeur est enregistré sur `product.vendeur_id` (migration `20260621120000_product_vendeur_id.sql`).
 - Changer de fournisseur réinitialise le vendeur s’il n’appartient plus au nouveau fournisseur.
+- **Historique prix et marges** (`product_price_history`) : une ligne est ajoutée à chaque enregistrement qui modifie le prix de vente, un coût (achat, fabrication, emballage) ou la marge. La **marge n’est stockée que si elle est saisie** (fiche, import Sheet, marge rétroactive) — jamais calculée automatiquement à partir du prix de vente. Migration nettoyage : `20260701140000_clear_auto_price_history_margin.sql`.
+- **Marge rétroactive** : bouton sur la fiche produit pour enregistrer une marge (ex. marge moyenne) **à partir d’une date passée** (`valid_from`, min = `HISTORIQUE_FROM_ISO` dans `src/lib/ca/constants.ts`) sans modifier le produit courant — permet d’estimer le bénéfice sur l’historique des ventes.
 
 Les vendeurs se créent dans **Paramètres → Vendeurs**. Les liaisons par conditionnement restent dans **Paramètres du conditionnement** (`product_packaging_vendeur`).
 

@@ -5,6 +5,7 @@ type Row = {
   code: string
   name: string
   price: number
+  margin: number | null
   active: boolean
   name_ar: string | null
   ref_sales_unit: { label: string } | null
@@ -18,7 +19,7 @@ type Row = {
 export async function buildSheetExportPayload(supabase: SupabaseClient) {
   const { data, error } = await supabase
     .from('product')
-    .select('code, name, price, active, name_ar, ref_sales_unit (label), ref_category (label), ref_supplier (label)')
+    .select('code, name, price, margin, active, name_ar, ref_sales_unit (label), ref_category (label), ref_supplier (label)')
     .order('code', { ascending: true })
   if (error) throw error
   const C = SHEET_COLUMNS
@@ -30,6 +31,7 @@ export async function buildSheetExportPayload(supabase: SupabaseClient) {
       [C.code]: row.code ?? '',
       [C.nom]: row.name,
       [C.prix]: Number(row.price),
+      [C.marge]: row.margin != null && Number.isFinite(Number(row.margin)) ? Number(row.margin) : null,
       [C.udv]: row.ref_sales_unit?.label ?? '',
       [C.categorie]: row.ref_category?.label ?? '',
       [C.fournisseur]: row.ref_supplier?.label ?? '',

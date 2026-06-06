@@ -83,6 +83,9 @@ export type ProductPriceHistoryRow = {
   valid_from: string
   price: number
   cost_purchase: number | null
+  cost_manufacturing: number | null
+  cost_packaging: number | null
+  margin: number | null
   created_at: string
 }
 

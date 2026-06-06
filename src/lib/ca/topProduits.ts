@@ -4,15 +4,17 @@ export type CaTopProduitSimpleRow = {
   name: string
   ca: number
   qty: number
+  benefit: number | null
   salesUnitLabel: string | null
 }
 
 export type CaTopProduitPivotRow = {
   name: string
   salesUnitLabel: string | null
-  byMag: Record<string, { ca: number; qty: number }>
+  byMag: Record<string, { ca: number; qty: number; benefit: number }>
   totalCa: number
   totalQty: number
+  totalBenefit: number
 }
 
 export type CaTopProduitRankings =
@@ -57,6 +59,10 @@ export function aggregateTopProduitLines(lines: CaTopProduitLine[]): CaTopProdui
       name: cur.productId ? cur.name : line.name,
       ca: cur.ca + line.ca,
       qty: cur.qty + line.qty,
+      benefit:
+        line.benefit != null && Number.isFinite(line.benefit)
+          ? (cur.benefit ?? 0) + line.benefit
+          : cur.benefit,
       salesUnitLabel: cur.salesUnitLabel ?? line.salesUnitLabel,
     })
   }
@@ -88,11 +94,23 @@ export function buildTopProduitRankings(lines: CaTopProduitLine[]): {
   const byCa = [...lines]
     .sort((a, b) => b.ca - a.ca)
     .slice(0, 10)
-    .map(l => ({ name: l.name, ca: l.ca, qty: l.qty, salesUnitLabel: l.salesUnitLabel }))
+    .map(l => ({
+      name: l.name,
+      ca: l.ca,
+      qty: l.qty,
+      benefit: l.benefit ?? null,
+      salesUnitLabel: l.salesUnitLabel,
+    }))
   const byQty = [...lines]
     .sort((a, b) => b.qty - a.qty)
     .slice(0, 10)
-    .map(l => ({ name: l.name, ca: l.ca, qty: l.qty, salesUnitLabel: l.salesUnitLabel }))
+    .map(l => ({
+      name: l.name,
+      ca: l.ca,
+      qty: l.qty,
+      benefit: l.benefit ?? null,
+      salesUnitLabel: l.salesUnitLabel,
+    }))
   const filteredTotal = lines.reduce((acc, l) => acc + (Number.isFinite(l.ca) ? l.ca : 0), 0)
   return { byCa, byQty, filteredTotal }
 }
@@ -118,6 +136,7 @@ export function buildTopProduitPivotRankings(
         byMag: {},
         totalCa: 0,
         totalQty: 0,
+        totalBenefit: 0,
       }
       byName.set(key, row)
     } else if (!row.salesUnitLabel && line.salesUnitLabel) {
@@ -125,13 +144,20 @@ export function buildTopProduitPivotRankings(
     }
 
     const mag = line.magasin
-    const cur = row.byMag[mag] ?? { ca: 0, qty: 0 }
+    const cur = row.byMag[mag] ?? { ca: 0, qty: 0, benefit: 0 }
     row.byMag[mag] = {
       ca: cur.ca + line.ca,
       qty: cur.qty + line.qty,
+      benefit:
+        line.benefit != null && Number.isFinite(line.benefit)
+          ? cur.benefit + line.benefit
+          : cur.benefit,
     }
     row.totalCa += line.ca
     row.totalQty += line.qty
+    if (line.benefit != null && Number.isFinite(line.benefit)) {
+      row.totalBenefit += line.benefit
+    }
   }
 
   const rows = Array.from(byName.values())

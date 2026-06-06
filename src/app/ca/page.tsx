@@ -10,6 +10,7 @@ import PaniersHeureHistogram from '@/components/PaniersHeureHistogram'
 import RecordCaBanner from '@/components/RecordCaBanner'
 import SyncStatusFooter from '@/components/SyncStatusFooter'
 import { fetchCaDashboardFromSupabase } from '@/lib/ca/fromSupabase'
+import { percentOfPart } from '@/lib/ca/percent'
 import { computeTopCategorieRankings } from '@/lib/ca/topCategories'
 import { computeTopProduitRankings } from '@/lib/ca/topProduits'
 import type { CaResponse } from '@/lib/ca/types'
@@ -311,6 +312,32 @@ export default function CaDashboardPage() {
   const formatPercent = (pct: number) =>
     `${new Intl.NumberFormat('fr-FR', { maximumFractionDigits: 2 }).format(pct)}%`
 
+  const formatBenefitCaPercent = (benefit: number, ca: unknown) => {
+    const pct = percentOfPart(benefit, ca)
+    return pct != null ? formatPercent(pct) : null
+  }
+
+  const benefitPercentLabels = (
+    benefit: number,
+    totalCa: unknown,
+    caWithMargin?: number,
+    accentClass = 'text-emerald-800',
+  ) => {
+    const pctTotal = formatBenefitCaPercent(benefit, totalCa)
+    const pctScoped =
+      caWithMargin != null && caWithMargin > 0 ? formatBenefitCaPercent(benefit, caWithMargin) : null
+    if (!pctTotal && !pctScoped) return null
+    return (
+      <span className={`ml-1 font-semibold ${accentClass}`}>
+        (
+        {pctTotal ? `${pctTotal} du CA total` : null}
+        {pctTotal && pctScoped ? ' · ' : null}
+        {pctScoped ? `${pctScoped} du CA avec marge` : null}
+        )
+      </span>
+    )
+  }
+
   const topPercentOfBase = (value: unknown) => {
     const n = typeof value === 'number' ? value : Number(value)
     if (!Number.isFinite(n) || !Number.isFinite(topPercentBase) || topPercentBase <= 0) return 0
@@ -487,6 +514,14 @@ export default function CaDashboardPage() {
                 <span className="font-semibold text-slate-800">{formatKg(data.totalKgJour)}</span>
                 <span className="ml-1 text-xs text-slate-500">(produits UdV Kg)</span>
               </div>
+              {data.totalBenefitJour != null ? (
+                <div className="mt-3 border-t border-emerald-100 pt-3 text-sm text-slate-600">
+                  Bénéfice estimé :{' '}
+                  <span className="font-semibold text-slate-800">{formatMAD(data.totalBenefitJour)}</span>
+                  {benefitPercentLabels(data.totalBenefitJour, data.totalGlobal, data.caWithMarginJour)}
+                  <span className="ml-1 text-xs text-slate-500">· produits avec marge renseignée uniquement</span>
+                </div>
+              ) : null}
             </div>
 
             <div className="rounded-2xl border border-slate-200 bg-white/80 px-5 py-4 shadow-sm backdrop-blur">
@@ -526,6 +561,19 @@ export default function CaDashboardPage() {
                 <span className="font-semibold text-slate-800">{formatKg(month?.totalKg)}</span>
                 <span className="ml-1 text-xs text-slate-500">(produits UdV Kg)</span>
               </div>
+              {month?.totalBenefit != null ? (
+                <div className="mt-3 border-t border-slate-100 pt-3 text-sm text-slate-600">
+                  Bénéfice estimé :{' '}
+                  <span className="font-semibold text-slate-800">{formatMAD(month.totalBenefit)}</span>
+                  {benefitPercentLabels(
+                    month.totalBenefit,
+                    month.totalGlobal,
+                    month.caWithMargin,
+                    'text-slate-700',
+                  )}
+                  <span className="ml-1 text-xs text-slate-500">· produits avec marge renseignée uniquement</span>
+                </div>
+              ) : null}
             </div>
           </div>
         </header>
@@ -818,6 +866,7 @@ export default function CaDashboardPage() {
                           {topProduitsComputed.mode === 'pivot' ? 'Total' : 'CA'}
                         </th>
                         <th className="px-3 py-2 text-right">% jour</th>
+                        <th className="px-3 py-2 text-right">Bénéfice</th>
                         {topProduitsComputed.mode === 'simple' ? (
                           <th className="px-3 py-2 text-right">Qté</th>
                         ) : null}
@@ -842,6 +891,21 @@ export default function CaDashboardPage() {
                               <td className="whitespace-nowrap px-3 py-2 text-right text-slate-700">
                                 {formatPercent(topPercentOfBase(r.totalCa))}
                               </td>
+                              <td className="whitespace-nowrap px-3 py-2 text-right text-slate-700">
+                                {r.totalBenefit !== 0 ? (() => {
+                                  const pctLabel = formatBenefitCaPercent(r.totalBenefit, r.totalCa)
+                                  return (
+                                    <>
+                                      {formatMAD(r.totalBenefit)}
+                                      {pctLabel ? (
+                                        <span className="ml-1 text-xs text-slate-500">({pctLabel})</span>
+                                      ) : null}
+                                    </>
+                                  )
+                                })() : (
+                                  '—'
+                                )}
+                              </td>
                             </tr>
                           ))
                         : topProduitsComputed.byCa.map(r => (
@@ -850,6 +914,21 @@ export default function CaDashboardPage() {
                               <td className="px-3 py-2 text-right font-semibold text-slate-900">{formatMAD(r.ca)}</td>
                               <td className="px-3 py-2 text-right text-slate-700">
                                 {formatPercent(topPercentOfBase(r.ca))}
+                              </td>
+                              <td className="px-3 py-2 text-right text-slate-700">
+                                {r.benefit != null ? (() => {
+                                  const pctLabel = formatBenefitCaPercent(r.benefit, r.ca)
+                                  return (
+                                    <>
+                                      {formatMAD(r.benefit)}
+                                      {pctLabel ? (
+                                        <span className="ml-1 text-xs text-slate-500">({pctLabel})</span>
+                                      ) : null}
+                                    </>
+                                  )
+                                })() : (
+                                  '—'
+                                )}
                               </td>
                               <td className="px-3 py-2 text-right text-slate-700">
                                 {new Intl.NumberFormat('fr-FR').format(r.qty)}

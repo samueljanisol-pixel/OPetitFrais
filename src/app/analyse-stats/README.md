@@ -13,7 +13,8 @@ Page d’analyse des ventes produit sur une plage de dates, avec filtres et regr
 | Source | Usage |
 |--------|--------|
 | `ca_product_day` via RPC `ca_analyse_product_lines` | Ventes produit (KPIs, graphique, tableau) — pagination côté client |
-| `product` + `ref_category` + `ref_supplier` | Lien via `ca_product_day.product_id` = `product.code` (JSON `code` caisse ou article numérique) |
+| `product` + `ref_category` + `ref_supplier` | Lien catalogue via `ca_product_day.product_id` |
+| `product_price_history` | Marge en vigueur à la date de vente → bénéfice = `qty × marge` (`src/lib/ca/benefitFromSales.ts`) |
 
 ### RPC
 
@@ -36,9 +37,9 @@ Le bouton **Analyser** déclenche le chargement (pas de requête à chaque chang
 
 ## Affichage
 
-- **KPIs** : CA total (filtres) avec **% du CA période** (même dates et magasins, sans filtre catégorie/fournisseur/produit), moyenne CA/jour, nb lignes tableau
-- **Graphique** : histogramme SVG journalier — ventes filtrées, bascule CA / quantité
-- **Tableau** : regroupement produit / catégorie / fournisseur / magasin ; en **Tri CA**, colonne **% période** (part du CA ligne / CA période) ; **% filtre** uniquement si catégorie, fournisseur ou produit est sélectionné (part / CA total filtres)
+- **KPIs** : CA total (filtres) avec **% du CA période**, **bénéfice total** avec **% du CA filtré** et **% du CA avec marge**, moyenne CA/jour, nb lignes tableau
+- **Graphique** : histogramme SVG journalier — bascule **Tri CA** / **Tri qté** / **Tri bénéfice**
+- **Tableau** : colonnes CA, quantité, **bénéfice** (% du CA ligne) ; regroupement produit / catégorie / fournisseur / magasin ; en **Tri CA**, colonnes **% période** et **% filtre** (si filtres produit actifs)
 
 ## Limites connues
 
@@ -46,6 +47,7 @@ Le bouton **Analyser** déclenche le chargement (pas de requête à chaque chang
 - Après migration : relancer `npm run sync:day -- <date>` ou `sync:all` sur les jours à jour pour peupler `product_id` sur les nouvelles syncs.
 - **Filtre magasin** : nécessite des données ventilées par magasin (`M1`, `M2`, …). Relancer la sync FTP des jours concernés si seules des lignes `__all__` existent.
 - **Graphique vs historique** : les totaux filtres proviennent des ventes produit (`ca_product_day`), pas de `ca_day` ; un écart avec l’historique CA global reste possible.
+- **Bénéfice** : `qty × marge` à la date, sans double comptage magasin. Marge prise en compte seulement si renseignée explicitement (marge produit, marge rétroactive, ou ≠ formule auto vente − coûts).
 
 ## Composants
 

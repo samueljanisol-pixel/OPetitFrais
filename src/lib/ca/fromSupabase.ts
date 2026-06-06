@@ -4,6 +4,13 @@ import { catalogEntryForProductId, fetchProductCatalogIndex } from "./productCat
 import type { CaResponse, CaRecordRef, CaTopProduitLine, CaTopProduitsPayload, HistoriqueDayRow, HistoriquePayload, PanierMag } from "./types";
 import { buildTopProduitRankings, filterTopProduitLines } from "./topProduits";
 import { fetchTotalKgQtyForDateRange, monthDateBounds, sumKgQtyFromTopProduitLines } from "./totalKg";
+import {
+  dedupeProductLinesByMagasin,
+  enrichCaTopProduitLines,
+  fetchBenefitTotalsForDateRange,
+  sumBenefitFromLines,
+  sumCaFromLinesWithKnownBenefit,
+} from "./benefitFromSales";
 
 function isoDateMinusDays(iso: string, days: number) {
   const [yy, mm, dd] = iso.split("-").map((x) => Number(x));
@@ -274,7 +281,8 @@ export async function fetchCaDashboardFromSupabase(
   }
 
   const monthBounds = monthDateBounds(ym);
-  const [dayQ, j1Q, j7Q, monthQ, hourQ, maxDayRecords, topProduits, totalKgMois] = await Promise.all([
+  const [dayQ, j1Q, j7Q, monthQ, hourQ, maxDayRecords, topProduitsRaw, totalKgMois, monthBenefitTotals] =
+    await Promise.all([
     dayQb,
     j1Qb,
     j7Qb,
@@ -283,6 +291,7 @@ export async function fetchCaDashboardFromSupabase(
     fetchMaxDailyCaRecords(supabase, HISTORIQUE_FROM_ISO, todayIso, magIn),
     buildTopProduitsForDate(supabase, date, magIn),
     fetchTotalKgQtyForDateRange(supabase, monthBounds.from, monthBounds.to, magIn),
+    fetchBenefitTotalsForDateRange(supabase, monthBounds.from, monthBounds.to, magIn),
   ]);
 
   const firstErr = dayQ.error || j1Q.error || j7Q.error || monthQ.error || hourQ.error;
@@ -296,6 +305,8 @@ export async function fetchCaDashboardFromSupabase(
   for (const [mag, t] of Object.entries(dayAgg.byMag)) {
     magasins[mag] = { total: t };
   }
+
+  let topProduits = topProduitsRaw;
 
   topProduits.filterMagasins = mergeTopMagasinFilterList(
     topProduits.filterMagasins,
@@ -379,9 +390,41 @@ export async function fetchCaDashboardFromSupabase(
 
   const totalKgJour = topProduits.available ? sumKgQtyFromTopProduitLines(topProduits.lines) : 0;
 
+  let totalBenefitJour: number | undefined;
+  let caWithMarginJour: number | undefined;
+  if (topProduits.available && topProduits.lines.length > 0) {
+    const enriched = await enrichCaTopProduitLines(supabase, topProduits.lines, date);
+    if (!("error" in enriched)) {
+      const deduped = dedupeProductLinesByMagasin(enriched);
+      topProduits = {
+        ...topProduits,
+        lines: enriched,
+        byCa: buildTopProduitRankings(
+          filterTopProduitLines(enriched, "all", "all"),
+        ).byCa,
+        byQty: buildTopProduitRankings(
+          filterTopProduitLines(enriched, "all", "all"),
+        ).byQty,
+      };
+      totalBenefitJour = sumBenefitFromLines(deduped);
+      caWithMarginJour = sumCaFromLinesWithKnownBenefit(deduped);
+    }
+  }
+
+  const monthTotalBenefit =
+    typeof monthBenefitTotals === 'object' && 'benefit' in monthBenefitTotals
+      ? monthBenefitTotals.benefit
+      : undefined;
+  const monthCaWithMargin =
+    typeof monthBenefitTotals === 'object' && 'caWithMargin' in monthBenefitTotals
+      ? monthBenefitTotals.caWithMargin
+      : undefined;
+
   const data: CaResponse = {
     totalGlobal: dayAgg.totalGlobal,
     totalKgJour,
+    totalBenefitJour,
+    caWithMarginJour,
     isRecordDay,
     previousRecordDay,
     isRecordDayByMag,
@@ -391,6 +434,8 @@ export async function fetchCaDashboardFromSupabase(
       ym,
       totalGlobal: monthTotalGlobal,
       totalKg: totalKgMois,
+      totalBenefit: monthTotalBenefit,
+      caWithMargin: monthCaWithMargin,
       magasins: monthByMag,
       panierMois,
       panierMoisGlobal,

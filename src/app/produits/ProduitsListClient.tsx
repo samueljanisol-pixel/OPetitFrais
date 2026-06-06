@@ -242,6 +242,9 @@ export default function ProduitsListClient() {
       product_id: r.id,
       price: n,
       cost_purchase: r.cost_purchase ?? null,
+      cost_manufacturing: r.cost_manufacturing ?? null,
+      cost_packaging: r.cost_packaging ?? null,
+      margin: r.margin ?? null,
     })
     if (hErr) {
       setError(hErr.message)

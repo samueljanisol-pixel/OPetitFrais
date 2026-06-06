@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { enrichVentesAnalyseLines, sumBenefitFromLines } from "@/lib/ca/benefitFromSales";
 import {
   catalogEntryForProductId,
   fetchProductCatalogIndex,
@@ -77,6 +78,8 @@ function enrichRpcLine(row: RpcProductLine, catalog: ProductCatalogIndex): Vente
     ca: Number.isFinite(ca) ? ca : 0,
     qty: Number.isFinite(qty) ? qty : 0,
     magasin,
+    margin: null,
+    benefit: null,
   };
 }
 
@@ -190,17 +193,25 @@ export function groupAnalyseLines(lines: VentesAnalyseLine[], groupBy: VentesAna
 
     const cur = byKey.get(key);
     if (!cur) {
-      byKey.set(key, { label, ca: line.ca, qty: line.qty });
+      byKey.set(key, {
+        label,
+        ca: line.ca,
+        qty: line.qty,
+        benefit: line.benefit != null && Number.isFinite(line.benefit) ? line.benefit : 0,
+      });
       continue;
     }
     cur.ca += line.ca;
     cur.qty += line.qty;
+    if (line.benefit != null && Number.isFinite(line.benefit)) {
+      cur.benefit += line.benefit;
+    }
   }
 
   return Array.from(byKey.values()).sort((a, b) => b.ca - a.ca || a.label.localeCompare(b.label, "fr"));
 }
 
-export type VentesAnalyseMetric = "ca" | "qty";
+export type VentesAnalyseMetric = "ca" | "qty" | "benefit";
 
 export function buildDailySeriesFromLines(
   lines: VentesAnalyseLine[],
@@ -208,7 +219,8 @@ export function buildDailySeriesFromLines(
 ): VentesAnalyseDailyRow[] {
   const byDate = new Map<string, number>();
   for (const line of lines) {
-    const v = metric === "ca" ? line.ca : line.qty;
+    const v =
+      metric === "ca" ? line.ca : metric === "qty" ? line.qty : line.benefit ?? 0;
     byDate.set(line.date, (byDate.get(line.date) ?? 0) + v);
   }
   return Array.from(byDate.entries())
@@ -268,9 +280,12 @@ export async function fetchVentesAnalyse(
 
   if ("error" in linesRes) return { error: linesRes.error };
 
-  const filtered = applyAnalyseFilters(linesRes.lines, filters);
+  const enrichedRes = await enrichVentesAnalyseLines(supabase, linesRes.lines);
+  if ("error" in enrichedRes) return { error: enrichedRes.error };
 
-  const totalCaPeriod = linesRes.lines.reduce((acc, l) => acc + (Number.isFinite(l.ca) ? l.ca : 0), 0);
+  const filtered = applyAnalyseFilters(enrichedRes, filters);
+
+  const totalCaPeriod = enrichedRes.reduce((acc, l) => acc + (Number.isFinite(l.ca) ? l.ca : 0), 0);
   const totalCaFiltered = filtered.reduce((acc, l) => acc + (Number.isFinite(l.ca) ? l.ca : 0), 0);
   const caPercentOfPeriod =
     totalCaPeriod > 0 ? Math.min(100, (totalCaFiltered / totalCaPeriod) * 100) : null;

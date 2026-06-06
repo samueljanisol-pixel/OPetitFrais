@@ -14,6 +14,8 @@ export type CaTopProduitLine = {
   salesUnitLabel: string | null
   /** Code UdV catalogue (ex. `kg`), null si produit non lié. */
   salesUnitCode: string | null
+  margin?: number | null
+  benefit?: number | null
 }
 
 export type CaTopProduitsPayload = {
@@ -29,6 +31,10 @@ export type CaResponse = {
   totalGlobal: number
   /** Somme des quantités vendues (UdV Kg) pour la date sélectionnée. */
   totalKgJour?: number
+  /** Bénéfice estimé du jour (qté × marge ; produits sans marge exclus). */
+  totalBenefitJour?: number
+  /** CA du jour sur les produits avec marge connue (même périmètre que totalBenefitJour). */
+  caWithMarginJour?: number
   /** Vrai si le CA du jour sélectionné atteint ou dépasse le record sur la période historique. */
   isRecordDay?: boolean
   /** Record battu (date + montant) lorsque `isRecordDay` et qu'un record antérieur existait. */
@@ -43,6 +49,10 @@ export type CaResponse = {
     totalGlobal: number
     /** Somme des quantités vendues (UdV Kg) sur le mois calendaire. */
     totalKg?: number
+    /** Bénéfice estimé sur le mois calendaire (même règles que totalBenefitJour). */
+    totalBenefit?: number
+    /** CA du mois sur les produits avec marge connue (même périmètre que totalBenefit). */
+    caWithMargin?: number
     magasins: Record<string, number>
     panierMois?: Record<string, PanierMag>
     panierMoisGlobal?: PanierMag
@@ -94,12 +104,15 @@ export type VentesAnalyseLine = {
   categoryLabel: string | null
   supplierId: string | null
   supplierLabel: string | null
+  margin: number | null
+  benefit: number | null
 }
 
 export type VentesAnalyseRow = {
   label: string
   ca: number
   qty: number
+  benefit: number
 }
 
 export type VentesAnalyseDailyRow = {
