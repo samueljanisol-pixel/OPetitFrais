@@ -1,6 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { insertProductPriceHistoryRow, pricingSnapshotChanged, type ProductPricingSnapshot } from '@/lib/products/priceHistory'
-import type { RefRow } from '@/lib/products/types'
+import type { RefRow, RefSubcategoryRow } from '@/lib/products/types'
 import type { SheetRowParsed } from './mapSheetRow'
 import {
   DEFAULT_SHEET_IMPORT_FIELDS,
@@ -15,14 +15,20 @@ type Refs = {
   byCatCode: Map<string, string>
   bySupLabel: Map<string, string>
   bySupCode: Map<string, string>
+  bySubcatKey: Map<string, string>
 }
 
 const norm = (s: string) => s.trim().toLowerCase()
+
+function subcatKey(categoryId: string, label: string): string {
+  return `${categoryId}\0${norm(label)}`
+}
 
 function buildRefs(
   units: RefRow[],
   cats: RefRow[],
   sups: RefRow[],
+  subcats: RefSubcategoryRow[],
 ): Refs {
   const byUnitLabel = new Map<string, string>()
   const byUnitCode = new Map<string, string>()
@@ -42,7 +48,11 @@ function buildRefs(
     bySupLabel.set(norm(s.label), s.id)
     bySupCode.set(norm(s.code), s.id)
   }
-  return { byUnitLabel, byUnitCode, byCatLabel, byCatCode, bySupLabel, bySupCode }
+  const bySubcatKey = new Map<string, string>()
+  for (const sc of subcats) {
+    bySubcatKey.set(subcatKey(sc.category_id, sc.label), sc.id)
+  }
+  return { byUnitLabel, byUnitCode, byCatLabel, byCatCode, bySupLabel, bySupCode, bySubcatKey }
 }
 
 function resolveId(maps: Map<string, string>[], raw: string): string | null {
@@ -127,6 +137,79 @@ function buildProductPatch(
   return { patch, errors }
 }
 
+async function findOrCreateSubcategory(
+  supabase: SupabaseClient,
+  categoryId: string,
+  label: string,
+  refs: Refs,
+): Promise<string | { error: string }> {
+  const trimmed = label.trim()
+  const key = subcatKey(categoryId, trimmed)
+  const existing = refs.bySubcatKey.get(key)
+  if (existing) return existing
+
+  const { data, error } = await supabase
+    .from('ref_subcategory')
+    .insert({ category_id: categoryId, label: trimmed } as never)
+    .select('id, category_id, label')
+    .single()
+  if (error) return { error: error.message }
+  const inserted = data as RefSubcategoryRow
+  refs.bySubcatKey.set(subcatKey(inserted.category_id, inserted.label), inserted.id)
+  return inserted.id
+}
+
+async function applySubcategoryToPatch(
+  supabase: SupabaseClient,
+  row: SheetRowParsed,
+  fields: SheetImportFields,
+  refs: Refs,
+  patch: Record<string, unknown>,
+  categoryId: string | null,
+): Promise<string[]> {
+  const errors: string[] = []
+  if (!fields.sousCategorie) return errors
+
+  if (!row.sousCategorie.trim()) {
+    patch.subcategory_id = null
+    return errors
+  }
+
+  if (!categoryId) {
+    errors.push(`« ${row.nom} » : sous-catégorie « ${row.sousCategorie} » sans catégorie connue.`)
+    return errors
+  }
+
+  const resolved = await findOrCreateSubcategory(supabase, categoryId, row.sousCategorie, refs)
+  if (typeof resolved === 'object' && 'error' in resolved) {
+    errors.push(`« ${row.nom} » : sous-catégorie « ${row.sousCategorie} » : ${resolved.error}`)
+    return errors
+  }
+  patch.subcategory_id = resolved
+  return errors
+}
+
+async function resolveCategoryIdForRow(
+  supabase: SupabaseClient,
+  productId: string | null,
+  patch: Record<string, unknown>,
+  row: SheetRowParsed,
+  fields: SheetImportFields,
+  refs: Refs,
+): Promise<string | null> {
+  const fromPatch = patch.category_id
+  if (typeof fromPatch === 'string' && fromPatch.length > 0) return fromPatch
+  if (fields.categorie) {
+    return resolveId([refs.byCatLabel, refs.byCatCode], row.categorie)
+  }
+  if (productId) {
+    const { data } = await supabase.from('product').select('category_id').eq('id', productId).single()
+    const cid = data?.category_id
+    return typeof cid === 'string' && cid.length > 0 ? cid : null
+  }
+  return resolveId([refs.byCatLabel, refs.byCatCode], row.categorie)
+}
+
 /**
  * N’applique que les champs cochés pour les produits existants.
  * Les nouveaux produits sont toujours créés avec toutes les colonnes de la feuille.
@@ -141,12 +224,14 @@ export async function applySheetImport(
   if (!hasAnyImportField(fields)) {
     return { created: 0, updated: 0, skipped: 0, errors: ['Aucun champ sélectionné pour l’import.'] }
   }
-  const [{ data: units }, { data: cats }, { data: sups }, { data: products }] = await Promise.all([
-    supabase.from('ref_sales_unit').select('*'),
-    supabase.from('ref_category').select('*'),
-    supabase.from('ref_supplier').select('*'),
-    supabase.from('product').select('id, code, name'),
-  ])
+  const [{ data: units }, { data: cats }, { data: sups }, { data: subcats }, { data: products }] =
+    await Promise.all([
+      supabase.from('ref_sales_unit').select('*'),
+      supabase.from('ref_category').select('*'),
+      supabase.from('ref_supplier').select('*'),
+      supabase.from('ref_subcategory').select('id, category_id, label, code, sort_order'),
+      supabase.from('product').select('id, code, name'),
+    ])
   if (!units?.length || !cats?.length || !sups?.length) {
     return { created: 0, updated: 0, skipped: 0, errors: ['Référentiels (UdV / catégorie / fournisseur) introuvables.'] }
   }
@@ -154,6 +239,7 @@ export async function applySheetImport(
     units as RefRow[],
     cats as RefRow[],
     sups as RefRow[],
+    (subcats as RefSubcategoryRow[]) ?? [],
   )
   const byCode = new Map<string, string>()
   const byName = new Map<string, string>()
@@ -177,6 +263,13 @@ export async function applySheetImport(
     const codeNorm = row.code ? norm(row.code) : ''
     const id =
       (codeNorm && byCode.get(codeNorm)) || (!codeNorm && byName.get(norm(row.nom))) || null
+
+    const categoryId = await resolveCategoryIdForRow(supabase, id, patch, row, fields, refs)
+    const subErrors = await applySubcategoryToPatch(supabase, row, fields, refs, patch, categoryId)
+    if (subErrors.length > 0) {
+      errors.push(...subErrors)
+      continue
+    }
 
     if (id) {
       if (Object.keys(patch).length === 0) {
@@ -216,6 +309,26 @@ export async function applySheetImport(
       )
       if (createErrors.length > 0) {
         errors.push(...createErrors)
+        continue
+      }
+      const createCategoryId = await resolveCategoryIdForRow(
+        supabase,
+        null,
+        fullPatch,
+        row,
+        DEFAULT_SHEET_IMPORT_FIELDS,
+        refs,
+      )
+      const createSubErrors = await applySubcategoryToPatch(
+        supabase,
+        row,
+        DEFAULT_SHEET_IMPORT_FIELDS,
+        refs,
+        fullPatch,
+        createCategoryId,
+      )
+      if (createSubErrors.length > 0) {
+        errors.push(...createSubErrors)
         continue
       }
       const insert: Record<string, unknown> = {

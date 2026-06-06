@@ -1,10 +1,16 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { roleSlugFromName } from "@/lib/auth/role-slug";
+import AddIcon from "@mui/icons-material/Add";
 import {
   Box,
   Button,
   Checkbox,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
   FormControl,
   FormControlLabel,
   InputLabel,
@@ -35,8 +41,22 @@ export default function AdminRolesClient() {
   const [selectedRoleId, setSelectedRoleId] = useState<string>("");
   const [saving, setSaving] = useState(false);
 
-  const [newSlug, setNewSlug] = useState("");
+  const [createOpen, setCreateOpen] = useState(false);
+  const [createBusy, setCreateBusy] = useState(false);
+  const [createError, setCreateError] = useState<string | null>(null);
   const [newName, setNewName] = useState("");
+
+  const openCreateDialog = () => {
+    setNewName("");
+    setCreateError(null);
+    setCreateOpen(true);
+  };
+
+  const closeCreateDialog = () => {
+    if (createBusy) return;
+    setCreateOpen(false);
+    setCreateError(null);
+  };
 
   const load = async () => {
     setLoading(true);
@@ -122,26 +142,30 @@ export default function AdminRolesClient() {
   };
 
   const createRole = async () => {
-    const slug = newSlug.trim().toLowerCase().replace(/\s+/g, "_");
     const name = newName.trim();
-    if (!slug || !name) {
-      setError("Code (slug) et nom requis");
+    if (!name) {
+      setCreateError("Nom requis");
       return;
     }
+    setCreateBusy(true);
+    setCreateError(null);
     const res = await fetch("/api/admin/roles", {
       method: "POST",
       credentials: "include",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ slug, name }),
+      body: JSON.stringify({ name }),
     });
     const j = await res.json().catch(() => ({}));
+    setCreateBusy(false);
     if (!res.ok) {
-      setError((j as { error?: string }).error ?? "Création impossible");
+      setCreateError((j as { error?: string }).error ?? "Création impossible");
       return;
     }
-    setNewSlug("");
+    const created = (j as { role?: { id: string } }).role;
+    setCreateOpen(false);
     setNewName("");
     await load();
+    if (created?.id) setSelectedRoleId(created.id);
   };
 
   if (loading && !roles.length) {
@@ -150,33 +174,69 @@ export default function AdminRolesClient() {
 
   return (
     <div className="flex flex-col gap-6">
-      <Typography variant="h6" className="!font-semibold">
-        Rôles & accès
-      </Typography>
+      <div className="flex flex-row flex-wrap items-center justify-between gap-2">
+        <Typography variant="h6" className="!font-semibold">
+          Rôles & accès
+        </Typography>
+        <Button
+          variant="contained"
+          color="success"
+          size="small"
+          startIcon={<AddIcon />}
+          onClick={openCreateDialog}
+          sx={{ textTransform: "none" }}
+        >
+          Ajouter
+        </Button>
+      </div>
       {error ? (
         <Paper className="!border-rose-200 !bg-rose-50 !p-3">
           <Typography color="error">{error}</Typography>
         </Paper>
       ) : null}
 
-      <Paper className="!p-4">
-        <Typography variant="subtitle2" className="!mb-2 !font-semibold">
-          Nouveau rôle
-        </Typography>
-        <div className="flex max-w-2xl flex-col gap-2 sm:flex-row sm:items-end">
+      <Dialog open={createOpen} onClose={closeCreateDialog} fullWidth maxWidth="xs">
+        <DialogTitle>Nouveau rôle</DialogTitle>
+        <DialogContent>
           <TextField
-            label="Code (slug, non modifiable après création)"
-            value={newSlug}
-            onChange={(e) => setNewSlug(e.target.value)}
+            autoFocus
+            label="Nom affiché"
+            value={newName}
+            onChange={(e) => setNewName(e.target.value)}
             size="small"
-            helperText="ex: magasin_lyon"
+            fullWidth
+            margin="dense"
+            disabled={createBusy}
+            helperText={
+              newName.trim()
+                ? `Code : ${roleSlugFromName(newName) || "—"}`
+                : "Le code est généré automatiquement à partir du nom"
+            }
+            onKeyDown={(e) => {
+              if (e.key === "Enter") void createRole();
+            }}
           />
-          <TextField label="Nom affiché" value={newName} onChange={(e) => setNewName(e.target.value)} size="small" fullWidth />
-          <Button variant="contained" color="success" onClick={() => void createRole()} sx={{ textTransform: "none" }}>
-            Créer
+          {createError ? (
+            <Typography color="error" variant="body2" sx={{ mt: 1 }}>
+              {createError}
+            </Typography>
+          ) : null}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={closeCreateDialog} disabled={createBusy} sx={{ textTransform: "none" }}>
+            Annuler
           </Button>
-        </div>
-      </Paper>
+          <Button
+            variant="contained"
+            color="success"
+            disabled={createBusy}
+            onClick={() => void createRole()}
+            sx={{ textTransform: "none" }}
+          >
+            {createBusy ? "Création…" : "Créer"}
+          </Button>
+        </DialogActions>
+      </Dialog>
 
       <Paper className="!p-4">
         <Typography variant="subtitle2" className="!mb-2 !font-semibold">

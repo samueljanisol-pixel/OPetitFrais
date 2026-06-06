@@ -32,6 +32,8 @@
       "products": "Produits",
       "stats": "Statistique",
       "supplierOrders": "Commandes fournisseur",
+      "cuisine": "Cuisine",
+      "cuisineHistorique": "Historique cuisine",
       "logout": "Déconnexion",
       "settings": "Paramètres",
       "settingsAria": "Paramètres",
@@ -415,6 +417,66 @@
         "noOrderCommentsToMerge": "Aucun commentaire de commande à intégrer.",
         "storeNotFoundForComment": "Magasin introuvable pour ce commentaire.",
         "productNotFoundForComment": "Produit introuvable pour ce commentaire."
+      }
+    },
+    "cuisine": {
+      "saisie": {
+        "title": "Saisie cuisine",
+        "historiqueLink": "Historique",
+        "addEntree": "Entrée",
+        "addSortie": "Sortie",
+        "sections": {
+          "entrees": "Entrées",
+          "sorties": "Sorties"
+        },
+        "emptyEntrees": "Aucune entrée aujourd'hui.",
+        "emptySorties": "Aucune sortie aujourd'hui.",
+        "atTime": "à",
+        "quantityWithUnit": "{quantity} {unit}",
+        "quantityOnly": "{quantity}",
+        "totals": {
+          "entrees": "Entrées",
+          "sorties": "Sorties"
+        }
+      },
+      "ajouter": {
+        "titleEntree": "Choisir un produit — entrée",
+        "titleSortie": "Choisir un produit — sortie",
+        "backToSaisie": "Retour à la saisie",
+        "uncategorized": "Sans sous-catégorie",
+        "filterAll": "Tout",
+        "emptyProducts": "Aucun produit Frigo actif."
+      },
+      "quantite": {
+        "title": "Quantité",
+        "titleEntree": "Entrée — quantité",
+        "titleSortie": "Sortie — quantité",
+        "entryNotFound": "Ligne introuvable.",
+        "productNotFound": "Produit introuvable.",
+        "stepper": {
+          "minusTen": "−10",
+          "minusOne": "−1",
+          "plusOne": "+1",
+          "plusTen": "+10"
+        }
+      },
+      "historique": {
+        "title": "Historique cuisine",
+        "saisieLink": "Saisie",
+        "dateLabel": "Date",
+        "prevDay": "Jour précédent",
+        "nextDay": "Jour suivant",
+        "emptyDay": "Aucune saisie pour cette date.",
+        "uncategorized": "Sans sous-catégorie",
+        "table": {
+          "product": "Produit",
+          "entrees": "Entrées",
+          "sorties": "Sorties"
+        },
+        "totals": {
+          "entrees": "Entrées",
+          "sorties": "Sorties"
+        }
       }
     }
   },

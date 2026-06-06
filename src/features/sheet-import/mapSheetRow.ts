@@ -12,6 +12,7 @@ export const SHEET_COLUMNS = {
   marge: 'Marge DH Actuelle',
   udv: 'UdV',
   categorie: 'Catégorie',
+  sousCategorie: 'Sous-Catégorie',
   fournisseur: 'Fournisseur',
   arabe: 'Arabe',
 } as const
@@ -24,6 +25,7 @@ export type SheetRowParsed = {
   marge: number | null
   udv: string
   categorie: string
+  sousCategorie: string
   fournisseur: string
   arabe: string | null
 }
@@ -73,7 +75,7 @@ function numMarge(v: unknown): number | null {
 }
 
 /**
- * Extrait une ligne d’export en ne retenant **que** Actif, Code, Nom, Prix, Marge DH, UdV, Catégorie, Fournisseur, Arabe.
+ * Extrait une ligne d’export en ne retenant **que** Actif, Code, Nom, Prix, Marge DH, UdV, Catégorie, Sous-Catégorie, Fournisseur, Arabe.
  * Les `aliases` ne servent qu’en secours (orthographe / casse) ; le fichier canonique est les clés de {@link SHEET_COLUMNS}.
  */
 export function parseSheetRow(
@@ -107,6 +109,9 @@ export function parseSheetRow(
   const arabeRaw = getCell(row, SHEET_COLUMNS.arabe, ['arabe', 'Name_ar', 'name_ar'])
   const arabe = str(arabeRaw) ? str(arabeRaw) : null
   const marge = numMarge(getCell(row, SHEET_COLUMNS.marge, ['Marge DH', 'marge', 'Marge DH actuelle']))
+  const sousCategorie = str(
+    getCell(row, SHEET_COLUMNS.sousCategorie, ['Sous-Catégorie', 'Sous-catégorie', 'sous-categorie', 'Sous categorie']),
+  )
 
   return {
     ok: true,
@@ -118,6 +123,7 @@ export function parseSheetRow(
       marge,
       udv,
       categorie: cat,
+      sousCategorie,
       fournisseur: fourn,
       arabe,
     },

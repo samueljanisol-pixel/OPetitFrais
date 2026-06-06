@@ -38,6 +38,12 @@ const rules: RouteRule[] = [
       ],
     },
   },
+  { match: (p) => p.startsWith("/cuisine/historique"), permission: "cuisine.historique" },
+  { match: (p) => p.startsWith("/cuisine/saisie"), permission: "cuisine.saisie" },
+  {
+    match: (p) => p === "/cuisine" || p === "/cuisine/",
+    permission: { anyOf: ["cuisine.saisie", "cuisine.historique"] },
+  },
   { match: (p) => p === "/", permission: null },
 ];
 

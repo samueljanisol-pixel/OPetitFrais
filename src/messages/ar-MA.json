@@ -32,6 +32,8 @@
       "products": "المنتجات",
       "stats": "الإحصائيات",
       "supplierOrders": "طلبيات المزود",
+      "cuisine": "المطبخ",
+      "cuisineHistorique": "تاريخ المطبخ",
       "logout": "خرج",
       "settings": "الإعدادات",
       "settingsAria": "الإعدادات",
@@ -415,6 +417,66 @@
         "noOrderCommentsToMerge": "ما كاين حتى تعليق طلبية باش ندمجو.",
         "storeNotFoundForComment": "المحل ما لقيناه لهاد التعليق.",
         "productNotFoundForComment": "المنتج ما لقيناه لهاد التعليق."
+      }
+    },
+    "cuisine": {
+      "saisie": {
+        "title": "تسجيل المطبخ",
+        "historiqueLink": "التاريخ",
+        "addEntree": "دخول",
+        "addSortie": "خروج",
+        "sections": {
+          "entrees": "الدخول",
+          "sorties": "الخروج"
+        },
+        "emptyEntrees": "ما كاين حتى دخول اليوم.",
+        "emptySorties": "ما كاين حتى خروج اليوم.",
+        "atTime": "ف",
+        "quantityWithUnit": "{quantity} {unit}",
+        "quantityOnly": "{quantity}",
+        "totals": {
+          "entrees": "الدخول",
+          "sorties": "الخروج"
+        }
+      },
+      "ajouter": {
+        "titleEntree": "اختار منتج — دخول",
+        "titleSortie": "اختار منتج — خروج",
+        "backToSaisie": "رجع للتسجيل",
+        "uncategorized": "بلا تصنيف فرعي",
+        "filterAll": "الكل",
+        "emptyProducts": "ما كاين حتى منتج فالثلاجة."
+      },
+      "quantite": {
+        "title": "الكمية",
+        "titleEntree": "دخول — الكمية",
+        "titleSortie": "خروج — الكمية",
+        "entryNotFound": "السطر ما لقيناه.",
+        "productNotFound": "المنتج ما لقيناه.",
+        "stepper": {
+          "minusTen": "−10",
+          "minusOne": "−1",
+          "plusOne": "+1",
+          "plusTen": "+10"
+        }
+      },
+      "historique": {
+        "title": "تاريخ المطبخ",
+        "saisieLink": "التسجيل",
+        "dateLabel": "التاريخ",
+        "prevDay": "اليوم اللي فات",
+        "nextDay": "اليوم الجاي",
+        "emptyDay": "ما كاين حتى تسجيل فهاد التاريخ.",
+        "uncategorized": "بلا تصنيف فرعي",
+        "table": {
+          "product": "المنتج",
+          "entrees": "الدخول",
+          "sorties": "الخروج"
+        },
+        "totals": {
+          "entrees": "الدخول",
+          "sorties": "الخروج"
+        }
       }
     }
   },

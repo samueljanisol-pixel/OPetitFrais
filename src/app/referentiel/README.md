@@ -16,6 +16,13 @@ Un même libellé peut exister chez plusieurs fournisseurs (enregistrements dist
 
 Migration : `20260619120000_unify_marchand_vendeur.sql` (fusion de l’ancien `ref_marchand`).
 
+## Catégories et sous-catégories
+
+- **`ref_category`** : catégories produit (onglet **Catégories**).
+- **`ref_subcategory`** : sous-catégories rattachées à une catégorie (libellé unique par catégorie). Gestion dans le même onglet, tableau **Sous-catégories**.
+- **`product.subcategory_id`** : optionnel ; doit correspondre à la catégorie du produit.
+- Import Google Sheet : colonne **Sous-Catégorie** (création auto si absente). Migration `20260701160000_ref_subcategory.sql`.
+
 ## Traductions (interface)
 
 Onglet **Traductions** dans Paramètres : édition des libellés **par zone** (accueil, login, commandes, etc.) sans modifier les fichiers JSON du dépôt.

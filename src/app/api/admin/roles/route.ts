@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { roleSlugFromName } from "@/lib/auth/role-slug";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/server";
 import { requireAnyApiPermission, requireApiPermission } from "@/lib/auth/require-permission-api";
 
@@ -49,10 +50,11 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "JSON invalide" }, { status: 400 });
   }
 
-  const slug = (body.slug ?? "").trim().toLowerCase().replace(/\s+/g, "_");
   const name = (body.name ?? "").trim();
-  if (!slug || !name) {
-    return NextResponse.json({ error: "slug et name requis" }, { status: 400 });
+  const slugExplicit = (body.slug ?? "").trim().toLowerCase().replace(/\s+/g, "_");
+  const slug = slugExplicit || roleSlugFromName(name);
+  if (!name || !slug) {
+    return NextResponse.json({ error: "Nom requis (code généré automatiquement)" }, { status: 400 });
   }
 
   let service;

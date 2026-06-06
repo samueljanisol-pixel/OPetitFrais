@@ -7,6 +7,7 @@ import { Button, Fab, Paper, Stack, Tooltip } from '@mui/material'
 import AssessmentOutlinedIcon from '@mui/icons-material/AssessmentOutlined'
 import Inventory2OutlinedIcon from '@mui/icons-material/Inventory2Outlined'
 import LocalShippingOutlinedIcon from '@mui/icons-material/LocalShippingOutlined'
+import RestaurantMenuOutlinedIcon from '@mui/icons-material/RestaurantMenuOutlined'
 import SettingsIcon from '@mui/icons-material/Settings'
 import AppLink from '@/components/AppLink'
 import { useSessionPermissions } from '@/lib/auth/useSessionPermissions'
@@ -16,7 +17,8 @@ export default function HomePage() {
   const router = useRouter()
   const t = useTranslations('backoffice.home')
   const tCommon = useTranslations('common')
-  const { loading, can, canReadVentes, canReadParametres } = useSessionPermissions()
+  const { loading, can, canReadVentes, canReadParametres, canCuisineSaisie, canCuisineHistorique } =
+    useSessionPermissions()
   const canCommandesFournisseur =
     can('commandes_fournisseur.saisie') ||
     can('commandes_fournisseur.consolidation') ||
@@ -137,6 +139,52 @@ export default function HomePage() {
                 }}
               >
                 {t('supplierOrders')}
+              </Button>
+            ) : null}
+            {canCuisineSaisie ? (
+              <Button
+                component={AppLink}
+                href="/cuisine/saisie"
+                variant="contained"
+                color="success"
+                size="large"
+                fullWidth
+                startIcon={<RestaurantMenuOutlinedIcon sx={{ fontSize: 28 }} />}
+                sx={{
+                  borderRadius: 2,
+                  textTransform: 'none',
+                  fontWeight: 600,
+                  py: 1.25,
+                  px: 2,
+                  justifyContent: 'flex-start',
+                  gap: 1.25,
+                  '& .MuiButton-startIcon': { mr: 0.5, ml: 0 },
+                }}
+              >
+                {t('cuisine')}
+              </Button>
+            ) : null}
+            {canCuisineHistorique ? (
+              <Button
+                component={AppLink}
+                href="/cuisine/historique"
+                variant={canCuisineSaisie ? 'outlined' : 'contained'}
+                color={canCuisineSaisie ? 'inherit' : 'success'}
+                size="large"
+                fullWidth
+                startIcon={<RestaurantMenuOutlinedIcon sx={{ fontSize: 28 }} />}
+                sx={{
+                  borderRadius: 2,
+                  textTransform: 'none',
+                  fontWeight: 600,
+                  py: 1.25,
+                  px: 2,
+                  justifyContent: 'flex-start',
+                  gap: 1.25,
+                  '& .MuiButton-startIcon': { mr: 0.5, ml: 0 },
+                }}
+              >
+                {t('cuisineHistorique')}
               </Button>
             ) : null}
           </Stack>

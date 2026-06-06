@@ -20,7 +20,7 @@ import {
 } from '@mui/material'
 import BackNavButton from '@/components/BackNavButton'
 import { createSupabaseBrowserClient } from '@/lib/supabase/client'
-import type { RefConditionnementRow, RefRow, RefVendeurRow } from '@/lib/products/types'
+import type { RefConditionnementRow, RefRow, RefSubcategoryRow, RefVendeurRow } from '@/lib/products/types'
 import { muiSlotPropsDecimalKeypad } from '@/lib/mui/numericTextFieldProps'
 import MagasinsAdminPanel from './MagasinsAdminPanel'
 import StatusLabelsAdminPanel from './StatusLabelsAdminPanel'
@@ -119,6 +119,7 @@ export default function ReferentielClient() {
   const [tab, setTab] = useState<TabId>('udv')
   const [udv, setUdv] = useState<RefRow[]>([])
   const [cat, setCat] = useState<RefRow[]>([])
+  const [subcats, setSubcats] = useState<RefSubcategoryRow[]>([])
   const [sup, setSup] = useState<RefRow[]>([])
   const [cond, setCond] = useState<RefConditionnementRow[]>([])
   const [vendeurs, setVendeurs] = useState<RefVendeurRow[]>([])
@@ -129,6 +130,10 @@ export default function ReferentielClient() {
   const [isNew, setIsNew] = useState(false)
   const [deleteConfirm, setDeleteConfirm] = useState<DeleteConfirmTarget | null>(null)
   const [deleteBusy, setDeleteBusy] = useState(false)
+  const [subcatOpen, setSubcatOpen] = useState(false)
+  const [subcatEditing, setSubcatEditing] = useState<RefSubcategoryRow | null>(null)
+  const [subcatIsNew, setSubcatIsNew] = useState(false)
+  const [subcatForm, setSubcatForm] = useState({ label: '', category_id: '' })
   const [form, setForm] = useState({
     label: '',
     label_ar: '',
@@ -141,9 +146,10 @@ export default function ReferentielClient() {
   const load = useCallback(async () => {
     setErr(null)
     setLoading(true)
-    const [a, b, c, d, e] = await Promise.all([
+    const [a, b, sc, c, d, e] = await Promise.all([
       supabase.from('ref_sales_unit').select('*').order('sort_order'),
       supabase.from('ref_category').select('*').order('sort_order'),
+      supabase.from('ref_subcategory').select('*, ref_category(id, label)').order('sort_order').order('label'),
       supabase.from('ref_supplier').select('*').order('sort_order'),
       supabase.from('ref_conditionnement').select('*, ref_supplier(id, code, label)').order('sort_order'),
       supabase
@@ -152,10 +158,11 @@ export default function ReferentielClient() {
         .order('sort_order')
         .order('label'),
     ])
-    const firstErr = a.error ?? b.error ?? c.error ?? d.error ?? e.error
+    const firstErr = a.error ?? b.error ?? sc.error ?? c.error ?? d.error ?? e.error
     if (firstErr) setErr(firstErr.message)
     setUdv((a.data as RefRow[]) ?? [])
     setCat((b.data as RefRow[]) ?? [])
+    setSubcats((sc.data as RefSubcategoryRow[]) ?? [])
     setSup((c.data as RefRow[]) ?? [])
     setCond((d.data as RefConditionnementRow[]) ?? [])
     setVendeurs((e.data as RefVendeurRow[]) ?? [])
@@ -169,6 +176,54 @@ export default function ReferentielClient() {
   useEffect(() => {
     if (!showComptesTab && tab === 'comptes') setTab('udv')
   }, [showComptesTab, tab])
+
+  const openNewSubcat = () => {
+    setSubcatIsNew(true)
+    setSubcatEditing(null)
+    setSubcatForm({ label: '', category_id: cat[0]?.id ?? '' })
+    setSubcatOpen(true)
+  }
+
+  const openSubcatRow = (r: RefSubcategoryRow) => {
+    setSubcatIsNew(false)
+    setSubcatEditing(r)
+    setSubcatForm({ label: r.label, category_id: r.category_id })
+    setSubcatOpen(true)
+  }
+
+  const saveSubcat = async () => {
+    setErr(null)
+    const label = subcatForm.label.trim()
+    const categoryId = subcatForm.category_id.trim()
+    if (!label || !categoryId) {
+      setErr('Libellé et catégorie requis pour une sous-catégorie.')
+      return
+    }
+    if (subcatIsNew) {
+      const { error: e0 } = await supabase
+        .from('ref_subcategory')
+        .insert({ label, category_id: categoryId } as never)
+      if (e0) {
+        setErr(e0.message)
+        return
+      }
+    } else if (subcatEditing) {
+      const { error: e0 } = await supabase
+        .from('ref_subcategory')
+        .update({ label, category_id: categoryId } as never)
+        .eq('id', subcatEditing.id)
+      if (e0) {
+        setErr(e0.message)
+        return
+      }
+    }
+    setSubcatOpen(false)
+    void load()
+  }
+
+  const requestDeleteSubcat = (row: RefSubcategoryRow) => {
+    setDeleteConfirm({ tab: 'cat', id: row.id, label: row.label })
+  }
 
   const openNew = () => {
     setIsNew(true)
@@ -311,7 +366,8 @@ export default function ReferentielClient() {
     const target = deleteConfirm
     setDeleteBusy(true)
     setErr(null)
-    const t = tableName(target.tab)
+    const isSubcat = subcats.some(sc => sc.id === target.id)
+    const t = isSubcat ? 'ref_subcategory' : tableName(target.tab)
     const { error: e0 } = await supabase.from(t).delete().eq('id', target.id)
     setDeleteBusy(false)
     if (e0) {
@@ -393,7 +449,40 @@ export default function ReferentielClient() {
           </>
         ) : null}
         {tab === 'udv' && <RefTable title="Unités" rows={udv} onEdit={openRow} onDelete={requestDelete} />}
-        {tab === 'cat' && <RefTable title="Catégories" rows={cat} onEdit={openRow} onDelete={requestDelete} />}
+        {tab === 'cat' && (
+          <>
+            <RefTable title="Catégories" rows={cat} onEdit={openRow} onDelete={requestDelete} />
+            <Box sx={{ mt: 4 }}>
+              <Button
+                variant="contained"
+                color="success"
+                onClick={openNewSubcat}
+                sx={{ mb: 2, textTransform: 'none' }}
+              >
+                Ajouter — sous-catégorie
+              </Button>
+              <RefTable
+                title="Sous-catégories"
+                rows={subcats}
+                onEdit={openSubcatRow}
+                onDelete={requestDeleteSubcat}
+                extras={[
+                  {
+                    header: 'Catégorie',
+                    render: r => {
+                      const row = r as RefSubcategoryRow
+                      const rel = row.ref_category
+                      if (rel && typeof rel === 'object' && 'label' in rel && !Array.isArray(rel)) {
+                        return (rel as RefRow).label
+                      }
+                      return cat.find(c => c.id === row.category_id)?.label ?? '—'
+                    },
+                  },
+                ]}
+              />
+            </Box>
+          </>
+        )}
         {tab === 'sup' && <RefTable title="Fournisseurs" rows={sup} onEdit={openRow} onDelete={requestDelete} />}
         {tab === 'vend' && (
           <RefTable
@@ -558,6 +647,44 @@ export default function ReferentielClient() {
           <DialogActions>
             <Button onClick={() => setOpen(false)}>Annuler</Button>
             <Button variant="contained" onClick={() => void save()}>
+              Enregistrer
+            </Button>
+          </DialogActions>
+        </Dialog>
+
+        <Dialog open={subcatOpen} onClose={() => setSubcatOpen(false)} fullWidth maxWidth="sm">
+          <DialogTitle>{subcatIsNew ? 'Ajouter une sous-catégorie' : 'Modifier la sous-catégorie'}</DialogTitle>
+          <DialogContent>
+            <div className="mt-1 flex flex-col gap-4">
+              <FormControl size="small" fullWidth required>
+                <InputLabel id="subcat-category-label">Catégorie</InputLabel>
+                <Select
+                  labelId="subcat-category-label"
+                  label="Catégorie"
+                  value={subcatForm.category_id}
+                  onChange={e => setSubcatForm(f => ({ ...f, category_id: e.target.value }))}
+                >
+                  {cat.map(c => (
+                    <MenuItem key={c.id} value={c.id}>
+                      {c.label}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+              <TextField
+                label="Libellé"
+                value={subcatForm.label}
+                onChange={e => setSubcatForm(f => ({ ...f, label: e.target.value }))}
+                size="small"
+                fullWidth
+              />
+            </div>
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={() => setSubcatOpen(false)} sx={{ textTransform: 'none' }}>
+              Annuler
+            </Button>
+            <Button variant="contained" onClick={() => void saveSubcat()} sx={{ textTransform: 'none' }}>
               Enregistrer
             </Button>
           </DialogActions>

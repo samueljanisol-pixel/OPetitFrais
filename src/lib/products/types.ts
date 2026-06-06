@@ -8,6 +8,12 @@ export type RefRow = {
   created_at?: string
 }
 
+/** Sous-catégorie catalogue, rattachée à une catégorie. */
+export type RefSubcategoryRow = RefRow & {
+  category_id: string
+  ref_category?: RefRow | RefRow[] | null
+}
+
 export type RefConditionnementRow = RefRow & {
   height_mm: number | null
   width_mm: number | null
@@ -35,6 +41,8 @@ export type ProductRow = {
   price: number
   sales_unit_id: string
   category_id: string
+  /** Sous-catégorie optionnelle (doit correspondre à category_id). */
+  subcategory_id?: string | null
   supplier_id: string
   /** Vendeur achat par défaut (réf. fournisseur produit). */
   vendeur_id?: string | null
@@ -92,5 +100,6 @@ export type ProductPriceHistoryRow = {
 export type ProductWithRefs = ProductRow & {
   ref_sales_unit: RefRow | null
   ref_category: RefRow | null
+  ref_subcategory: RefSubcategoryRow | RefRow | null
   ref_supplier: RefRow | null
 }

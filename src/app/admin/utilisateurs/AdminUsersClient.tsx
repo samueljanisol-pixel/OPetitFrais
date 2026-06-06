@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import AddIcon from "@mui/icons-material/Add";
 import {
   Box,
   Button,
@@ -47,6 +48,9 @@ export default function AdminUsersClient() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  const [createOpen, setCreateOpen] = useState(false);
+  const [createBusy, setCreateBusy] = useState(false);
+  const [createError, setCreateError] = useState<string | null>(null);
   const [email, setEmail] = useState("");
   const [login, setLogin] = useState("");
   const [password, setPassword] = useState("");
@@ -118,6 +122,27 @@ export default function AdminUsersClient() {
     void loadMagasins();
   }, [canAdminMagasins]);
 
+  const resetCreateForm = () => {
+    setEmail("");
+    setLogin("");
+    setPassword("");
+    setPrenom("");
+    setNom("");
+    setRoleId(roles[0]?.id ?? "");
+    setCreateError(null);
+  };
+
+  const openCreateDialog = () => {
+    resetCreateForm();
+    setCreateOpen(true);
+  };
+
+  const closeCreateDialog = () => {
+    if (createBusy) return;
+    setCreateOpen(false);
+    setCreateError(null);
+  };
+
   const openEdit = (p: ProfileRow) => {
     setEditUserId(p.user_id);
     setEditPrenom(p.prenom ?? "");
@@ -163,7 +188,8 @@ export default function AdminUsersClient() {
   };
 
   const createUser = async () => {
-    setError(null);
+    setCreateBusy(true);
+    setCreateError(null);
     const res = await fetch("/api/admin/profiles", {
       method: "POST",
       credentials: "include",
@@ -178,15 +204,13 @@ export default function AdminUsersClient() {
       }),
     });
     const j = await res.json().catch(() => ({}));
+    setCreateBusy(false);
     if (!res.ok) {
-      setError((j as { error?: string }).error ?? "Création impossible");
+      setCreateError((j as { error?: string }).error ?? "Création impossible");
       return;
     }
-    setEmail("");
-    setLogin("");
-    setPassword("");
-    setPrenom("");
-    setNom("");
+    setCreateOpen(false);
+    resetCreateForm();
     await load();
   };
 
@@ -211,54 +235,113 @@ export default function AdminUsersClient() {
 
   return (
     <div className="flex flex-col gap-6">
-      <Typography variant="h6" className="!font-semibold">
-        Utilisateurs
-      </Typography>
+      <div className="flex flex-row flex-wrap items-center justify-between gap-2">
+        <Typography variant="h6" className="!font-semibold">
+          Utilisateurs
+        </Typography>
+        <Button
+          variant="contained"
+          color="success"
+          size="small"
+          startIcon={<AddIcon />}
+          onClick={openCreateDialog}
+          sx={{ textTransform: "none" }}
+        >
+          Ajouter
+        </Button>
+      </div>
       {error ? (
         <Paper className="!border-rose-200 !bg-rose-50 !p-3">
           <Typography color="error">{error}</Typography>
         </Paper>
       ) : null}
 
-      <Paper className="!p-4">
-        <Typography variant="subtitle2" className="!mb-2 !font-semibold">
-          Nouvel utilisateur
-        </Typography>
-        <Typography variant="caption" className="!mb-2 !block !text-slate-600">
-          Renseignez un e-mail <strong>ou</strong> un identifiant de connexion (login). Sans e-mail, un compte technique
-          interne est créé pour permettre l&apos;accès aux données.
-        </Typography>
-        <div className="flex max-w-xl flex-col gap-2">
-          <TextField label="E-mail (optionnel)" type="email" value={email} onChange={(e) => setEmail(e.target.value)} size="small" fullWidth />
-          <TextField label="Identifiant / login (optionnel)" value={login} onChange={(e) => setLogin(e.target.value)} size="small" fullWidth />
-          <div className="flex flex-col gap-2 sm:flex-row">
-            <TextField label="Prénom" value={prenom} onChange={(e) => setPrenom(e.target.value)} size="small" fullWidth />
-            <TextField label="Nom" value={nom} onChange={(e) => setNom(e.target.value)} size="small" fullWidth />
+      <Dialog open={createOpen} onClose={closeCreateDialog} fullWidth maxWidth="sm">
+        <DialogTitle>Nouvel utilisateur</DialogTitle>
+        <DialogContent>
+          <Typography variant="caption" className="!mb-2 !mt-1 !block !text-slate-600">
+            Renseignez un e-mail <strong>ou</strong> un identifiant de connexion (login). Sans e-mail, un compte technique
+            interne est créé pour permettre l&apos;accès aux données.
+          </Typography>
+          <div className="flex flex-col gap-2">
+            <TextField
+              autoFocus
+              label="E-mail (optionnel)"
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              size="small"
+              fullWidth
+              disabled={createBusy}
+            />
+            <TextField
+              label="Identifiant / login (optionnel)"
+              value={login}
+              onChange={(e) => setLogin(e.target.value)}
+              size="small"
+              fullWidth
+              disabled={createBusy}
+            />
+            <div className="flex flex-col gap-2 sm:flex-row">
+              <TextField
+                label="Prénom"
+                value={prenom}
+                onChange={(e) => setPrenom(e.target.value)}
+                size="small"
+                fullWidth
+                disabled={createBusy}
+              />
+              <TextField
+                label="Nom"
+                value={nom}
+                onChange={(e) => setNom(e.target.value)}
+                size="small"
+                fullWidth
+                disabled={createBusy}
+              />
+            </div>
+            <TextField
+              label="Mot de passe initial"
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              size="small"
+              fullWidth
+              disabled={createBusy}
+              helperText="Minimum 6 caractères"
+            />
+            <FormControl size="small" fullWidth disabled={createBusy}>
+              <InputLabel>Rôle</InputLabel>
+              <Select label="Rôle" value={roleId} onChange={(e) => setRoleId(e.target.value)}>
+                {roles.map((r) => (
+                  <MenuItem key={r.id} value={r.id}>
+                    {r.name}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+            {createError ? (
+              <Typography color="error" variant="body2">
+                {createError}
+              </Typography>
+            ) : null}
           </div>
-          <TextField
-            label="Mot de passe initial"
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            size="small"
-            fullWidth
-            helperText="Minimum 6 caractères"
-          />
-          <FormControl size="small" fullWidth>
-            <InputLabel>Rôle</InputLabel>
-            <Select label="Rôle" value={roleId} onChange={(e) => setRoleId(e.target.value)}>
-              {roles.map((r) => (
-                <MenuItem key={r.id} value={r.id}>
-                  {r.name}
-                </MenuItem>
-              ))}
-            </Select>
-          </FormControl>
-          <Button variant="contained" color="success" onClick={() => void createUser()} sx={{ textTransform: "none", alignSelf: "flex-start" }}>
-            Créer
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={closeCreateDialog} disabled={createBusy} sx={{ textTransform: "none" }}>
+            Annuler
           </Button>
-        </div>
-      </Paper>
+          <Button
+            variant="contained"
+            color="success"
+            disabled={createBusy}
+            onClick={() => void createUser()}
+            sx={{ textTransform: "none" }}
+          >
+            {createBusy ? "Création…" : "Créer"}
+          </Button>
+        </DialogActions>
+      </Dialog>
 
       <Paper className="!overflow-x-auto">
         <Table size="small">

@@ -26,6 +26,7 @@ import type {
   ProductPriceHistoryRow,
   ProductRow,
   RefConditionnementRow,
+  RefSubcategoryRow,
   RefVendeurRow,
   RefRow,
 } from '@/lib/products/types'
@@ -77,6 +78,7 @@ export default function ProductFormClient({ productId, returnTo = null }: Props)
 
   const [units, setUnits] = useState<RefRow[]>([])
   const [cats, setCats] = useState<RefRow[]>([])
+  const [subcats, setSubcats] = useState<RefSubcategoryRow[]>([])
   const [sups, setSups] = useState<RefRow[]>([])
   const [conds, setConds] = useState<RefConditionnementRow[]>([])
 
@@ -127,10 +129,17 @@ export default function ProductFormClient({ productId, returnTo = null }: Props)
     return vendeurs.filter(v => v.supplier_id === sid)
   }, [vendeurs, p.supplier_id])
 
+  const subcatsForCategory = useMemo(() => {
+    const cid = p.category_id?.trim()
+    if (!cid) return []
+    return subcats.filter(sc => sc.category_id === cid)
+  }, [subcats, p.category_id])
+
   const loadRefs = useCallback(async () => {
-    const [u, c, s, co, ma, mg] = await Promise.all([
+    const [u, c, sc, s, co, ma, mg] = await Promise.all([
       supabase.from('ref_sales_unit').select('*').order('sort_order'),
       supabase.from('ref_category').select('*').order('sort_order'),
+      supabase.from('ref_subcategory').select('*, ref_category(id, label)').order('sort_order').order('label'),
       supabase.from('ref_supplier').select('*').order('sort_order'),
       supabase.from('ref_conditionnement').select('*').order('sort_order'),
       supabase.from('ref_supplier_vendeur').select('id, supplier_id, label, sort_order').order('sort_order').order('label'),
@@ -144,6 +153,7 @@ export default function ProductFormClient({ productId, returnTo = null }: Props)
       setCats(c.data as RefRow[])
       if (c.data[0] && isNew) setP(x => ({ ...x, category_id: (c.data[0] as RefRow).id }))
     }
+    if (sc.data) setSubcats(sc.data as RefSubcategoryRow[])
     if (s.data) {
       setSups(s.data as RefRow[])
       if (s.data[0] && isNew) setP(x => ({ ...x, supplier_id: (s.data[0] as RefRow).id }))
@@ -174,7 +184,7 @@ export default function ProductFormClient({ productId, returnTo = null }: Props)
     setErr(null)
     const { data, error: e0 } = await supabase
       .from('product')
-      .select('*, ref_sales_unit(*), ref_category(*), ref_supplier(*)')
+      .select('*, ref_sales_unit(*), ref_category(*), ref_subcategory(*), ref_supplier(*)')
       .eq('id', productId)
       .maybeSingle()
     if (e0 || !data) {
@@ -330,6 +340,13 @@ export default function ProductFormClient({ productId, returnTo = null }: Props)
       setErr('UdV, catégorie et fournisseur sont obligatoires')
       return
     }
+    if (p.subcategory_id?.trim()) {
+      const ok = subcatsForCategory.some(sc => sc.id === p.subcategory_id)
+      if (!ok) {
+        setErr('La sous-catégorie doit appartenir à la catégorie sélectionnée.')
+        return
+      }
+    }
     setSaving(true)
     setErr(null)
     const payload = {
@@ -337,6 +354,7 @@ export default function ProductFormClient({ productId, returnTo = null }: Props)
       price: Number(p.price) || 0,
       sales_unit_id: p.sales_unit_id!,
       category_id: p.category_id!,
+      subcategory_id: p.subcategory_id?.trim() ? p.subcategory_id : null,
       supplier_id: p.supplier_id!,
       vendeur_id: p.vendeur_id?.trim() ? p.vendeur_id : null,
       name_ar: p.name_ar || null,
@@ -632,11 +650,49 @@ export default function ProductFormClient({ productId, returnTo = null }: Props)
               <Select
                 value={p.category_id ?? ''}
                 label="Catégorie"
-                onChange={e => setP(x => ({ ...x, category_id: e.target.value }))}
+                onChange={e => {
+                  const category_id = e.target.value
+                  setP(x => {
+                    const subOk =
+                      x.subcategory_id &&
+                      subcats.some(sc => sc.id === x.subcategory_id && sc.category_id === category_id)
+                    return {
+                      ...x,
+                      category_id,
+                      subcategory_id: subOk ? x.subcategory_id : null,
+                    }
+                  })
+                }}
               >
                 {cats.map(c => (
                   <MenuItem key={c.id} value={c.id}>
                     {c.label}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+            <FormControl
+              size="small"
+              sx={{ minWidth: 0, width: '100%', flex: { sm: '1 1 160px' } }}
+              disabled={!p.category_id?.trim()}
+            >
+              <InputLabel>Sous-catégorie</InputLabel>
+              <Select
+                value={p.subcategory_id ?? ''}
+                label="Sous-catégorie"
+                onChange={e =>
+                  setP(x => ({
+                    ...x,
+                    subcategory_id: e.target.value.length > 0 ? e.target.value : null,
+                  }))
+                }
+              >
+                <MenuItem value="">
+                  <em>Aucune</em>
+                </MenuItem>
+                {subcatsForCategory.map(sc => (
+                  <MenuItem key={sc.id} value={sc.id}>
+                    {sc.label}
                   </MenuItem>
                 ))}
               </Select>

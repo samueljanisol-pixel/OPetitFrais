@@ -3,7 +3,8 @@
 ## Liste (`ProduitsListClient`)
 
 - Filtre **Recherche (nom)** : insensible à la casse et aux accents (ex. « peche » trouve « Pêche »). Cherche aussi dans `name_ar`.
-- **Import Google Sheet** : colonne feuille **Marge DH Actuelle** (alias « Marge DH ») → `product.margin` ; historique tarifaire si la marge change. Voir `src/features/sheet-import/`.
+- **Import Google Sheet** : colonnes **Catégorie** + **Sous-Catégorie** (création auto de la sous-catégorie si absente sous la catégorie) ; **Marge DH Actuelle** → `product.margin`. Voir `src/features/sheet-import/`.
+- **Sous-catégories** : table `ref_subcategory` (rattachée à `ref_category`), champ optionnel `product.subcategory_id`. Fiche produit + onglet Catégories dans **Paramètres**. Migration `20260701160000_ref_subcategory.sql`.
 
 ## Fiche produit (`ProductFormClient`)
 
