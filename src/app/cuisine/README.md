@@ -26,7 +26,8 @@ Migration : `supabase/migrations/20260702120000_cuisine_journal.sql`.
 
 - Table `cuisine_journal_entry` : `entry_type` `entree` \| `sortie`, `quantity` > 0.
 - Produits : `product` actifs, `ref_category.code = 'frigo'`, regroupés par `ref_subcategory`.
-- Nom affiché : `productDisplayName` (`src/lib/products/product-display-name.ts`) selon locale UI.
+- Nom affiché produit : `productDisplayName` (`src/lib/products/product-display-name.ts`) selon locale UI.
+- Libellé sous-catégorie : `refDisplayLabel` (`src/lib/products/ref-display-label.ts`) — `label_ar` si locale `ar-MA`, sinon `label`.
 
 ## Lib
 

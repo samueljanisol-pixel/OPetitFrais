@@ -2,11 +2,12 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { AppLocale } from "@/i18n/config";
 import { compareStrings } from "@/lib/i18n/format";
 import { productDisplayName } from "@/lib/products/product-display-name";
+import { refDisplayLabel } from "@/lib/products/ref-display-label";
 import type { CuisineFrigoProduct, CuisineSubcategoryGroup } from "./types";
 
 const FRIGO_PRODUCT_SELECT = `
   id, code, name, name_ar, image_path, subcategory_id,
-  ref_subcategory(id, label, sort_order),
+  ref_subcategory(id, label, label_ar, sort_order),
   ref_sales_unit(label)
 `;
 
@@ -45,7 +46,9 @@ export async function loadFrigoProducts(
     const sub = Array.isArray(subRaw) ? subRaw[0] : subRaw;
     const subcategoryId = sub?.id ?? p.subcategory_id ?? null;
     const key = subcategoryId ?? UNCATEGORIZED_KEY;
-    const label = sub?.label?.trim() || uncategorizedLabel;
+    const label = sub
+      ? refDisplayLabel(sub, locale)
+      : uncategorizedLabel;
     const sortOrder = sub?.sort_order ?? 9999;
 
     let group = groupMap.get(key);

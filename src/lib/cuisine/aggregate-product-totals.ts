@@ -1,3 +1,5 @@
+import type { AppLocale } from "@/i18n/config";
+import { refDisplayLabel } from "@/lib/products/ref-display-label";
 import type {
   CuisineFrigoProduct,
   CuisineJournalEntryWithProduct,
@@ -8,7 +10,7 @@ import { normalizeProductRelation } from "./normalize-product-relation";
 
 function normalizeSubcategory(
   raw: CuisineFrigoProduct["ref_subcategory"],
-): { id: string; label: string; sort_order: number } | null {
+): { id: string; label: string; label_ar?: string | null; sort_order: number } | null {
   if (!raw) return null;
   const row = Array.isArray(raw) ? raw[0] : raw;
   if (!row?.id) return null;
@@ -24,6 +26,7 @@ function salesUnitLabel(raw: CuisineFrigoProduct["ref_sales_unit"]): string {
 export function aggregateProductTotalsBySubcategory(
   entries: CuisineJournalEntryWithProduct[],
   uncategorizedLabel: string,
+  locale: AppLocale,
 ): CuisineSubcategoryTotalsGroup[] {
   const byProduct = new Map<
     string,
@@ -39,7 +42,7 @@ export function aggregateProductTotalsBySubcategory(
 
     const sub = normalizeSubcategory(product.ref_subcategory);
     const subcategoryId = sub?.id ?? product.subcategory_id ?? null;
-    const subcategoryLabel = sub?.label ?? uncategorizedLabel;
+    const subcategoryLabel = sub ? refDisplayLabel(sub, locale) : uncategorizedLabel;
     const subcategorySortOrder = sub?.sort_order ?? 9999;
 
     let row = byProduct.get(product.id);

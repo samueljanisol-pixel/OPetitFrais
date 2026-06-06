@@ -133,7 +133,7 @@ export default function ReferentielClient() {
   const [subcatOpen, setSubcatOpen] = useState(false)
   const [subcatEditing, setSubcatEditing] = useState<RefSubcategoryRow | null>(null)
   const [subcatIsNew, setSubcatIsNew] = useState(false)
-  const [subcatForm, setSubcatForm] = useState({ label: '', category_id: '' })
+  const [subcatForm, setSubcatForm] = useState({ label: '', label_ar: '', category_id: '' })
   const [form, setForm] = useState({
     label: '',
     label_ar: '',
@@ -180,29 +180,39 @@ export default function ReferentielClient() {
   const openNewSubcat = () => {
     setSubcatIsNew(true)
     setSubcatEditing(null)
-    setSubcatForm({ label: '', category_id: cat[0]?.id ?? '' })
+    setSubcatForm({ label: '', label_ar: '', category_id: cat[0]?.id ?? '' })
     setSubcatOpen(true)
   }
 
   const openSubcatRow = (r: RefSubcategoryRow) => {
     setSubcatIsNew(false)
     setSubcatEditing(r)
-    setSubcatForm({ label: r.label, category_id: r.category_id })
+    setSubcatForm({
+      label: r.label,
+      label_ar: typeof r.label_ar === 'string' ? r.label_ar : '',
+      category_id: r.category_id,
+    })
     setSubcatOpen(true)
   }
 
   const saveSubcat = async () => {
     setErr(null)
     const label = subcatForm.label.trim()
+    const labelArTrim = subcatForm.label_ar.trim()
     const categoryId = subcatForm.category_id.trim()
     if (!label || !categoryId) {
       setErr('Libellé et catégorie requis pour une sous-catégorie.')
       return
     }
+    const payload = {
+      label,
+      label_ar: labelArTrim.length > 0 ? labelArTrim : null,
+      category_id: categoryId,
+    }
     if (subcatIsNew) {
       const { error: e0 } = await supabase
         .from('ref_subcategory')
-        .insert({ label, category_id: categoryId } as never)
+        .insert(payload as never)
       if (e0) {
         setErr(e0.message)
         return
@@ -210,7 +220,7 @@ export default function ReferentielClient() {
     } else if (subcatEditing) {
       const { error: e0 } = await supabase
         .from('ref_subcategory')
-        .update({ label, category_id: categoryId } as never)
+        .update(payload as never)
         .eq('id', subcatEditing.id)
       if (e0) {
         setErr(e0.message)
@@ -296,6 +306,28 @@ export default function ReferentielClient() {
             depth_mm: d,
             supplier_id: supplierId,
           } as never)
+          .eq('id', editing.id)
+        if (e0) {
+          setErr(e0.message)
+          return
+        }
+      }
+    } else if (tab === 'cat') {
+      const labelArTrim = form.label_ar.trim()
+      const payload = {
+        label: form.label.trim(),
+        label_ar: labelArTrim.length > 0 ? labelArTrim : null,
+      }
+      if (isNew) {
+        const { error: e0 } = await supabase.from('ref_category').insert(payload as never)
+        if (e0) {
+          setErr(e0.message)
+          return
+        }
+      } else {
+        const { error: e0 } = await supabase
+          .from('ref_category')
+          .update(payload as never)
           .eq('id', editing.id)
         if (e0) {
           setErr(e0.message)
@@ -451,7 +483,27 @@ export default function ReferentielClient() {
         {tab === 'udv' && <RefTable title="Unités" rows={udv} onEdit={openRow} onDelete={requestDelete} />}
         {tab === 'cat' && (
           <>
-            <RefTable title="Catégories" rows={cat} onEdit={openRow} onDelete={requestDelete} />
+            <RefTable
+              title="Catégories"
+              rows={cat}
+              onEdit={openRow}
+              onDelete={requestDelete}
+              extras={[
+                {
+                  header: 'Libellé arabe',
+                  render: r => {
+                    const ar = (r as RefRow).label_ar?.trim()
+                    return ar && ar.length > 0 ? (
+                      <span dir="rtl" className="block text-right">
+                        {ar}
+                      </span>
+                    ) : (
+                      '—'
+                    )
+                  },
+                },
+              ]}
+            />
             <Box sx={{ mt: 4 }}>
               <Button
                 variant="contained"
@@ -467,6 +519,19 @@ export default function ReferentielClient() {
                 onEdit={openSubcatRow}
                 onDelete={requestDeleteSubcat}
                 extras={[
+                  {
+                    header: 'Libellé arabe',
+                    render: r => {
+                      const ar = (r as RefSubcategoryRow).label_ar?.trim()
+                      return ar && ar.length > 0 ? (
+                        <span dir="rtl" className="block text-right">
+                          {ar}
+                        </span>
+                      ) : (
+                        '—'
+                      )
+                    },
+                  },
                   {
                     header: 'Catégorie',
                     render: r => {
@@ -583,9 +648,9 @@ export default function ReferentielClient() {
           <DialogContent>
             <div className="mt-1 flex flex-col gap-4">
               <TextField label="Libellé" value={form.label} onChange={e => setForm(f => ({ ...f, label: e.target.value }))} size="small" fullWidth />
-              {tab === 'cond' ? (
+              {tab === 'cond' || tab === 'cat' ? (
                 <TextField
-                  label="Libellé Arabe"
+                  label="Libellé arabe"
                   value={form.label_ar}
                   onChange={e => setForm(f => ({ ...f, label_ar: e.target.value }))}
                   size="small"
@@ -677,6 +742,14 @@ export default function ReferentielClient() {
                 onChange={e => setSubcatForm(f => ({ ...f, label: e.target.value }))}
                 size="small"
                 fullWidth
+              />
+              <TextField
+                label="Libellé arabe"
+                value={subcatForm.label_ar}
+                onChange={e => setSubcatForm(f => ({ ...f, label_ar: e.target.value }))}
+                size="small"
+                fullWidth
+                slotProps={{ input: { dir: 'rtl' } }}
               />
             </div>
           </DialogContent>

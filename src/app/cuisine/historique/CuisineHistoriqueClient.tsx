@@ -88,8 +88,8 @@ export default function CuisineHistoriqueClient() {
   const totals = useMemo(() => aggregateDayTotals(entries), [entries]);
 
   const productGroups = useMemo(
-    () => aggregateProductTotalsBySubcategory(entries, t("uncategorized")),
-    [entries, t],
+    () => aggregateProductTotalsBySubcategory(entries, t("uncategorized"), locale),
+    [entries, locale, t],
   );
 
   const formatQty = useCallback(

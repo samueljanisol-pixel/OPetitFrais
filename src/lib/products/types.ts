@@ -4,6 +4,8 @@ export type RefRow = {
   id: string
   code: string
   label: string
+  /** Libellé arabe optionnel (catégories, sous-catégories, conditionnements). */
+  label_ar?: string | null
   sort_order: number
   created_at?: string
 }

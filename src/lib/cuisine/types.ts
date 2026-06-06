@@ -19,8 +19,8 @@ export type CuisineFrigoProduct = {
   image_path: string | null;
   subcategory_id: string | null;
   ref_subcategory?:
-    | { id: string; label: string; sort_order: number }
-    | { id: string; label: string; sort_order: number }[]
+    | { id: string; label: string; label_ar?: string | null; sort_order: number }
+    | { id: string; label: string; label_ar?: string | null; sort_order: number }[]
     | null;
   ref_sales_unit?: { label: string } | { label: string }[] | null;
 };
