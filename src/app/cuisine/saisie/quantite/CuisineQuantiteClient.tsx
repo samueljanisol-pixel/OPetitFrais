@@ -14,7 +14,7 @@ import {
   loadJournalEntryById,
   updateJournalEntryQuantity,
 } from "@/lib/cuisine/journal-queries";
-import { todayJournalDateIso } from "@/lib/cuisine/production-date";
+import { useJournalDateLive } from "@/lib/cuisine/use-journal-day";
 import { clampCuisineQuantity } from "@/lib/cuisine/clamp-quantity";
 import { productDisplayName } from "@/lib/products/product-display-name";
 import { productPhotoPublicUrl } from "@/lib/products/storage";
@@ -45,7 +45,7 @@ export default function CuisineQuantiteClient() {
   const locale = useAppLocale();
   const { loading: permLoading, canCuisineSaisie } = useSessionPermissions();
   const supabase = useMemo(() => createSupabaseBrowserClient(), []);
-  const journalDate = useMemo(() => todayJournalDateIso(), []);
+  const journalDate = useJournalDateLive();
 
   const [entry, setEntry] = useState<CuisineJournalEntryWithProduct | null>(null);
   const [product, setProduct] = useState<CuisineFrigoProduct | null>(null);
@@ -197,9 +197,13 @@ export default function CuisineQuantiteClient() {
 
   if (!canCuisineSaisie) return null;
 
+  const cancelHref = isEdit
+    ? "/cuisine/saisie"
+    : `/cuisine/saisie/ajouter?type=${entryType ?? "entree"}`;
+
   return (
     <main className="mx-auto w-full max-w-lg px-4 py-4">
-      <BackNavButton href={isEdit ? "/cuisine/saisie" : `/cuisine/saisie/ajouter?type=${entryType ?? "entree"}`}>
+      <BackNavButton href={cancelHref}>
         {tCommon("back")}
       </BackNavButton>
 
@@ -255,6 +259,16 @@ export default function CuisineQuantiteClient() {
           sx={{ textTransform: "none", py: 1.25 }}
         >
           {saving ? tCommon("loading") : tCommon("save")}
+        </Button>
+        <Button
+          variant="outlined"
+          color="error"
+          fullWidth
+          disabled={saving}
+          onClick={() => router.replace(cancelHref)}
+          sx={{ textTransform: "none", py: 1.25, borderWidth: 2 }}
+        >
+          {tCommon("cancel")}
         </Button>
         {isEdit ? (
           <Button

@@ -28,6 +28,24 @@ export function formatJournalDateLabel(locale: AppLocale, isoDate: string): stri
   }).format(d);
 }
 
+/** Libellé court pour mobile (ex. « sam. 6 juin »). */
+export function formatJournalDateLabelCompact(locale: AppLocale, isoDate: string): string {
+  const d = new Date(`${isoDate}T12:00:00`);
+  return new Intl.DateTimeFormat(intlLocale(locale), {
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+    timeZone: CASABLANCA_TZ,
+  }).format(d);
+}
+
+/** Affichage chip date (JJ/MM). */
+export function formatJournalDateChip(isoDate: string): string {
+  const [, m, d] = isoDate.split("-");
+  if (!m || !d) return isoDate;
+  return `${d}/${m}`;
+}
+
 export function formatJournalTime(locale: AppLocale, isoTimestamp: string): string {
   const d = new Date(isoTimestamp);
   return new Intl.DateTimeFormat(intlLocale(locale), {

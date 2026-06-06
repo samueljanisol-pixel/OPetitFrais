@@ -440,8 +440,8 @@
         }
       },
       "ajouter": {
-        "titleEntree": "اختار منتج — دخول",
-        "titleSortie": "اختار منتج — خروج",
+        "titleEntree": "دخول الثلاجة",
+        "titleSortie": "خروج الثلاجة",
         "backToSaisie": "رجع للتسجيل",
         "uncategorized": "بلا تصنيف فرعي",
         "filterAll": "الكل",
@@ -449,8 +449,8 @@
       },
       "quantite": {
         "title": "الكمية",
-        "titleEntree": "دخول — الكمية",
-        "titleSortie": "خروج — الكمية",
+        "titleEntree": "دخول الثلاجة",
+        "titleSortie": "خروج الثلاجة",
         "entryNotFound": "السطر ما لقيناه.",
         "productNotFound": "المنتج ما لقيناه.",
         "stepper": {
@@ -471,7 +471,9 @@
         "table": {
           "product": "المنتج",
           "entrees": "الدخول",
-          "sorties": "الخروج"
+          "sorties": "الخروج",
+          "entreesShort": "دخ.",
+          "sortiesShort": "خر."
         },
         "totals": {
           "entrees": "الدخول",

@@ -31,11 +31,10 @@ export default function CuisineProductPickerClient() {
   const [groups, setGroups] = useState<CuisineSubcategoryGroup[]>([]);
   const [err, setErr] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  /** null = toutes les sous-catégories */
   const [subcategoryFilter, setSubcategoryFilter] = useState<string | null>(null);
 
   const filteredGroups = useMemo(() => {
-    if (subcategoryFilter === null) return groups;
+    if (!subcategoryFilter) return [];
     return groups.filter((g) => (g.subcategoryId ?? "__none__") === subcategoryFilter);
   }, [groups, subcategoryFilter]);
 
@@ -64,6 +63,8 @@ export default function CuisineProductPickerClient() {
         setGroups([]);
       } else {
         setGroups(g);
+        const firstKey = g[0] ? (g[0].subcategoryId ?? "__none__") : null;
+        setSubcategoryFilter(firstKey);
       }
       setLoading(false);
     })();
@@ -107,16 +108,6 @@ export default function CuisineProductPickerClient() {
               gap: 1,
             }}
           >
-            <Button
-              type="button"
-              variant={subcategoryFilter === null ? "contained" : "outlined"}
-              color="success"
-              size="medium"
-              onClick={() => setSubcategoryFilter(null)}
-              sx={{ textTransform: "none", fontWeight: 600, borderRadius: 2, minHeight: 44 }}
-            >
-              {t("filterAll")}
-            </Button>
             {groups.map((group) => {
               const key = group.subcategoryId ?? "__none__";
               const selected = subcategoryFilter === key;
@@ -142,11 +133,6 @@ export default function CuisineProductPickerClient() {
             <Box sx={{ display: "flex", flexDirection: "column", gap: 3 }}>
               {filteredGroups.map((group) => (
                 <section key={group.subcategoryId ?? "__none__"}>
-                  {subcategoryFilter === null ? (
-                    <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 1.5 }}>
-                      {group.subcategoryLabel}
-                    </Typography>
-                  ) : null}
                   <Box
                     sx={{
                       display: "grid",

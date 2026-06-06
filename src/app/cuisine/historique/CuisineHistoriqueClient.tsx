@@ -22,7 +22,8 @@ import { useSessionPermissions } from "@/lib/auth/useSessionPermissions";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { loadDistinctJournalDates, loadJournalEntriesForDate } from "@/lib/cuisine/journal-queries";
 import {
-  formatJournalDateLabel,
+  formatJournalDateChip,
+  formatJournalDateLabelCompact,
   shiftJournalDateIso,
   todayJournalDateIso,
 } from "@/lib/cuisine/production-date";
@@ -100,7 +101,7 @@ export default function CuisineHistoriqueClient() {
     setSelectedDate((d) => shiftJournalDateIso(d, delta));
   };
 
-  const recentDates = knownDates.slice(0, 12);
+  const recentDates = knownDates.slice(0, 8);
 
   if (permLoading) {
     return <p className="px-4 py-6 text-slate-600">{tCommon("loading")}</p>;
@@ -109,16 +110,16 @@ export default function CuisineHistoriqueClient() {
   if (!canCuisineHistorique) return null;
 
   return (
-    <main className="mx-auto w-full max-w-lg px-4 py-4">
+    <main className="mx-auto w-full max-w-lg px-3 py-2">
       <BackNavButton href="/">{tCommon("home")}</BackNavButton>
 
-      <div className="!mt-2 !mb-4 flex flex-row items-start justify-between gap-2">
-        <div>
-          <Typography variant="h5" component="h1" sx={{ fontWeight: 600 }}>
+      <div className="!mt-1 !mb-2 flex flex-row items-center justify-between gap-1">
+        <div className="min-w-0">
+          <Typography variant="subtitle1" component="h1" sx={{ fontWeight: 700, lineHeight: 1.25 }}>
             {t("title")}
           </Typography>
-          <Typography variant="body2" color="text.secondary">
-            {formatJournalDateLabel(locale, selectedDate)}
+          <Typography variant="caption" color="text.secondary" sx={{ display: "block" }}>
+            {formatJournalDateLabelCompact(locale, selectedDate)}
           </Typography>
         </div>
         {canCuisineSaisie ? (
@@ -128,8 +129,8 @@ export default function CuisineHistoriqueClient() {
             variant="outlined"
             color="success"
             size="small"
-            startIcon={<EditNoteOutlinedIcon />}
-            sx={{ textTransform: "none", flexShrink: 0 }}
+            startIcon={<EditNoteOutlinedIcon sx={{ fontSize: 18 }} />}
+            sx={{ textTransform: "none", flexShrink: 0, minHeight: 32, py: 0.25, fontSize: "0.8125rem" }}
           >
             {t("saisieLink")}
           </Button>
@@ -138,64 +139,76 @@ export default function CuisineHistoriqueClient() {
 
       <Paper
         elevation={0}
-        sx={{ p: 1.5, mb: 2, borderRadius: 2, border: "1px solid", borderColor: "divider" }}
+        sx={{ p: 1, mb: 1.5, borderRadius: 1.5, border: "1px solid", borderColor: "divider" }}
       >
-        <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
-          <IconButton aria-label={t("prevDay")} onClick={() => shiftDate(-1)} size="small">
-            <ChevronLeftIcon />
+        <Stack direction="row" spacing={0.5} sx={{ alignItems: "center" }}>
+          <IconButton aria-label={t("prevDay")} onClick={() => shiftDate(-1)} size="small" sx={{ p: 0.5 }}>
+            <ChevronLeftIcon fontSize="small" />
           </IconButton>
           <TextField
             type="date"
             size="small"
             value={selectedDate}
             onChange={(e) => setSelectedDate(e.target.value)}
-            slotProps={{ inputLabel: { shrink: true } }}
-            label={t("dateLabel")}
-            sx={{ flex: 1 }}
+            slotProps={{
+              input: { sx: { fontSize: "0.8125rem", py: 0.75 } },
+            }}
+            sx={{ flex: 1, "& .MuiOutlinedInput-root": { borderRadius: 1.5 } }}
           />
-          <IconButton aria-label={t("nextDay")} onClick={() => shiftDate(1)} size="small">
-            <ChevronRightIcon />
+          <IconButton aria-label={t("nextDay")} onClick={() => shiftDate(1)} size="small" sx={{ p: 0.5 }}>
+            <ChevronRightIcon fontSize="small" />
           </IconButton>
         </Stack>
 
         {recentDates.length > 0 ? (
-          <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.75, mt: 1.5 }}>
+          <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.5, mt: 1 }}>
             {recentDates.map((d) => (
               <Chip
                 key={d}
-                label={d}
+                label={formatJournalDateChip(d)}
                 size="small"
                 variant={d === selectedDate ? "filled" : "outlined"}
                 color={d === selectedDate ? "success" : "default"}
                 onClick={() => setSelectedDate(d)}
-                sx={{ cursor: "pointer" }}
+                sx={{
+                  cursor: "pointer",
+                  height: 24,
+                  fontSize: "0.7rem",
+                  "& .MuiChip-label": { px: 0.75 },
+                }}
               />
             ))}
           </Box>
         ) : null}
-      </Paper>
 
-      <Paper
-        elevation={0}
-        sx={{ p: 1.5, mb: 3, borderRadius: 2, border: "1px solid", borderColor: "divider" }}
-      >
-        <Stack direction="row" spacing={2} sx={{ justifyContent: "space-around", textAlign: "center" }}>
-          <div>
-            <Typography variant="caption" color="text.secondary">
+        <Stack
+          direction="row"
+          spacing={1.5}
+          sx={{
+            justifyContent: "center",
+            textAlign: "center",
+            mt: 1,
+            pt: 1,
+            borderTop: "1px solid",
+            borderColor: "divider",
+          }}
+        >
+          <Box>
+            <Typography variant="caption" color="text.secondary" sx={{ fontSize: "0.65rem", lineHeight: 1.2 }}>
               {t("totals.entrees")}
             </Typography>
-            <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
+            <Typography variant="body2" sx={{ fontWeight: 700, lineHeight: 1.2 }}>
               {formatQty(totals.entrees)}
             </Typography>
-          </div>
-          <div>
-            <Typography variant="caption" color="text.secondary">
+          </Box>
+          <Box>
+            <Typography variant="caption" color="text.secondary" sx={{ fontSize: "0.65rem", lineHeight: 1.2 }}>
               {t("totals.sorties")}
             </Typography>
-            <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
+            <Typography variant="body2" sx={{ fontWeight: 700, lineHeight: 1.2 }}>
               {formatQty(totals.sorties)}
             </Typography>
-          </div>
+          </Box>
         </Stack>
       </Paper>
 
@@ -218,6 +231,8 @@ export default function CuisineHistoriqueClient() {
             product: t("table.product"),
             entrees: t("table.entrees"),
             sorties: t("table.sorties"),
+            entreesShort: t("table.entreesShort"),
+            sortiesShort: t("table.sortiesShort"),
           }}
         />
       )}

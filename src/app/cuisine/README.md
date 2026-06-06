@@ -20,7 +20,7 @@ Migration : `supabase/migrations/20260702120000_cuisine_journal.sql`.
 | `/cuisine/saisie/ajouter?type=entree\|sortie` | Grille produits Frigo ; filtres par sous-catégorie ; cartes image `contain` |
 | `/cuisine/saisie/quantite?type=&productId=` | Nouvelle ligne (quantité, min 1, pas ±10/±1) |
 | `/cuisine/saisie/quantite?entryId=` | Modifier ou supprimer une ligne du jour |
-| `/cuisine/historique` | Calendrier / sélecteur de date, totaux globaux, **tableau par sous-catégorie** (produit × entrées × sorties) |
+| `/cuisine/historique` | Vue compacte mobile : date, totaux, **tableau dense** par sous-catégorie |
 
 ## Données
 
@@ -31,6 +31,7 @@ Migration : `supabase/migrations/20260702120000_cuisine_journal.sql`.
 ## Lib
 
 - `src/lib/cuisine/production-date.ts` — date du jour fuseau `Africa/Casablanca`.
+- `src/lib/cuisine/use-journal-day.ts` — surveillance du jour (minuit Casablanca) ; rafraîchit la saisie si la page reste ouverte.
 - `src/lib/cuisine/journal-queries.ts` — chargement / écriture Supabase browser.
 - `src/lib/cuisine/load-frigo-products.ts` — catalogue Frigo groupé.
 - `src/lib/cuisine/aggregate-product-totals.ts` — totaux par produit regroupés par sous-catégorie (historique).

@@ -440,8 +440,8 @@
         }
       },
       "ajouter": {
-        "titleEntree": "Choisir un produit — entrée",
-        "titleSortie": "Choisir un produit — sortie",
+        "titleEntree": "Entrée Frigo",
+        "titleSortie": "Sortie Frigo",
         "backToSaisie": "Retour à la saisie",
         "uncategorized": "Sans sous-catégorie",
         "filterAll": "Tout",
@@ -449,8 +449,8 @@
       },
       "quantite": {
         "title": "Quantité",
-        "titleEntree": "Entrée — quantité",
-        "titleSortie": "Sortie — quantité",
+        "titleEntree": "Entrée Frigo",
+        "titleSortie": "Sortie Frigo",
         "entryNotFound": "Ligne introuvable.",
         "productNotFound": "Produit introuvable.",
         "stepper": {
@@ -471,7 +471,9 @@
         "table": {
           "product": "Produit",
           "entrees": "Entrées",
-          "sorties": "Sorties"
+          "sorties": "Sorties",
+          "entreesShort": "Ent.",
+          "sortiesShort": "Sort."
         },
         "totals": {
           "entrees": "Entrées",

@@ -11,7 +11,8 @@ import BackNavButton from "@/components/BackNavButton";
 import { useSessionPermissions } from "@/lib/auth/useSessionPermissions";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { loadJournalEntriesForDate } from "@/lib/cuisine/journal-queries";
-import { todayJournalDateIso, formatJournalDateLabel } from "@/lib/cuisine/production-date";
+import { formatJournalDateLabel } from "@/lib/cuisine/production-date";
+import { useJournalDateLive } from "@/lib/cuisine/use-journal-day";
 import { aggregateDayTotals } from "@/lib/cuisine/aggregate-day-totals";
 import { useAppFormat } from "@/lib/i18n/useAppFormat";
 import type { CuisineJournalEntryWithProduct } from "@/lib/cuisine/types";
@@ -25,7 +26,7 @@ export default function CuisineSaisieClient() {
   const { loading: permLoading, canCuisineSaisie } = useSessionPermissions();
   const supabase = useMemo(() => createSupabaseBrowserClient(), []);
 
-  const journalDate = useMemo(() => todayJournalDateIso(), []);
+  const journalDate = useJournalDateLive();
   const [entries, setEntries] = useState<CuisineJournalEntryWithProduct[]>([]);
   const [err, setErr] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
