@@ -70,6 +70,7 @@ export function useSessionPermissions() {
     isFullAccess: session?.isFullAccess ?? false,
     can,
     linkedMagasins: session?.magasins ?? [],
+    magasinsRestricted: session?.magasinsRestricted ?? false,
     canWriteProducts: can("produits.write"),
     canReadVentes: can("ventes.read"),
     canReadParametres: can("parametres.read"),

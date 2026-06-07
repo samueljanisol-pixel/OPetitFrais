@@ -31,6 +31,20 @@ export const SHEET_IMPORT_FIELD_KEYS = Object.keys(
 ) as SheetImportFieldKey[]
 
 export const DEFAULT_SHEET_IMPORT_FIELDS: SheetImportFields = {
+  actif: false,
+  code: false,
+  nom: false,
+  prix: false,
+  marge: false,
+  udv: false,
+  categorie: false,
+  sousCategorie: false,
+  fournisseur: false,
+  arabe: false,
+}
+
+/** Tous les champs feuille — utilisé à la création d’un produit absent en base. */
+export const ALL_SHEET_IMPORT_FIELDS: SheetImportFields = {
   actif: true,
   code: true,
   nom: true,

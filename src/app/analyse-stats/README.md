@@ -29,7 +29,7 @@ Migration : `supabase/migrations/20260629140000_ca_analyse_product_lines_rpc.sql
 ## Filtres
 
 - **Dates** : du / au (min `HISTORIQUE_FROM_ISO`, max aujourd’hui)
-- **Magasins** : multi-select ; caissier limité aux magasins de session
+- **Magasins** : multi-select ; profil avec périmètre restreint (`magasinsRestricted`) limité aux magasins de session
 - **Catégories** / **Fournisseurs** : multi-select (+ options « Sans catégorie » / « Sans fournisseur »)
 - **Produits** : recherche + chips (vide = tous les produits)
 

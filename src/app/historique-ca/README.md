@@ -38,4 +38,4 @@ En ouvrant le mois, chaque jour affiche le CA, le nombre de paniers du jour, et 
 
 - Source : Supabase (`fetchHistoriqueFromSupabase`), avec sync FTP automatique au premier chargement si stale.
 - Borne basse : `2025-05-13` (`HISTORIQUE_FROM_ISO`).
-- Rôle caissier : CA limité aux magasins assignés à la session.
+- Périmètre magasin restreint (`session.magasinsRestricted`) : CA limité aux magasins assignés au profil.

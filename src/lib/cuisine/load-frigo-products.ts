@@ -1,7 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { AppLocale } from "@/i18n/config";
-import { compareStrings } from "@/lib/i18n/format";
-import { productDisplayName } from "@/lib/products/product-display-name";
+import { compareProductDisplayNames } from "@/lib/products/product-display-name";
 import { refDisplayLabel } from "@/lib/products/ref-display-label";
 import type { CuisineFrigoProduct, CuisineSubcategoryGroup } from "./types";
 
@@ -65,9 +64,7 @@ export async function loadFrigoProducts(
   });
 
   for (const group of groups) {
-    group.products.sort((a, b) =>
-      compareStrings(locale, productDisplayName(a, locale), productDisplayName(b, locale)),
-    );
+    group.products.sort((a, b) => compareProductDisplayNames(locale, a, b));
   }
 
   return { groups, error: null };

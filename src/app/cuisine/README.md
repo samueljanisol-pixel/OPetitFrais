@@ -17,7 +17,7 @@ Migration : `supabase/migrations/20260702120000_cuisine_journal.sql`.
 |--------|------|
 | `/cuisine` | Redirection : saisie si `cuisine.saisie`, sinon historique si `cuisine.historique` |
 | `/cuisine/saisie` | Journal du jour : listes entrées / sorties, totaux, boutons d’ajout |
-| `/cuisine/saisie/ajouter?type=entree\|sortie` | Grille produits Frigo ; filtres par sous-catégorie ; cartes image `contain` |
+| `/cuisine/saisie/ajouter?type=entree\|sortie` | Grille produits Frigo (tri alphabétique du nom affiché) ; filtres par sous-catégorie ; cartes image `contain` + libellé complet |
 | `/cuisine/saisie/quantite?type=&productId=` | Nouvelle ligne (quantité, min 1, pas ±10/±1) |
 | `/cuisine/saisie/quantite?entryId=` | Modifier ou supprimer une ligne du jour |
 | `/cuisine/historique` | Vue compacte mobile : date, totaux, **tableau dense** par sous-catégorie |

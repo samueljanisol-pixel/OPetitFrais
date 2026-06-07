@@ -57,6 +57,7 @@ export default function AdminUsersClient() {
   const [prenom, setPrenom] = useState("");
   const [nom, setNom] = useState("");
   const [roleId, setRoleId] = useState("");
+  const [createMagasinIds, setCreateMagasinIds] = useState<string[]>([]);
 
   const [editOpen, setEditOpen] = useState(false);
   const [editUserId, setEditUserId] = useState<string | null>(null);
@@ -129,6 +130,7 @@ export default function AdminUsersClient() {
     setPrenom("");
     setNom("");
     setRoleId(roles[0]?.id ?? "");
+    setCreateMagasinIds([]);
     setCreateError(null);
   };
 
@@ -166,8 +168,7 @@ export default function AdminUsersClient() {
     if (editPassword.trim().length > 0) {
       payload.password = editPassword;
     }
-    const edited = profiles.find((x) => x.user_id === editUserId);
-    if (canAdminMagasins && edited?.roles?.slug === "caissier") {
+    if (canAdminMagasins) {
       payload.magasin_ids = editMagasinIds;
     }
     const res = await fetch(`/api/admin/profiles/${editUserId}`, {
@@ -190,18 +191,22 @@ export default function AdminUsersClient() {
   const createUser = async () => {
     setCreateBusy(true);
     setCreateError(null);
+    const createPayload: Record<string, unknown> = {
+      email: email.trim() || undefined,
+      login: login.trim() || undefined,
+      password,
+      prenom: prenom.trim(),
+      nom: nom.trim(),
+      role_id: roleId,
+    };
+    if (canAdminMagasins) {
+      createPayload.magasin_ids = createMagasinIds;
+    }
     const res = await fetch("/api/admin/profiles", {
       method: "POST",
       credentials: "include",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        email: email.trim() || undefined,
-        login: login.trim() || undefined,
-        password,
-        prenom: prenom.trim(),
-        nom: nom.trim(),
-        role_id: roleId,
-      }),
+      body: JSON.stringify(createPayload),
     });
     const j = await res.json().catch(() => ({}));
     setCreateBusy(false);
@@ -320,6 +325,39 @@ export default function AdminUsersClient() {
                 ))}
               </Select>
             </FormControl>
+            {canAdminMagasins ? (
+              <FormControl size="small" fullWidth disabled={createBusy}>
+                <InputLabel id="create-magasins-label">Magasins</InputLabel>
+                <Select
+                  labelId="create-magasins-label"
+                  multiple
+                  value={createMagasinIds}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    setCreateMagasinIds(typeof v === "string" ? v.split(",") : (v as string[]));
+                  }}
+                  input={<OutlinedInput label="Magasins" />}
+                  renderValue={(selected) =>
+                    (selected as string[])
+                      .map((id) => {
+                        const m = allMagasins.find((x) => x.id === id);
+                        return m ? m.nom.trim() || m.code : id;
+                      })
+                      .join(", ") || "Aucun (pas de restriction)"
+                  }
+                >
+                  {allMagasins.map((m) => (
+                    <MenuItem key={m.id} value={m.id}>
+                      <Checkbox checked={createMagasinIds.includes(m.id)} />
+                      <ListItemText primary={m.nom.trim() || m.code} />
+                    </MenuItem>
+                  ))}
+                </Select>
+                <Typography variant="caption" color="text.secondary" className="!mt-1 !block">
+                  Optionnel. Limite le périmètre magasin (CA, commandes…). Vide = pas de rattachement explicite.
+                </Typography>
+              </FormControl>
+            ) : null}
             {createError ? (
               <Typography color="error" variant="body2">
                 {createError}
@@ -418,10 +456,9 @@ export default function AdminUsersClient() {
               fullWidth
               helperText="Laisser vide pour ne pas changer. Minimum 6 caractères si renseigné."
             />
-            {canAdminMagasins &&
-            profiles.find((x) => x.user_id === editUserId)?.roles?.slug === "caissier" ? (
+            {canAdminMagasins ? (
               <FormControl size="small" fullWidth>
-                <InputLabel id="edit-magasins-label">Magasins (caissier)</InputLabel>
+                <InputLabel id="edit-magasins-label">Magasins</InputLabel>
                 <Select
                   labelId="edit-magasins-label"
                   multiple
@@ -430,23 +467,27 @@ export default function AdminUsersClient() {
                     const v = e.target.value;
                     setEditMagasinIds(typeof v === "string" ? v.split(",") : (v as string[]));
                   }}
-                  input={<OutlinedInput label="Magasins (caissier)" />}
+                  input={<OutlinedInput label="Magasins" />}
                   renderValue={(selected) =>
                     (selected as string[])
                       .map((id) => {
                         const m = allMagasins.find((x) => x.id === id);
-                        return m ? `${m.nom} (${m.code})` : id;
+                        return m ? m.nom.trim() || m.code : id;
                       })
-                      .join(", ")
+                      .join(", ") || "Aucun (pas de restriction)"
                   }
                 >
                   {allMagasins.map((m) => (
                     <MenuItem key={m.id} value={m.id}>
                       <Checkbox checked={editMagasinIds.includes(m.id)} />
-                      <ListItemText primary={`${m.nom} (${m.code})`} />
+                      <ListItemText primary={m.nom.trim() || m.code} />
                     </MenuItem>
                   ))}
                 </Select>
+                <Typography variant="caption" color="text.secondary" className="!mt-1 !block">
+                  Vide = pas de rattachement explicite (administrateur : tous les magasins ; autres rôles : aucun magasin
+                  lié).
+                </Typography>
               </FormControl>
             ) : null}
           </div>

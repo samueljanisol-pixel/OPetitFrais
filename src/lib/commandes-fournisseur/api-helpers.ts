@@ -5,24 +5,27 @@ export async function userHasMagasin(
   userId: string,
   magasinId: string,
 ): Promise<boolean> {
+  const { data: links, error: le } = await supabase
+    .from("profile_magasins")
+    .select("magasin_id")
+    .eq("user_id", userId);
+  if (le) return false;
+
+  if (links && links.length > 0) {
+    return links.some((l) => l.magasin_id === magasinId);
+  }
+
   const { data: prof } = await supabase
     .from("profiles")
-    .select("roles(slug)")
+    .select("roles(slug, is_full_access)")
     .eq("user_id", userId)
     .maybeSingle();
-  const role = prof?.roles as { slug: string } | null | undefined;
-  if (role?.slug === "administrateur") {
+  const role = prof?.roles as { slug: string; is_full_access?: boolean } | null | undefined;
+  if (role?.slug === "administrateur" || role?.is_full_access) {
     const { data: m, error: me } = await supabase.from("magasins").select("id").eq("id", magasinId).maybeSingle();
     if (me) return false;
     return Boolean(m);
   }
 
-  const { data, error } = await supabase
-    .from("profile_magasins")
-    .select("magasin_id")
-    .eq("user_id", userId)
-    .eq("magasin_id", magasinId)
-    .maybeSingle();
-  if (error) return false;
-  return Boolean(data);
+  return false;
 }

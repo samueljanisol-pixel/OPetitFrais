@@ -15,8 +15,10 @@ export type SessionPayload = {
   roleSlug: string | null;
   isFullAccess: boolean;
   permissions: string[];
-  /** Magasins : tous pour le rôle « administrateur », sinon profile_magasins. */
+  /** Magasins visibles (profile_magasins ou tous si administrateur / accès total sans lien). */
   magasins: SessionMagasin[];
+  /** true si le périmètre magasin vient de profile_magasins (restriction explicite). */
+  magasinsRestricted?: boolean;
   /** Libellé unique pour l'en-tête (pré-calculé côté API session). */
   displayLabel: string;
   uiLocale?: "fr" | "ar-MA";

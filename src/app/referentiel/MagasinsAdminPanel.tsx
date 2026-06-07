@@ -286,7 +286,7 @@ export default function MagasinsAdminPanel() {
         ))}
         {!magasins.length ? (
           <Typography variant="body2" className="!text-slate-600">
-            Aucun magasin. Créez-en un pour pouvoir rattacher des caissiers.
+            Aucun magasin. Créez-en un pour pouvoir rattacher des utilisateurs.
           </Typography>
         ) : null}
       </div>

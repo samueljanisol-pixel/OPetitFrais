@@ -99,8 +99,8 @@ export default function CaDashboardPage() {
     return new Intl.DateTimeFormat('fr-FR', { month: 'long', year: 'numeric', timeZone: 'UTC' }).format(d)
   }, [data?.month?.ym])
 
-  const caissierMagKey =
-    session?.roleSlug === 'caissier'
+  const scopedMagKey =
+    session?.magasinsRestricted
       ? (session.magasins ?? [])
           .map((m) => m.code)
           .sort()
@@ -117,7 +117,7 @@ export default function CaDashboardPage() {
       try {
         const supabase = createSupabaseBrowserClient()
         const caOpts =
-          session?.roleSlug === 'caissier'
+          session?.magasinsRestricted
             ? { magasinCodes: (session.magasins ?? []).map((m) => m.code) }
             : undefined
         const res = await fetchCaDashboardFromSupabase(supabase, date, caOpts)
@@ -140,7 +140,7 @@ export default function CaDashboardPage() {
     return () => {
       cancelled = true
     }
-  }, [date, refreshNonce, sessionLoading, session?.roleSlug, caissierMagKey])
+  }, [date, refreshNonce, sessionLoading, session?.magasinsRestricted, scopedMagKey])
 
   useEffect(() => {
     setTopMagFilter('all')

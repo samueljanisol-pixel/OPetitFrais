@@ -8,6 +8,7 @@ import BackNavButton from "@/components/BackNavButton";
 import { useSessionPermissions } from "@/lib/auth/useSessionPermissions";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { loadFrigoProducts } from "@/lib/cuisine/load-frigo-products";
+import { compareProductDisplayNames } from "@/lib/products/product-display-name";
 import { productPhotoPublicUrl } from "@/lib/products/storage";
 import { useAppLocale } from "@/lib/i18n/useAppFormat";
 import type { CuisineEntryType, CuisineSubcategoryGroup } from "@/lib/cuisine/types";
@@ -35,8 +36,13 @@ export default function CuisineProductPickerClient() {
 
   const filteredGroups = useMemo(() => {
     if (!subcategoryFilter) return [];
-    return groups.filter((g) => (g.subcategoryId ?? "__none__") === subcategoryFilter);
-  }, [groups, subcategoryFilter]);
+    return groups
+      .filter((g) => (g.subcategoryId ?? "__none__") === subcategoryFilter)
+      .map((group) => ({
+        ...group,
+        products: [...group.products].sort((a, b) => compareProductDisplayNames(locale, a, b)),
+      }));
+  }, [groups, subcategoryFilter, locale]);
 
   useEffect(() => {
     if (!permLoading && !canCuisineSaisie) {
@@ -138,6 +144,7 @@ export default function CuisineProductPickerClient() {
                       display: "grid",
                       gridTemplateColumns: "repeat(3, 1fr)",
                       gap: 1.25,
+                      alignItems: "start",
                     }}
                   >
                     {group.products.map((product) => {

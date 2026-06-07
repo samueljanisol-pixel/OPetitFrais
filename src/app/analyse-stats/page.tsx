@@ -98,7 +98,7 @@ export default function AnalyseStatsPage() {
   const [error, setError] = useState<string | null>(null)
   const [hasRun, setHasRun] = useState(false)
 
-  const isCaissier = session?.roleSlug === 'caissier'
+  const magasinsRestricted = session?.magasinsRestricted ?? false
   const availableMagasins = session?.magasins ?? []
 
   useEffect(() => {
@@ -133,11 +133,11 @@ export default function AnalyseStatsPage() {
   }, [sessionLoading])
 
   useEffect(() => {
-    if (sessionLoading || isCaissier) return
+    if (sessionLoading || magasinsRestricted) return
     setSelectedMagasinCodes((prev) =>
       prev.length === 0 ? availableMagasins.map((m) => m.code) : prev,
     )
-  }, [sessionLoading, isCaissier, availableMagasins])
+  }, [sessionLoading, magasinsRestricted, availableMagasins])
 
   const formatMAD = useMemo(() => {
     const nf = new Intl.NumberFormat('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
@@ -176,7 +176,7 @@ export default function AnalyseStatsPage() {
 
     try {
       const supabase = createSupabaseBrowserClient()
-      const magasinCodes = isCaissier
+      const magasinCodes = magasinsRestricted
         ? availableMagasins.map((m) => m.code)
         : resolveMagasinCodesForQuery(selectedMagasinCodes, availableMagasins)
 
@@ -204,7 +204,7 @@ export default function AnalyseStatsPage() {
   }, [
     from,
     to,
-    isCaissier,
+    magasinsRestricted,
     availableMagasins,
     selectedMagasinCodes,
     categoryIds,
@@ -344,12 +344,12 @@ export default function AnalyseStatsPage() {
             </Stack>
 
             {availableMagasins.length > 0 ? (
-              <FormControl size="small" fullWidth disabled={isCaissier}>
+              <FormControl size="small" fullWidth disabled={magasinsRestricted}>
                 <InputLabel>Magasins</InputLabel>
                 <Select
                   multiple
                   label="Magasins"
-                  value={isCaissier ? availableMagasins.map((m) => m.code) : selectedMagasinCodes}
+                  value={magasinsRestricted ? availableMagasins.map((m) => m.code) : selectedMagasinCodes}
                   onChange={handleMagasinChange}
                   input={<OutlinedInput label="Magasins" />}
                   renderValue={(selected) => {

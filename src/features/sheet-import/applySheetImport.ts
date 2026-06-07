@@ -3,6 +3,7 @@ import { insertProductPriceHistoryRow, pricingSnapshotChanged, type ProductPrici
 import type { RefRow, RefSubcategoryRow } from '@/lib/products/types'
 import type { SheetRowParsed } from './mapSheetRow'
 import {
+  ALL_SHEET_IMPORT_FIELDS,
   DEFAULT_SHEET_IMPORT_FIELDS,
   hasAnyImportField,
   type SheetImportFields,
@@ -304,7 +305,7 @@ export async function applySheetImport(
     } else {
       const { patch: fullPatch, errors: createErrors } = buildProductPatch(
         row,
-        DEFAULT_SHEET_IMPORT_FIELDS,
+        ALL_SHEET_IMPORT_FIELDS,
         refs,
       )
       if (createErrors.length > 0) {
@@ -316,13 +317,13 @@ export async function applySheetImport(
         null,
         fullPatch,
         row,
-        DEFAULT_SHEET_IMPORT_FIELDS,
+        ALL_SHEET_IMPORT_FIELDS,
         refs,
       )
       const createSubErrors = await applySubcategoryToPatch(
         supabase,
         row,
-        DEFAULT_SHEET_IMPORT_FIELDS,
+        ALL_SHEET_IMPORT_FIELDS,
         refs,
         fullPatch,
         createCategoryId,

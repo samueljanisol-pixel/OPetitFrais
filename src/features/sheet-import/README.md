@@ -6,7 +6,7 @@
 
 ## Filtre d’import
 
-Au clic sur **Importer depuis Google Sheet**, une fenêtre permet de **cocher les champs** à appliquer aux **produits existants** (mise à jour partielle). La correspondance produit utilise toujours Code / Nom depuis la feuille. Un **nouveau produit** (absent en base) est toujours créé avec **toutes** les colonnes lues.
+Au clic sur **Importer depuis Google Sheet**, une fenêtre permet de **cocher les champs** à appliquer aux **produits existants** (mise à jour partielle). **Aucune case cochée par défaut** — il faut sélectionner les champs à mettre à jour. La correspondance produit utilise toujours Code / Nom depuis la feuille. Un **nouveau produit** (absent en base) est toujours créé avec **toutes** les colonnes lues.
 
 - **Désactiver l’UI** : `SHEET_IMPORT_ENABLED = false` dans `config.ts`.
 - **Retirer du projet** : supprimer

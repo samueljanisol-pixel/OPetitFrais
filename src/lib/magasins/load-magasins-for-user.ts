@@ -3,9 +3,13 @@ import type { SessionMagasin } from "@/lib/auth/session-types";
 
 type RoleInfo = { slug: string | null; is_full_access: boolean } | null | undefined;
 
-function mapProfileMagasins(
-  pmRows: { magasins: unknown }[] | null,
-): SessionMagasin[] {
+export type UserMagasinsLoad = {
+  magasins: SessionMagasin[];
+  /** true si l'utilisateur a des lignes dans profile_magasins (périmètre explicite). */
+  restricted: boolean;
+};
+
+function mapProfileMagasins(pmRows: { magasins: unknown }[] | null): SessionMagasin[] {
   return (pmRows ?? [])
     .map((row) => {
       const raw = row.magasins as unknown;
@@ -19,36 +23,35 @@ function mapProfileMagasins(
 }
 
 /**
- * Magasins visibles pour la session : tous les magasins pour le rôle « administrateur »,
- * sinon ceux de profile_magasins.
+ * Magasins visibles pour la session :
+ * 1. profile_magasins s'il existe (tout rôle) ;
+ * 2. sinon tous les magasins pour administrateur ou rôle is_full_access ;
+ * 3. sinon aucun.
  */
 export async function loadMagasinsForUser(
   supabase: SupabaseClient,
   userId: string,
   role: RoleInfo,
-): Promise<SessionMagasin[]> {
-  if (role?.slug === "administrateur") {
+): Promise<UserMagasinsLoad> {
+  const { data: pmRows, error: pmErr } = await supabase
+    .from("profile_magasins")
+    .select("magasins(id, code, nom)")
+    .eq("user_id", userId);
+
+  if (!pmErr && pmRows && pmRows.length > 0) {
+    return { magasins: mapProfileMagasins(pmRows), restricted: true };
+  }
+
+  if (role?.slug === "administrateur" || role?.is_full_access) {
     const { data, error } = await supabase
       .from("magasins")
       .select("id, code, nom")
       .order("sort_order", { ascending: true })
       .order("nom", { ascending: true });
-    if (!error && data && data.length > 0) {
-      return data as SessionMagasin[];
+    if (!error && data) {
+      return { magasins: data as SessionMagasin[], restricted: false };
     }
-    const { data: pmRows } = await supabase
-      .from("profile_magasins")
-      .select("magasins(id, code, nom)")
-      .eq("user_id", userId);
-    return mapProfileMagasins(pmRows ?? []);
   }
 
-  const { data: pmRows, error: pmErr } = await supabase
-    .from("profile_magasins")
-    .select("magasins(id, code, nom)")
-    .eq("user_id", userId);
-  if (pmErr) {
-    return [];
-  }
-  return mapProfileMagasins(pmRows ?? []);
+  return { magasins: [], restricted: false };
 }

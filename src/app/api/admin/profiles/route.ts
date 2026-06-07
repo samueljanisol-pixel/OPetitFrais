@@ -158,32 +158,28 @@ export async function POST(req: Request) {
   }
 
   const magasinIds = Array.isArray(body.magasin_ids) ? body.magasin_ids : undefined;
-  if (magasinIds !== undefined && magasinIds.length > 0) {
+  if (magasinIds !== undefined) {
     const mg = await requireApiPermission("admin.magasins");
     if (!mg.ok) {
       return NextResponse.json({ error: mg.error }, { status: mg.status });
     }
-    const { data: roleRow } = await service.from("roles").select("slug").eq("id", role_id).maybeSingle();
-    const slug = (roleRow as { slug?: string } | null)?.slug;
-    if (slug !== "caissier") {
-      return NextResponse.json(
-        { error: "Les magasins ne peuvent être liés qu’à un utilisateur au rôle Caissier" },
-        { status: 400 },
-      );
-    }
-    const { data: magOk } = await service.from("magasins").select("id").in("id", magasinIds);
-    if (!magOk || magOk.length !== magasinIds.length) {
-      return NextResponse.json({ error: "Un ou plusieurs magasins sont invalides" }, { status: 400 });
+    if (magasinIds.length > 0) {
+      const { data: magOk } = await service.from("magasins").select("id").in("id", magasinIds);
+      if (!magOk || magOk.length !== magasinIds.length) {
+        return NextResponse.json({ error: "Un ou plusieurs magasins sont invalides" }, { status: 400 });
+      }
     }
     const { error: delE } = await service.from("profile_magasins").delete().eq("user_id", created.user.id);
     if (delE) {
       return NextResponse.json({ error: delE.message }, { status: 400 });
     }
-    const { error: insE } = await service
-      .from("profile_magasins")
-      .insert(magasinIds.map((mid) => ({ user_id: created.user.id, magasin_id: mid })));
-    if (insE) {
-      return NextResponse.json({ error: insE.message }, { status: 400 });
+    if (magasinIds.length > 0) {
+      const { error: insE } = await service
+        .from("profile_magasins")
+        .insert(magasinIds.map((mid) => ({ user_id: created.user.id, magasin_id: mid })));
+      if (insE) {
+        return NextResponse.json({ error: insE.message }, { status: 400 });
+      }
     }
   }
 

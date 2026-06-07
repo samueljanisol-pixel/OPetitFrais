@@ -39,7 +39,7 @@ export async function GET() {
       login = ml || null;
     }
 
-    const magasins: SessionPayload["magasins"] = await loadMagasinsForUser(
+    const { magasins, restricted: magasinsRestricted } = await loadMagasinsForUser(
       supabase,
       user.id,
       role,
@@ -69,6 +69,7 @@ export async function GET() {
       isFullAccess: role?.is_full_access ?? false,
       permissions,
       magasins,
+      magasinsRestricted,
       displayLabel,
       uiLocale: normalizeLocale(profile?.ui_locale),
     };

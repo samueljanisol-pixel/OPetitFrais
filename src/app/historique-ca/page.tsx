@@ -39,8 +39,8 @@ export default function HistoriqueCA() {
 
   const todayIso = useMemo(() => new Date().toISOString().split('T')[0], [])
 
-  const caissierMagKey =
-    session?.roleSlug === 'caissier'
+  const scopedMagKey =
+    session?.magasinsRestricted
       ? (session.magasins ?? [])
           .map((m) => m.code)
           .sort()
@@ -99,7 +99,7 @@ export default function HistoriqueCA() {
         setLoadHint('Chargement…')
         const supabase = createSupabaseBrowserClient()
         const caOpts =
-          session?.roleSlug === 'caissier'
+          session?.magasinsRestricted
             ? { magasinCodes: (session.magasins ?? []).map((m) => m.code) }
             : undefined
         const res = await fetchHistoriqueFromSupabase(supabase, HISTORIQUE_FROM_ISO, todayIso, caOpts)
@@ -123,7 +123,7 @@ export default function HistoriqueCA() {
     return () => {
       cancelled = true
     }
-  }, [todayIso, sessionLoading, session?.roleSlug, caissierMagKey])
+  }, [todayIso, sessionLoading, session?.magasinsRestricted, scopedMagKey])
 
   const computed = useMemo(() => {
     if (!data || 'error' in data) return null

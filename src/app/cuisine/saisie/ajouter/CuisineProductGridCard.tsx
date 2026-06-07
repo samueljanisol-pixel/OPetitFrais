@@ -24,7 +24,7 @@ export default function CuisineProductGridCard({ product, photoUrl, href }: Prop
       sx={{
         display: "flex",
         flexDirection: "column",
-        aspectRatio: "1",
+        height: "100%",
         borderRadius: 2,
         border: "1px solid",
         borderColor: "divider",
@@ -44,13 +44,14 @@ export default function CuisineProductGridCard({ product, photoUrl, href }: Prop
       <Box
         sx={{
           position: "relative",
-          flex: "1 1 auto",
-          minHeight: 0,
+          width: "100%",
+          aspectRatio: "1",
+          flexShrink: 0,
           bgcolor: "grey.50",
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
-          p: 0.75,
+          p: 0.5,
         }}
       >
         {photoUrl ? (
@@ -91,15 +92,14 @@ export default function CuisineProductGridCard({ product, photoUrl, href }: Prop
         variant="caption"
         component="p"
         sx={{
-          px: 0.75,
-          py: 0.75,
+          px: 0.5,
+          py: 0.5,
           textAlign: "center",
           fontWeight: 600,
-          lineHeight: 1.25,
-          display: "-webkit-box",
-          WebkitLineClamp: 2,
-          WebkitBoxOrient: "vertical",
-          overflow: "hidden",
+          fontSize: "0.625rem",
+          lineHeight: 1.15,
+          wordBreak: "break-word",
+          hyphens: "auto",
         }}
         dir={locale === "ar-MA" ? "rtl" : undefined}
         lang={locale === "ar-MA" ? "ar" : undefined}

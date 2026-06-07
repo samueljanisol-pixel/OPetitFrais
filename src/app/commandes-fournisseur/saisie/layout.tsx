@@ -14,7 +14,8 @@ export default async function SaisieLayout({ children }: { children: React.React
       .eq("user_id", userId)
       .maybeSingle();
     const role = profile?.roles as { slug: string; is_full_access: boolean } | null | undefined;
-    magasins = await loadMagasinsForUser(supabase, userId, role);
+    const loaded = await loadMagasinsForUser(supabase, userId, role);
+    magasins = loaded.magasins;
   }
 
   return <MagasinSaisieProvider magasins={magasins}>{children}</MagasinSaisieProvider>;

@@ -53,18 +53,6 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ userId: strin
     }
   }
 
-  if (typeof body.role_id === "string") {
-    const { data: profAfter } = await service
-      .from("profiles")
-      .select("roles(slug)")
-      .eq("user_id", userId)
-      .maybeSingle();
-    const s = (profAfter?.roles as { slug?: string } | null)?.slug;
-    if (s !== "caissier") {
-      await service.from("profile_magasins").delete().eq("user_id", userId);
-    }
-  }
-
   const pwd = typeof body.password === "string" ? body.password : "";
   if (pwd.length > 0 && pwd.length < 6) {
     return NextResponse.json({ error: "Mot de passe : minimum 6 caractères" }, { status: 400 });
@@ -102,21 +90,6 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ userId: strin
   }
 
   if (body.magasin_ids !== undefined) {
-    const { data: prof, error: rErr } = await service
-      .from("profiles")
-      .select("role_id, roles(slug)")
-      .eq("user_id", userId)
-      .maybeSingle();
-    if (rErr || !prof) {
-      return NextResponse.json({ error: rErr?.message ?? "Profil introuvable" }, { status: 400 });
-    }
-    const slug = (prof.roles as { slug?: string } | null)?.slug;
-    if (slug !== "caissier") {
-      return NextResponse.json(
-        { error: "Les magasins ne peuvent être liés qu’à un utilisateur au rôle Caissier" },
-        { status: 400 },
-      );
-    }
     const ids = body.magasin_ids;
     if (ids.length > 0) {
       const { data: magOk } = await service.from("magasins").select("id").in("id", ids);
