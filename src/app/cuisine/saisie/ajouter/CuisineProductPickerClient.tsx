@@ -88,7 +88,7 @@ export default function CuisineProductPickerClient() {
   const title = entryType === "entree" ? t("titleEntree") : t("titleSortie");
 
   return (
-    <main className="mx-auto w-full max-w-lg px-4 py-4">
+    <main className="mx-auto w-full px-4 py-4 sm:px-6 md:px-8">
       <BackNavButton href="/cuisine/saisie">{t("backToSaisie")}</BackNavButton>
 
       <Typography variant="h5" component="h1" sx={{ fontWeight: 600, mt: 1, mb: 2 }}>
@@ -142,8 +142,11 @@ export default function CuisineProductPickerClient() {
                   <Box
                     sx={{
                       display: "grid",
-                      gridTemplateColumns: "repeat(3, 1fr)",
-                      gap: 1.25,
+                      gridTemplateColumns: {
+                        xs: "repeat(5, minmax(0, 1fr))",
+                        sm: "repeat(auto-fill, minmax(76px, 1fr))",
+                      },
+                      gap: { xs: 0.75, sm: 1 },
                       alignItems: "start",
                     }}
                   >

@@ -25,7 +25,7 @@ export default function CuisineProductGridCard({ product, photoUrl, href }: Prop
         display: "flex",
         flexDirection: "column",
         height: "100%",
-        borderRadius: 2,
+        borderRadius: 1.5,
         border: "1px solid",
         borderColor: "divider",
         bgcolor: "background.paper",
@@ -33,7 +33,7 @@ export default function CuisineProductGridCard({ product, photoUrl, href }: Prop
         textDecoration: "none",
         color: "inherit",
         transition: "box-shadow 0.15s ease",
-        "&:hover": { boxShadow: 2 },
+        "&:hover": { boxShadow: 1 },
         "&:focus-visible": {
           outline: "2px solid",
           outlineColor: "success.main",
@@ -51,7 +51,7 @@ export default function CuisineProductGridCard({ product, photoUrl, href }: Prop
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
-          p: 0.5,
+          p: 0.25,
         }}
       >
         {photoUrl ? (
@@ -67,7 +67,7 @@ export default function CuisineProductGridCard({ product, photoUrl, href }: Prop
               src={photoUrl}
               alt=""
               fill
-              sizes="(max-width: 600px) 33vw, 120px"
+              sizes="(max-width: 600px) 20vw, (max-width: 900px) 12vw, 96px"
               style={{ objectFit: "contain", objectPosition: "center" }}
             />
           </Box>
@@ -80,7 +80,7 @@ export default function CuisineProductGridCard({ product, photoUrl, href }: Prop
               alignItems: "center",
               justifyContent: "center",
               color: "text.disabled",
-              fontSize: "2rem",
+              fontSize: "1.25rem",
             }}
             aria-hidden
           >
@@ -92,12 +92,12 @@ export default function CuisineProductGridCard({ product, photoUrl, href }: Prop
         variant="caption"
         component="p"
         sx={{
-          px: 0.5,
-          py: 0.5,
+          px: 0.25,
+          py: 0.25,
           textAlign: "center",
           fontWeight: 600,
-          fontSize: "0.625rem",
-          lineHeight: 1.15,
+          fontSize: "0.5625rem",
+          lineHeight: 1.1,
           wordBreak: "break-word",
           hyphens: "auto",
         }}
