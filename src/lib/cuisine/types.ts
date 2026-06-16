@@ -52,6 +52,8 @@ export type CuisineProductDayTotal = {
   unit: string;
   entrees: number;
   sorties: number;
+  /** Quantités vendues du jour (ca_product_day, tous magasins). */
+  ventes?: number;
 };
 
 export type CuisineSubcategoryTotalsGroup = {

@@ -480,11 +480,14 @@
           "entrees": "الدخول",
           "sorties": "الخروج",
           "entreesShort": "دخ.",
-          "sortiesShort": "خر."
+          "sortiesShort": "خر.",
+          "ventes": "المبيعات",
+          "ventesShort": "م."
         },
         "totals": {
           "entrees": "الدخول",
-          "sorties": "الخروج"
+          "sorties": "الخروج",
+          "ventes": "المبيعات"
         }
       }
     }

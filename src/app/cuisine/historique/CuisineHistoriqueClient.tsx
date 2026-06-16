@@ -29,6 +29,10 @@ import {
 } from "@/lib/cuisine/production-date";
 import { aggregateDayTotals } from "@/lib/cuisine/aggregate-day-totals";
 import { aggregateProductTotalsBySubcategory } from "@/lib/cuisine/aggregate-product-totals";
+import {
+  loadProductSalesQtyForDate,
+  mergeProductGroupsWithSales,
+} from "@/lib/cuisine/load-product-sales-for-date";
 import { useAppFormat } from "@/lib/i18n/useAppFormat";
 import type { CuisineJournalEntryWithProduct } from "@/lib/cuisine/types";
 import CuisineHistoriqueTotalsTable from "./CuisineHistoriqueTotalsTable";
@@ -45,6 +49,7 @@ export default function CuisineHistoriqueClient() {
   const [selectedDate, setSelectedDate] = useState(todayIso);
   const [knownDates, setKnownDates] = useState<string[]>([]);
   const [entries, setEntries] = useState<CuisineJournalEntryWithProduct[]>([]);
+  const [salesByProductId, setSalesByProductId] = useState<Map<string, number>>(() => new Map());
   const [err, setErr] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -67,12 +72,21 @@ export default function CuisineHistoriqueClient() {
   const loadEntries = useCallback(async () => {
     setLoading(true);
     setErr(null);
-    const { entries: rows, error } = await loadJournalEntriesForDate(supabase, selectedDate);
-    if (error) {
-      setErr(error);
+    const [entriesResult, salesResult] = await Promise.all([
+      loadJournalEntriesForDate(supabase, selectedDate),
+      loadProductSalesQtyForDate(supabase, selectedDate),
+    ]);
+    if (entriesResult.error) {
+      setErr(entriesResult.error);
       setEntries([]);
     } else {
-      setEntries(rows);
+      setEntries(entriesResult.entries);
+    }
+    if (salesResult.error) {
+      setErr((prev) => prev ?? salesResult.error);
+      setSalesByProductId(new Map());
+    } else {
+      setSalesByProductId(salesResult.byProductId);
     }
     setLoading(false);
   }, [supabase, selectedDate]);
@@ -88,8 +102,21 @@ export default function CuisineHistoriqueClient() {
   const totals = useMemo(() => aggregateDayTotals(entries), [entries]);
 
   const productGroups = useMemo(
-    () => aggregateProductTotalsBySubcategory(entries, t("uncategorized"), locale),
-    [entries, locale, t],
+    () =>
+      mergeProductGroupsWithSales(
+        aggregateProductTotalsBySubcategory(entries, t("uncategorized"), locale),
+        salesByProductId,
+      ),
+    [entries, locale, salesByProductId, t],
+  );
+
+  const totalVentes = useMemo(
+    () =>
+      productGroups.reduce(
+        (sum, group) => sum + group.products.reduce((groupSum, product) => groupSum + (product.ventes ?? 0), 0),
+        0,
+      ),
+    [productGroups],
   );
 
   const formatQty = useCallback(
@@ -110,7 +137,7 @@ export default function CuisineHistoriqueClient() {
   if (!canCuisineHistorique) return null;
 
   return (
-    <main className="mx-auto w-full max-w-lg px-3 py-2">
+    <main className="mx-auto w-full max-w-xl px-3 py-2">
       <BackNavButton href="/">{tCommon("home")}</BackNavButton>
 
       <div className="!mt-1 !mb-2 flex flex-row items-center justify-between gap-1">
@@ -209,6 +236,14 @@ export default function CuisineHistoriqueClient() {
               {formatQty(totals.sorties)}
             </Typography>
           </Box>
+          <Box>
+            <Typography variant="caption" color="text.secondary" sx={{ fontSize: "0.65rem", lineHeight: 1.2 }}>
+              {t("totals.ventes")}
+            </Typography>
+            <Typography variant="body2" sx={{ fontWeight: 700, lineHeight: 1.2 }}>
+              {formatQty(totalVentes)}
+            </Typography>
+          </Box>
         </Stack>
       </Paper>
 
@@ -231,8 +266,10 @@ export default function CuisineHistoriqueClient() {
             product: t("table.product"),
             entrees: t("table.entrees"),
             sorties: t("table.sorties"),
+            ventes: t("table.ventes"),
             entreesShort: t("table.entreesShort"),
             sortiesShort: t("table.sortiesShort"),
+            ventesShort: t("table.ventesShort"),
           }}
         />
       )}

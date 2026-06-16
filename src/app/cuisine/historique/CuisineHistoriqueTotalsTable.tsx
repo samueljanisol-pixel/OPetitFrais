@@ -7,6 +7,25 @@ import type { CuisineSubcategoryTotalsGroup } from "@/lib/cuisine/types";
 
 const denseCell = { py: 0.5, px: 0.75, fontSize: "0.75rem", lineHeight: 1.3 };
 const denseHead = { ...denseCell, fontWeight: 700, whiteSpace: "nowrap" as const };
+const metricHead = {
+  ...denseHead,
+  width: "3.75rem",
+  minWidth: "3.75rem",
+  maxWidth: "4.25rem",
+  px: 1,
+  pl: 1.25,
+  pr: 0.5,
+};
+const metricCell = {
+  ...denseCell,
+  width: "3.75rem",
+  minWidth: "3.75rem",
+  maxWidth: "4.25rem",
+  px: 1,
+  pl: 1.25,
+  pr: 0.5,
+  fontWeight: 600,
+};
 
 type Props = {
   groups: CuisineSubcategoryTotalsGroup[];
@@ -16,10 +35,31 @@ type Props = {
     product: string;
     entrees: string;
     sorties: string;
+    ventes: string;
     entreesShort: string;
     sortiesShort: string;
+    ventesShort: string;
   };
 };
+
+function MetricHeader({
+  full,
+  short,
+}: {
+  full: string;
+  short: string;
+}) {
+  return (
+    <>
+      <Box component="span" sx={{ display: { xs: "none", sm: "inline" } }}>
+        {full}
+      </Box>
+      <Box component="span" sx={{ display: { xs: "inline", sm: "none" } }}>
+        {short}
+      </Box>
+    </>
+  );
+}
 
 export default function CuisineHistoriqueTotalsTable({ groups, locale, formatQty, labels }: Props) {
   return (
@@ -41,32 +81,25 @@ export default function CuisineHistoriqueTotalsTable({ groups, locale, formatQty
               overflow: "hidden",
             }}
           >
-            <Table size="small" sx={{ tableLayout: "fixed" }}>
+            <Table size="small" sx={{ tableLayout: "fixed", width: "100%" }}>
               <TableHead>
                 <TableRow sx={{ bgcolor: "grey.50" }}>
-                  <TableCell sx={denseHead}>{labels.product}</TableCell>
-                  <TableCell align="right" sx={{ ...denseHead, width: "2.75rem" }}>
-                    <Box component="span" sx={{ display: { xs: "none", sm: "inline" } }}>
-                      {labels.entrees}
-                    </Box>
-                    <Box component="span" sx={{ display: { xs: "inline", sm: "none" } }}>
-                      {labels.entreesShort}
-                    </Box>
+                  <TableCell sx={{ ...denseHead, pr: 1 }}>{labels.product}</TableCell>
+                  <TableCell align="right" sx={metricHead}>
+                    <MetricHeader full={labels.entrees} short={labels.entreesShort} />
                   </TableCell>
-                  <TableCell align="right" sx={{ ...denseHead, width: "2.75rem" }}>
-                    <Box component="span" sx={{ display: { xs: "none", sm: "inline" } }}>
-                      {labels.sorties}
-                    </Box>
-                    <Box component="span" sx={{ display: { xs: "inline", sm: "none" } }}>
-                      {labels.sortiesShort}
-                    </Box>
+                  <TableCell align="right" sx={{ ...metricHead, pl: 1.5 }}>
+                    <MetricHeader full={labels.sorties} short={labels.sortiesShort} />
+                  </TableCell>
+                  <TableCell align="right" sx={{ ...metricHead, pl: 1.5 }}>
+                    <MetricHeader full={labels.ventes} short={labels.ventesShort} />
                   </TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
                 {group.products.map((product) => (
                   <TableRow key={product.productId} hover>
-                    <TableCell sx={denseCell}>
+                    <TableCell sx={{ ...denseCell, pr: 1 }}>
                       <Typography
                         variant="caption"
                         component="span"
@@ -84,11 +117,14 @@ export default function CuisineHistoriqueTotalsTable({ groups, locale, formatQty
                         {productDisplayName(product, locale)}
                       </Typography>
                     </TableCell>
-                    <TableCell align="right" sx={{ ...denseCell, fontWeight: 600 }}>
+                    <TableCell align="right" sx={metricCell}>
                       {product.entrees > 0 ? formatQty(product.entrees) : "—"}
                     </TableCell>
-                    <TableCell align="right" sx={{ ...denseCell, fontWeight: 600 }}>
+                    <TableCell align="right" sx={{ ...metricCell, pl: 1.5 }}>
                       {product.sorties > 0 ? formatQty(product.sorties) : "—"}
+                    </TableCell>
+                    <TableCell align="right" sx={{ ...metricCell, pl: 1.5 }}>
+                      {(product.ventes ?? 0) > 0 ? formatQty(product.ventes ?? 0) : "—"}
                     </TableCell>
                   </TableRow>
                 ))}

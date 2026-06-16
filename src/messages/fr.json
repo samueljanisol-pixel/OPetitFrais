@@ -480,11 +480,14 @@
           "entrees": "Entrées",
           "sorties": "Sorties",
           "entreesShort": "Ent.",
-          "sortiesShort": "Sort."
+          "sortiesShort": "Sort.",
+          "ventes": "Ventes",
+          "ventesShort": "Vte."
         },
         "totals": {
           "entrees": "Entrées",
-          "sorties": "Sorties"
+          "sorties": "Sorties",
+          "ventes": "Ventes"
         }
       }
     }
