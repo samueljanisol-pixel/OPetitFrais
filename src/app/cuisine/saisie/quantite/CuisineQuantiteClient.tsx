@@ -4,7 +4,8 @@ import Image from "next/image";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useTranslations } from "next-intl";
-import { Box, Button, Stack, Typography } from "@mui/material";
+import { Box, Button, Dialog, DialogActions, DialogContent, DialogTitle, Stack, Typography } from "@mui/material";
+import DeleteOutlineOutlinedIcon from "@mui/icons-material/DeleteOutlineOutlined";
 import BackNavButton from "@/components/BackNavButton";
 import { useSessionPermissions } from "@/lib/auth/useSessionPermissions";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
@@ -18,7 +19,7 @@ import { useJournalDateLive } from "@/lib/cuisine/use-journal-day";
 import { clampCuisineQuantity } from "@/lib/cuisine/clamp-quantity";
 import { productDisplayName } from "@/lib/products/product-display-name";
 import { productPhotoPublicUrl } from "@/lib/products/storage";
-import { useAppLocale } from "@/lib/i18n/useAppFormat";
+import { useAppLocale, useAppFormat } from "@/lib/i18n/useAppFormat";
 import type { CuisineEntryType, CuisineFrigoProduct, CuisineJournalEntryWithProduct } from "@/lib/cuisine/types";
 import CuisineQuantityStepper from "./CuisineQuantityStepper";
 
@@ -43,6 +44,7 @@ export default function CuisineQuantiteClient() {
   const t = useTranslations("backoffice.cuisine.quantite");
   const tCommon = useTranslations("common");
   const locale = useAppLocale();
+  const { formatNumber } = useAppFormat();
   const { loading: permLoading, canCuisineSaisie } = useSessionPermissions();
   const supabase = useMemo(() => createSupabaseBrowserClient(), []);
   const journalDate = useJournalDateLive();
@@ -54,6 +56,7 @@ export default function CuisineQuantiteClient() {
   const [err, setErr] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
 
   const isEdit = Boolean(entryId);
 
@@ -187,9 +190,18 @@ export default function CuisineQuantiteClient() {
       setSaving(false);
       return;
     }
+    setDeleteOpen(false);
     setSaving(false);
     void router.replace("/cuisine/saisie");
   }, [entry, supabase, router]);
+
+  const deleteDialogBody = useMemo(() => {
+    const qty = formatNumber(entry?.quantity ?? quantity, { maximumFractionDigits: 3 });
+    if (unit) {
+      return t("deleteDialog.bodyWithUnit", { product: displayName, quantity: qty, unit });
+    }
+    return t("deleteDialog.body", { product: displayName, quantity: qty });
+  }, [displayName, entry?.quantity, formatNumber, quantity, t, unit]);
 
   if (permLoading || loading) {
     return <p className="px-4 py-6 text-slate-600">{tCommon("loading")}</p>;
@@ -262,27 +274,69 @@ export default function CuisineQuantiteClient() {
         </Button>
         <Button
           variant="outlined"
-          color="error"
+          color="inherit"
           fullWidth
           disabled={saving}
           onClick={() => router.replace(cancelHref)}
-          sx={{ textTransform: "none", py: 1.25, borderWidth: 2 }}
+          sx={{
+            textTransform: "none",
+            py: 1.25,
+            borderColor: "divider",
+            color: "text.primary",
+          }}
         >
           {tCommon("cancel")}
         </Button>
         {isEdit ? (
           <Button
-            variant="outlined"
+            variant="contained"
             color="error"
             fullWidth
             disabled={saving}
-            onClick={() => void remove()}
-            sx={{ textTransform: "none" }}
+            startIcon={<DeleteOutlineOutlinedIcon />}
+            onClick={() => setDeleteOpen(true)}
+            sx={{ textTransform: "none", py: 1.25 }}
           >
             {tCommon("delete")}
           </Button>
         ) : null}
       </Stack>
+
+      <Dialog open={deleteOpen} onClose={() => !saving && setDeleteOpen(false)} fullWidth maxWidth="xs">
+        <DialogTitle sx={{ pb: 0.5 }}>{t("deleteDialog.title")}</DialogTitle>
+        <DialogContent>
+          <Typography
+            variant="body2"
+            color="text.secondary"
+            dir={locale === "ar-MA" ? "rtl" : undefined}
+          >
+            {deleteDialogBody}
+          </Typography>
+        </DialogContent>
+        <DialogActions sx={{ px: 2, pb: 2, gap: 1 }}>
+          <Button
+            type="button"
+            variant="outlined"
+            color="inherit"
+            disabled={saving}
+            onClick={() => setDeleteOpen(false)}
+            sx={{ textTransform: "none", flex: 1, borderColor: "divider", color: "text.primary" }}
+          >
+            {tCommon("cancel")}
+          </Button>
+          <Button
+            type="button"
+            variant="contained"
+            color="error"
+            disabled={saving}
+            startIcon={<DeleteOutlineOutlinedIcon />}
+            onClick={() => void remove()}
+            sx={{ textTransform: "none", flex: 1 }}
+          >
+            {saving ? tCommon("loading") : tCommon("delete")}
+          </Button>
+        </DialogActions>
+      </Dialog>
     </main>
   );
 }

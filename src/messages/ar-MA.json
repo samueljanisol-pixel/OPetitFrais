@@ -445,7 +445,9 @@
         "backToSaisie": "رجع للتسجيل",
         "uncategorized": "بلا تصنيف فرعي",
         "filterAll": "الكل",
-        "emptyProducts": "ما كاين حتى منتج فالثلاجة."
+        "emptyProducts": "ما كاين حتى منتج فالثلاجة.",
+        "columnsPerRowLabel": "منتجات فكل سطر",
+        "columnsPerRowOption": "{count}"
       },
       "quantite": {
         "title": "الكمية",
@@ -453,6 +455,11 @@
         "titleSortie": "خروج الثلاجة",
         "entryNotFound": "السطر ما لقيناه.",
         "productNotFound": "المنتج ما لقيناه.",
+        "deleteDialog": {
+          "title": "تأكيد الحذف",
+          "body": "تحيد السطر « {product} » ({quantity}) ؟",
+          "bodyWithUnit": "تحيد السطر « {product} » ({quantity} {unit}) ؟"
+        },
         "stepper": {
           "minusTen": "−10",
           "minusOne": "−1",

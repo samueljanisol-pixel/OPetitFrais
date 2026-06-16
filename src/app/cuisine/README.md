@@ -17,15 +17,15 @@ Migration : `supabase/migrations/20260702120000_cuisine_journal.sql`.
 |--------|------|
 | `/cuisine` | Redirection : saisie si `cuisine.saisie`, sinon historique si `cuisine.historique` |
 | `/cuisine/saisie` | Journal du jour : listes entrées / sorties, totaux, boutons d’ajout |
-| `/cuisine/saisie/ajouter?type=entree\|sortie` | Grille produits Frigo (tri alphabétique du nom affiché) ; filtres par sous-catégorie ; **pleine largeur tablette** ; 5 colonnes téléphone, colonnes auto (`minmax(76px)`) au-delà |
+| `/cuisine/saisie/ajouter?type=entree\|sortie` | Grille produits Frigo **actifs** ; filtres sous-catégorie ; **3 à 8 produits par ligne** (préférence mémorisée localement) |
 | `/cuisine/saisie/quantite?type=&productId=` | Nouvelle ligne (quantité, min 1, pas ±10/±1) |
-| `/cuisine/saisie/quantite?entryId=` | Modifier ou supprimer une ligne du jour |
+| `/cuisine/saisie/quantite?entryId=` | Modifier ou supprimer une ligne du jour (confirmation avant suppression, icône poubelle) |
 | `/cuisine/historique` | Vue compacte mobile : date, totaux, **tableau dense** par sous-catégorie |
 
 ## Données
 
 - Table `cuisine_journal_entry` : `entry_type` `entree` \| `sortie`, `quantity` > 0.
-- Produits : `product` actifs, `ref_category.code = 'frigo'`, regroupés par `ref_subcategory`.
+- Produits : `product` **actifs** (`active = true`), `ref_category.code = 'frigo'`, regroupés par `ref_subcategory`.
 - Nom affiché produit : `productDisplayName` (`src/lib/products/product-display-name.ts`) selon locale UI.
 - Libellé sous-catégorie : `refDisplayLabel` (`src/lib/products/ref-display-label.ts`) — `label_ar` si locale `ar-MA`, sinon `label`.
 
@@ -35,4 +35,5 @@ Migration : `supabase/migrations/20260702120000_cuisine_journal.sql`.
 - `src/lib/cuisine/use-journal-day.ts` — surveillance du jour (minuit Casablanca) ; rafraîchit la saisie si la page reste ouverte.
 - `src/lib/cuisine/journal-queries.ts` — chargement / écriture Supabase browser.
 - `src/lib/cuisine/load-frigo-products.ts` — catalogue Frigo groupé.
+- `src/lib/cuisine/picker-columns-preference.ts` — nombre de colonnes du picker (3–8, `localStorage`).
 - `src/lib/cuisine/aggregate-product-totals.ts` — totaux par produit regroupés par sous-catégorie (historique).

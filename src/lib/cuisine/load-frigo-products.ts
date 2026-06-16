@@ -5,7 +5,7 @@ import { refDisplayLabel } from "@/lib/products/ref-display-label";
 import type { CuisineFrigoProduct, CuisineSubcategoryGroup } from "./types";
 
 const FRIGO_PRODUCT_SELECT = `
-  id, code, name, name_ar, image_path, subcategory_id,
+  id, code, name, name_ar, image_path, active, subcategory_id,
   ref_subcategory(id, label, label_ar, sort_order),
   ref_sales_unit(label)
 `;
@@ -37,7 +37,7 @@ export async function loadFrigoProducts(
 
   if (error) return { groups: [], error: error.message };
 
-  const products = (data ?? []) as CuisineFrigoProduct[];
+  const products = ((data ?? []) as CuisineFrigoProduct[]).filter((p) => p.active === true);
   const groupMap = new Map<string, CuisineSubcategoryGroup>();
 
   for (const p of products) {

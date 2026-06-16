@@ -445,7 +445,9 @@
         "backToSaisie": "Retour à la saisie",
         "uncategorized": "Sans sous-catégorie",
         "filterAll": "Tout",
-        "emptyProducts": "Aucun produit Frigo actif."
+        "emptyProducts": "Aucun produit Frigo actif.",
+        "columnsPerRowLabel": "Produits par ligne",
+        "columnsPerRowOption": "{count}"
       },
       "quantite": {
         "title": "Quantité",
@@ -453,6 +455,11 @@
         "titleSortie": "Sortie Frigo",
         "entryNotFound": "Ligne introuvable.",
         "productNotFound": "Produit introuvable.",
+        "deleteDialog": {
+          "title": "Confirmer la suppression",
+          "body": "Supprimer la ligne « {product} » ({quantity}) ?",
+          "bodyWithUnit": "Supprimer la ligne « {product} » ({quantity} {unit}) ?"
+        },
         "stepper": {
           "minusTen": "−10",
           "minusOne": "−1",

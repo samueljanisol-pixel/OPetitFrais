@@ -3,11 +3,20 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useTranslations } from "next-intl";
-import { Box, Button, Typography } from "@mui/material";
+import { Box, Button, FormControl, InputLabel, MenuItem, Select, Typography } from "@mui/material";
+import type { SelectChangeEvent } from "@mui/material/Select";
 import BackNavButton from "@/components/BackNavButton";
 import { useSessionPermissions } from "@/lib/auth/useSessionPermissions";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { loadFrigoProducts } from "@/lib/cuisine/load-frigo-products";
+import {
+  CUISINE_PICKER_COLUMN_OPTIONS,
+  CUISINE_PICKER_COLUMNS_DEFAULT,
+  clampPickerColumns,
+  readPickerColumnsFromStorage,
+  writePickerColumnsToStorage,
+  type CuisinePickerColumnCount,
+} from "@/lib/cuisine/picker-columns-preference";
 import { compareProductDisplayNames } from "@/lib/products/product-display-name";
 import { productPhotoPublicUrl } from "@/lib/products/storage";
 import { useAppLocale } from "@/lib/i18n/useAppFormat";
@@ -33,6 +42,17 @@ export default function CuisineProductPickerClient() {
   const [err, setErr] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [subcategoryFilter, setSubcategoryFilter] = useState<string | null>(null);
+  const [columnsPerRow, setColumnsPerRow] = useState<CuisinePickerColumnCount>(CUISINE_PICKER_COLUMNS_DEFAULT);
+
+  useEffect(() => {
+    setColumnsPerRow(readPickerColumnsFromStorage());
+  }, []);
+
+  const handleColumnsPerRowChange = (event: SelectChangeEvent<number>) => {
+    const next = clampPickerColumns(Number(event.target.value));
+    setColumnsPerRow(next);
+    writePickerColumnsToStorage(next);
+  };
 
   const filteredGroups = useMemo(() => {
     if (!subcategoryFilter) return [];
@@ -142,11 +162,8 @@ export default function CuisineProductPickerClient() {
                   <Box
                     sx={{
                       display: "grid",
-                      gridTemplateColumns: {
-                        xs: "repeat(5, minmax(0, 1fr))",
-                        sm: "repeat(auto-fill, minmax(76px, 1fr))",
-                      },
-                      gap: { xs: 0.75, sm: 1 },
+                      gridTemplateColumns: `repeat(${columnsPerRow}, minmax(0, 1fr))`,
+                      gap: { xs: 1.25, sm: 1.5 },
                       alignItems: "start",
                     }}
                   >
@@ -159,6 +176,7 @@ export default function CuisineProductPickerClient() {
                           product={product}
                           photoUrl={photoUrl}
                           href={href}
+                          columnsPerRow={columnsPerRow}
                         />
                       );
                     })}
@@ -167,6 +185,22 @@ export default function CuisineProductPickerClient() {
               ))}
             </Box>
           )}
+
+          <FormControl size="small" sx={{ alignSelf: "flex-start", minWidth: 160, mt: 1 }}>
+            <InputLabel id="cuisine-picker-columns-label">{t("columnsPerRowLabel")}</InputLabel>
+            <Select
+              labelId="cuisine-picker-columns-label"
+              label={t("columnsPerRowLabel")}
+              value={columnsPerRow}
+              onChange={handleColumnsPerRowChange}
+            >
+              {CUISINE_PICKER_COLUMN_OPTIONS.map((count) => (
+                <MenuItem key={count} value={count}>
+                  {t("columnsPerRowOption", { count })}
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
         </Box>
       )}
     </main>

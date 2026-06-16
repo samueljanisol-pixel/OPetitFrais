@@ -11,11 +11,13 @@ type Props = {
   product: CuisineFrigoProduct;
   photoUrl: string | null;
   href: string;
+  columnsPerRow: number;
 };
 
-export default function CuisineProductGridCard({ product, photoUrl, href }: Props) {
+export default function CuisineProductGridCard({ product, photoUrl, href, columnsPerRow }: Props) {
   const locale = useAppLocale();
   const label = productDisplayName(product, locale);
+  const imageSizeVw = Math.max(12, Math.ceil(100 / columnsPerRow));
 
   return (
     <Box
@@ -25,7 +27,7 @@ export default function CuisineProductGridCard({ product, photoUrl, href }: Prop
         display: "flex",
         flexDirection: "column",
         height: "100%",
-        borderRadius: 1.5,
+        borderRadius: 2,
         border: "1px solid",
         borderColor: "divider",
         bgcolor: "background.paper",
@@ -33,7 +35,7 @@ export default function CuisineProductGridCard({ product, photoUrl, href }: Prop
         textDecoration: "none",
         color: "inherit",
         transition: "box-shadow 0.15s ease",
-        "&:hover": { boxShadow: 1 },
+        "&:hover": { boxShadow: 2 },
         "&:focus-visible": {
           outline: "2px solid",
           outlineColor: "success.main",
@@ -51,7 +53,7 @@ export default function CuisineProductGridCard({ product, photoUrl, href }: Prop
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
-          p: 0.25,
+          p: 0.75,
         }}
       >
         {photoUrl ? (
@@ -67,7 +69,7 @@ export default function CuisineProductGridCard({ product, photoUrl, href }: Prop
               src={photoUrl}
               alt=""
               fill
-              sizes="(max-width: 600px) 20vw, (max-width: 900px) 12vw, 96px"
+              sizes={`${imageSizeVw}vw`}
               style={{ objectFit: "contain", objectPosition: "center" }}
             />
           </Box>
@@ -80,7 +82,7 @@ export default function CuisineProductGridCard({ product, photoUrl, href }: Prop
               alignItems: "center",
               justifyContent: "center",
               color: "text.disabled",
-              fontSize: "1.25rem",
+              fontSize: "1.75rem",
             }}
             aria-hidden
           >
@@ -92,12 +94,12 @@ export default function CuisineProductGridCard({ product, photoUrl, href }: Prop
         variant="caption"
         component="p"
         sx={{
-          px: 0.25,
-          py: 0.25,
+          px: 0.5,
+          py: 0.625,
           textAlign: "center",
           fontWeight: 600,
-          fontSize: "0.5625rem",
-          lineHeight: 1.1,
+          fontSize: { xs: "0.6875rem", sm: "0.75rem" },
+          lineHeight: 1.15,
           wordBreak: "break-word",
           hyphens: "auto",
         }}
