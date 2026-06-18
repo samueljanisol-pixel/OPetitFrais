@@ -5,6 +5,7 @@ import { findExistingLotLigneId } from "@/lib/commandes-fournisseur/lot-ligne-du
 import { insertLotLignesMerged } from "@/lib/commandes-fournisseur/insert-lot-lignes";
 import { normalizeEntityId, normalizeProductPackagingId } from "@/lib/commandes-fournisseur/commande-ligne-key";
 import { vendeurIdForProduct } from "@/lib/commandes-fournisseur/product-vendeur";
+import { productBelongsToSupplier } from "@/lib/products/product-supplier";
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -59,7 +60,7 @@ export async function POST(req: Request, ctx: Ctx) {
 
   const { data: product, error: pe } = await supabase
     .from("product")
-    .select("id, supplier_id, active")
+    .select("id, active")
     .eq("id", productIdNorm)
     .maybeSingle();
   if (pe) {
@@ -72,8 +73,14 @@ export async function POST(req: Request, ctx: Ctx) {
     return NextResponse.json({ error: "Produit inactif" }, { status: 400 });
   }
 
-  const ps = (product as { supplier_id: string }).supplier_id;
-  if (ps !== lotSupplierId) {
+  let belongs = false;
+  try {
+    belongs = await productBelongsToSupplier(supabase, productIdNorm, lotSupplierId);
+  } catch (e) {
+    const message = e instanceof Error ? e.message : "Erreur vérification fournisseur";
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
+  if (!belongs) {
     return NextResponse.json({ error: "Ce produit n'appartient pas au fournisseur du lot" }, { status: 400 });
   }
 

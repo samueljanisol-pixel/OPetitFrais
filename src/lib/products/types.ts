@@ -49,6 +49,10 @@ export type ProductRow = {
   /** Vendeur achat par défaut (réf. fournisseur produit). */
   vendeur_id?: string | null
   name_ar: string | null
+  /** Nom affiché client (français) ; repli sur `name` si absent. */
+  sales_name?: string | null
+  /** Nom affiché client (arabe) ; repli sur `name_ar` si absent. */
+  sales_name_ar?: string | null
   cost_purchase: number | null
   cost_manufacturing: number | null
   cost_packaging: number | null

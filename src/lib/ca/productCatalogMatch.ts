@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { PRODUCT_CATALOG_MATCH_SELECT } from "@/lib/products/product-supabase-select";
 
 type ProductCatalogRow = {
   id: string;
@@ -59,9 +60,7 @@ export type ProductCatalogIndex = {
 export async function fetchProductCatalogIndex(supabase: SupabaseClient): Promise<ProductCatalogIndex> {
   const { data: productRows, error } = await supabase
     .from("product")
-    .select(
-      "id, code, name, category_id, supplier_id, ref_category(id, label), ref_supplier(id, label), ref_sales_unit(label, code)",
-    );
+    .select(PRODUCT_CATALOG_MATCH_SELECT);
 
   const byId = new Map<string, ProductCatalogEntry>();
   const byCode = new Map<string, string>();

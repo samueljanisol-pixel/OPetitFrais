@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { requireAnyApiPermission } from "@/lib/auth/require-permission-api";
+import { activeProductIdsForSupplier } from "@/lib/products/product-supplier";
 
 const PERMS = ["commandes_fournisseur.saisie", "commandes_fournisseur.consolidation", "commandes_fournisseur.achat"];
 
@@ -27,13 +28,26 @@ export async function GET(req: Request) {
 
   const supabase = await createSupabaseServerClient();
 
+  let supplierProductIds: string[] | null = null;
+  if (onlySupplier) {
+    try {
+      supplierProductIds = await activeProductIdsForSupplier(supabase, supplierId);
+    } catch (e) {
+      const message = e instanceof Error ? e.message : "Erreur filtre fournisseur";
+      return NextResponse.json({ error: message }, { status: 500 });
+    }
+    if (supplierProductIds.length === 0) {
+      return NextResponse.json({ categories: [] });
+    }
+  }
+
   let qb = supabase
     .from("product")
     .select("category_id, ref_category(id, label, sort_order)")
     .eq("active", true);
 
-  if (onlySupplier) {
-    qb = qb.eq("supplier_id", supplierId);
+  if (supplierProductIds) {
+    qb = qb.in("id", supplierProductIds);
   }
 
   const { data: rows, error } = await qb;

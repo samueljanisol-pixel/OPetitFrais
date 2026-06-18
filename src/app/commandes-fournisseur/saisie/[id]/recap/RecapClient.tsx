@@ -42,11 +42,16 @@ import {
 import { useStatusLabels } from "@/lib/statusLabels/useStatusLabels";
 import { DecimalQtyTextField } from "@/components/commandes-fournisseur/DecimalQtyTextField";
 import { commandeLigneKey } from "@/lib/commandes-fournisseur/commande-ligne-key";
-import { buildSoitLine } from "@/lib/commandes-fournisseur/product-display";
+import {
+  buildSoitLineForLocale,
+  recapCondTitreForLocale,
+  type PackagingRowForDisplay,
+} from "@/lib/commandes-fournisseur/product-display";
 import { clampQtyToApiRange, roundQty2 } from "@/lib/commandes-fournisseur/qty-parse";
 import CommandeSaisieRecapExport from "@/features/commandes-fournisseur/CommandeSaisieRecapExport";
 import type { VendeurRef } from "@/lib/commandes-fournisseur/validation-lot-vendeur-recap";
 import { useAppFormat } from "@/lib/i18n/useAppFormat";
+import type { AppLocale } from "@/i18n/config";
 import { useBackChevronIcon } from "@/lib/i18n/useBackChevronIcon";
 
 type Ligne = {
@@ -57,7 +62,7 @@ type Ligne = {
   line_comment: string | null;
   hors_fournisseur: boolean;
   vendeur_id?: string | null;
-  product: { name: string; code: string; name_ar?: string | null } | null;
+  product: { name: string; code: string; name_ar?: string | null; ref_sales_unit?: unknown } | null;
   /** Unité de vente du produit (réf. produit) : affichage à l’unité. */
   uniteVente?: string;
   /** UdV du conditionnement (pour « Soit … »). */
@@ -67,6 +72,8 @@ type Ligne = {
   packContentQty?: number | null;
   /** UdV du conditionnement = « Unité » : « Soit … » en unité(s), pas en UdV poids/volume. */
   packSalesUnitIsUnite?: boolean;
+  /** Données colis pour libellés localisés (arabe / français). */
+  packaging?: PackagingRowForDisplay | null;
   /** Libellé catégorie (pour regroupement récap) ; absent avant rechargement après ajout ponctuel. */
   categoryLabel?: string | null;
 };
@@ -115,6 +122,32 @@ const QTE_SOIT_CELL =
   "col-span-2 min-w-0 whitespace-nowrap text-center text-[0.8125rem] leading-tight tabular-nums sm:text-sm";
 
 const QTE_COND_TITRE_CELL = "col-span-4 min-w-0 text-center leading-tight";
+
+function recapLigneCondDisplay(
+  l: Ligne,
+  locale: AppLocale,
+  tc: (key: "soitLine", values: { qty: string; unit: string }) => string,
+): { condTitre: string | null; soitLine: string | null } {
+  const isCond = Boolean(l.product_packaging_id);
+  const pack = l.packaging ?? null;
+  const condTitre = recapCondTitreForLocale(l.condTitre, pack, locale);
+  const display = {
+    uniteVente: l.uniteVente ?? "—",
+    condPackUniteVente: l.condPackUniteVente ?? null,
+    condTitre,
+    packContentQty: isCond ? (l.packContentQty ?? null) : null,
+    isCond,
+    packSalesUnitIsUnite: l.packSalesUnitIsUnite === true,
+  };
+  const soitLine = buildSoitLineForLocale(
+    display,
+    l.qte,
+    locale,
+    pack,
+    (qty, unit) => tc("soitLine", { qty, unit }),
+  );
+  return { condTitre, soitLine };
+}
 
 function RecapCondTitre({ label }: { label: string }) {
   return (
@@ -224,7 +257,7 @@ export default function RecapClient({ commandeId }: { commandeId: string }) {
   const tStatus = useTranslations("backoffice.status");
   const tCommon = useTranslations("common");
   const BackChevron = useBackChevronIcon();
-  const { formatNumber } = useAppFormat();
+  const { formatNumber, locale } = useAppFormat();
   const { labelFor } = useStatusLabels();
   const [commande, setCommande] = useState<Commande | null>(null);
   const [lignes, setLignes] = useState<Ligne[]>([]);
@@ -724,19 +757,7 @@ export default function RecapClient({ commandeId }: { commandeId: string }) {
         {lignes.map((l, i) => {
           const u = l.uniteVente ?? emDash;
           const isCond = Boolean(l.product_packaging_id);
-          const pq = l.packContentQty;
-          const packUdv = l.condPackUniteVente ?? u;
-          const soitCond = buildSoitLine(
-            {
-              uniteVente: u,
-              condPackUniteVente: isCond ? packUdv : null,
-              condTitre: l.condTitre ?? null,
-              packContentQty: isCond ? (pq ?? null) : null,
-              isCond,
-              packSalesUnitIsUnite: l.packSalesUnitIsUnite === true,
-            },
-            l.qte,
-          );
+          const { condTitre: condTitreDisplay, soitLine: soitCond } = recapLigneCondDisplay(l, locale, tc);
           const catKey = (l.categoryLabel ?? "").trim() || tc("noCategory");
           const prevCat =
             i > 0 ? ((lignes[i - 1]!.categoryLabel ?? "").trim() || tc("noCategory")) : null;
@@ -781,7 +802,7 @@ export default function RecapClient({ commandeId }: { commandeId: string }) {
                     <>
                     <div className="flex items-start gap-0.5">
                       <div className="flex flex-col items-stretch gap-0.5">
-                        {l.condTitre ? <RecapCondTitre label={l.condTitre} /> : null}
+                        {condTitreDisplay ? <RecapCondTitre label={condTitreDisplay} /> : null}
                         <StepQte
                           value={l.qte}
                           uniteVente={u}
@@ -858,21 +879,13 @@ export default function RecapClient({ commandeId }: { commandeId: string }) {
             {lignes.map((l, i) => {
               const u = l.uniteVente ?? emDash;
               const isCond = Boolean(l.product_packaging_id);
-              const pq = l.packContentQty;
-              const packUdv = l.condPackUniteVente ?? u;
-              const soitCond = buildSoitLine(
-                {
-                  uniteVente: u,
-                  condPackUniteVente: isCond ? packUdv : null,
-                  condTitre: l.condTitre ?? null,
-                  packContentQty: isCond ? (pq ?? null) : null,
-                  isCond,
-                  packSalesUnitIsUnite: l.packSalesUnitIsUnite === true,
-                },
-                l.qte,
+              const { condTitre: condTitreDisplay, soitLine: soitCond } = recapLigneCondDisplay(
+                l,
+                locale,
+                tc,
               );
               const udvMain =
-                isCond && l.condTitre ? l.condTitre : u !== emDash ? u : emDash;
+                isCond && condTitreDisplay ? condTitreDisplay : u !== emDash ? u : emDash;
               const udvSub = soitCond;
               const catKey = (l.categoryLabel ?? "").trim() || tc("noCategory");
               const prevCat =

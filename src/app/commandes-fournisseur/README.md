@@ -110,8 +110,9 @@ Ajout manuel au lot (brouillon / achat) : refus uniquement si le **même conditi
 
 Pour une commande du fournisseur **F**, les colis affichés (parcours, récap, recherche produit) incluent :
 
-- tous les colis achetables si le **produit** est déjà rattaché à **F** (`product.supplier_id`) ;
+- tous les colis achetables si le **produit** est rattaché à **F** (`product.supplier_id` ou **`product_supplier`**) ;
 - sinon les colis dont le **conditionnement réf.** (`ref_conditionnement.supplier_id`) ou les liaisons **`product_packaging_supplier`** ciblent **F** ;
+- le **parcours** et la **recherche produit** incluent aussi les produits liés via **`product_supplier`** (fournisseurs secondaires). Migration `20260702160000_product_supplier.sql`.
 - les colis « génériques » (pas de fournisseur sur le réf. ni liaison explicite).
 
 Le **parcours** liste aussi les produits actifs qui ont au moins un tel colis pour **F**, même si `product.supplier_id` est différent, ainsi que les produits déjà présents sur la commande.

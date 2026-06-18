@@ -4,7 +4,7 @@ import { normalizeProductRelation } from "./normalize-product-relation";
 
 const ENTRY_SELECT = `
   id, journal_date, entry_type, product_id, quantity, created_by, created_at, updated_at,
-  product(id, code, name, name_ar, image_path, subcategory_id,
+  product(id, code, name, name_ar, sales_name, sales_name_ar, image_path, subcategory_id,
     ref_subcategory(id, label, label_ar, sort_order),
     ref_sales_unit(label))
 `;

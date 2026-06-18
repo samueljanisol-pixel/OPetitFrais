@@ -18,13 +18,37 @@ import { applySheetImport } from './applySheetImport'
 import { parseSheetJsonToRows } from './mapSheetRow'
 import {
   DEFAULT_SHEET_IMPORT_FIELDS,
-  hasAnyImportField,
   SHEET_IMPORT_FIELD_KEYS,
   SHEET_IMPORT_FIELD_LABELS,
   type SheetImportFieldKey,
   type SheetImportFields,
 } from './sheet-import-fields'
 import { createSupabaseBrowserClient } from '@/lib/supabase/client'
+
+function formatImportResult(
+  created: number,
+  updated: number,
+  skipped: number,
+  parseErrs: string[],
+  applyErrs: string[],
+  selectedFields: SheetImportFields,
+): string {
+  const lines: string[] = [
+    `Nouveaux produits créés : ${created}`,
+    `Produits modifiés : ${updated}`,
+  ]
+  if (skipped > 0) {
+    lines.push(`Lignes ignorées (existant sans champ coché) : ${skipped}`)
+  }
+  if (!Object.values(selectedFields).some(Boolean)) {
+    lines.push('(Aucun champ coché — seuls les nouveaux produits ont été traités.)')
+  }
+  const allErrs = [...parseErrs, ...applyErrs]
+  if (allErrs.length > 0) {
+    lines.push('', `Erreurs (${allErrs.length}) :`, ...allErrs.map(e => `• ${e}`))
+  }
+  return lines.join('\n')
+}
 
 type Props = { onDone: () => void; canWriteProducts?: boolean }
 
@@ -35,8 +59,6 @@ export function SheetImportBar({ onDone, canWriteProducts = false }: Props) {
   const [ftpMsg, setFtpMsg] = useState<string | null>(null)
   const [dialogOpen, setDialogOpen] = useState(false)
   const [fields, setFields] = useState<SheetImportFields>({ ...DEFAULT_SHEET_IMPORT_FIELDS })
-
-  const canRun = hasAnyImportField(fields)
 
   const setField = useCallback((key: SheetImportFieldKey, checked: boolean) => {
     setFields((prev) => ({ ...prev, [key]: checked }))
@@ -76,17 +98,10 @@ export function SheetImportBar({ onDone, canWriteProducts = false }: Props) {
         rows,
         selectedFields,
       )
-      const selectedLabels = SHEET_IMPORT_FIELD_KEYS.filter((k) => selectedFields[k]).map(
-        (k) => SHEET_IMPORT_FIELD_LABELS[k],
-      )
-      const parts = [
-        `Champs : ${selectedLabels.join(', ') || '—'}.`,
-        `Créés : ${created}, mis à jour : ${updated}${skipped > 0 ? `, ignorés : ${skipped}` : ''}.`,
-        ...parseErrs,
-        ...applyErrs,
-      ].filter(Boolean)
-      setMsg(parts.join(' '))
-      onDone()
+      setMsg(formatImportResult(created, updated, skipped, parseErrs, applyErrs, selectedFields))
+      if (created > 0 || updated > 0) {
+        onDone()
+      }
     } catch (e) {
       setMsg(e instanceof Error ? e.message : String(e))
     } finally {
@@ -95,7 +110,6 @@ export function SheetImportBar({ onDone, canWriteProducts = false }: Props) {
   }
 
   const onConfirmImport = () => {
-    if (!canRun) return
     setDialogOpen(false)
     void runImport(fields)
   }
@@ -205,7 +219,8 @@ export function SheetImportBar({ onDone, canWriteProducts = false }: Props) {
           <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
             Correspondance produit par <strong>Code</strong> ou par <strong>Nom</strong> si le code feuille est vide.
             Les champs cochés s’appliquent aux <strong>produits existants</strong> uniquement ; un{' '}
-            <strong>nouveau produit</strong> est toujours créé avec toutes les colonnes de la feuille.
+            <strong>nouveau produit</strong> est toujours créé avec <strong>toutes</strong> les colonnes de la feuille.
+            Sans case cochée, seuls les <strong>nouveaux</strong> produits sont importés.
           </Typography>
           <div className="mb-2 flex flex-wrap gap-2">
             <Button type="button" size="small" variant="text" onClick={() => setAllFields(true)} sx={{ textTransform: 'none', px: 1 }}>
@@ -238,7 +253,7 @@ export function SheetImportBar({ onDone, canWriteProducts = false }: Props) {
           <Button
             variant="contained"
             color="warning"
-            disabled={!canRun || loading}
+            disabled={loading}
             onClick={onConfirmImport}
             sx={{ textTransform: 'none' }}
           >

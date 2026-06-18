@@ -16,6 +16,8 @@ export type CuisineFrigoProduct = {
   code: string;
   name: string;
   name_ar: string | null;
+  sales_name?: string | null;
+  sales_name_ar?: string | null;
   image_path: string | null;
   /** Présent sur le catalogue picker ; absent sur les jointures journal. */
   active?: boolean;
@@ -49,6 +51,8 @@ export type CuisineProductDayTotal = {
   code: string;
   name: string;
   name_ar: string | null;
+  sales_name?: string | null;
+  sales_name_ar?: string | null;
   unit: string;
   entrees: number;
   sorties: number;

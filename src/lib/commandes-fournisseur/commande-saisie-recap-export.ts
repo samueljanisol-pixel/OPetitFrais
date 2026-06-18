@@ -1,7 +1,11 @@
+import type { AppLocale } from "@/i18n/config";
 import { magasinCodeMx } from "@/lib/commandes-fournisseur/magasin-code-mx";
 import { lotCommandeDateInfo, type LotCommandeDateInfo } from "@/lib/commandes-fournisseur/lot-commande-date";
 import {
-  buildSoitLine,
+  buildSoitLineForLocale,
+  labelFromRefForLocale,
+  recapCondTitreForLocale,
+  type PackagingRowForDisplay,
   type ProductDisplayInfo,
 } from "@/lib/commandes-fournisseur/product-display";
 import {
@@ -29,7 +33,13 @@ export type CommandeSaisieExportLigne = {
   condTitre?: string | null;
   packContentQty?: number | null;
   packSalesUnitIsUnite?: boolean;
-  product: { name: string; name_ar?: string | null; code?: string } | null;
+  packaging?: PackagingRowForDisplay | null;
+  product: {
+    name: string;
+    name_ar?: string | null;
+    code?: string;
+    ref_sales_unit?: unknown;
+  } | null;
 };
 
 function one<T>(raw: T | T[] | null | undefined): T | null {
@@ -83,40 +93,36 @@ export function magasinLabelFromCommande(commande: {
   return "Magasin";
 }
 
-function displayFromSaisieLigne(l: CommandeSaisieExportLigne): ProductDisplayInfo {
+function displayFromSaisieLigne(
+  l: CommandeSaisieExportLigne,
+  locale: AppLocale,
+): ProductDisplayInfo {
   const isCond = Boolean(l.product_packaging_id);
-  const productUdv = l.uniteVente ?? "—";
-  const packUdv = l.condPackUniteVente ?? productUdv;
+  const pack = l.packaging ?? null;
+  const productUdv =
+    l.product?.ref_sales_unit != null
+      ? labelFromRefForLocale(l.product.ref_sales_unit, locale)
+      : (l.uniteVente ?? "—");
+  const packUdv =
+    pack?.ref_sales_unit != null
+      ? labelFromRefForLocale(pack.ref_sales_unit, locale)
+      : (l.condPackUniteVente ?? productUdv);
+  const condTitre = recapCondTitreForLocale(l.condTitre, pack, locale);
   return {
     uniteVente: productUdv,
     condPackUniteVente: isCond ? packUdv : null,
-    condTitre: l.condTitre ?? null,
+    condTitre,
     packContentQty: isCond ? (l.packContentQty ?? null) : null,
     isCond,
     packSalesUnitIsUnite: l.packSalesUnitIsUnite === true,
   };
 }
 
-function fakeProductPackaging(l: CommandeSaisieExportLigne) {
-  if (!l.product_packaging_id) {
+function packagingForRecapInput(l: CommandeSaisieExportLigne): PackagingRowForDisplay[] {
+  if (!l.product_packaging_id || !l.packaging) {
     return [];
   }
-  const label =
-    l.condTitre?.replace(/\s*\([^)]*\)\s*$/, "").trim() ||
-    l.condTitre?.trim() ||
-    "Colis";
-  const packUdv = l.condPackUniteVente ?? l.uniteVente ?? "—";
-  return [
-    {
-      id: l.product_packaging_id,
-      quantity: l.packContentQty ?? 1,
-      nom: null,
-      ref_conditionnement: { label },
-      ref_sales_unit: l.packSalesUnitIsUnite
-        ? { label: "Unité", code: "unite" }
-        : { label: packUdv },
-    },
-  ];
+  return [l.packaging];
 }
 
 function toRecapLigneInput(l: CommandeSaisieExportLigne, magasinId: string): RecapLigneInput {
@@ -131,9 +137,9 @@ function toRecapLigneInput(l: CommandeSaisieExportLigne, magasinId: string): Rec
       name: l.product?.name,
       name_ar: l.product?.name_ar,
       code: l.product?.code,
-      ref_sales_unit: { label: l.uniteVente ?? "—" },
+      ref_sales_unit: l.product?.ref_sales_unit ?? { label: l.uniteVente ?? "—" },
       ref_category: catLabel.length > 0 ? { label: catLabel, sort_order: 0 } : undefined,
-      product_packaging: fakeProductPackaging(l),
+      product_packaging: packagingForRecapInput(l),
     },
     commande_fournisseur_lot_ligne_magasin: [
       {
@@ -160,6 +166,8 @@ export function buildCommandeSaisieRecapGroups(
   vendeurs: VendeurRef[],
   magasinColumn: MagasinMxColumn,
   supplierLabel: string,
+  locale: AppLocale,
+  formatSoitLine: (qty: string, unit: string) => string,
 ): VendeurRecapGroup[] {
   const inputs = lignes.map((l) => toRecapLigneInput(l, magasinColumn.id));
   const groups = buildVendeurRecapGroups(inputs, vendeurs, [magasinColumn], supplierLabel);
@@ -169,12 +177,17 @@ export function buildCommandeSaisieRecapGroups(
       if (!src) {
         continue;
       }
-      const display = displayFromSaisieLigne(src);
-      const soitLine = src.qte > 0 ? buildSoitLine(display, src.qte) : null;
+      const pack = src.packaging ?? null;
+      const display = displayFromSaisieLigne(src, locale);
+      const soitLine =
+        src.qte > 0
+          ? buildSoitLineForLocale(display, src.qte, locale, pack, formatSoitLine)
+          : null;
       if (display.isCond && display.condTitre) {
         group.rows[i]!.udvCond = display.condTitre;
         group.rows[i]!.udvCondSub = soitLine;
-      } else if (soitLine) {
+      } else {
+        group.rows[i]!.udvCond = display.uniteVente !== "—" ? display.uniteVente : "—";
         group.rows[i]!.udvCondSub = soitLine;
       }
       const cat = src.categoryLabel

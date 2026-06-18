@@ -1,4 +1,5 @@
 import { SHEET_COLUMNS } from './mapSheetRow'
+import { PRODUCT_SHEET_EXPORT_SELECT } from '@/lib/products/product-supabase-select'
 import type { SupabaseClient } from '@supabase/supabase-js'
 
 type Row = {
@@ -20,7 +21,7 @@ type Row = {
 export async function buildSheetExportPayload(supabase: SupabaseClient) {
   const { data, error } = await supabase
     .from('product')
-    .select('code, name, price, margin, active, name_ar, ref_sales_unit (label), ref_category (label), ref_subcategory (label), ref_supplier (label)')
+    .select(PRODUCT_SHEET_EXPORT_SELECT)
     .order('code', { ascending: true })
   if (error) throw error
   const C = SHEET_COLUMNS

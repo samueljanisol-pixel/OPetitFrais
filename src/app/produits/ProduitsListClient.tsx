@@ -32,7 +32,9 @@ import { useRouter } from 'next/navigation'
 import { SHEET_IMPORT_ENABLED, SheetImportBar } from '@/features/sheet-import'
 import { muiSlotPropsDecimalKeypad } from '@/lib/mui/numericTextFieldProps'
 import { insertProductPriceHistoryRow } from '@/lib/products/priceHistory'
+import { PRODUCT_LIST_SELECT } from '@/lib/products/product-supabase-select'
 import { useSessionPermissions } from '@/lib/auth/useSessionPermissions'
+import { productSalesNameFr } from '@/lib/products/product-display-name'
 import { textIncludesFolded } from '@/lib/text/fold-for-search'
 
 type Row = ProductWithRefs
@@ -85,7 +87,7 @@ export default function ProduitsListClient() {
     setEditing({})
     const { data, error: e1 } = await supabase
       .from('product')
-      .select('*, ref_sales_unit(*), ref_category(*), ref_supplier(*)')
+      .select(PRODUCT_LIST_SELECT)
     if (e1) {
       setError(e1.message)
       setRows([])
@@ -116,7 +118,9 @@ export default function ProduitsListClient() {
         const q = qName.trim()
         const nameMatch = textIncludesFolded(r.name, q)
         const arMatch = r.name_ar ? textIncludesFolded(r.name_ar, q) : false
-        if (!nameMatch && !arMatch) return false
+        const salesMatch = r.sales_name ? textIncludesFolded(r.sales_name, q) : false
+        const salesArMatch = r.sales_name_ar ? textIncludesFolded(r.sales_name_ar, q) : false
+        if (!nameMatch && !arMatch && !salesMatch && !salesArMatch) return false
       }
       return true
     })
@@ -127,7 +131,9 @@ export default function ProduitsListClient() {
     const m = sortDir === 'asc' ? 1 : -1
     list.sort((a, b) => {
       if (sortKey === 'code') return (codeToNum(a.code) - codeToNum(b.code)) * m
-      if (sortKey === 'name') return a.name.localeCompare(b.name, 'fr', { sensitivity: 'base' }) * m
+      if (sortKey === 'name') {
+        return productSalesNameFr(a).localeCompare(productSalesNameFr(b), 'fr', { sensitivity: 'base' }) * m
+      }
       return (a.price - b.price) * m
     })
     return list
@@ -429,7 +435,7 @@ export default function ProduitsListClient() {
                       ) : null}
                     </td>
                     <td className="px-3 py-2 font-mono text-slate-800">{r.code}</td>
-                    <td className="px-3 py-2 text-slate-900">{r.name}</td>
+                    <td className="px-3 py-2 text-slate-900">{productSalesNameFr(r)}</td>
                     <td className="px-3 py-1.5 align-middle" onClick={e => e.stopPropagation()}>
                       <TextField
                         size="small"

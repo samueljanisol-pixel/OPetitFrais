@@ -1,5 +1,10 @@
 # Paramètres (référentiels)
 
+## Unités de vente
+
+- Colonne **`label_ar`** (libellé arabe optionnel) sur `ref_sales_unit`. Saisie dans l’onglet **Unités de vente** (dialogue Ajouter / Modifier).
+- Affichage arabe dans le **parcours commande** (boutons conditionnement : nom du colis + unité UdV du colis). Migration `20260702150000_ref_sales_unit_label_ar.sql`.
+
 ## Vendeurs
 
 Les **vendeurs** (`ref_supplier_vendeur`) sont rattachés à un **fournisseur**. Ils servent à la fois :

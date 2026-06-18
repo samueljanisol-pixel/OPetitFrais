@@ -1,5 +1,7 @@
 /** Affichage unité / conditionnement / « Soit » — aligné sur la logique de l’API commandes (récap). */
 
+import type { AppLocale } from "@/i18n/config";
+
 type RefMini = { label?: string | null; label_ar?: string | null; code?: string | null };
 
 function refMini(raw: unknown): RefMini | null {
@@ -9,6 +11,18 @@ function refMini(raw: unknown): RefMini | null {
 
 export function labelFromRef(raw: unknown): string {
   const t = refMini(raw)?.label?.trim();
+  return t ? String(t) : "—";
+}
+
+/** Libellé référentiel selon la locale UI (arabe si dispo). */
+export function labelFromRefForLocale(raw: unknown, locale: AppLocale): string {
+  const o = refMini(raw);
+  if (!o) return "—";
+  if (locale === "ar-MA") {
+    const ar = o.label_ar?.trim();
+    if (ar) return ar;
+  }
+  const t = o.label?.trim();
   return t ? String(t) : "—";
 }
 
@@ -71,12 +85,36 @@ export function packagingConditionnementLabelAr(pack: PackagingRowForDisplay): s
   return refAr && refAr.length > 0 ? refAr : null;
 }
 
+/** Libellé conditionnement selon la locale UI (arabe si dispo). */
+export function packagingConditionnementLabelForLocale(
+  pack: PackagingRowForDisplay,
+  locale: AppLocale,
+): string {
+  if (locale === "ar-MA") {
+    const ar = packagingConditionnementLabelAr(pack);
+    if (ar) return ar;
+  }
+  return packagingConditionnementLabel(pack);
+}
+
 /** Ex. « Carton (12 Kg) » — utilisé partout où le conditionnement apparaît. */
 export function buildPackagingCondTitre(pack: PackagingRowForDisplay): string {
   const packQty =
     typeof pack.quantity === "string" ? parseFloat(pack.quantity) : Number(pack.quantity);
   const condN = packagingConditionnementLabel(pack);
   const packUs = labelFromRef(pack.ref_sales_unit);
+  return `${condN} (${formatPackQty(packQty)} ${packUs})`;
+}
+
+/** Variante localisée de {@link buildPackagingCondTitre}. */
+export function buildPackagingCondTitreForLocale(
+  pack: PackagingRowForDisplay,
+  locale: AppLocale,
+): string {
+  const packQty =
+    typeof pack.quantity === "string" ? parseFloat(pack.quantity) : Number(pack.quantity);
+  const condN = packagingConditionnementLabelForLocale(pack, locale);
+  const packUs = labelFromRefForLocale(pack.ref_sales_unit, locale);
   return `${condN} (${formatPackQty(packQty)} ${packUs})`;
 }
 
@@ -171,4 +209,42 @@ export function buildSoitLine(
   const converted = qteForSoit * packContentQty;
   const udvSoit = soitLineDisplayUnit(display, converted);
   return `Soit ${formatPackQty(converted)} ${udvSoit}`;
+}
+
+/** Ligne « Soit … » localisée (préfixe via callback, ex. `tc("soitLine", { qty, unit })`). */
+export function buildSoitLineForLocale(
+  display: ProductDisplayInfo,
+  qteForSoit: number,
+  locale: AppLocale,
+  pack: PackagingRowForDisplay | null | undefined,
+  formatLine: (qty: string, unit: string) => string,
+): string | null {
+  const { isCond, packContentQty } = display;
+  if (
+    !isCond ||
+    packContentQty == null ||
+    !Number.isFinite(packContentQty) ||
+    qteForSoit <= 0
+  ) {
+    return null;
+  }
+  const converted = qteForSoit * packContentQty;
+  const unit =
+    pack?.ref_sales_unit != null
+      ? labelFromRefForLocale(pack.ref_sales_unit, locale)
+      : soitLineDisplayUnit(display, converted);
+  return formatLine(formatPackQty(converted), unit);
+}
+
+/** Titre conditionnement pour le récap (locale UI, repli sur `condTitre` pré-calculé). */
+export function recapCondTitreForLocale(
+  condTitre: string | null | undefined,
+  pack: PackagingRowForDisplay | null | undefined,
+  locale: AppLocale,
+): string | null {
+  if (pack) {
+    return buildPackagingCondTitreForLocale(pack, locale);
+  }
+  const t = condTitre?.trim();
+  return t && t.length > 0 ? t : null;
 }

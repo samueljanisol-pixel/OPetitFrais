@@ -312,21 +312,21 @@ export default function ReferentielClient() {
           return
         }
       }
-    } else if (tab === 'cat') {
+    } else if (tab === 'cat' || tab === 'udv') {
       const labelArTrim = form.label_ar.trim()
       const payload = {
         label: form.label.trim(),
         label_ar: labelArTrim.length > 0 ? labelArTrim : null,
       }
       if (isNew) {
-        const { error: e0 } = await supabase.from('ref_category').insert(payload as never)
+        const { error: e0 } = await supabase.from(tableName(tab)).insert(payload as never)
         if (e0) {
           setErr(e0.message)
           return
         }
       } else {
         const { error: e0 } = await supabase
-          .from('ref_category')
+          .from(tableName(tab))
           .update(payload as never)
           .eq('id', editing.id)
         if (e0) {
@@ -480,7 +480,29 @@ export default function ReferentielClient() {
             {isAdministrator ? <StatusLabelsAdminPanel /> : null}
           </>
         ) : null}
-        {tab === 'udv' && <RefTable title="Unités" rows={udv} onEdit={openRow} onDelete={requestDelete} />}
+        {tab === 'udv' && (
+          <RefTable
+            title="Unités"
+            rows={udv}
+            onEdit={openRow}
+            onDelete={requestDelete}
+            extras={[
+              {
+                header: 'Libellé arabe',
+                render: r => {
+                  const ar = (r as RefRow).label_ar?.trim()
+                  return ar && ar.length > 0 ? (
+                    <span dir="rtl" className="block text-right">
+                      {ar}
+                    </span>
+                  ) : (
+                    '—'
+                  )
+                },
+              },
+            ]}
+          />
+        )}
         {tab === 'cat' && (
           <>
             <RefTable
@@ -648,7 +670,7 @@ export default function ReferentielClient() {
           <DialogContent>
             <div className="mt-1 flex flex-col gap-4">
               <TextField label="Libellé" value={form.label} onChange={e => setForm(f => ({ ...f, label: e.target.value }))} size="small" fullWidth />
-              {tab === 'cond' || tab === 'cat' ? (
+              {tab === 'cond' || tab === 'cat' || tab === 'udv' ? (
                 <TextField
                   label="Libellé arabe"
                   value={form.label_ar}

@@ -2,7 +2,8 @@ import { NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { requireAnyApiPermission } from "@/lib/auth/require-permission-api";
 import { applyCommandeProductPackagingFilter } from "@/lib/commandes-fournisseur/applyCommandeProductPackagingFilter";
-import { COMMANDE_PACKAGING_SELECT } from "@/lib/commandes-fournisseur/commande-packaging-fields";
+import { PRODUCT_COMMANDE_SEARCH_SELECT } from "@/lib/products/product-supabase-select";
+import { activeProductIdsForSupplier } from "@/lib/products/product-supplier";
 
 const MAX_Q = 100;
 const MAX_RESULTS = 100;
@@ -49,15 +50,26 @@ export async function GET(req: Request) {
 
   const supabase = await createSupabaseServerClient();
 
+  let supplierProductIds: string[] | null = null;
+  if (supplierId.length > 0 && onlySupplier) {
+    try {
+      supplierProductIds = await activeProductIdsForSupplier(supabase, supplierId);
+    } catch (e) {
+      const message = e instanceof Error ? e.message : "Erreur filtre fournisseur";
+      return NextResponse.json({ error: message }, { status: 500 });
+    }
+    if (supplierProductIds.length === 0) {
+      return NextResponse.json({ products: [], total: 0 });
+    }
+  }
+
   let qb = supabase
     .from("product")
-    .select(
-      `id, code, name, name_ar, category_id, supplier_id, allow_unit_in_commande, ref_supplier(code, label), ref_category(label, sort_order), ref_sales_unit(label, code), product_packaging(${COMMANDE_PACKAGING_SELECT})`,
-    )
+    .select(PRODUCT_COMMANDE_SEARCH_SELECT)
     .eq("active", true);
 
-  if (supplierId.length > 0 && onlySupplier) {
-    qb = qb.eq("supplier_id", supplierId);
+  if (supplierProductIds) {
+    qb = qb.in("id", supplierProductIds);
   }
 
   if (categoryId) {

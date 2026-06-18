@@ -103,7 +103,7 @@ export default function CuisineQuantiteClient() {
       const { data, error } = await supabase
         .from("product")
         .select(
-          "id, code, name, name_ar, image_path, subcategory_id, ref_subcategory(id, label, sort_order), ref_sales_unit(label)",
+          "id, code, name, name_ar, sales_name, sales_name_ar, image_path, subcategory_id, ref_subcategory(id, label, sort_order), ref_sales_unit(label)",
         )
         .eq("id", productId)
         .maybeSingle();

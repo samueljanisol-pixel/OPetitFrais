@@ -84,7 +84,7 @@ export async function GET(_req: Request, ctx: Ctx) {
   if (pids.length > 0) {
     const { data: prods } = await supabase
       .from("product")
-      .select("id, name, name_ar, code, vendeur_id, ref_sales_unit(label), ref_category(label, sort_order)")
+      .select("id, name, name_ar, code, vendeur_id, ref_sales_unit(label, label_ar, code), ref_category(label, sort_order)")
       .in("id", pids);
     productMap = Object.fromEntries((prods ?? []).map((p) => [p.id, p as ProductRow]));
   }
@@ -122,7 +122,7 @@ export async function GET(_req: Request, ctx: Ctx) {
   if (packIds.length > 0) {
     const { data: packs } = await supabase
       .from("product_packaging")
-      .select("id, quantity, nom, nom_ar, ref_sales_unit(label, code), ref_conditionnement(label, label_ar)")
+      .select("id, quantity, nom, nom_ar, ref_sales_unit(label, label_ar, code), ref_conditionnement(label, label_ar)")
       .in("id", packIds);
     packMap = Object.fromEntries((packs ?? []).map((pk) => [pk.id, pk as PackRow]));
   }
@@ -177,13 +177,20 @@ export async function GET(_req: Request, ctx: Ctx) {
         ...l,
         vendeur_id: product?.vendeur_id ?? null,
         product: product
-          ? { id: product.id, name: product.name, code: product.code, name_ar: product.name_ar }
+          ? {
+              id: product.id,
+              name: product.name,
+              code: product.code,
+              name_ar: product.name_ar,
+              ref_sales_unit: product.ref_sales_unit,
+            }
           : null,
         uniteVente,
         condPackUniteVente: condPackUniteVente && condPackUniteVente !== "—" ? condPackUniteVente : null,
         condTitre,
         packContentQty: pr && pr.id && Number.isFinite(packQty) ? packQty : null,
         packSalesUnitIsUnite: pr ? isPackSalesUnitUnite(pr.ref_sales_unit) : false,
+        packaging: pr && pr.id ? pr : null,
         categoryLabel,
       };
     }),

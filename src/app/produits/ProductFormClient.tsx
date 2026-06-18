@@ -39,6 +39,13 @@ import { ProductPackagingSettingsDialog, type MagasinMini } from '@/app/produits
 import { packagingConditionnementLabel } from '@/lib/commandes-fournisseur/product-display'
 import { hasPackagingCombo, packagingDbErrorMessage } from '@/lib/products/packaging-errors'
 import { productPackagingArchiveUpdate } from '@/lib/products/packaging-archive'
+import {
+  loadProductSupplierIds,
+  primarySupplierIdFromSelection,
+  syncProductSuppliers,
+} from '@/lib/products/product-supplier'
+import { productSalesNameFr } from '@/lib/products/product-display-name'
+import { PRODUCT_FORM_SELECT } from '@/lib/products/product-supabase-select'
 
 type Props = { productId: string | null; /** Retour après enregistrement (ex. parcours commande). */
   returnTo?: string | null }
@@ -84,6 +91,8 @@ export default function ProductFormClient({ productId, returnTo = null }: Props)
 
   const [p, setP] = useState<Partial<ProductRow> & { id?: string }>({
     name: '',
+    sales_name: '',
+    sales_name_ar: '',
     price: 0,
     name_ar: '',
     cost_purchase: null,
@@ -96,6 +105,7 @@ export default function ProductFormClient({ productId, returnTo = null }: Props)
   })
   const [imageUrl, setImageUrl] = useState<string | null>(null)
   const [packs, setPacks] = useState<PackagingLine[]>([])
+  const [productSupplierIds, setProductSupplierIds] = useState<Set<string>>(() => new Set())
   const [vendeurs, setVendeurs] = useState<RefVendeurRow[]>([])
   const [magasins, setMagasins] = useState<MagasinMini[]>([])
   const [packDialog, setPackDialog] = useState<PackagingLine | null>(null)
@@ -124,10 +134,28 @@ export default function ProductFormClient({ productId, returnTo = null }: Props)
   const lastPricingDbRef = useRef<ProductPricingSnapshot | null>(null)
 
   const vendeursProduit = useMemo(() => {
-    const sid = p.supplier_id?.trim()
-    if (!sid) return []
-    return vendeurs.filter(v => v.supplier_id === sid)
-  }, [vendeurs, p.supplier_id])
+    if (productSupplierIds.size === 0) return []
+    return vendeurs.filter(v => productSupplierIds.has(v.supplier_id))
+  }, [vendeurs, productSupplierIds])
+
+  const toggleProductSupplier = (supplierId: string) => {
+    setProductSupplierIds(prev => {
+      const next = new Set(prev)
+      if (next.has(supplierId)) next.delete(supplierId)
+      else next.add(supplierId)
+      const primary = primarySupplierIdFromSelection(next, sups)
+      setP(x => {
+        const vendeurOk =
+          x.vendeur_id && vendeurs.some(v => v.id === x.vendeur_id && next.has(v.supplier_id))
+        return {
+          ...x,
+          supplier_id: primary ?? undefined,
+          vendeur_id: vendeurOk ? x.vendeur_id : null,
+        }
+      })
+      return next
+    })
+  }
 
   const subcatsForCategory = useMemo(() => {
     const cid = p.category_id?.trim()
@@ -156,7 +184,11 @@ export default function ProductFormClient({ productId, returnTo = null }: Props)
     if (sc.data) setSubcats(sc.data as RefSubcategoryRow[])
     if (s.data) {
       setSups(s.data as RefRow[])
-      if (s.data[0] && isNew) setP(x => ({ ...x, supplier_id: (s.data[0] as RefRow).id }))
+      if (s.data[0] && isNew) {
+        const firstId = (s.data[0] as RefRow).id
+        setP(x => ({ ...x, supplier_id: firstId }))
+        setProductSupplierIds(new Set([firstId]))
+      }
     }
     if (co.data) {
       setConds(co.data as RefConditionnementRow[])
@@ -184,7 +216,7 @@ export default function ProductFormClient({ productId, returnTo = null }: Props)
     setErr(null)
     const { data, error: e0 } = await supabase
       .from('product')
-      .select('*, ref_sales_unit(*), ref_category(*), ref_subcategory(*), ref_supplier(*)')
+      .select(PRODUCT_FORM_SELECT)
       .eq('id', productId)
       .maybeSingle()
     if (e0 || !data) {
@@ -194,6 +226,13 @@ export default function ProductFormClient({ productId, returnTo = null }: Props)
     }
     const row = data as ProductRow
     setP(row)
+    try {
+      const supplierIds = await loadProductSupplierIds(supabase, productId, row.supplier_id)
+      setProductSupplierIds(new Set(supplierIds))
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : 'Erreur chargement fournisseurs produit')
+      setProductSupplierIds(row.supplier_id ? new Set([row.supplier_id]) : new Set())
+    }
     lastPricingDbRef.current = {
       price: Number(row.price),
       cost_purchase: row.cost_purchase ?? null,
@@ -333,12 +372,26 @@ export default function ProductFormClient({ productId, returnTo = null }: Props)
   const save = async () => {
     if (readOnly) return
     if (!p.name?.trim()) {
-      setErr('Le nom est obligatoire')
+      setErr('Le nom logistique est obligatoire')
       return
     }
-    if (p.sales_unit_id == null || p.category_id == null || p.supplier_id == null) {
-      setErr('UdV, catégorie et fournisseur sont obligatoires')
+    if (p.sales_unit_id == null || p.category_id == null || productSupplierIds.size === 0) {
+      setErr('UdV, catégorie et au moins un fournisseur sont obligatoires')
       return
+    }
+    const primarySupplierId = primarySupplierIdFromSelection(productSupplierIds, sups)
+    if (!primarySupplierId) {
+      setErr('Au moins un fournisseur valide est requis')
+      return
+    }
+    if (p.vendeur_id?.trim()) {
+      const vendeurOk = vendeurs.some(
+        v => v.id === p.vendeur_id && productSupplierIds.has(v.supplier_id),
+      )
+      if (!vendeurOk) {
+        setErr('Le vendeur doit appartenir à un des fournisseurs cochés.')
+        return
+      }
     }
     if (p.subcategory_id?.trim()) {
       const ok = subcatsForCategory.some(sc => sc.id === p.subcategory_id)
@@ -351,11 +404,13 @@ export default function ProductFormClient({ productId, returnTo = null }: Props)
     setErr(null)
     const payload = {
       name: p.name.trim(),
+      sales_name: p.sales_name?.trim() ? p.sales_name.trim() : null,
+      sales_name_ar: p.sales_name_ar?.trim() ? p.sales_name_ar.trim() : null,
       price: Number(p.price) || 0,
       sales_unit_id: p.sales_unit_id!,
       category_id: p.category_id!,
       subcategory_id: p.subcategory_id?.trim() ? p.subcategory_id : null,
-      supplier_id: p.supplier_id!,
+      supplier_id: primarySupplierId,
       vendeur_id: p.vendeur_id?.trim() ? p.vendeur_id : null,
       name_ar: p.name_ar || null,
       cost_purchase: p.cost_purchase,
@@ -381,6 +436,13 @@ export default function ProductFormClient({ productId, returnTo = null }: Props)
         return
       }
       const newId = (data as { id: string }).id
+      try {
+        await syncProductSuppliers(supabase, newId, [...productSupplierIds], sups)
+      } catch (e) {
+        setErr(e instanceof Error ? e.message : 'Erreur enregistrement fournisseurs')
+        setSaving(false)
+        return
+      }
       const { error: h1 } = await insertProductPriceHistoryRow(supabase, {
         product_id: newId,
         price: Number(p.price) || 0,
@@ -401,6 +463,13 @@ export default function ProductFormClient({ productId, returnTo = null }: Props)
     const { error: e2 } = await supabase.from('product').update(payload as never).eq('id', productId!)
     if (e2) {
       setErr(e2.message)
+      setSaving(false)
+      return
+    }
+    try {
+      await syncProductSuppliers(supabase, productId!, [...productSupplierIds], sups)
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : 'Erreur enregistrement fournisseurs')
       setSaving(false)
       return
     }
@@ -506,12 +575,13 @@ export default function ProductFormClient({ productId, returnTo = null }: Props)
       return false
     }
     const newId = (ins as { id: string } | null)?.id
-    const sid = p.supplier_id?.trim()
-    if (newId && sid) {
-      await supabase.from('product_packaging_supplier').insert({
-        product_packaging_id: newId,
-        supplier_id: sid,
-      } as never)
+    if (newId && productSupplierIds.size > 0) {
+      await supabase.from('product_packaging_supplier').insert(
+        [...productSupplierIds].map(supplier_id => ({
+          product_packaging_id: newId,
+          supplier_id,
+        })) as never,
+      )
     }
     setAddNom('')
     setAddNomAr('')
@@ -582,7 +652,7 @@ export default function ProductFormClient({ productId, returnTo = null }: Props)
             {returnTo ? 'Retour au parcours' : 'Liste produits'}
           </BackNavButton>
           <Typography variant="h4" component="h1" sx={{ fontWeight: 600, color: '#0f172a' }}>
-            {isNew ? 'Nouveau produit' : p.name?.trim() || (p.code != null ? `Produit ${p.code}` : 'Fiche produit')}
+            {isNew ? 'Nouveau produit' : productSalesNameFr(p as ProductRow) || (p.code != null ? `Produit ${p.code}` : 'Fiche produit')}
           </Typography>
         </div>
         {err ? (
@@ -605,16 +675,31 @@ export default function ProductFormClient({ productId, returnTo = null }: Props)
           <TextField
             required
             size="small"
-            label="Nom"
+            label="Nom logistique"
             value={p.name ?? ''}
             onChange={e => setP(x => ({ ...x, name: e.target.value }))}
             fullWidth
           />
           <TextField
             size="small"
-            label="Nom (arabe)"
+            label="Nom logistique (arabe)"
             value={p.name_ar ?? ''}
             onChange={e => setP(x => ({ ...x, name_ar: e.target.value }))}
+            fullWidth
+            slotProps={{ input: { dir: 'rtl' } }}
+          />
+          <TextField
+            size="small"
+            label="Nom vente"
+            value={p.sales_name ?? ''}
+            onChange={e => setP(x => ({ ...x, sales_name: e.target.value }))}
+            fullWidth
+          />
+          <TextField
+            size="small"
+            label="Nom vente (arabe)"
+            value={p.sales_name_ar ?? ''}
+            onChange={e => setP(x => ({ ...x, sales_name_ar: e.target.value }))}
             fullWidth
             slotProps={{ input: { dir: 'rtl' } }}
           />
@@ -698,33 +783,34 @@ export default function ProductFormClient({ productId, returnTo = null }: Props)
               </Select>
             </FormControl>
           </div>
-          <FormControl size="small" fullWidth>
-            <InputLabel>Fournisseur</InputLabel>
-            <Select
-              value={p.supplier_id ?? ''}
-              label="Fournisseur"
-              onChange={e => {
-                const supplier_id = e.target.value
-                setP(x => {
-                  const vendeurOk =
-                    x.vendeur_id &&
-                    vendeurs.some(v => v.id === x.vendeur_id && v.supplier_id === supplier_id)
-                  return {
-                    ...x,
-                    supplier_id,
-                    vendeur_id: vendeurOk ? x.vendeur_id : null,
-                  }
-                })
-              }}
-            >
-              {sups.map(s => (
-                <MenuItem key={s.id} value={s.id}>
-                  {s.label}
-                </MenuItem>
-              ))}
-            </Select>
-          </FormControl>
-          <FormControl size="small" fullWidth disabled={!p.supplier_id?.trim()}>
+          <div>
+            <Typography variant="subtitle2" className="!mb-1">
+              Fournisseurs
+            </Typography>
+            <div className="flex max-h-36 flex-col gap-1 overflow-auto rounded border border-slate-200 p-2">
+              {sups.length === 0 ? (
+                <Typography variant="body2" color="text.secondary">
+                  Aucun fournisseur en référentiel
+                </Typography>
+              ) : (
+                sups.map(s => (
+                  <FormControlLabel
+                    key={s.id}
+                    control={
+                      <Checkbox
+                        size="small"
+                        checked={productSupplierIds.has(s.id)}
+                        onChange={() => toggleProductSupplier(s.id)}
+                        disabled={readOnly}
+                      />
+                    }
+                    label={s.label}
+                  />
+                ))
+              )}
+            </div>
+          </div>
+          <FormControl size="small" fullWidth disabled={productSupplierIds.size === 0 || readOnly}>
             <InputLabel>Vendeur</InputLabel>
             <Select
               value={p.vendeur_id ?? ''}

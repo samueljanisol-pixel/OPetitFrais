@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { insertProductPriceHistoryRow, pricingSnapshotChanged, type ProductPricingSnapshot } from '@/lib/products/priceHistory'
 import type { RefRow, RefSubcategoryRow } from '@/lib/products/types'
+import { syncProductSuppliers } from '@/lib/products/product-supplier'
 import type { SheetRowParsed } from './mapSheetRow'
 import {
   ALL_SHEET_IMPORT_FIELDS,
@@ -222,9 +223,7 @@ export async function applySheetImport(
   fields: SheetImportFields = DEFAULT_SHEET_IMPORT_FIELDS,
 ): Promise<SheetImportResult> {
   const errors: string[] = []
-  if (!hasAnyImportField(fields)) {
-    return { created: 0, updated: 0, skipped: 0, errors: ['Aucun champ sélectionné pour l’import.'] }
-  }
+  const updateExisting = hasAnyImportField(fields)
   const [{ data: units }, { data: cats }, { data: sups }, { data: subcats }, { data: products }] =
     await Promise.all([
       supabase.from('ref_sales_unit').select('*'),
@@ -255,24 +254,28 @@ export async function applySheetImport(
   let skipped = 0
 
   for (const row of parsed) {
-    const { patch, errors: patchErrors } = buildProductPatch(row, fields, refs)
-    if (patchErrors.length > 0) {
-      errors.push(...patchErrors)
-      continue
-    }
-
     const codeNorm = row.code ? norm(row.code) : ''
     const id =
       (codeNorm && byCode.get(codeNorm)) || (!codeNorm && byName.get(norm(row.nom))) || null
 
-    const categoryId = await resolveCategoryIdForRow(supabase, id, patch, row, fields, refs)
-    const subErrors = await applySubcategoryToPatch(supabase, row, fields, refs, patch, categoryId)
-    if (subErrors.length > 0) {
-      errors.push(...subErrors)
-      continue
-    }
-
     if (id) {
+      if (!updateExisting) {
+        skipped += 1
+        continue
+      }
+      const { patch, errors: patchErrors } = buildProductPatch(row, fields, refs)
+      if (patchErrors.length > 0) {
+        errors.push(...patchErrors)
+        continue
+      }
+
+      const categoryId = await resolveCategoryIdForRow(supabase, id, patch, row, fields, refs)
+      const subErrors = await applySubcategoryToPatch(supabase, row, fields, refs, patch, categoryId)
+      if (subErrors.length > 0) {
+        errors.push(...subErrors)
+        continue
+      }
+
       if (Object.keys(patch).length === 0) {
         skipped += 1
         continue
@@ -290,6 +293,15 @@ export async function applySheetImport(
       if (e0) errors.push(`Mise à jour « ${row.nom} » : ${e0.message}`)
       else {
         updated += 1
+        if (fields.fournisseur && typeof patch.supplier_id === 'string') {
+          try {
+            await syncProductSuppliers(supabase, id, [patch.supplier_id], (sups ?? []) as RefRow[])
+          } catch (syncErr) {
+            errors.push(
+              `Fournisseurs « ${row.nom} » : ${syncErr instanceof Error ? syncErr.message : String(syncErr)}`,
+            )
+          }
+        }
         if (pricingFieldsChanged && upd) {
           const snap = pricingFromRow(upd as Record<string, unknown>)
           const bef = before ? pricingFromRow(before as Record<string, unknown>) : null
@@ -351,8 +363,19 @@ export async function applySheetImport(
       else {
         created += 1
         if (ins?.id) {
+          const newProductId = (ins as { id: string }).id
+          const sid = typeof insert.supplier_id === 'string' ? insert.supplier_id : null
+          if (sid) {
+            try {
+              await syncProductSuppliers(supabase, newProductId, [sid], (sups ?? []) as RefRow[])
+            } catch (syncErr) {
+              errors.push(
+                `Fournisseurs « ${row.nom} » : ${syncErr instanceof Error ? syncErr.message : String(syncErr)}`,
+              )
+            }
+          }
           const { error: hIns } = await insertProductPriceHistoryRow(supabase, {
-            product_id: (ins as { id: string }).id,
+            product_id: newProductId,
             price: row.prix,
             cost_purchase: null,
             cost_manufacturing: null,

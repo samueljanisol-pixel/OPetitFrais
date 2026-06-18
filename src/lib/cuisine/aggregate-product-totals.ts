@@ -1,4 +1,5 @@
 import type { AppLocale } from "@/i18n/config";
+import { compareProductDisplayNames } from "@/lib/products/product-display-name";
 import { refDisplayLabel } from "@/lib/products/ref-display-label";
 import type {
   CuisineFrigoProduct,
@@ -52,6 +53,8 @@ export function aggregateProductTotalsBySubcategory(
         code: product.code,
         name: product.name,
         name_ar: product.name_ar,
+        sales_name: product.sales_name ?? null,
+        sales_name_ar: product.sales_name_ar ?? null,
         unit: salesUnitLabel(product.ref_sales_unit),
         entrees: 0,
         sorties: 0,
@@ -88,6 +91,8 @@ export function aggregateProductTotalsBySubcategory(
       code: row.code,
       name: row.name,
       name_ar: row.name_ar,
+      sales_name: row.sales_name ?? null,
+      sales_name_ar: row.sales_name_ar ?? null,
       unit: row.unit,
       entrees: row.entrees,
       sorties: row.sorties,
@@ -96,7 +101,7 @@ export function aggregateProductTotalsBySubcategory(
 
   const groups = [...bySubcategory.values()];
   for (const group of groups) {
-    group.products.sort((a, b) => a.name.localeCompare(b.name, "fr", { sensitivity: "base" }));
+    group.products.sort((a, b) => compareProductDisplayNames(locale, a, b));
   }
   groups.sort((a, b) => {
     if (a.sortOrder !== b.sortOrder) return a.sortOrder - b.sortOrder;

@@ -8,9 +8,8 @@ import { useTranslations } from "next-intl";
 import { DecimalQtyTextField } from "@/components/commandes-fournisseur/DecimalQtyTextField";
 import { clampQtyToApiRange, roundQty2 } from "@/lib/commandes-fournisseur/qty-parse";
 import {
-  formatSoitUniteLabel,
-  isPackSalesUnitUnite,
-  packagingConditionnementLabel,
+  labelFromRefForLocale,
+  packagingConditionnementLabelForLocale,
 } from "@/lib/commandes-fournisseur/product-display";
 import { commandeAllowsUnitProduct } from "@/lib/products/packagingEligibility";
 import { conditionnementSupplierId } from "@/lib/products/packagingSupplierMatch";
@@ -474,10 +473,10 @@ export function ParcoursProductQuantityPanel({
 }: ParcoursProductQuantityPanelProps) {
   const t = useTranslations("backoffice.commandes.quantityPanel");
   const tc = useTranslations("backoffice.commandes.common");
-  const { formatNumber } = useAppFormat();
+  const { formatNumber, locale } = useAppFormat();
   const p = product;
   const packs = packArray(p.product_packaging);
-  const productUnit = refLabel(p.ref_sales_unit);
+  const productUnit = labelFromRefForLocale(p.ref_sales_unit, locale);
   const uk = uKeyForProduct(p.id);
   const formatQty = useCallback(
     (value: number) =>
@@ -537,8 +536,8 @@ export function ParcoursProductQuantityPanel({
         ) : null}
         {packs.map((pkg) => {
           const pq = packQtyValue(pkg);
-          const pkUnit = refLabel(pkg.ref_sales_unit);
-          const shortT = packagingConditionnementLabel(pkg);
+          const pkUnit = labelFromRefForLocale(pkg.ref_sales_unit, locale);
+          const shortT = packagingConditionnementLabelForLocale(pkg, locale);
           const formattedPackQty = formatQty(pq);
           const pk = pKeyForProduct(p.id, pkg.id);
           const qPack = getQ(pk);
@@ -596,9 +595,9 @@ export function ParcoursProductQuantityPanel({
       ) : (() => {
           const pkg = packs.find((x) => x.id === route);
           if (!pkg) return null;
-          const condName = packagingConditionnementLabel(pkg);
+          const condName = packagingConditionnementLabelForLocale(pkg, locale);
           const pq = packQtyValue(pkg);
-          const pkUnit = refLabel(pkg.ref_sales_unit);
+          const pkUnit = labelFromRefForLocale(pkg.ref_sales_unit, locale);
           const v = getQ(pKeyForProduct(p.id, pkg.id));
           const total = v * pq;
           const condWithPackSpec = t("packButton", {
@@ -606,10 +605,8 @@ export function ParcoursProductQuantityPanel({
             packQty: formatQty(pq),
             unit: pkUnit,
           });
-          const packUdVIsUnite = isPackSalesUnitUnite(pkg.ref_sales_unit);
-          const soitUnit = packUdVIsUnite ? formatSoitUniteLabel(total) : pkUnit;
           const soitLine =
-            v > 0 ? tc("soitLine", { qty: formatQty(total), unit: soitUnit }) : null;
+            v > 0 ? tc("soitLine", { qty: formatQty(total), unit: pkUnit }) : null;
           return (
             <PackQteControl
               condWithPackSpec={condWithPackSpec}
