@@ -9,11 +9,10 @@ import {
   type ProductDisplayInfo,
 } from "@/lib/commandes-fournisseur/product-display";
 import {
-  buildVendeurRecapGroups,
+  buildRecapRows,
   type MagasinMxColumn,
   type RecapLigneInput,
   type VendeurRecapGroup,
-  type VendeurRef,
 } from "@/lib/commandes-fournisseur/validation-lot-vendeur-recap";
 import {
   categoryDisplayLabel,
@@ -160,41 +159,59 @@ function toRecapLigneInput(l: CommandeSaisieExportLigne, magasinId: string): Rec
   };
 }
 
-/** Récap export image (même format validation lot) pour une commande saisie validée. */
+function applyLocaleToRecapRows(
+  rows: VendeurRecapGroup["rows"],
+  lignes: CommandeSaisieExportLigne[],
+  locale: AppLocale,
+  formatSoitLine: (qty: string, unit: string) => string,
+): void {
+  for (let i = 0; i < rows.length; i++) {
+    const src = lignes.find((l) => l.id === rows[i]!.ligneId);
+    if (!src) {
+      continue;
+    }
+    const pack = src.packaging ?? null;
+    const display = displayFromSaisieLigne(src, locale);
+    const soitLine =
+      src.qte > 0
+        ? buildSoitLineForLocale(display, src.qte, locale, pack, formatSoitLine)
+        : null;
+    if (display.isCond && display.condTitre) {
+      rows[i]!.udvCond = display.condTitre;
+      rows[i]!.udvCondSub = soitLine;
+    } else {
+      rows[i]!.udvCond = display.uniteVente !== "—" ? display.uniteVente : "—";
+      rows[i]!.udvCondSub = soitLine;
+    }
+    const cat = src.categoryLabel
+      ? { label: src.categoryLabel, sort_order: null as number | null }
+      : parseCategoryFromRef(undefined);
+    rows[i]!.categoryLabel = categoryDisplayLabel(cat);
+  }
+}
+
+/**
+ * Récap export image pour une commande saisie validée — **un seul tableau**
+ * (tous les produits du fournisseur, sans découpage par vendeur marché).
+ */
 export function buildCommandeSaisieRecapGroups(
   lignes: CommandeSaisieExportLigne[],
-  vendeurs: VendeurRef[],
   magasinColumn: MagasinMxColumn,
   supplierLabel: string,
   locale: AppLocale,
   formatSoitLine: (qty: string, unit: string) => string,
 ): VendeurRecapGroup[] {
   const inputs = lignes.map((l) => toRecapLigneInput(l, magasinColumn.id));
-  const groups = buildVendeurRecapGroups(inputs, vendeurs, [magasinColumn], supplierLabel);
-  for (const group of groups) {
-    for (let i = 0; i < group.rows.length; i++) {
-      const src = lignes.find((l) => l.id === group.rows[i]!.ligneId);
-      if (!src) {
-        continue;
-      }
-      const pack = src.packaging ?? null;
-      const display = displayFromSaisieLigne(src, locale);
-      const soitLine =
-        src.qte > 0
-          ? buildSoitLineForLocale(display, src.qte, locale, pack, formatSoitLine)
-          : null;
-      if (display.isCond && display.condTitre) {
-        group.rows[i]!.udvCond = display.condTitre;
-        group.rows[i]!.udvCondSub = soitLine;
-      } else {
-        group.rows[i]!.udvCond = display.uniteVente !== "—" ? display.uniteVente : "—";
-        group.rows[i]!.udvCondSub = soitLine;
-      }
-      const cat = src.categoryLabel
-        ? { label: src.categoryLabel, sort_order: null as number | null }
-        : parseCategoryFromRef(undefined);
-      group.rows[i]!.categoryLabel = categoryDisplayLabel(cat);
-    }
+  const rows = buildRecapRows(inputs, [magasinColumn]);
+  applyLocaleToRecapRows(rows, lignes, locale, formatSoitLine);
+  if (rows.length === 0) {
+    return [];
   }
-  return groups;
+  return [
+    {
+      vendeurKey: "__commande_saisie__",
+      vendeurLabel: supplierLabel.trim() || "Commande",
+      rows,
+    },
+  ];
 }

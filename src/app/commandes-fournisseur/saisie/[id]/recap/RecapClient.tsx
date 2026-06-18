@@ -49,7 +49,6 @@ import {
 } from "@/lib/commandes-fournisseur/product-display";
 import { clampQtyToApiRange, roundQty2 } from "@/lib/commandes-fournisseur/qty-parse";
 import CommandeSaisieRecapExport from "@/features/commandes-fournisseur/CommandeSaisieRecapExport";
-import type { VendeurRef } from "@/lib/commandes-fournisseur/validation-lot-vendeur-recap";
 import { useAppFormat } from "@/lib/i18n/useAppFormat";
 import type { AppLocale } from "@/i18n/config";
 import { useBackChevronIcon } from "@/lib/i18n/useBackChevronIcon";
@@ -261,7 +260,6 @@ export default function RecapClient({ commandeId }: { commandeId: string }) {
   const { labelFor } = useStatusLabels();
   const [commande, setCommande] = useState<Commande | null>(null);
   const [lignes, setLignes] = useState<Ligne[]>([]);
-  const [vendeurs, setVendeurs] = useState<VendeurRef[]>([]);
   const [saisieParLabel, setSaisieParLabel] = useState<string | null>(null);
   const [comment, setComment] = useState("");
   const [err, setErr] = useState<string | null>(null);
@@ -303,7 +301,6 @@ export default function RecapClient({ commandeId }: { commandeId: string }) {
       const j = (await res.json()) as {
         commande?: Commande;
         lignes?: Ligne[];
-        vendeurs?: VendeurRef[];
         saisieParLabel?: string | null;
         error?: string;
       };
@@ -316,7 +313,6 @@ export default function RecapClient({ commandeId }: { commandeId: string }) {
         setComment(j.commande.commentaire ?? "");
       }
       setLignes(j.lignes ?? []);
-      setVendeurs(j.vendeurs ?? []);
       setSaisieParLabel(typeof j.saisieParLabel === "string" ? j.saisieParLabel : null);
     } catch (e) {
       setErr(e instanceof Error ? e.message : te("generic"));
@@ -719,7 +715,6 @@ export default function RecapClient({ commandeId }: { commandeId: string }) {
           commande={commande}
           supplierLabel={supplierLabel(commande, emDash)}
           lignes={lignes}
-          vendeurs={vendeurs}
           saisieParLabel={saisieParLabel}
         />
       ) : null}

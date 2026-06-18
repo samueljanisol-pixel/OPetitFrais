@@ -181,6 +181,31 @@ function buildRecapRow(l: RecapLigneInput, magasinColumns: MagasinMxColumn[]): V
 
 const SANS_VENDEUR_KEY = "__sans_vendeur__";
 
+function sortRecapLignesByCategory(lignes: RecapLigneInput[]): RecapLigneInput[] {
+  return [...lignes].sort((a, b) => {
+    const pa = one(a.product);
+    const pb = one(b.product);
+    const ca = pa ? parseCategoryFromRef(pa.ref_category) : { label: "", sort_order: null };
+    const cb = pb ? parseCategoryFromRef(pb.ref_category) : { label: "", sort_order: null };
+    return compareByCategoryThenProductName(
+      ca,
+      cb,
+      pa?.name ?? "",
+      pb?.name ?? "",
+      String(a.id),
+      String(b.id),
+    );
+  });
+}
+
+/** Lignes récap triées par catégorie puis nom produit (sans regroupement vendeur). */
+export function buildRecapRows(
+  lignes: RecapLigneInput[],
+  magasinColumns: MagasinMxColumn[],
+): VendeurRecapRow[] {
+  return sortRecapLignesByCategory(lignes).map((l) => buildRecapRow(l, magasinColumns));
+}
+
 export function buildVendeurRecapGroups(
   lignes: RecapLigneInput[],
   vendeurs: VendeurRef[],
@@ -214,25 +239,11 @@ export function buildVendeurRecapGroups(
   const groups: VendeurRecapGroup[] = [];
   for (const key of keys) {
     const raw = byVendeur.get(key) ?? [];
-    const sorted = [...raw].sort((a, b) => {
-      const pa = one(a.product);
-      const pb = one(b.product);
-      const ca = pa ? parseCategoryFromRef(pa.ref_category) : { label: "", sort_order: null };
-      const cb = pb ? parseCategoryFromRef(pb.ref_category) : { label: "", sort_order: null };
-      return compareByCategoryThenProductName(
-        ca,
-        cb,
-        pa?.name ?? "",
-        pb?.name ?? "",
-        String(a.id),
-        String(b.id),
-      );
-    });
     groups.push({
       vendeurKey: key,
       vendeurLabel:
         key === SANS_VENDEUR_KEY ? sansVendeurGroupTitle : (vendeurLabel.get(key) ?? "Vendeur"),
-      rows: sorted.map((l) => buildRecapRow(l, magasinColumns)),
+      rows: buildRecapRows(raw, magasinColumns),
     });
   }
   return groups;

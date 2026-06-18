@@ -1,12 +1,11 @@
 "use client";
 
-import { Fragment, useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { Box, Button, Typography } from "@mui/material";
 import ImageOutlinedIcon from "@mui/icons-material/ImageOutlined";
 import { useTranslations } from "next-intl";
 import {
   captureRootSx,
-  vendeurHeaderVisible,
   VendeurRecapCaptureHeader,
   VendeurRecapTable,
 } from "@/features/commandes-fournisseur/vendeur-recap-export-parts";
@@ -19,7 +18,6 @@ import {
   type CommandeSaisieExportLigne,
 } from "@/lib/commandes-fournisseur/commande-saisie-recap-export";
 import { useAppLocale } from "@/lib/i18n/useAppFormat";
-import type { VendeurRef } from "@/lib/commandes-fournisseur/validation-lot-vendeur-recap";
 
 type Props = {
   commande: {
@@ -31,7 +29,6 @@ type Props = {
   };
   supplierLabel: string;
   lignes: CommandeSaisieExportLigne[];
-  vendeurs: VendeurRef[];
   saisieParLabel?: string | null;
 };
 
@@ -39,7 +36,6 @@ export default function CommandeSaisieRecapExport({
   commande,
   supplierLabel,
   lignes,
-  vendeurs,
   saisieParLabel,
 }: Props) {
   const locale = useAppLocale();
@@ -60,18 +56,16 @@ export default function CommandeSaisieRecapExport({
     (qty: string, unit: string) => tc("soitLine", { qty, unit }),
     [tc],
   );
-  const groups = useMemo(
-    () =>
-      buildCommandeSaisieRecapGroups(
-        lignes,
-        vendeurs,
-        magasinColumn,
-        supplierLabel,
-        locale,
-        formatSoitLine,
-      ),
-    [lignes, vendeurs, magasinColumn, supplierLabel, locale, formatSoitLine],
-  );
+  const group = useMemo(() => {
+    const groups = buildCommandeSaisieRecapGroups(
+      lignes,
+      magasinColumn,
+      supplierLabel,
+      locale,
+      formatSoitLine,
+    );
+    return groups[0] ?? null;
+  }, [lignes, magasinColumn, supplierLabel, locale, formatSoitLine]);
 
   const onExport = useCallback(async () => {
     const el = captureRef.current;
@@ -88,7 +82,7 @@ export default function CommandeSaisieRecapExport({
     setExporting(false);
   }, [commandeDate.slug, supplierLabel]);
 
-  if (groups.length === 0) {
+  if (!group || group.rows.length === 0) {
     return null;
   }
 
@@ -96,7 +90,6 @@ export default function CommandeSaisieRecapExport({
   const parLabel = saisieParLabel?.trim() ?? "";
   const productCount = productCountLabel?.trim() ?? "";
   const footer = commande.commentaire?.trim() ?? "";
-  const hasMultipleGroups = groups.length > 1;
 
   const tableLabels = {
     product: "Produit",
@@ -111,40 +104,19 @@ export default function CommandeSaisieRecapExport({
       <VendeurRecapCaptureHeader
         magasinHeader={magasinHeader}
         supplierOrderLine={`Commande Fournisseur : ${supplierLabel}`}
-        vendeurLabel={groups[0]!.vendeurLabel}
-        showVendeurHeader={!hasMultipleGroups && vendeurHeaderVisible(groups[0]!.vendeurLabel, supplierLabel)}
+        vendeurLabel={group.vendeurLabel}
+        showVendeurHeader={false}
         orderOnLine={`Commande du ${commandeDate.label}`}
         orderByLine={parLabel.length > 0 ? `par ${parLabel}` : null}
         productCount={productCount}
       />
-      {groups.map((g, index) => {
-        const showVendeurSubheader =
-          hasMultipleGroups && vendeurHeaderVisible(g.vendeurLabel, supplierLabel);
-        return (
-          <Fragment key={g.vendeurKey}>
-            {showVendeurSubheader ? (
-              <Typography
-                variant="subtitle2"
-                sx={{
-                  fontWeight: 700,
-                  mb: 0.75,
-                  mt: index > 0 ? 1.5 : 0,
-                  whiteSpace: "nowrap",
-                }}
-              >
-                {g.vendeurLabel}
-              </Typography>
-            ) : null}
-            <VendeurRecapTable
-              group={g}
-              magasinColumns={[magasinColumn]}
-              showTotalColumn={false}
-              magasinColumnHeader={tc("quantity")}
-              labels={tableLabels}
-            />
-          </Fragment>
-        );
-      })}
+      <VendeurRecapTable
+        group={group}
+        magasinColumns={[magasinColumn]}
+        showTotalColumn={false}
+        magasinColumnHeader={tc("quantity")}
+        labels={tableLabels}
+      />
       {footer ? (
         <Typography
           variant="caption"
@@ -162,8 +134,6 @@ export default function CommandeSaisieRecapExport({
     </Box>
   );
 
-  const totalRows = groups.reduce((n, g) => n + g.rows.length, 0);
-
   return (
     <div className="!mb-4">
       <Typography variant="subtitle2" className="!mb-2" sx={{ fontWeight: 600 }}>
@@ -175,7 +145,7 @@ export default function CommandeSaisieRecapExport({
           variant="outlined"
           size="small"
           startIcon={<ImageOutlinedIcon />}
-          disabled={exporting || totalRows === 0}
+          disabled={exporting || group.rows.length === 0}
           onClick={() => void onExport()}
           sx={{ textTransform: "none" }}
         >
