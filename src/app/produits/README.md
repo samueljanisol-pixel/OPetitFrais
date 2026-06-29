@@ -3,7 +3,7 @@
 ## Liste (`ProduitsListClient`)
 
 - Filtre **Recherche (nom)** : insensible à la casse et aux accents (ex. « peche » trouve « Pêche »). Cherche aussi dans `name_ar`.
-- **Import Google Sheet** : colonnes **Nom** / **Arabe** → `product.name` / `product.name_ar` (format feuille inchangé) ; **Catégorie** + **Sous-Catégorie** (création auto de la sous-catégorie si absente sous la catégorie) ; **Marge DH Actuelle** → `product.margin`. Les noms de vente (`sales_name`) ne sont pas importés depuis la feuille. Voir `src/features/sheet-import/`.
+- **Import Google Sheet** : colonnes **Nom** / **Arabe** → `product.name` / `product.name_ar` (format feuille inchangé) ; **Catégorie** + **SousCatégorie** (création auto de la sous-catégorie si absente sous la catégorie) ; **Marge DH Actuelle** → `product.margin`. Les noms de vente (`sales_name`) ne sont pas importés depuis la feuille. Voir `src/features/sheet-import/`.
 - **Sous-catégories** : table `ref_subcategory` (rattachée à `ref_category`), champ optionnel `product.subcategory_id`. Fiche produit + onglet Catégories dans **Paramètres**. Migration `20260701160000_ref_subcategory.sql`.
 - **Libellés arabes** : colonnes `label_ar` sur `ref_category` et `ref_subcategory` (Paramètres → Catégories). Migration `20260702130000_ref_category_subcategory_label_ar.sql`.
 

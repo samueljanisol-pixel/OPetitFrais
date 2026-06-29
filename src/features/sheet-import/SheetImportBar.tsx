@@ -24,6 +24,8 @@ import {
   type SheetImportFields,
 } from './sheet-import-fields'
 import { createSupabaseBrowserClient } from '@/lib/supabase/client'
+import { consumeEventStream } from '@/lib/sse/consumeEventStream'
+import type { ImportPhotosFromFtpResult } from '@/lib/products/importPhotosFromFtp'
 
 function formatImportResult(
   created: number,
@@ -48,6 +50,25 @@ function formatImportResult(
     lines.push('', `Erreurs (${allErrs.length}) :`, ...allErrs.map(e => `• ${e}`))
   }
   return lines.join('\n')
+}
+
+function formatFtpImportResult(data: ImportPhotosFromFtpResult): string {
+  const parts = [
+    `Téléchargé ${data.downloadedBytes ?? 0} octets, ${data.extractedFiles ?? 0} fichier(s) dans l’archive.`,
+    `Envoyés : ${data.uploaded ?? 0}, ignorés (pas de produit) : ${data.skippedNoProduct ?? 0}, noms invalides : ${data.skippedBadName ?? 0}, anciennes images supprimées : ${data.removedOld ?? 0}.`,
+    ...(Array.isArray(data.errors) ? data.errors.slice(0, 30) : []),
+  ]
+  if (Array.isArray(data.errors) && data.errors.length > 30) {
+    parts.push(`… et ${data.errors.length - 30} autre(s) message(s).`)
+  }
+  return parts.join(' ')
+}
+
+function formatFtpProgress(phase: string, current?: number, total?: number): string {
+  if (typeof current === 'number' && typeof total === 'number' && total > 0) {
+    return `${phase} (${current}/${total})…`
+  }
+  return `${phase}…`
 }
 
 type Props = { onDone: () => void; canWriteProducts?: boolean }
@@ -123,19 +144,15 @@ export function SheetImportBar({ onDone, canWriteProducts = false }: Props) {
     )
       return
     setFtpLoading(true)
-    setFtpMsg(null)
+    setFtpMsg('Démarrage…')
     try {
       const r = await fetch('/api/products/import-photos-ftp', {
         method: 'POST',
         credentials: 'include',
       })
-      const j: unknown = await r.json()
-      const data422 =
-        typeof j === 'object' &&
-        j !== null &&
-        ('uploaded' in j || 'extractedFiles' in j || 'errors' in j)
-
-      if (!r.ok && !data422) {
+      const contentType = r.headers.get('content-type') ?? ''
+      if (!r.ok && contentType.includes('application/json')) {
+        const j: unknown = await r.json()
         const err =
           typeof j === 'object' && j !== null && 'error' in j && typeof (j as { error?: unknown }).error === 'string'
             ? (j as { error: string }).error
@@ -143,25 +160,37 @@ export function SheetImportBar({ onDone, canWriteProducts = false }: Props) {
         setFtpMsg(err)
         return
       }
-      const data = j as {
-        uploaded?: number
-        downloadedBytes?: number
-        extractedFiles?: number
-        skippedNoProduct?: number
-        skippedBadName?: number
-        removedOld?: number
-        errors?: string[]
+      if (!contentType.includes('text/event-stream')) {
+        setFtpMsg(`Réponse inattendue (${r.status}).`)
+        return
       }
-      const parts = [
-        `Téléchargé ${data.downloadedBytes ?? 0} octets, ${data.extractedFiles ?? 0} fichier(s) dans l’archive.`,
-        `Envoyés : ${data.uploaded ?? 0}, ignorés (pas de produit) : ${data.skippedNoProduct ?? 0}, noms invalides : ${data.skippedBadName ?? 0}, anciennes images supprimées : ${data.removedOld ?? 0}.`,
-        ...(Array.isArray(data.errors) ? data.errors.slice(0, 30) : []),
-      ]
-      if (Array.isArray(data.errors) && data.errors.length > 30) {
-        parts.push(`… et ${data.errors.length - 30} autre(s) message(s).`)
+
+      const outcome: { result: ImportPhotosFromFtpResult | null } = { result: null }
+      await consumeEventStream(r, (event, data) => {
+        if (event === 'progress' && data && typeof data === 'object' && 'phase' in data) {
+          const p = data as { phase?: string; current?: number; total?: number }
+          setFtpMsg(formatFtpProgress(String(p.phase ?? 'Import'), p.current, p.total))
+          return
+        }
+        if (event === 'done' && data && typeof data === 'object') {
+          outcome.result = data as ImportPhotosFromFtpResult
+          return
+        }
+        if (event === 'error' && data && typeof data === 'object' && 'error' in data) {
+          const err = (data as { error?: unknown }).error
+          setFtpMsg(typeof err === 'string' ? err : 'Erreur import photos')
+        }
+      })
+
+      const result = outcome.result
+      if (result) {
+        setFtpMsg(formatFtpImportResult(result))
+        if (result.uploaded > 0 || result.ok) {
+          onDone()
+        }
+      } else if (!r.ok) {
+        setFtpMsg(`Échec (${r.status})`)
       }
-      setFtpMsg(parts.join(' '))
-      onDone()
     } catch (e) {
       setFtpMsg(e instanceof Error ? e.message : String(e))
     } finally {

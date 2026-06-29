@@ -21,7 +21,7 @@ export const SHEET_IMPORT_FIELD_LABELS: Record<SheetImportFieldKey, string> = {
   marge: 'Marge DH',
   udv: 'UdV',
   categorie: 'Catégorie',
-  sousCategorie: 'Sous-Catégorie',
+  sousCategorie: 'SousCatégorie',
   fournisseur: 'Fournisseur',
   arabe: 'Arabe',
 }

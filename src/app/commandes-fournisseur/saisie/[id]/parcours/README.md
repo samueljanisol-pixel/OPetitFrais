@@ -19,3 +19,7 @@ Route : `/commandes-fournisseur/saisie/[id]/parcours`
 - Brouillon parcours en **sessionStorage** : quantités et routes de tous les produits + index courant ; fusionné au rechargement (priorité au brouillon sur les lignes non encore enregistrées en base).
 - Retour fiche produit : même produit (`?productId=`), quantités des autres produits conservées.
 - Après **Terminer**, le brouillon session est effacé.
+
+## Conditionnements affichés
+
+Liste via `GET /api/commandes-fournisseur/parcours-produits` puis `applyCommandeProductPackagingFilter` : colis **non archivés** (`archived_at` null), **achetables** pour le magasin, éligibles pour le **fournisseur de la commande** (aligné fiche produit). Les conditionnements **archivés** sur la fiche ne doivent plus apparaître au parcours (champ `archived_at` requis dans `COMMANDE_PACKAGING_SELECT`).

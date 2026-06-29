@@ -114,6 +114,7 @@ Pour une commande du fournisseur **F**, les colis affichés (parcours, récap, r
 - sinon les colis dont le **conditionnement réf.** (`ref_conditionnement.supplier_id`) ou les liaisons **`product_packaging_supplier`** ciblent **F** ;
 - le **parcours** et la **recherche produit** incluent aussi les produits liés via **`product_supplier`** (fournisseurs secondaires). Migration `20260702160000_product_supplier.sql`.
 - les colis « génériques » (pas de fournisseur sur le réf. ni liaison explicite).
+- les colis **archivés** sur la fiche produit (`archived_at` renseigné) sont **exclus** (filtre `filterActivePackaging` ; le select API inclut `archived_at`).
 
 Le **parcours** liste aussi les produits actifs qui ont au moins un tel colis pour **F**, même si `product.supplier_id` est différent, ainsi que les produits déjà présents sur la commande.
 

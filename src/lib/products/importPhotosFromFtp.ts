@@ -25,6 +25,16 @@ export type ImportPhotosFromFtpResult = {
   errors: string[];
 };
 
+export type ImportPhotosFromFtpProgress = {
+  phase: string;
+  current?: number;
+  total?: number;
+};
+
+export type ImportPhotosFromFtpOptions = {
+  onProgress?: (progress: ImportPhotosFromFtpProgress) => void;
+};
+
 function ftpEnv() {
   const host = process.env.FTP_HOST;
   const user = process.env.FTP_USER;
@@ -144,7 +154,14 @@ async function extractRarArchive(rarPath: string, outDir: string): Promise<void>
   );
 }
 
-export async function runImportProductPhotosFromFtp(): Promise<ImportPhotosFromFtpResult> {
+export async function runImportProductPhotosFromFtp(
+  options: ImportPhotosFromFtpOptions = {},
+): Promise<ImportPhotosFromFtpResult> {
+  const { onProgress } = options;
+  const progress = (phase: string, current?: number, total?: number) => {
+    onProgress?.({ phase, current, total });
+  };
+
   const errors: string[] = [];
   let downloadedBytes = 0;
   let extractedFiles = 0;
@@ -158,21 +175,25 @@ export async function runImportProductPhotosFromFtp(): Promise<ImportPhotosFromF
   const extractDir = path.join(tmpRoot, "extracted");
 
   try {
+    progress("Connexion FTP");
     const { host, user, password } = ftpEnv();
     const ftp = new Client();
     await ftp.access({ host, user, password, secure: false });
     const remotePath = `${FTP_REMOTE_DIR}/${FTP_RAR_NAME}`;
+    progress("Téléchargement de l’archive");
     await ftp.downloadTo(rarPath, remotePath);
     ftp.close();
 
     const st = await stat(rarPath);
     downloadedBytes = st.size;
 
+    progress("Extraction de l’archive");
     await extractRarArchive(rarPath, extractDir);
 
     const allFiles = await walkFiles(extractDir);
     extractedFiles = allFiles.length;
 
+    progress("Chargement des produits");
     const supabase = createSupabaseServiceRoleClient();
 
     const { data: products, error: pe } = await supabase.from("product").select("id, code, image_path");
@@ -210,10 +231,14 @@ export async function runImportProductPhotosFromFtp(): Promise<ImportPhotosFromF
       if (key) byCode.set(key, { id: row.id, image_path: row.image_path ?? null });
     }
 
-    for (const filePath of allFiles) {
-      const ext = path.extname(filePath);
-      if (!IMAGE_EXT.has(ext.toLowerCase())) continue;
+    const imageFiles = allFiles.filter((filePath) => IMAGE_EXT.has(path.extname(filePath).toLowerCase()));
+    let uploadIndex = 0;
 
+    for (const filePath of imageFiles) {
+      uploadIndex += 1;
+      progress("Envoi des images", uploadIndex, imageFiles.length);
+
+      const ext = path.extname(filePath);
       const base = path.basename(filePath, ext);
       const key = normalizeCodeKey(base);
       if (!key) {
