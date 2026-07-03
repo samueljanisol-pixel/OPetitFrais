@@ -8,6 +8,7 @@ export type PhotoZipProgress = {
   phase: string
   current?: number
   total?: number
+  percent?: number
 }
 
 type ProductPhotoRow = {
@@ -55,6 +56,14 @@ export async function buildProductPhotosZip(
     zip.file(archiveName, buf)
   }
 
-  onProgress?.({ phase: 'Création de l’archive' })
-  return zip.generateAsync({ type: 'blob', compression: 'DEFLATE', compressionOptions: { level: 6 } })
+  onProgress?.({ phase: 'Création de l’archive', percent: 0 })
+  return zip.generateAsync(
+    { type: 'blob', compression: 'DEFLATE', compressionOptions: { level: 6 } },
+    (metadata) => {
+      onProgress?.({
+        phase: 'Création de l’archive',
+        percent: Math.round(metadata.percent),
+      })
+    },
+  )
 }

@@ -10,6 +10,37 @@ export type FtpExportMode = 'client' | 'server'
 
 export type FtpExportProgress = {
   message: string
+  percent: number
+}
+
+function clampPercent(n: number): number {
+  return Math.max(0, Math.min(100, Math.round(n)))
+}
+
+function clientZipPercent(phase: string, current?: number, total?: number, zipPercent?: number): number {
+  if (phase === 'Chargement des produits') return 5
+  if (phase === 'Préparation des images' && typeof current === 'number' && typeof total === 'number' && total > 0) {
+    return clampPercent(10 + (current / total) * 65)
+  }
+  if (phase === 'Création de l’archive' && typeof zipPercent === 'number') {
+    return clampPercent(78 + (zipPercent / 100) * 14)
+  }
+  if (phase === 'Envoi vers le FTP') return 96
+  return 0
+}
+
+function serverExportPercent(phase: string, current?: number, total?: number): number {
+  if (typeof current === 'number' && typeof total === 'number' && total > 0) {
+    if (phase === 'Préparation des images') {
+      return clampPercent(15 + (current / total) * 60)
+    }
+    return clampPercent((current / total) * 90)
+  }
+  if (phase === 'Chargement des produits') return 8
+  if (phase === 'Création de l’archive') return 82
+  if (phase === 'Connexion FTP') return 90
+  if (phase === 'Envoi de l’archive') return 96
+  return 0
 }
 
 export async function runProductPhotoFtpExport(
@@ -18,16 +49,19 @@ export async function runProductPhotoFtpExport(
 ): Promise<{ ok: boolean; message: string }> {
   if (mode === 'client') {
     const supabase = createSupabaseBrowserClient()
-    onProgress({ message: 'Préparation de l’archive…' })
+    onProgress({ message: 'Chargement des produits…', percent: 5 })
     const zipBlob = await buildProductPhotosZip(supabase, (p) => {
+      const percent = clientZipPercent(p.phase, p.current, p.total, p.percent)
       if (typeof p.current === 'number' && typeof p.total === 'number') {
-        onProgress({ message: `${p.phase} (${p.current}/${p.total})…` })
+        onProgress({ message: `${p.phase} (${p.current}/${p.total})…`, percent })
+      } else if (typeof p.percent === 'number') {
+        onProgress({ message: `${p.phase} (${p.percent} %)…`, percent })
       } else {
-        onProgress({ message: `${p.phase}…` })
+        onProgress({ message: `${p.phase}…`, percent })
       }
     })
 
-    onProgress({ message: 'Envoi vers le FTP…' })
+    onProgress({ message: 'Envoi vers le FTP…', percent: 96 })
     const form = new FormData()
     form.append('archive', zipBlob, FTP_ARCHIVE_NAME)
     const r = await fetch('/api/products/export-photos-ftp', {
@@ -42,13 +76,14 @@ export async function runProductPhotoFtpExport(
     if (!j.ok) {
       return { ok: false, message: j.errors?.join(' ') || 'Export échoué' }
     }
+    onProgress({ message: 'Export terminé', percent: 100 })
     return {
       ok: true,
       message: `Archive envoyée (${j.uploadedBytes ?? 0} octets) : ${FTP_ARCHIVE_NAME}`,
     }
   }
 
-  onProgress({ message: 'Export serveur…' })
+  onProgress({ message: 'Export serveur…', percent: 2 })
   const r = await fetch('/api/products/export-photos-ftp', {
     method: 'POST',
     credentials: 'include',
@@ -74,15 +109,18 @@ export async function runProductPhotoFtpExport(
   await consumeEventStream(r, (event, data) => {
     if (event === 'progress' && data && typeof data === 'object' && 'phase' in data) {
       const p = data as { phase?: string; current?: number; total?: number }
+      const phase = String(p.phase ?? 'Export')
+      const percent = serverExportPercent(phase, p.current, p.total)
       if (typeof p.current === 'number' && typeof p.total === 'number') {
-        onProgress({ message: `${p.phase ?? 'Export'} (${p.current}/${p.total})…` })
+        onProgress({ message: `${phase} (${p.current}/${p.total})…`, percent })
       } else {
-        onProgress({ message: `${p.phase ?? 'Export'}…` })
+        onProgress({ message: `${phase}…`, percent })
       }
       return
     }
     if (event === 'done' && data && typeof data === 'object') {
       outcome.result = data as ExportPhotosToFtpResult & { archiveName?: string }
+      onProgress({ message: 'Export terminé', percent: 100 })
     }
     if (event === 'error' && data && typeof data === 'object' && 'error' in data) {
       const errMsg = (data as { error?: unknown }).error

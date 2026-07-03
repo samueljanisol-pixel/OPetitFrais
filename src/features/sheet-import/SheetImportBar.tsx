@@ -11,6 +11,7 @@ import {
   DialogTitle,
   FormControlLabel,
   FormGroup,
+  LinearProgress,
   Typography,
 } from '@mui/material'
 import { SHEET_IMPORT_ENABLED } from './config'
@@ -82,6 +83,7 @@ export function SheetImportBar({ onDone, canWriteProducts = false }: Props) {
   const [ftpMsg, setFtpMsg] = useState<string | null>(null)
   const [ftpExportLoading, setFtpExportLoading] = useState(false)
   const [ftpExportMsg, setFtpExportMsg] = useState<string | null>(null)
+  const [ftpExportProgress, setFtpExportProgress] = useState<number | null>(null)
   const [dialogOpen, setDialogOpen] = useState(false)
   const [fields, setFields] = useState<SheetImportFields>({ ...DEFAULT_SHEET_IMPORT_FIELDS })
 
@@ -212,11 +214,17 @@ export function SheetImportBar({ onDone, canWriteProducts = false }: Props) {
       return
     setFtpExportLoading(true)
     setFtpExportMsg('Démarrage…')
+    setFtpExportProgress(0)
     try {
-      const outcome = await runProductPhotoFtpExport('client', (p) => setFtpExportMsg(p.message))
+      const outcome = await runProductPhotoFtpExport('client', (p) => {
+        setFtpExportMsg(p.message)
+        setFtpExportProgress(p.percent)
+      })
       setFtpExportMsg(outcome.message)
+      if (outcome.ok) setFtpExportProgress(100)
     } catch (e) {
       setFtpExportMsg(e instanceof Error ? e.message : String(e))
+      setFtpExportProgress(null)
     } finally {
       setFtpExportLoading(false)
     }
@@ -282,6 +290,12 @@ export function SheetImportBar({ onDone, canWriteProducts = false }: Props) {
           <p className="text-amber-900/95 leading-snug whitespace-pre-wrap border-t border-amber-200/80 pt-2 mt-1">
             Export : {ftpExportMsg}
           </p>
+        ) : null}
+        {ftpExportLoading && ftpExportProgress != null ? (
+          <div className="border-t border-amber-200/80 pt-2 mt-1">
+            <LinearProgress variant="determinate" value={ftpExportProgress} color="warning" />
+            <p className="text-xs text-amber-900/80 mt-1">{ftpExportProgress} %</p>
+          </div>
         ) : null}
       </div>
 

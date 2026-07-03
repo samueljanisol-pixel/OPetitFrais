@@ -28,10 +28,13 @@ Les vendeurs se créent dans **Paramètres → Vendeurs**. Les liaisons par cond
 
 Page mobile pour photographier les produits (PWA ou navigateur) :
 
-- Sélection d’un produit (recherche nom/code), prise de photo (`capture="environment"`).
-- **Détourage optionnel** : modèle IA `@imgly/background-removal` (~40 Mo), activable par appareil (`localStorage`). En-têtes COOP/COEP sur cette route uniquement (`next.config.ts`).
+- Sélection d’un produit (recherche nom/code), **prise de photo** ou **galerie**.
+- Détourage optionnel : modèle IA `@imgly/background-removal` (~40 Mo), activable par appareil (`localStorage`). En-têtes COOP/COEP `credentialless` sur cette route (`next.config.ts`). Vignettes via `ProductPhotoThumb` (téléchargement Supabase → blob URL, compatible COEP).
 - **Format final** : JPEG **100×100 px**, fond blanc, ratio conservé (`src/lib/products/photo-normalize.ts`).
-- Prévisualisation et validation avant enregistrement Supabase (`product.image_path`, bucket `product-photos`).
+- Prévisualisation et validation avant enregistrement ; **rotation** (90° gauche/droite) dans le dialogue de validation.
+- Liste produits : vignette 44×44, filtre **Sans photo** / **Avec photo**.
+- Après détourage : recadrage sur le sujet visible, **agrandissement** pour remplir le cadre avec ~6 % de marge, centrage dans le carré 100×100 (`photo-normalize.ts`).
+- Export FTP : jauge de progression (%).
 - Lien depuis la liste produits (**Photos terrain**) et la fiche produit (`?productId=`).
 
 ### Export / import FTP (`Photos_Produits.zip`)
