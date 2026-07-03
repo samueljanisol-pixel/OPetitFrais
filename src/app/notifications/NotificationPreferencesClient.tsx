@@ -11,9 +11,17 @@ import {
   Switch,
   Typography,
 } from "@mui/material";
+import NotificationsOutlinedIcon from "@mui/icons-material/NotificationsOutlined";
+import PhoneAndroidOutlinedIcon from "@mui/icons-material/PhoneAndroidOutlined";
 import AppLink from "@/components/AppLink";
 import { useSessionPermissions } from "@/lib/auth/useSessionPermissions";
-import { subscribeToPush, unsubscribeFromPush, getPushSupport } from "@/lib/notifications/usePushNotifications";
+import {
+  subscribeToPush,
+  unsubscribeFromPush,
+  getDevicePushState,
+  pushStatusMessageKey,
+  type DevicePushState,
+} from "@/lib/notifications/usePushNotifications";
 import type { NotificationTypeKey } from "@/lib/notifications/types";
 import { useBackChevronIcon } from "@/lib/i18n/useBackChevronIcon";
 
@@ -24,37 +32,57 @@ type PreferenceItem = {
   pushEnabled: boolean;
 };
 
+type SavingTarget = "bell" | "push" | NotificationTypeKey | null;
+
+function isEventEnabled(pref: PreferenceItem): boolean {
+  return pref.inAppEnabled && pref.pushEnabled;
+}
+
 export default function NotificationPreferencesClient() {
   const t = useTranslations("backoffice.notifications");
   const tCommon = useTranslations("common");
   const BackChevron = useBackChevronIcon();
   const { loading: sessionLoading, can } = useSessionPermissions();
   const [preferences, setPreferences] = useState<PreferenceItem[]>([]);
+  const [globalInAppEnabled, setGlobalInAppEnabled] = useState(true);
+  const [globalPushPrefEnabled, setGlobalPushPrefEnabled] = useState(false);
+  const [devicePush, setDevicePush] = useState<DevicePushState | null>(null);
   const [vapidPublicKey, setVapidPublicKey] = useState<string | null>(null);
   const [pushConfigured, setPushConfigured] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState<string | null>(null);
+  const [saving, setSaving] = useState<SavingTarget>(null);
   const [error, setError] = useState<string | null>(null);
   const [pushMessage, setPushMessage] = useState<string | null>(null);
 
-  const pushSupport = getPushSupport();
+  const refreshDevicePush = useCallback(async () => {
+    const state = await getDevicePushState();
+    setDevicePush(state);
+    return state;
+  }, []);
 
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch("/api/notifications/preferences", { credentials: "include" });
-      const json = (await res.json()) as {
+      const [prefRes] = await Promise.all([
+        fetch("/api/notifications/preferences", { credentials: "include" }),
+        refreshDevicePush(),
+      ]);
+      const json = (await prefRes.json()) as {
         preferences: PreferenceItem[];
+        globalInAppEnabled?: boolean;
+        globalPushEnabled?: boolean;
         pushConfigured: boolean;
         vapidPublicKey: string | null;
         error?: string;
       };
-      if (!res.ok) {
+      if (!prefRes.ok) {
         setError(json.error ?? tCommon("error"));
         return;
       }
       setPreferences(json.preferences ?? []);
+      setGlobalInAppEnabled(json.globalInAppEnabled ?? true);
+      setGlobalPushPrefEnabled(json.globalPushEnabled ?? false);
       setPushConfigured(json.pushConfigured ?? false);
       setVapidPublicKey(json.vapidPublicKey);
     } catch {
@@ -62,79 +90,142 @@ export default function NotificationPreferencesClient() {
     } finally {
       setLoading(false);
     }
-  }, [tCommon]);
+  }, [refreshDevicePush, tCommon]);
 
   useEffect(() => {
     void load();
   }, [load]);
 
-  const updatePreference = useCallback(
-    async (typeKey: NotificationTypeKey, patch: { inAppEnabled?: boolean; pushEnabled?: boolean }) => {
-      setSaving(typeKey);
-      setPushMessage(null);
-      setError(null);
-
-      const current = preferences.find((p) => p.typeKey === typeKey);
-      if (!current) return;
-
-      const nextInApp = patch.inAppEnabled ?? current.inAppEnabled;
-      let nextPush = patch.pushEnabled ?? current.pushEnabled;
-
-      if (patch.pushEnabled === true) {
-        if (!pushConfigured || !vapidPublicKey) {
-          setPushMessage(t("pushNotConfigured"));
-          setSaving(null);
-          return;
-        }
-        const sub = await subscribeToPush(vapidPublicKey);
-        if (!sub.ok) {
-          if (sub.error === "ios_requires_install") {
-            setPushMessage(t("iosInstallHint"));
-          } else if (sub.error === "denied") {
-            setPushMessage(t("pushDenied"));
-          } else if (sub.error === "unsupported") {
-            setPushMessage(t("pushUnsupported"));
-          } else if (sub.error === "insecure_context") {
-            setPushMessage(t("pushInsecureContext"));
-          } else if (sub.error === "push_service_unavailable") {
-            setPushMessage(t("pushServiceUnavailable"));
-          } else {
-            setPushMessage(t("pushSubscribeError"));
-          }
-          nextPush = false;
-        }
-      } else if (patch.pushEnabled === false) {
-        await unsubscribeFromPush();
+  const patchGlobal = useCallback(
+    async (patch: { inAppEnabled?: boolean; pushEnabled?: boolean }) => {
+      const res = await fetch("/api/notifications/preferences", {
+        method: "PATCH",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ global: true, ...patch }),
+      });
+      const json = (await res.json()) as {
+        error?: string;
+        preferences?: PreferenceItem[];
+        globalInAppEnabled?: boolean;
+        globalPushEnabled?: boolean;
+      };
+      if (!res.ok) {
+        throw new Error(json.error ?? tCommon("error"));
       }
+      if (json.preferences) {
+        setPreferences(json.preferences);
+      }
+      if (json.globalInAppEnabled !== undefined) setGlobalInAppEnabled(json.globalInAppEnabled);
+      if (json.globalPushEnabled !== undefined) setGlobalPushPrefEnabled(json.globalPushEnabled);
+    },
+    [tCommon],
+  );
 
+  const patchEvent = useCallback(
+    async (typeKey: NotificationTypeKey, enabled: boolean) => {
+      const res = await fetch("/api/notifications/preferences", {
+        method: "PATCH",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          typeKey,
+          inAppEnabled: enabled,
+          pushEnabled: enabled,
+        }),
+      });
+      const json = (await res.json()) as {
+        error?: string;
+        preferences?: PreferenceItem[];
+        globalInAppEnabled?: boolean;
+        globalPushEnabled?: boolean;
+      };
+      if (!res.ok) {
+        throw new Error(json.error ?? tCommon("error"));
+      }
+      const updated = json.preferences?.find((p) => p.typeKey === typeKey);
+      if (json.preferences) {
+        setPreferences(json.preferences);
+      } else if (updated) {
+        setPreferences((prev) => prev.map((p) => (p.typeKey === typeKey ? updated : p)));
+      }
+      if (json.globalInAppEnabled !== undefined) setGlobalInAppEnabled(json.globalInAppEnabled);
+      if (json.globalPushEnabled !== undefined) setGlobalPushPrefEnabled(json.globalPushEnabled);
+    },
+    [tCommon],
+  );
+
+  const mapPushError = useCallback(
+    (code: string) => {
+      if (code === "ios_requires_install") return t("iosInstallHint");
+      if (code === "denied") return t("pushDenied");
+      if (code === "unsupported") return t("pushUnsupported");
+      if (code === "insecure_context") return t("pushInsecureContext");
+      if (code === "push_service_unavailable") return t("pushServiceUnavailable");
+      return t("pushSubscribeError");
+    },
+    [t],
+  );
+
+  const onToggleBell = useCallback(
+    async (enabled: boolean) => {
+      setSaving("bell");
+      setError(null);
       try {
-        const res = await fetch("/api/notifications/preferences", {
-          method: "PATCH",
-          credentials: "include",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            typeKey,
-            inAppEnabled: nextInApp,
-            pushEnabled: nextPush,
-          }),
-        });
-        const json = (await res.json()) as { error?: string; preference?: PreferenceItem };
-        if (!res.ok) {
-          setError(json.error ?? tCommon("error"));
-          return;
-        }
-        if (json.preference) {
-          setPreferences((prev) =>
-            prev.map((p) => (p.typeKey === typeKey ? { ...p, ...json.preference! } : p)),
-          );
-        }
-      } catch {
-        setError(tCommon("networkError"));
+        await patchGlobal({ inAppEnabled: enabled });
+      } catch (e) {
+        setError(e instanceof Error ? e.message : tCommon("error"));
       } finally {
         setSaving(null);
       }
     },
-    [preferences, pushConfigured, vapidPublicKey, t, tCommon],
+    [patchGlobal, tCommon],
+  );
+
+  const onTogglePush = useCallback(
+    async (enabled: boolean) => {
+      setSaving("push");
+      setPushMessage(null);
+      setError(null);
+
+      try {
+        if (enabled) {
+          if (!pushConfigured || !vapidPublicKey) {
+            setPushMessage(t("pushNotConfigured"));
+            return;
+          }
+          const sub = await subscribeToPush(vapidPublicKey);
+          if (!sub.ok) {
+            setPushMessage(mapPushError(sub.error));
+            await refreshDevicePush();
+            return;
+          }
+        } else {
+          await unsubscribeFromPush();
+        }
+        await refreshDevicePush();
+      } catch (e) {
+        setError(e instanceof Error ? e.message : tCommon("error"));
+      } finally {
+        setSaving(null);
+      }
+    },
+    [mapPushError, pushConfigured, refreshDevicePush, t, tCommon, vapidPublicKey],
+  );
+
+  const onToggleEvent = useCallback(
+    async (typeKey: NotificationTypeKey, enabled: boolean) => {
+      setSaving(typeKey);
+      setError(null);
+      try {
+        await patchEvent(typeKey, enabled);
+      } catch (e) {
+        setError(e instanceof Error ? e.message : tCommon("error"));
+      } finally {
+        setSaving(null);
+      }
+    },
+    [patchEvent, tCommon],
   );
 
   if (sessionLoading || loading) {
@@ -146,6 +237,15 @@ export default function NotificationPreferencesClient() {
   }
 
   const hasAccess = can("commandes_fournisseur.consolidation");
+  const pushActiveOnDevice = devicePush?.activeOnDevice ?? false;
+  const pushStatusKey = devicePush ? pushStatusMessageKey(devicePush) : null;
+  const pushToggleDisabled =
+    saving === "push" ||
+    !devicePush?.support.supported ||
+    devicePush?.permission === "denied";
+
+  const hasPushOnAnotherDevice =
+    globalPushPrefEnabled && !pushActiveOnDevice && (devicePush?.support.supported ?? false);
 
   return (
     <main className="mx-auto w-full max-w-lg px-4 py-6">
@@ -171,16 +271,6 @@ export default function NotificationPreferencesClient() {
           {pushMessage}
         </Alert>
       ) : null}
-      {pushSupport.isIos && !pushSupport.isStandalone ? (
-        <Alert severity="info" sx={{ mb: 2 }}>
-          {t("iosInstallHint")}
-        </Alert>
-      ) : null}
-      {!pushSupport.contextOk ? (
-        <Alert severity="warning" sx={{ mb: 2 }}>
-          {t("pushInsecureContext")}
-        </Alert>
-      ) : null}
 
       {!hasAccess || preferences.length === 0 ? (
         <Paper elevation={0} sx={{ p: 3, border: 1, borderColor: "divider", borderRadius: 2 }}>
@@ -188,46 +278,120 @@ export default function NotificationPreferencesClient() {
         </Paper>
       ) : (
         <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
-          {preferences.map((pref) => (
-            <Paper
-              key={pref.typeKey}
-              elevation={0}
-              sx={{ p: 2, border: 1, borderColor: "divider", borderRadius: 2 }}
-            >
-              <Typography variant="subtitle1" sx={{ fontWeight: 600 }} gutterBottom>
-                {t(`types.${pref.typeKey}.label`)}
+          <Paper elevation={0} sx={{ p: 2, border: 1, borderColor: "divider", borderRadius: 2 }}>
+            <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 0.5 }}>
+              <NotificationsOutlinedIcon color="success" fontSize="small" />
+              <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
+                {t("bellLabel")}
               </Typography>
-              <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
-                {t(`types.${pref.typeKey}.description`)}
+            </Box>
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
+              {t("bellDescription")}
+            </Typography>
+            <FormControlLabel
+              control={
+                <Switch
+                  checked={globalInAppEnabled}
+                  disabled={saving === "bell"}
+                  onChange={(e) => void onToggleBell(e.target.checked)}
+                  color="success"
+                />
+              }
+              label={globalInAppEnabled ? t("enabled") : t("disabled")}
+              sx={{ display: "flex", minHeight: 44, ml: 0 }}
+            />
+          </Paper>
+
+          <Paper elevation={0} sx={{ p: 2, border: 1, borderColor: "divider", borderRadius: 2 }}>
+            <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 0.5 }}>
+              <PhoneAndroidOutlinedIcon color="success" fontSize="small" />
+              <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
+                {t("pushLabel")}
               </Typography>
-              <FormControlLabel
-                control={
-                  <Switch
-                    checked={pref.inAppEnabled}
-                    disabled={saving === pref.typeKey}
-                    onChange={(e) =>
-                      void updatePreference(pref.typeKey, { inAppEnabled: e.target.checked })
+            </Box>
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+              {t("pushDescription")}
+            </Typography>
+            {pushStatusKey ? (
+              <Typography
+                variant="caption"
+                color={pushActiveOnDevice ? "success.main" : "text.secondary"}
+                sx={{ display: "block", mb: 1.5 }}
+              >
+                {t(pushStatusKey)}
+              </Typography>
+            ) : null}
+            <FormControlLabel
+              control={
+                <Switch
+                  checked={pushActiveOnDevice}
+                  disabled={pushToggleDisabled}
+                  onChange={(e) => void onTogglePush(e.target.checked)}
+                  color="success"
+                />
+              }
+              label={pushActiveOnDevice ? t("enabledOnDevice") : t("disabledOnDevice")}
+              sx={{ display: "flex", minHeight: 44, ml: 0 }}
+            />
+            {hasPushOnAnotherDevice ? (
+              <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 1 }}>
+                {t("pushEnabledElsewhereHint")}
+              </Typography>
+            ) : null}
+          </Paper>
+
+          <Paper elevation={0} sx={{ p: 2, border: 1, borderColor: "divider", borderRadius: 2 }}>
+            <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 1.5 }}>
+              {t("typesSectionTitle")}
+            </Typography>
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
+              {t("typesSectionHint")}
+            </Typography>
+            {preferences.map((pref, index) => {
+              const enabled = isEventEnabled(pref);
+              const eventSaving = saving === pref.typeKey;
+              return (
+                <Box
+                  key={pref.typeKey}
+                  sx={{
+                    pt: index > 0 ? 1.5 : 0,
+                    mt: index > 0 ? 1.5 : 0,
+                    borderTop: index > 0 ? 1 : 0,
+                    borderColor: "divider",
+                  }}
+                >
+                  <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                    {t(`types.${pref.typeKey}.label`)}
+                  </Typography>
+                  <Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 0.5 }}>
+                    {t(`types.${pref.typeKey}.description`)}
+                  </Typography>
+                  <FormControlLabel
+                    control={
+                      <Switch
+                        checked={enabled}
+                        disabled={eventSaving || saving === "bell" || saving === "push"}
+                        onChange={(e) => void onToggleEvent(pref.typeKey, e.target.checked)}
+                        color="success"
+                      />
                     }
-                    color="success"
+                    label={enabled ? t("eventEnabled") : t("eventDisabled")}
+                    sx={{ display: "flex", minHeight: 44, ml: 0 }}
                   />
-                }
-                label={t("inAppLabel")}
-                sx={{ display: "flex", minHeight: 44, ml: 0 }}
-              />
-              <FormControlLabel
-                control={
-                  <Switch
-                    checked={pref.pushEnabled}
-                    disabled={saving === pref.typeKey || !pushSupport.supported}
-                    onChange={(e) => void updatePreference(pref.typeKey, { pushEnabled: e.target.checked })}
-                    color="success"
-                  />
-                }
-                label={t("pushLabel")}
-                sx={{ display: "flex", minHeight: 44, ml: 0 }}
-              />
-            </Paper>
-          ))}
+                  {enabled && !globalInAppEnabled ? (
+                    <Typography variant="caption" color="text.secondary" sx={{ display: "block" }}>
+                      {t("eventClocheOffHint")}
+                    </Typography>
+                  ) : null}
+                  {enabled && !pushActiveOnDevice ? (
+                    <Typography variant="caption" color="text.secondary" sx={{ display: "block" }}>
+                      {t("eventPushOffHint")}
+                    </Typography>
+                  ) : null}
+                </Box>
+              );
+            })}
+          </Paper>
         </Box>
       )}
     </main>

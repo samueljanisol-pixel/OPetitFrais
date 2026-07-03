@@ -52,6 +52,11 @@ VAPID_SUBJECT=mailto:admin@opetitfrais.fr
 
 Service worker : `public/sw.js` (handlers `push` et `notificationclick`).
 
+## Préférences utilisateur (`/notifications`)
+
+- **Notification Cloche** — toggle global (compte), s'applique à tous les appareils.
+- **Notification Push** — toggle **propre à l'appareil courant** : reflète l'autorisation navigateur et l'abonnement push de ce poste (tablette, téléphone, ordinateur). Désactiver sur un appareil ne désactive pas le push sur les autres.
+
 ## Compatibilité mobile / desktop
 
 | Plateforme | In-app | Push |

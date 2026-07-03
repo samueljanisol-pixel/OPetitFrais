@@ -11,23 +11,26 @@ import {
 } from "@/lib/notifications/types";
 import { isWebPushConfigured } from "@/lib/notifications/send-web-push";
 
-export async function GET() {
-  const gate = await requireAuthenticatedUser();
-  if (!gate.ok) {
-    return NextResponse.json({ error: gate.error }, { status: gate.status });
-  }
+type PreferenceDto = {
+  typeKey: NotificationTypeKey;
+  permission: string;
+  inAppEnabled: boolean;
+  pushEnabled: boolean;
+};
 
-  const availableTypes = notificationTypesForPermissions(gate.permissions, gate.isFullAccess);
+async function loadPreferencesDto(
+  userId: string,
+  availableTypes: NotificationTypeKey[],
+): Promise<PreferenceDto[]> {
   const supabase = await createSupabaseServerClient();
-
   const { data: rows, error } = await supabase
     .from("user_notification_preferences")
     .select("type_key, in_app_enabled, push_enabled")
-    .eq("user_id", gate.userId)
+    .eq("user_id", userId)
     .in("type_key", availableTypes);
 
   if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    throw new Error(error.message);
   }
 
   const rowMap = new Map(
@@ -40,7 +43,7 @@ export async function GET() {
     ]),
   );
 
-  const preferences = availableTypes.map((typeKey) => {
+  return availableTypes.map((typeKey) => {
     const stored = rowMap.get(typeKey);
     const defaults = DEFAULT_NOTIFICATION_PREFERENCES[typeKey];
     return {
@@ -50,12 +53,39 @@ export async function GET() {
       pushEnabled: stored?.push_enabled ?? defaults.push_enabled,
     };
   });
+}
 
-  return NextResponse.json({
-    preferences,
-    pushConfigured: isWebPushConfigured(),
-    vapidPublicKey: process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY ?? null,
-  });
+function summarizeGlobals(preferences: PreferenceDto[]) {
+  return {
+    globalInAppEnabled: preferences.length > 0 && preferences.every((p) => p.inAppEnabled),
+    globalPushEnabled: preferences.length > 0 && preferences.every((p) => p.pushEnabled),
+  };
+}
+
+export async function GET() {
+  const gate = await requireAuthenticatedUser();
+  if (!gate.ok) {
+    return NextResponse.json({ error: gate.error }, { status: gate.status });
+  }
+
+  const availableTypes = notificationTypesForPermissions(gate.permissions, gate.isFullAccess);
+
+  try {
+    const preferences = await loadPreferencesDto(gate.userId, availableTypes);
+    const globals = summarizeGlobals(preferences);
+
+    return NextResponse.json({
+      preferences,
+      ...globals,
+      pushConfigured: isWebPushConfigured(),
+      vapidPublicKey: process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY ?? null,
+    });
+  } catch (e) {
+    return NextResponse.json(
+      { error: e instanceof Error ? e.message : "Erreur serveur" },
+      { status: 500 },
+    );
+  }
 }
 
 export async function PATCH(req: Request) {
@@ -68,6 +98,7 @@ export async function PATCH(req: Request) {
     typeKey?: string;
     inAppEnabled?: boolean;
     pushEnabled?: boolean;
+    global?: boolean;
   };
   try {
     body = (await req.json()) as typeof body;
@@ -75,43 +106,78 @@ export async function PATCH(req: Request) {
     return NextResponse.json({ error: "JSON invalide" }, { status: 400 });
   }
 
-  const typeKey = body.typeKey;
-  if (!typeKey || !isNotificationTypeKey(typeKey)) {
+  const availableTypes = notificationTypesForPermissions(gate.permissions, gate.isFullAccess);
+  if (availableTypes.length === 0) {
+    return NextResponse.json({ error: "Aucun type de notification disponible" }, { status: 403 });
+  }
+
+  const targetTypes: NotificationTypeKey[] = body.global
+    ? availableTypes
+    : body.typeKey && isNotificationTypeKey(body.typeKey)
+      ? [body.typeKey]
+      : [];
+
+  if (targetTypes.length === 0) {
     return NextResponse.json({ error: "Type de notification invalide" }, { status: 400 });
   }
 
-  const availableTypes = notificationTypesForPermissions(gate.permissions, gate.isFullAccess);
-  if (!availableTypes.includes(typeKey)) {
-    return NextResponse.json({ error: "Permission refusée pour ce type" }, { status: 403 });
+  for (const typeKey of targetTypes) {
+    if (!availableTypes.includes(typeKey)) {
+      return NextResponse.json({ error: "Permission refusée pour ce type" }, { status: 403 });
+    }
   }
-
-  const defaults = DEFAULT_NOTIFICATION_PREFERENCES[typeKey];
-  const inAppEnabled = body.inAppEnabled ?? defaults.in_app_enabled;
-  const pushEnabled = body.pushEnabled ?? defaults.push_enabled;
 
   const supabase = await createSupabaseServerClient();
-  const row: Omit<NotificationPreferenceRow, "user_id"> & { user_id: string; updated_at: string } = {
-    user_id: gate.userId,
-    type_key: typeKey,
-    in_app_enabled: inAppEnabled,
-    push_enabled: pushEnabled,
-    updated_at: new Date().toISOString(),
-  };
 
-  const { error } = await supabase.from("user_notification_preferences").upsert(row, {
-    onConflict: "user_id,type_key",
-  });
-
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+  let existing: PreferenceDto[];
+  try {
+    existing = await loadPreferencesDto(gate.userId, availableTypes);
+  } catch (e) {
+    return NextResponse.json(
+      { error: e instanceof Error ? e.message : "Erreur serveur" },
+      { status: 500 },
+    );
   }
 
-  return NextResponse.json({
-    ok: true,
-    preference: {
-      typeKey,
-      inAppEnabled,
-      pushEnabled,
-    },
-  });
+  const existingMap = new Map(existing.map((p) => [p.typeKey, p]));
+
+  for (const typeKey of targetTypes) {
+    const defaults = DEFAULT_NOTIFICATION_PREFERENCES[typeKey];
+    const current = existingMap.get(typeKey);
+    const inAppEnabled = body.inAppEnabled ?? current?.inAppEnabled ?? defaults.in_app_enabled;
+    const pushEnabled = body.pushEnabled ?? current?.pushEnabled ?? defaults.push_enabled;
+
+    const row: Omit<NotificationPreferenceRow, "user_id"> & { user_id: string; updated_at: string } = {
+      user_id: gate.userId,
+      type_key: typeKey,
+      in_app_enabled: inAppEnabled,
+      push_enabled: pushEnabled,
+      updated_at: new Date().toISOString(),
+    };
+
+    const { error } = await supabase.from("user_notification_preferences").upsert(row, {
+      onConflict: "user_id,type_key",
+    });
+
+    if (error) {
+      return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+  }
+
+  try {
+    const preferences = await loadPreferencesDto(gate.userId, availableTypes);
+    const globals = summarizeGlobals(preferences);
+
+    return NextResponse.json({
+      ok: true,
+      global: Boolean(body.global),
+      preferences,
+      ...globals,
+    });
+  } catch (e) {
+    return NextResponse.json(
+      { error: e instanceof Error ? e.message : "Erreur serveur" },
+      { status: 500 },
+    );
+  }
 }

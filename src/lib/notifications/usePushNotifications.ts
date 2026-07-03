@@ -148,3 +148,57 @@ export async function unsubscribeFromPush(): Promise<void> {
     console.warn("[notifications] push unsubscribe:", err);
   }
 }
+
+export type DevicePushState = {
+  support: PushSupport;
+  permission: NotificationPermission | "unsupported";
+  subscribedOnDevice: boolean;
+  /** true si autorisé et abonné sur ce poste */
+  activeOnDevice: boolean;
+};
+
+/** État push propre au navigateur / appareil courant. */
+export async function getDevicePushState(): Promise<DevicePushState> {
+  const support = getPushSupport();
+  if (!support.supported) {
+    return {
+      support,
+      permission: support.permission,
+      subscribedOnDevice: false,
+      activeOnDevice: false,
+    };
+  }
+
+  try {
+    const reg = await navigator.serviceWorker.ready;
+    const subscription = await reg.pushManager.getSubscription();
+    const subscribedOnDevice = subscription !== null;
+    const activeOnDevice = Notification.permission === "granted" && subscribedOnDevice;
+    return {
+      support,
+      permission: Notification.permission,
+      subscribedOnDevice,
+      activeOnDevice,
+    };
+  } catch {
+    return {
+      support,
+      permission: Notification.permission,
+      subscribedOnDevice: false,
+      activeOnDevice: false,
+    };
+  }
+}
+
+export function pushStatusMessageKey(
+  state: DevicePushState,
+): "pushDenied" | "pushUnsupported" | "pushInsecureContext" | "iosInstallHint" | "pushActiveOnDevice" | "pushInactiveOnDevice" | null {
+  const { support, permission, activeOnDevice } = state;
+  if (!support.contextOk) return "pushInsecureContext";
+  if (!support.supported) return "pushUnsupported";
+  if (support.isIos && !support.isStandalone) return "iosInstallHint";
+  if (permission === "denied") return "pushDenied";
+  if (activeOnDevice) return "pushActiveOnDevice";
+  if (permission === "granted" || permission === "default") return "pushInactiveOnDevice";
+  return null;
+}
