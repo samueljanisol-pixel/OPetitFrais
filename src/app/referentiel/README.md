@@ -5,6 +5,11 @@
 - Colonne **`label_ar`** (libellé arabe optionnel) sur `ref_sales_unit`. Saisie dans l’onglet **Unités de vente** (dialogue Ajouter / Modifier).
 - Affichage arabe dans le **parcours commande** (boutons conditionnement : nom du colis + unité UdV du colis). Migration `20260702150000_ref_sales_unit_label_ar.sql`.
 
+## Fournisseurs
+
+- Colonne **`commande_active`** sur `ref_supplier` : interrupteur **Commande** dans l’onglet **Fournisseurs** (liste + dialogue Modifier).
+- Si désactivé : le fournisseur n’apparaît plus en **saisie commande magasin** et aucune nouvelle commande ne peut être créée. Migration `20260703120000_ref_supplier_commande_active.sql`.
+
 ## Vendeurs
 
 Les **vendeurs** (`ref_supplier_vendeur`) sont rattachés à un **fournisseur**. Ils servent à la fois :

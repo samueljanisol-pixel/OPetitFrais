@@ -11,7 +11,8 @@ export async function GET() {
   const supabase = await createSupabaseServerClient();
   const { data, error } = await supabase
     .from("ref_supplier")
-    .select("id, code, label, sort_order")
+    .select("id, code, label, sort_order, commande_active")
+    .eq("commande_active", true)
     .order("sort_order", { ascending: true });
 
   if (error) {

@@ -5,6 +5,10 @@ import { applyCommandeProductPackagingFilter } from "@/lib/commandes-fournisseur
 import { COMMANDE_PACKAGING_SELECT } from "@/lib/commandes-fournisseur/commande-packaging-fields";
 import { productIdsLinkedToCommandeSupplier } from "@/lib/commandes-fournisseur/product-ids-for-commande-supplier";
 import { productPhotoPublicUrl } from "@/lib/products/storage";
+import {
+  isSupplierCommandeActive,
+  SUPPLIER_COMMANDE_INACTIVE_MSG,
+} from "@/lib/commandes-fournisseur/supplier-commande-active";
 
 const PRODUCT_SELECT = `id, code, name, name_ar, category_id, supplier_id, image_path, allow_unit_in_commande, ref_category(label, sort_order), ref_sales_unit(label, label_ar, code), product_packaging(${COMMANDE_PACKAGING_SELECT})`;
 
@@ -51,6 +55,11 @@ export async function GET(req: Request) {
   const commandeId = url.searchParams.get("commandeId")?.trim() || null;
 
   const supabase = await createSupabaseServerClient();
+
+  const commandeOk = await isSupplierCommandeActive(supabase, supplierId);
+  if (!commandeOk) {
+    return NextResponse.json({ error: SUPPLIER_COMMANDE_INACTIVE_MSG }, { status: 403 });
+  }
 
   let rows: ProductRow[] = [];
 

@@ -10,6 +10,12 @@ export type RefRow = {
   created_at?: string
 }
 
+/** Fournisseur catalogue (`ref_supplier`). */
+export type RefSupplierRow = RefRow & {
+  /** Commandes magasin autorisées pour ce fournisseur. */
+  commande_active: boolean
+}
+
 /** Sous-catégorie catalogue, rattachée à une catégorie. */
 export type RefSubcategoryRow = RefRow & {
   category_id: string

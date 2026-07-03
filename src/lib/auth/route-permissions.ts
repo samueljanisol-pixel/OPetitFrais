@@ -44,6 +44,7 @@ const rules: RouteRule[] = [
     match: (p) => p === "/cuisine" || p === "/cuisine/",
     permission: { anyOf: ["cuisine.saisie", "cuisine.historique"] },
   },
+  { match: (p) => p.startsWith("/notifications"), permission: null },
   { match: (p) => p === "/", permission: null },
 ];
 

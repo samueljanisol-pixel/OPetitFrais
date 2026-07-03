@@ -2,6 +2,10 @@ import { NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { requireAnyApiPermission, requireApiPermission } from "@/lib/auth/require-permission-api";
 import { userHasMagasin } from "@/lib/commandes-fournisseur/api-helpers";
+import {
+  isSupplierCommandeActive,
+  SUPPLIER_COMMANDE_INACTIVE_MSG,
+} from "@/lib/commandes-fournisseur/supplier-commande-active";
 
 /** Liste des commandes magasin (caissier : filtre magasinId obligatoire). */
 export async function GET(req: Request) {
@@ -82,6 +86,11 @@ export async function POST(req: Request) {
   const okMag = await userHasMagasin(supabase, gate.userId, magasinId);
   if (!okMag) {
     return NextResponse.json({ error: "Magasin non autorisé" }, { status: 403 });
+  }
+
+  const commandeOk = await isSupplierCommandeActive(supabase, supplierId);
+  if (!commandeOk) {
+    return NextResponse.json({ error: SUPPLIER_COMMANDE_INACTIVE_MSG }, { status: 403 });
   }
 
   const { data: row, error } = await supabase

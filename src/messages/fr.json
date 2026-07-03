@@ -482,12 +482,42 @@
           "entreesShort": "Ent.",
           "sortiesShort": "Sort.",
           "ventes": "Ventes",
-          "ventesShort": "Vte."
+          "ventesShort": "Vte.",
+          "ventesTotal": "Total",
+          "ventesTotalShort": "Tot."
         },
         "totals": {
           "entrees": "Entrées",
           "sorties": "Sorties",
           "ventes": "Ventes"
+        }
+      }
+    },
+    "notifications": {
+      "title": "Notifications",
+      "settingsTitle": "Paramètres de notifications",
+      "settingsSubtitle": "Choisissez comment vous souhaitez être informé.",
+      "settings": "Paramètres notifications",
+      "bellAria": "Notifications{count, plural, =0 {} other { ({count} non lues)}}",
+      "loading": "Chargement…",
+      "empty": "Aucune notification",
+      "markAllRead": "Tout marquer lu",
+      "inAppLabel": "Notification in-app (cloche)",
+      "pushLabel": "Notification navigateur (push)",
+      "pushNotConfigured": "Les notifications push ne sont pas encore configurées sur le serveur.",
+      "pushDenied": "Autorisation refusée par le navigateur.",
+      "pushUnsupported": "Votre navigateur ne prend pas en charge les notifications push.",
+      "pushSubscribeError": "Impossible d'activer les notifications push.",
+      "pushInsecureContext": "Le push nécessite https:// ou http://localhost — n'utilisez pas l'adresse réseau (ex. 10.x.x.x).",
+      "pushServiceUnavailable": "Service push indisponible dans ce navigateur (essayez Chrome, ou vérifiez les notifications Windows).",
+      "iosInstallHint": "Sur iPhone, ajoutez l'application à l'écran d'accueil pour recevoir les notifications push.",
+      "noTypesAvailable": "Aucun type de notification disponible pour votre compte.",
+      "types": {
+        "commande_fournisseur": {
+          "validee": {
+            "label": "Commande validée en magasin",
+            "description": "Quand une commande fournisseur est validée par un magasin, avant consolidation."
+          }
         }
       }
     }

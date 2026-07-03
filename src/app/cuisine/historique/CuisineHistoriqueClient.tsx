@@ -32,6 +32,8 @@ import { aggregateProductTotalsBySubcategory } from "@/lib/cuisine/aggregate-pro
 import {
   loadProductSalesQtyForDate,
   mergeProductGroupsWithSales,
+  resolveMagasinColumns,
+  type CuisineProductSalesForDate,
 } from "@/lib/cuisine/load-product-sales-for-date";
 import { useAppFormat } from "@/lib/i18n/useAppFormat";
 import type { CuisineJournalEntryWithProduct } from "@/lib/cuisine/types";
@@ -42,14 +44,19 @@ export default function CuisineHistoriqueClient() {
   const t = useTranslations("backoffice.cuisine.historique");
   const tCommon = useTranslations("common");
   const { locale, formatNumber } = useAppFormat();
-  const { loading: permLoading, canCuisineHistorique, canCuisineSaisie } = useSessionPermissions();
+  const { loading: permLoading, canCuisineHistorique, canCuisineSaisie, linkedMagasins } =
+    useSessionPermissions();
   const supabase = useMemo(() => createSupabaseBrowserClient(), []);
 
   const todayIso = useMemo(() => todayJournalDateIso(), []);
   const [selectedDate, setSelectedDate] = useState(todayIso);
   const [knownDates, setKnownDates] = useState<string[]>([]);
   const [entries, setEntries] = useState<CuisineJournalEntryWithProduct[]>([]);
-  const [salesByProductId, setSalesByProductId] = useState<Map<string, number>>(() => new Map());
+  const [sales, setSales] = useState<CuisineProductSalesForDate>(() => ({
+    byProductId: new Map(),
+    byProductIdAndMagasin: new Map(),
+    magasinsInData: [],
+  }));
   const [err, setErr] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -84,9 +91,13 @@ export default function CuisineHistoriqueClient() {
     }
     if (salesResult.error) {
       setErr((prev) => prev ?? salesResult.error);
-      setSalesByProductId(new Map());
+      setSales({
+        byProductId: new Map(),
+        byProductIdAndMagasin: new Map(),
+        magasinsInData: [],
+      });
     } else {
-      setSalesByProductId(salesResult.byProductId);
+      setSales(salesResult.sales);
     }
     setLoading(false);
   }, [supabase, selectedDate]);
@@ -101,13 +112,19 @@ export default function CuisineHistoriqueClient() {
 
   const totals = useMemo(() => aggregateDayTotals(entries), [entries]);
 
+  const magasinColumns = useMemo(
+    () => resolveMagasinColumns(linkedMagasins.map((m) => m.code), sales.magasinsInData),
+    [linkedMagasins, sales.magasinsInData],
+  );
+
   const productGroups = useMemo(
     () =>
       mergeProductGroupsWithSales(
         aggregateProductTotalsBySubcategory(entries, t("uncategorized"), locale),
-        salesByProductId,
+        sales,
+        magasinColumns,
       ),
-    [entries, locale, salesByProductId, t],
+    [entries, locale, sales, magasinColumns, t],
   );
 
   const totalVentes = useMemo(
@@ -262,14 +279,17 @@ export default function CuisineHistoriqueClient() {
           groups={productGroups}
           locale={locale}
           formatQty={formatQty}
+          magasinColumns={magasinColumns}
           labels={{
             product: t("table.product"),
             entrees: t("table.entrees"),
             sorties: t("table.sorties"),
             ventes: t("table.ventes"),
+            ventesTotal: t("table.ventesTotal"),
             entreesShort: t("table.entreesShort"),
             sortiesShort: t("table.sortiesShort"),
             ventesShort: t("table.ventesShort"),
+            ventesTotalShort: t("table.ventesTotalShort"),
           }}
         />
       )}

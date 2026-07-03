@@ -58,6 +58,8 @@ export type CuisineProductDayTotal = {
   sorties: number;
   /** Quantités vendues du jour (ca_product_day, tous magasins). */
   ventes?: number;
+  /** Ventes ventilées par code magasin (ex. M1, M2). */
+  ventesByMagasin?: Record<string, number>;
 };
 
 export type CuisineSubcategoryTotalsGroup = {

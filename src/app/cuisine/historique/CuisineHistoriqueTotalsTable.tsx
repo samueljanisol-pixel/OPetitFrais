@@ -9,36 +9,56 @@ const denseCell = { py: 0.5, px: 0.75, fontSize: "0.75rem", lineHeight: 1.3 };
 const denseHead = { ...denseCell, fontWeight: 700, whiteSpace: "nowrap" as const };
 const metricHead = {
   ...denseHead,
-  width: "3.75rem",
-  minWidth: "3.75rem",
-  maxWidth: "4.25rem",
-  px: 1,
-  pl: 1.25,
-  pr: 0.5,
+  width: "2.75rem",
+  minWidth: "2.75rem",
+  maxWidth: "3.25rem",
+  px: 0.5,
+  pl: 0.75,
+  pr: 0.25,
 };
 const metricCell = {
   ...denseCell,
-  width: "3.75rem",
-  minWidth: "3.75rem",
-  maxWidth: "4.25rem",
-  px: 1,
-  pl: 1.25,
-  pr: 0.5,
+  width: "2.75rem",
+  minWidth: "2.75rem",
+  maxWidth: "3.25rem",
+  px: 0.5,
+  pl: 0.75,
+  pr: 0.25,
   fontWeight: 600,
+};
+const magHead = {
+  ...denseHead,
+  width: "2.5rem",
+  minWidth: "2.5rem",
+  maxWidth: "2.75rem",
+  px: 0.5,
+  fontSize: "0.7rem",
+};
+const magCell = {
+  ...denseCell,
+  width: "2.5rem",
+  minWidth: "2.5rem",
+  maxWidth: "2.75rem",
+  px: 0.5,
+  fontWeight: 600,
+  fontSize: "0.7rem",
 };
 
 type Props = {
   groups: CuisineSubcategoryTotalsGroup[];
   locale: AppLocale;
   formatQty: (value: number) => string;
+  magasinColumns: string[];
   labels: {
     product: string;
     entrees: string;
     sorties: string;
     ventes: string;
+    ventesTotal: string;
     entreesShort: string;
     sortiesShort: string;
     ventesShort: string;
+    ventesTotalShort: string;
   };
 };
 
@@ -61,7 +81,19 @@ function MetricHeader({
   );
 }
 
-export default function CuisineHistoriqueTotalsTable({ groups, locale, formatQty, labels }: Props) {
+function QtyCell({ value, formatQty }: { value: number; formatQty: (value: number) => string }) {
+  return value > 0 ? formatQty(value) : "—";
+}
+
+export default function CuisineHistoriqueTotalsTable({
+  groups,
+  locale,
+  formatQty,
+  magasinColumns,
+  labels,
+}: Props) {
+  const showMagColumns = magasinColumns.length > 0;
+
   return (
     <Box sx={{ display: "flex", flexDirection: "column", gap: 1.25 }}>
       {groups.map((group) => (
@@ -78,22 +110,35 @@ export default function CuisineHistoriqueTotalsTable({ groups, locale, formatQty
               border: "1px solid",
               borderColor: "divider",
               borderRadius: 1.5,
-              overflow: "hidden",
+              overflowX: "auto",
             }}
           >
-            <Table size="small" sx={{ tableLayout: "fixed", width: "100%" }}>
+            <Table size="small" sx={{ tableLayout: "fixed", minWidth: showMagColumns ? 420 : 280 }}>
               <TableHead>
                 <TableRow sx={{ bgcolor: "grey.50" }}>
-                  <TableCell sx={{ ...denseHead, pr: 1 }}>{labels.product}</TableCell>
+                  <TableCell sx={{ ...denseHead, pr: 1, minWidth: "6rem" }}>{labels.product}</TableCell>
                   <TableCell align="right" sx={metricHead}>
                     <MetricHeader full={labels.entrees} short={labels.entreesShort} />
                   </TableCell>
-                  <TableCell align="right" sx={{ ...metricHead, pl: 1.5 }}>
+                  <TableCell align="right" sx={{ ...metricHead, pl: 1 }}>
                     <MetricHeader full={labels.sorties} short={labels.sortiesShort} />
                   </TableCell>
-                  <TableCell align="right" sx={{ ...metricHead, pl: 1.5 }}>
-                    <MetricHeader full={labels.ventes} short={labels.ventesShort} />
-                  </TableCell>
+                  {showMagColumns
+                    ? magasinColumns.map((mag) => (
+                        <TableCell key={mag} align="right" sx={magHead}>
+                          {mag}
+                        </TableCell>
+                      ))
+                    : (
+                        <TableCell align="right" sx={{ ...metricHead, pl: 1 }}>
+                          <MetricHeader full={labels.ventes} short={labels.ventesShort} />
+                        </TableCell>
+                      )}
+                  {showMagColumns ? (
+                    <TableCell align="right" sx={{ ...metricHead, pl: 0.75 }}>
+                      <MetricHeader full={labels.ventesTotal} short={labels.ventesTotalShort} />
+                    </TableCell>
+                  ) : null}
                 </TableRow>
               </TableHead>
               <TableBody>
@@ -118,14 +163,27 @@ export default function CuisineHistoriqueTotalsTable({ groups, locale, formatQty
                       </Typography>
                     </TableCell>
                     <TableCell align="right" sx={metricCell}>
-                      {product.entrees > 0 ? formatQty(product.entrees) : "—"}
+                      <QtyCell value={product.entrees} formatQty={formatQty} />
                     </TableCell>
-                    <TableCell align="right" sx={{ ...metricCell, pl: 1.5 }}>
-                      {product.sorties > 0 ? formatQty(product.sorties) : "—"}
+                    <TableCell align="right" sx={{ ...metricCell, pl: 1 }}>
+                      <QtyCell value={product.sorties} formatQty={formatQty} />
                     </TableCell>
-                    <TableCell align="right" sx={{ ...metricCell, pl: 1.5 }}>
-                      {(product.ventes ?? 0) > 0 ? formatQty(product.ventes ?? 0) : "—"}
-                    </TableCell>
+                    {showMagColumns
+                      ? magasinColumns.map((mag) => (
+                          <TableCell key={mag} align="right" sx={magCell}>
+                            <QtyCell value={product.ventesByMagasin?.[mag] ?? 0} formatQty={formatQty} />
+                          </TableCell>
+                        ))
+                      : (
+                          <TableCell align="right" sx={{ ...metricCell, pl: 1 }}>
+                            <QtyCell value={product.ventes ?? 0} formatQty={formatQty} />
+                          </TableCell>
+                        )}
+                    {showMagColumns ? (
+                      <TableCell align="right" sx={{ ...metricCell, pl: 0.75 }}>
+                        <QtyCell value={product.ventes ?? 0} formatQty={formatQty} />
+                      </TableCell>
+                    ) : null}
                   </TableRow>
                 ))}
               </TableBody>

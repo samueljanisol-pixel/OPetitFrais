@@ -13,6 +13,7 @@ import {
   isPackSalesUnitUnite,
   labelFromRef,
 } from "@/lib/commandes-fournisseur/product-display";
+import { notifyCommandeValidee } from "@/lib/notifications/notify-commande-validee";
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -274,6 +275,15 @@ export async function PATCH(req: Request, ctx: Ctx) {
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+
+  const becameValidee = body.status === "validee" && current.status !== "validee";
+  if (becameValidee) {
+    try {
+      await notifyCommandeValidee({ commandeId: id, excludeUserId: gate.userId });
+    } catch (err) {
+      console.error("[notifications] notifyCommandeValidee:", err);
+    }
   }
 
   return NextResponse.json({ ok: true });

@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { Button, Paper, Stack, Typography } from "@mui/material";
 import AddCircleOutlineOutlinedIcon from "@mui/icons-material/AddCircleOutlineOutlined";
+import HistoryOutlinedIcon from "@mui/icons-material/HistoryOutlined";
 import RemoveCircleOutlineOutlinedIcon from "@mui/icons-material/RemoveCircleOutlineOutlined";
 import AppLink from "@/components/AppLink";
 import BackNavButton from "@/components/BackNavButton";
@@ -23,7 +24,7 @@ export default function CuisineSaisieClient() {
   const t = useTranslations("backoffice.cuisine.saisie");
   const tCommon = useTranslations("common");
   const { locale, formatNumber } = useAppFormat();
-  const { loading: permLoading, canCuisineSaisie } = useSessionPermissions();
+  const { loading: permLoading, canCuisineSaisie, canCuisineHistorique } = useSessionPermissions();
   const supabase = useMemo(() => createSupabaseBrowserClient(), []);
 
   const journalDate = useJournalDateLive();
@@ -74,13 +75,28 @@ export default function CuisineSaisieClient() {
     <main className="mx-auto w-full max-w-lg px-4 py-4">
       <BackNavButton href="/">{tCommon("home")}</BackNavButton>
 
-      <div className="!mt-2 !mb-4">
-        <Typography variant="h5" component="h1" sx={{ fontWeight: 600 }}>
-          {t("title")}
-        </Typography>
-        <Typography variant="body2" color="text.secondary">
-          {formatJournalDateLabel(locale, journalDate)}
-        </Typography>
+      <div className="!mt-2 !mb-4 flex flex-row items-center justify-between gap-2">
+        <div className="min-w-0">
+          <Typography variant="h5" component="h1" sx={{ fontWeight: 600 }}>
+            {t("title")}
+          </Typography>
+          <Typography variant="body2" color="text.secondary">
+            {formatJournalDateLabel(locale, journalDate)}
+          </Typography>
+        </div>
+        {canCuisineHistorique ? (
+          <Button
+            component={AppLink}
+            href="/cuisine/historique"
+            variant="outlined"
+            color="success"
+            size="small"
+            startIcon={<HistoryOutlinedIcon sx={{ fontSize: 18 }} />}
+            sx={{ textTransform: "none", flexShrink: 0, minHeight: 32, py: 0.25, fontSize: "0.8125rem" }}
+          >
+            {t("historiqueLink")}
+          </Button>
+        ) : null}
       </div>
 
       <Paper

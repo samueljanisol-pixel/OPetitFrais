@@ -7,6 +7,7 @@ import { useTranslations } from "next-intl";
 import AccountCircleOutlinedIcon from "@mui/icons-material/AccountCircleOutlined";
 import { useSessionPermissions } from "@/lib/auth/useSessionPermissions";
 import LocaleSwitcher from "@/components/LocaleSwitcher";
+import NotificationBell from "@/components/NotificationBell";
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -40,7 +41,8 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           />
         </Link>
 
-        <div className="ms-auto flex min-w-0 max-w-[min(100%,24rem)] shrink-0 items-center gap-2">
+        <div className="ms-auto flex min-w-0 max-w-[min(100%,24rem)] shrink-0 items-center gap-1">
+          <NotificationBell />
           <LocaleSwitcher variant="header" />
           <AccountCircleOutlinedIcon className="!h-7 !w-7 shrink-0 text-emerald-700" aria-hidden />
           <span className="min-w-0 truncate text-sm font-medium text-slate-800" title={displayName}>

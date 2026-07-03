@@ -10,9 +10,11 @@ import {
   DialogContent,
   DialogTitle,
   FormControl,
+  FormControlLabel,
   InputLabel,
   MenuItem,
   Select,
+  Switch,
   Tab,
   Tabs,
   TextField,
@@ -20,7 +22,7 @@ import {
 } from '@mui/material'
 import BackNavButton from '@/components/BackNavButton'
 import { createSupabaseBrowserClient } from '@/lib/supabase/client'
-import type { RefConditionnementRow, RefRow, RefSubcategoryRow, RefVendeurRow } from '@/lib/products/types'
+import type { RefConditionnementRow, RefRow, RefSubcategoryRow, RefSupplierRow, RefVendeurRow } from '@/lib/products/types'
 import { muiSlotPropsDecimalKeypad } from '@/lib/mui/numericTextFieldProps'
 import MagasinsAdminPanel from './MagasinsAdminPanel'
 import StatusLabelsAdminPanel from './StatusLabelsAdminPanel'
@@ -120,13 +122,13 @@ export default function ReferentielClient() {
   const [udv, setUdv] = useState<RefRow[]>([])
   const [cat, setCat] = useState<RefRow[]>([])
   const [subcats, setSubcats] = useState<RefSubcategoryRow[]>([])
-  const [sup, setSup] = useState<RefRow[]>([])
+  const [sup, setSup] = useState<RefSupplierRow[]>([])
   const [cond, setCond] = useState<RefConditionnementRow[]>([])
   const [vendeurs, setVendeurs] = useState<RefVendeurRow[]>([])
   const [err, setErr] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [open, setOpen] = useState(false)
-  const [editing, setEditing] = useState<RefRow | RefConditionnementRow | RefVendeurRow | null>(null)
+  const [editing, setEditing] = useState<RefRow | RefSupplierRow | RefConditionnementRow | RefVendeurRow | null>(null)
   const [isNew, setIsNew] = useState(false)
   const [deleteConfirm, setDeleteConfirm] = useState<DeleteConfirmTarget | null>(null)
   const [deleteBusy, setDeleteBusy] = useState(false)
@@ -141,6 +143,7 @@ export default function ReferentielClient() {
     w: '',
     d: '',
     supplier_id: '',
+    commande_active: true,
   })
 
   const load = useCallback(async () => {
@@ -163,7 +166,12 @@ export default function ReferentielClient() {
     setUdv((a.data as RefRow[]) ?? [])
     setCat((b.data as RefRow[]) ?? [])
     setSubcats((sc.data as RefSubcategoryRow[]) ?? [])
-    setSup((c.data as RefRow[]) ?? [])
+    setSup(
+      ((c.data as RefSupplierRow[]) ?? []).map(row => ({
+        ...row,
+        commande_active: row.commande_active !== false,
+      })),
+    )
     setCond((d.data as RefConditionnementRow[]) ?? [])
     setVendeurs((e.data as RefVendeurRow[]) ?? [])
     setLoading(false)
@@ -239,15 +247,15 @@ export default function ReferentielClient() {
     setIsNew(true)
     if (tab === 'vend') {
       setEditing({ id: '', supplier_id: sup[0]?.id ?? '', label: '', sort_order: 0 } as RefVendeurRow)
-      setForm({ label: '', label_ar: '', h: '', w: '', d: '', supplier_id: sup[0]?.id ?? '' })
+      setForm({ label: '', label_ar: '', h: '', w: '', d: '', supplier_id: sup[0]?.id ?? '', commande_active: true })
     } else {
-      setEditing({ id: '', code: '', label: '', sort_order: 0, created_at: '' } as RefRow)
-      setForm({ label: '', label_ar: '', h: '', w: '', d: '', supplier_id: '' })
+      setEditing({ id: '', code: '', label: '', sort_order: 0, created_at: '', commande_active: true } as RefSupplierRow)
+      setForm({ label: '', label_ar: '', h: '', w: '', d: '', supplier_id: '', commande_active: true })
     }
     setOpen(true)
   }
 
-  const openRow = (r: RefRow | RefConditionnementRow | RefVendeurRow) => {
+  const openRow = (r: RefRow | RefConditionnementRow | RefVendeurRow | RefSupplierRow) => {
     setIsNew(false)
     setEditing(r)
     setForm({
@@ -260,8 +268,20 @@ export default function ReferentielClient() {
         'supplier_id' in r && typeof r.supplier_id === 'string' && r.supplier_id.length > 0
           ? r.supplier_id
           : '',
+      commande_active:
+        'commande_active' in r && typeof r.commande_active === 'boolean' ? r.commande_active : true,
     })
     setOpen(true)
+  }
+
+  const toggleSupCommande = async (row: RefSupplierRow, active: boolean) => {
+    setErr(null)
+    const { error: e0 } = await supabase.from('ref_supplier').update({ commande_active: active }).eq('id', row.id)
+    if (e0) {
+      setErr(e0.message)
+      return
+    }
+    setSup(prev => prev.map(s => (s.id === row.id ? { ...s, commande_active: active } : s)))
   }
 
   const tableName = (t: TabId) => {
@@ -362,21 +382,21 @@ export default function ReferentielClient() {
           return
         }
       }
-    } else {
+    } else if (tab === 'sup') {
+      const payload = {
+        label: form.label.trim(),
+        commande_active: form.commande_active,
+      }
       if (isNew) {
-        const { error: e0 } = await supabase.from(tableName(tab)).insert({
-          label: form.label.trim(),
-        } as never)
+        const { error: e0 } = await supabase.from('ref_supplier').insert(payload as never)
         if (e0) {
           setErr(e0.message)
           return
         }
       } else {
         const { error: e0 } = await supabase
-          .from(tableName(tab))
-          .update({
-            label: form.label.trim(),
-          } as never)
+          .from('ref_supplier')
+          .update(payload as never)
           .eq('id', editing.id)
         if (e0) {
           setErr(e0.message)
@@ -570,7 +590,30 @@ export default function ReferentielClient() {
             </Box>
           </>
         )}
-        {tab === 'sup' && <RefTable title="Fournisseurs" rows={sup} onEdit={openRow} onDelete={requestDelete} />}
+        {tab === 'sup' && (
+          <RefTable
+            title="Fournisseurs"
+            rows={sup}
+            onEdit={openRow}
+            onDelete={requestDelete}
+            extras={[
+              {
+                header: 'Commande',
+                render: r => {
+                  const row = r as RefSupplierRow
+                  return (
+                    <Switch
+                      size="small"
+                      checked={row.commande_active !== false}
+                      onChange={(_, checked) => void toggleSupCommande(row, checked)}
+                      slotProps={{ input: { 'aria-label': `Commandes pour ${row.label}` } }}
+                    />
+                  )
+                },
+              },
+            ]}
+          />
+        )}
         {tab === 'vend' && (
           <RefTable
             title="Vendeurs (par fournisseur)"
@@ -678,6 +721,17 @@ export default function ReferentielClient() {
                   size="small"
                   fullWidth
                   slotProps={{ input: { dir: 'rtl' } }}
+                />
+              ) : null}
+              {tab === 'sup' ? (
+                <FormControlLabel
+                  control={
+                    <Switch
+                      checked={form.commande_active}
+                      onChange={(_, checked) => setForm(f => ({ ...f, commande_active: checked }))}
+                    />
+                  }
+                  label="Commandes magasin activées"
                 />
               ) : null}
               {tab === 'vend' || tab === 'cond' ? (

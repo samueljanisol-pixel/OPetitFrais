@@ -148,4 +148,12 @@ Sur **détail lot achat**, un bouton « crayon » à côté du titre du vendeur 
 
 ### Internationalisation UI (achat détail)
 
-L’écran `/commandes-fournisseur/achat/lots/[id]` utilise désormais `next-intl` pour tous les libellés affichés (actions, colonnes, dialogues, messages d’erreur/succès, placeholders et ARIA) via les namespaces `backoffice.commandes.achat.detail`, `backoffice.commandes.common`, `backoffice.commandes.errors` et `common`. Le formatage des dates/nombres passe par `useAppFormat` (plus de locale codée en dur), le bouton retour suit `useBackChevronIcon`, et l’affichage du statut lot utilise `useStatusLabels` (`labelFor`).
+
+## Notifications (validation magasin)
+
+Lorsqu'une commande passe au statut **`validee`** (validation depuis le récap saisie magasin, `PATCH /api/commandes-fournisseur/commandes/[id]`), une notification est créée pour les utilisateurs ayant la permission **`commandes_fournisseur.consolidation`** et le type activé dans leurs préférences.
+
+- **Contenu** : magasin + fournisseur
+- **Lien** : `/commandes-fournisseur/validation`
+- **Documentation** : [`/notifications/README.md`](../notifications/README.md)
+

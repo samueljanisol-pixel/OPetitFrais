@@ -482,12 +482,42 @@
           "entreesShort": "دخ.",
           "sortiesShort": "خر.",
           "ventes": "المبيعات",
-          "ventesShort": "م."
+          "ventesShort": "م.",
+          "ventesTotal": "المجموع",
+          "ventesTotalShort": "مج."
         },
         "totals": {
           "entrees": "الدخول",
           "sorties": "الخروج",
           "ventes": "المبيعات"
+        }
+      }
+    },
+    "notifications": {
+      "title": "الإشعارات",
+      "settingsTitle": "إعدادات الإشعارات",
+      "settingsSubtitle": "اختار كيفاش بغيتي تتبلغ.",
+      "settings": "إعدادات الإشعارات",
+      "bellAria": "الإشعارات{count, plural, =0 {} other { ({count} ما تقراوش)}}",
+      "loading": "كيت chargé…",
+      "empty": "ما كاين حتى إشعار",
+      "markAllRead": "علّم الكل مقروء",
+      "inAppLabel": "إشعار فالتطبيق (الجرس)",
+      "pushLabel": "إشعار المتصفح (push)",
+      "pushNotConfigured": "إشعارات push ما مكونينش فالسيرفر.",
+      "pushDenied": "المتصفح رفض الإذن.",
+      "pushUnsupported": "المتصفح ديالك ما كيدعمش push.",
+      "pushSubscribeError": "ما قدرناش نفعّلو push.",
+      "pushInsecureContext": "push خاصو https:// ولا http://localhost — ما تستعملش adresse réseau (بحال 10.x.x.x).",
+      "pushServiceUnavailable": "خدمة push ما خداماش فهاد المتصفح (جرب Chrome، ولا vérifier notifications Windows).",
+      "iosInstallHint": "ف iPhone، زيد التطبيق لشاشة الرئيسية باش توصلك push.",
+      "noTypesAvailable": "ما كاين حتى نوع إشعار لحسابك.",
+      "types": {
+        "commande_fournisseur": {
+          "validee": {
+            "label": "كوموند صحّحات فالمحل",
+            "description": "ملي كوموند fournisseur كتتصحّح فالمحل، قبل consolidation."
+          }
         }
       }
     }
