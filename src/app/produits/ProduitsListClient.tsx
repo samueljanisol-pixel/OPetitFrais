@@ -284,9 +284,14 @@ export default function ProduitsListClient() {
             </Typography>
           </div>
           {canWriteProducts ? (
-            <Button component={AppLink} href="/produits/nouveau" variant="contained" color="success" sx={{ borderRadius: 2, textTransform: 'none' }}>
-              Nouveau produit
-            </Button>
+            <div className="flex flex-wrap gap-2">
+              <Button component={AppLink} href="/produits/photo" variant="outlined" color="primary" sx={{ borderRadius: 2, textTransform: 'none' }}>
+                Photos terrain
+              </Button>
+              <Button component={AppLink} href="/produits/nouveau" variant="contained" color="success" sx={{ borderRadius: 2, textTransform: 'none' }}>
+                Nouveau produit
+              </Button>
+            </div>
           ) : null}
         </div>
 

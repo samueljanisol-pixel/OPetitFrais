@@ -1,7 +1,7 @@
 "use client";
 
 import { useSearchParams, useRouter } from "next/navigation";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import type { SessionPayload } from "@/lib/auth/session-types";
 import { writeSessionSnapshot } from "@/lib/auth/session-display-cache";
@@ -16,13 +16,28 @@ export default function LoginClient() {
   const tAuth = useTranslations("backoffice.auth.errors");
   const tCommon = useTranslations("common");
 
+  const formRef = useRef<HTMLFormElement>(null);
   const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const readFormCredentials = () => {
+    const form = formRef.current;
+    if (!form) {
+      return { identifier: identifier.trim(), password };
+    }
+    const data = new FormData(form);
+    return {
+      identifier: String(data.get("identifier") ?? "").trim(),
+      password: String(data.get("password") ?? ""),
+    };
+  };
+
   const signIn = async () => {
-    if (loading || !identifier.trim() || !password) return;
+    if (loading) return;
+    const { identifier: id, password: pwd } = readFormCredentials();
+    if (!id || !pwd) return;
     setLoading(true);
     setError(null);
     try {
@@ -30,7 +45,7 @@ export default function LoginClient() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify({ identifier: identifier.trim(), password }),
+        body: JSON.stringify({ identifier: id, password: pwd }),
       });
       const json = (await res.json().catch(() => ({}))) as { error?: string; errorCode?: string };
       if (!res.ok) {
@@ -69,6 +84,7 @@ export default function LoginClient() {
           <p className="mt-3 text-xs text-slate-600">{t("hint")}</p>
 
           <form
+            ref={formRef}
             className="mt-6 grid gap-3"
             onSubmit={(e) => {
               e.preventDefault();
@@ -80,10 +96,13 @@ export default function LoginClient() {
                 {t("identifierLabel")}
               </span>
               <input
+                name="identifier"
                 value={identifier}
                 onChange={(e) => setIdentifier(e.target.value)}
+                onInput={(e) => setIdentifier(e.currentTarget.value)}
                 type="text"
                 autoComplete="username"
+                required
                 className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-emerald-300"
                 placeholder={t("identifierPlaceholder")}
               />
@@ -94,10 +113,13 @@ export default function LoginClient() {
                 {t("passwordLabel")}
               </span>
               <input
+                name="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
+                onInput={(e) => setPassword(e.currentTarget.value)}
                 type="password"
                 autoComplete="current-password"
+                required
                 className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-emerald-300"
                 placeholder="••••••••"
               />
@@ -109,7 +131,7 @@ export default function LoginClient() {
 
             <button
               type="submit"
-              disabled={loading || !identifier.trim() || !password}
+              disabled={loading}
               className="mt-1 rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
             >
               {loading ? t("connecting") : t("connect")}

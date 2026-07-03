@@ -24,6 +24,23 @@
 
 Les vendeurs se créent dans **Paramètres → Vendeurs**. Les liaisons par conditionnement restent dans **Paramètres du conditionnement** (`product_packaging_vendeur`).
 
+## Photos terrain (`/produits/photo`)
+
+Page mobile pour photographier les produits (PWA ou navigateur) :
+
+- Sélection d’un produit (recherche nom/code), prise de photo (`capture="environment"`).
+- **Détourage optionnel** : modèle IA `@imgly/background-removal` (~40 Mo), activable par appareil (`localStorage`). En-têtes COOP/COEP sur cette route uniquement (`next.config.ts`).
+- **Format final** : JPEG **100×100 px**, fond blanc, ratio conservé (`src/lib/products/photo-normalize.ts`).
+- Prévisualisation et validation avant enregistrement Supabase (`product.image_path`, bucket `product-photos`).
+- Lien depuis la liste produits (**Photos terrain**) et la fiche produit (`?productId=`).
+
+### Export / import FTP (`Photos_Produits.zip`)
+
+- Archive FTP : `img_produits/Photos_Produits.zip` (remplace l’ancien `.rar`).
+- Fichiers nommés par code numérique (`12.jpg` pour le code `000012`).
+- **Export** : bouton sur la page photo ou liste produits — ZIP créé sur l’appareil (JSZip, recommandé mobile) ou sur le serveur (`POST /api/products/export-photos-ftp`).
+- **Import** : `POST /api/products/import-photos-ftp` (SSE), extraction ZIP via `unzipper`.
+
 ## Conditionnements (`product_packaging`)
 
 - Colonne **`nom`** (texte optionnel) : nom affiché pour ce colis sur **ce** produit. S’il est renseigné, il remplace le libellé du référentiel `ref_conditionnement` partout (saisie, récap, consolidation, achat, export vendeur, parcours).

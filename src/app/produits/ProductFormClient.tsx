@@ -18,6 +18,7 @@ import {
   Typography,
 } from '@mui/material'
 import BackNavButton from '@/components/BackNavButton'
+import AppLink from '@/components/AppLink'
 import { createSupabaseBrowserClient } from '@/lib/supabase/client'
 import { defaultMargin } from '@/lib/products/margin'
 import { productPhotoPublicUrl, removeProductPhoto, uploadProductPhoto } from '@/lib/products/storage'
@@ -927,6 +928,15 @@ export default function ProductFormClient({ productId, returnTo = null }: Props)
                 // eslint-disable-next-line @next/next/no-img-element
                 <img src={imageUrl} alt="" className="mb-2 max-h-40 rounded border" />
               ) : null}
+              <Button
+                component={AppLink}
+                href={`/produits/photo?productId=${productId}`}
+                size="small"
+                variant="outlined"
+                sx={{ mb: 1, textTransform: 'none' }}
+              >
+                Photographier ce produit (mobile)
+              </Button>
               <input
                 type="file"
                 accept="image/jpeg,image/png,image/webp,image/gif"

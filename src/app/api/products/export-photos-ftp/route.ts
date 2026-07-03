@@ -1,13 +1,13 @@
 import { NextResponse } from "next/server";
 import { requireApiPermission } from "@/lib/auth/require-permission-api";
 import {
-  runImportProductPhotosFromFtp,
-  type ImportPhotosFromFtpResult,
+  runExportProductPhotosToFtp,
+  uploadProductPhotosZipToFtp,
+  type ExportPhotosToFtpResult,
 } from "@/lib/products/importPhotosFromFtp";
+import { FTP_ARCHIVE_NAME } from "@/lib/products/product-photo-ftp";
 
 export const runtime = "nodejs";
-
-/** Import FTP + extraction ZIP peut dépasser la limite serverless par défaut. */
 export const maxDuration = 300;
 
 function sseEvent(event: string, data: unknown): string {
@@ -20,10 +20,24 @@ const SSE_HEADERS = {
   Connection: "keep-alive",
 } as const;
 
-export async function POST() {
+export async function POST(req: Request) {
   const gate = await requireApiPermission("produits.write");
   if (!gate.ok) {
     return NextResponse.json({ error: gate.error }, { status: gate.status });
+  }
+
+  const contentType = req.headers.get("content-type") ?? "";
+
+  if (contentType.includes("multipart/form-data")) {
+    const formData = await req.formData();
+    const archive = formData.get("archive");
+    if (!(archive instanceof Blob)) {
+      return NextResponse.json({ error: "Archive ZIP manquante." }, { status: 400 });
+    }
+
+    const buf = Buffer.from(await archive.arrayBuffer());
+    const result = await uploadProductPhotosZipToFtp(buf);
+    return NextResponse.json(result);
   }
 
   const streamState = { closed: false };
@@ -32,9 +46,7 @@ export async function POST() {
     start(controller) {
       const enc = new TextEncoder();
       const send = (event: string, data: unknown) => {
-        if (streamState.closed) {
-          return;
-        }
+        if (streamState.closed) return;
         try {
           controller.enqueue(enc.encode(sseEvent(event, data)));
         } catch {
@@ -44,10 +56,10 @@ export async function POST() {
 
       void (async () => {
         try {
-          const result: ImportPhotosFromFtpResult = await runImportProductPhotosFromFtp({
+          const result: ExportPhotosToFtpResult = await runExportProductPhotosToFtp({
             onProgress: (p) => send("progress", p),
           });
-          send("done", result);
+          send("done", { ...result, archiveName: FTP_ARCHIVE_NAME });
         } catch (e) {
           const message = e instanceof Error ? e.message : String(e);
           send("error", { error: message });
@@ -56,7 +68,7 @@ export async function POST() {
           try {
             controller.close();
           } catch {
-            /* flux déjà fermé côté client */
+            /* flux déjà fermé */
           }
         }
       })();

@@ -26,6 +26,8 @@ import {
 import { createSupabaseBrowserClient } from '@/lib/supabase/client'
 import { consumeEventStream } from '@/lib/sse/consumeEventStream'
 import type { ImportPhotosFromFtpResult } from '@/lib/products/importPhotosFromFtp'
+import { FTP_ARCHIVE_NAME } from '@/lib/products/product-photo-ftp'
+import { runProductPhotoFtpExport } from '@/lib/products/run-product-photo-ftp-export'
 
 function formatImportResult(
   created: number,
@@ -78,6 +80,8 @@ export function SheetImportBar({ onDone, canWriteProducts = false }: Props) {
   const [msg, setMsg] = useState<string | null>(null)
   const [ftpLoading, setFtpLoading] = useState(false)
   const [ftpMsg, setFtpMsg] = useState<string | null>(null)
+  const [ftpExportLoading, setFtpExportLoading] = useState(false)
+  const [ftpExportMsg, setFtpExportMsg] = useState<string | null>(null)
   const [dialogOpen, setDialogOpen] = useState(false)
   const [fields, setFields] = useState<SheetImportFields>({ ...DEFAULT_SHEET_IMPORT_FIELDS })
 
@@ -139,7 +143,7 @@ export function SheetImportBar({ onDone, canWriteProducts = false }: Props) {
     if (!canWriteProducts) return
     if (
       !window.confirm(
-        'Importer les photos depuis le FTP (dossier img_produits / Photos_Produits.rar) ? Les fichiers nommés par code (ex. 12.jpg) seront associés aux produits.',
+        'Importer les photos depuis le FTP (dossier img_produits / Photos_Produits.zip) ? Les fichiers nommés par code (ex. 12.jpg) seront associés aux produits.',
       )
     )
       return
@@ -198,6 +202,26 @@ export function SheetImportBar({ onDone, canWriteProducts = false }: Props) {
     }
   }
 
+  const runFtpPhotosExport = async () => {
+    if (!canWriteProducts) return
+    if (
+      !window.confirm(
+        `Exporter les photos Supabase vers le FTP (${FTP_ARCHIVE_NAME}) ? L’archive existante sera remplacée.`,
+      )
+    )
+      return
+    setFtpExportLoading(true)
+    setFtpExportMsg('Démarrage…')
+    try {
+      const outcome = await runProductPhotoFtpExport('client', (p) => setFtpExportMsg(p.message))
+      setFtpExportMsg(outcome.message)
+    } catch (e) {
+      setFtpExportMsg(e instanceof Error ? e.message : String(e))
+    } finally {
+      setFtpExportLoading(false)
+    }
+  }
+
   if (!SHEET_IMPORT_ENABLED) return null
 
   return (
@@ -209,7 +233,7 @@ export function SheetImportBar({ onDone, canWriteProducts = false }: Props) {
             size="small"
             variant="contained"
             color="warning"
-            disabled={loading || ftpLoading}
+            disabled={loading || ftpLoading || ftpExportLoading}
             onClick={() => {
               setFields({ ...DEFAULT_SHEET_IMPORT_FIELDS })
               setDialogOpen(true)
@@ -220,24 +244,43 @@ export function SheetImportBar({ onDone, canWriteProducts = false }: Props) {
             Importer depuis Google Sheet
           </Button>
           {canWriteProducts ? (
+            <>
             <Button
               type="button"
               size="small"
               variant="outlined"
               color="warning"
-              disabled={loading || ftpLoading}
+              disabled={loading || ftpLoading || ftpExportLoading}
               onClick={() => void runFtpPhotos()}
               sx={{ textTransform: 'none' }}
             >
               {ftpLoading ? <CircularProgress size={18} color="inherit" className="mr-1" /> : null}
               Importer photos (FTP)
             </Button>
+            <Button
+              type="button"
+              size="small"
+              variant="outlined"
+              color="warning"
+              disabled={loading || ftpLoading || ftpExportLoading}
+              onClick={() => void runFtpPhotosExport()}
+              sx={{ textTransform: 'none' }}
+            >
+              {ftpExportLoading ? <CircularProgress size={18} color="inherit" className="mr-1" /> : null}
+              Exporter photos (FTP)
+            </Button>
+            </>
           ) : null}
         </div>
         {msg ? <p className="text-amber-900/90 leading-snug whitespace-pre-wrap">{msg}</p> : null}
         {ftpMsg ? (
           <p className="text-amber-900/95 leading-snug whitespace-pre-wrap border-t border-amber-200/80 pt-2 mt-1">
-            {ftpMsg}
+            Import : {ftpMsg}
+          </p>
+        ) : null}
+        {ftpExportMsg ? (
+          <p className="text-amber-900/95 leading-snug whitespace-pre-wrap border-t border-amber-200/80 pt-2 mt-1">
+            Export : {ftpExportMsg}
           </p>
         ) : null}
       </div>

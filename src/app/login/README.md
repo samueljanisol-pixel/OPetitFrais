@@ -10,4 +10,8 @@ Page de connexion staff (`/login`).
 
 Clés de traduction : `backoffice.login.*`, erreurs auth `backoffice.auth.errors.*`.
 
+## Mobile / autofill
+
+Le bouton « Se connecter » n’est grisé que pendant la requête (`loading`). Les identifiants sont lus via `FormData` à la soumission (et non uniquement via l’état React), car sur mobile Safari/Chrome l’autofill remplit les champs sans toujours déclencher `onChange`.
+
 Voir [`src/i18n/README.md`](../../i18n/README.md) pour le socle i18n global.

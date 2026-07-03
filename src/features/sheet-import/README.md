@@ -11,7 +11,12 @@ Au clic sur **Importer depuis Google Sheet**, une fenêtre permet de **cocher le
 ## Import photos FTP
 
 - POST `/api/products/import-photos-ftp` renvoie un flux **SSE** (`progress` / `done` / `error`) pour éviter les timeouts navigateur (~5 min d’import).
-- Dossier FTP `img_produits/Photos_Produits.rar` ; fichiers nommés par code produit (ex. `12.jpg`).
+- Dossier FTP `img_produits/Photos_Produits.zip` ; fichiers nommés par code produit (ex. `12.jpg`).
+
+## Export photos FTP
+
+- POST `/api/products/export-photos-ftp` : sans body → construction ZIP côté serveur (SSE) ; avec `multipart/form-data` (`archive`) → dépôt du ZIP fourni par le client (mobile JSZip).
+- Remplace `Photos_Produits.zip` sur le FTP. Images normalisées en JPG 100×100.
 
 ## Retrait du module
 
