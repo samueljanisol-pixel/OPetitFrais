@@ -10,6 +10,7 @@ import { productPhotoPublicUrl } from "@/lib/products/storage";
 import { useAppLocale } from "@/lib/i18n/useAppFormat";
 import { formatShopPriceDh } from "@/lib/shop/format-price";
 import { buildOrderText, buildWhatsAppUrl } from "@/lib/shop/format-order-text";
+import { buildCategoryMeta } from "@/lib/shop/group-cart-by-category";
 import { getShopWhatsAppPhone, isShopWhatsAppConfigured } from "@/lib/shop/whatsapp-phone";
 import {
   getCartLineQty,
@@ -124,14 +125,17 @@ export default function ShopOrderClient({ initialGroups, catalogError }: Props) 
   const cartCount = lines.length;
   const cartTotal = lines.reduce((sum, l) => sum + l.qty * l.priceAtAdd, 0);
 
+  const categoryMeta = useMemo(() => buildCategoryMeta(groups), [groups]);
+
   const orderText = useMemo(
     () =>
       buildOrderText(lines, productById, locale, {
         title: t("orderTitle"),
         total: t("estimatedTotal"),
         separator: "──────────────────────",
-      }),
-    [lines, productById, locale, t],
+        uncategorized: t("uncategorized"),
+      }, categoryMeta),
+    [lines, productById, locale, t, categoryMeta],
   );
 
   const whatsAppHref = useMemo(() => {
@@ -289,6 +293,7 @@ export default function ShopOrderClient({ initialGroups, catalogError }: Props) 
         onClose={() => setCartOpen(false)}
         lines={lines}
         productById={productById}
+        categoryGroups={groups}
         onUpdateLine={updateLine}
         onClear={() => {
           setLines([]);

@@ -3,7 +3,14 @@ import { formatNumber } from "@/lib/i18n/format";
 import { productDisplayName } from "@/lib/products/product-display-name";
 import { labelFromRefForLocale } from "@/lib/commandes-fournisseur/product-display";
 import { formatShopPriceDh } from "@/lib/shop/format-price";
+import { groupCartLinesByCategory } from "@/lib/shop/group-cart-by-category";
 import type { ShopCartLine, ShopProduct } from "@/lib/shop/types";
+
+export type OrderTextLine = {
+  name: string;
+  qtyLabel: string;
+  lineTotal: number;
+};
 
 function formatQtyLabel(qty: number, unitCode: string, locale: AppLocale): string {
   const formatted = formatNumber(locale, qty, {
@@ -23,26 +30,80 @@ export type OrderTextLabels = {
   title: string;
   total: string;
   separator: string;
+  uncategorized?: string;
 };
+
+export type OrderTextCategoryMeta = Map<string, { label: string; sortOrder: number }>;
+
+function toOrderTextLine(
+  line: ShopCartLine,
+  productById: Map<string, ShopProduct>,
+  locale: AppLocale,
+): OrderTextLine | null {
+  const product = productById.get(line.productId);
+  if (!product) return null;
+  return {
+    name: productDisplayName(product, locale),
+    qtyLabel: formatQtyLabel(line.qty, line.unitCode, locale),
+    lineTotal: line.qty * line.priceAtAdd,
+  };
+}
+
+/** Aligne les quantités avec des tabulations (même colonne pour toutes les lignes du bloc). */
+export function formatLinesWithTabQty(lines: Pick<OrderTextLine, "name" | "qtyLabel">[]): string[] {
+  if (lines.length === 0) return [];
+  const nameWidth = Math.max(...lines.map((l) => l.name.length));
+
+  return lines.map(({ name, qtyLabel }) => {
+    if (name.length >= nameWidth) {
+      return `${name}\t${qtyLabel}`;
+    }
+    const gap = nameWidth - name.length;
+    const tabCount = Math.max(1, Math.ceil((gap + 1) / 8));
+    return `${name}${"\t".repeat(tabCount)}${qtyLabel}`;
+  });
+}
 
 export function buildOrderText(
   lines: ShopCartLine[],
   productById: Map<string, ShopProduct>,
   locale: AppLocale,
   labels: OrderTextLabels,
+  categoryMeta?: OrderTextCategoryMeta,
 ): string {
   const rows: string[] = [labels.title, labels.separator];
   let total = 0;
 
-  for (const line of lines) {
-    const product = productById.get(line.productId);
-    if (!product) continue;
-    const name = productDisplayName(product, locale);
-    const qtyLabel = formatQtyLabel(line.qty, line.unitCode, locale);
-    const lineTotal = line.qty * line.priceAtAdd;
-    total += lineTotal;
-    const priceStr = formatShopPriceDh(locale, lineTotal);
-    rows.push(`${name} — ${qtyLabel} — ${priceStr}`);
+  if (categoryMeta && categoryMeta.size > 0) {
+    const groups = groupCartLinesByCategory(
+      lines,
+      productById,
+      categoryMeta,
+      labels.uncategorized ?? "Autres",
+      locale,
+    );
+    for (const group of groups) {
+      rows.push(group.categoryLabel);
+      const entries = group.lines.flatMap((line) => {
+        const entry = toOrderTextLine(line, productById, locale);
+        return entry ? [entry] : [];
+      });
+      for (const entry of entries) {
+        total += entry.lineTotal;
+      }
+      rows.push(...formatLinesWithTabQty(entries));
+      rows.push("");
+    }
+    if (rows[rows.length - 1] === "") rows.pop();
+  } else {
+    const entries = lines.flatMap((line) => {
+      const entry = toOrderTextLine(line, productById, locale);
+      return entry ? [entry] : [];
+    });
+    for (const entry of entries) {
+      total += entry.lineTotal;
+    }
+    rows.push(...formatLinesWithTabQty(entries));
   }
 
   rows.push(labels.separator);

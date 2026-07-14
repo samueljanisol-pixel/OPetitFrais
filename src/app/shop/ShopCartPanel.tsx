@@ -23,13 +23,15 @@ import { productDisplayName } from "@/lib/products/product-display-name";
 import { formatShopPriceDh, formatShopQty } from "@/lib/shop/format-price";
 import { labelFromRefForLocale } from "@/lib/commandes-fournisseur/product-display";
 import { useAppLocale } from "@/lib/i18n/useAppFormat";
-import type { ShopCartLine, ShopProduct } from "@/lib/shop/types";
+import type { ShopCartLine, ShopCategoryGroup, ShopProduct } from "@/lib/shop/types";
+import { buildCategoryMeta, groupCartLinesByCategory } from "@/lib/shop/group-cart-by-category";
 
 type Props = {
   open: boolean;
   onClose: () => void;
   lines: ShopCartLine[];
   productById: Map<string, ShopProduct>;
+  categoryGroups: ShopCategoryGroup[];
   onUpdateLine: (productId: string, qty: number) => void;
   onClear: () => void;
 };
@@ -39,12 +41,20 @@ export default function ShopCartPanel({
   onClose,
   lines,
   productById,
+  categoryGroups,
   onUpdateLine,
   onClear,
 }: Props) {
   const t = useTranslations("shop");
   const locale = useAppLocale();
   const [snack, setSnack] = useState<string | null>(null);
+
+  const categoryMeta = useMemo(() => buildCategoryMeta(categoryGroups), [categoryGroups]);
+
+  const groupedLines = useMemo(
+    () => groupCartLinesByCategory(lines, productById, categoryMeta, t("uncategorized"), locale),
+    [lines, productById, categoryMeta, t, locale],
+  );
 
   const total = useMemo(
     () => lines.reduce((sum, l) => sum + l.qty * l.priceAtAdd, 0),
@@ -57,8 +67,9 @@ export default function ShopCartPanel({
         title: t("orderTitle"),
         total: t("estimatedTotal"),
         separator: "──────────────────────",
-      }),
-    [lines, productById, locale, t],
+        uncategorized: t("uncategorized"),
+      }, categoryMeta),
+    [lines, productById, locale, t, categoryMeta],
   );
 
   const whatsAppPhone = getShopWhatsAppPhone();
@@ -101,48 +112,60 @@ export default function ShopCartPanel({
             </Typography>
           ) : (
             <>
-              <List dense disablePadding>
-                {lines.map((line) => {
-                  const product = productById.get(line.productId);
-                  if (!product) return null;
-                  const unitCode = line.unitCode;
-                  const unitLabel = labelFromRefForLocale(product.ref_sales_unit, locale);
-                  return (
-                    <ListItem
-                      key={line.productId}
-                      secondaryAction={
-                        <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
-                          <IconButton
-                            size="small"
-                            aria-label="-"
-                            onClick={() =>
-                              onUpdateLine(line.productId, subtractQty(line.qty, unitCode))
-                            }
-                          >
-                            −
-                          </IconButton>
-                          <Typography variant="body2" sx={{ minWidth: "2rem", textAlign: "center", fontWeight: 700 }}>
-                            {formatLineQty(line)}
-                          </Typography>
-                          <IconButton
-                            size="small"
-                            aria-label="+"
-                            onClick={() => onUpdateLine(line.productId, addQty(line.qty, unitCode))}
-                          >
-                            +
-                          </IconButton>
-                        </Box>
-                      }
-                      sx={{ pr: 12 }}
+              <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
+                {groupedLines.map((group) => (
+                  <Box key={group.categoryId}>
+                    <Typography
+                      variant="subtitle2"
+                      sx={{ fontWeight: 700, color: "success.dark", mb: 0.75, px: 0.5 }}
                     >
-                      <ListItemText
-                        primary={productDisplayName(product, locale)}
-                        secondary={`${formatLineQty(line)} ${unitLabel} — ${formatShopPriceDh(locale, line.qty * line.priceAtAdd)}`}
-                      />
-                    </ListItem>
-                  );
-                })}
-              </List>
+                      {group.categoryLabel}
+                    </Typography>
+                    <List dense disablePadding>
+                      {group.lines.map((line) => {
+                        const product = productById.get(line.productId);
+                        if (!product) return null;
+                        const unitCode = line.unitCode;
+                        const unitLabel = labelFromRefForLocale(product.ref_sales_unit, locale);
+                        return (
+                          <ListItem
+                            key={line.productId}
+                            secondaryAction={
+                              <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
+                                <IconButton
+                                  size="small"
+                                  aria-label="-"
+                                  onClick={() =>
+                                    onUpdateLine(line.productId, subtractQty(line.qty, unitCode))
+                                  }
+                                >
+                                  −
+                                </IconButton>
+                                <Typography variant="body2" sx={{ minWidth: "2rem", textAlign: "center", fontWeight: 700 }}>
+                                  {formatLineQty(line)}
+                                </Typography>
+                                <IconButton
+                                  size="small"
+                                  aria-label="+"
+                                  onClick={() => onUpdateLine(line.productId, addQty(line.qty, unitCode))}
+                                >
+                                  +
+                                </IconButton>
+                              </Box>
+                            }
+                            sx={{ pr: 12 }}
+                          >
+                            <ListItemText
+                              primary={productDisplayName(product, locale)}
+                              secondary={`${formatLineQty(line)} ${unitLabel} — ${formatShopPriceDh(locale, line.qty * line.priceAtAdd)}`}
+                            />
+                          </ListItem>
+                        );
+                      })}
+                    </List>
+                  </Box>
+                ))}
+              </Box>
 
               <Typography variant="subtitle1" sx={{ mt: 2, mb: 1.5, fontWeight: 700 }}>
                 {t("estimatedTotal")} : {formatShopPriceDh(locale, total)}
