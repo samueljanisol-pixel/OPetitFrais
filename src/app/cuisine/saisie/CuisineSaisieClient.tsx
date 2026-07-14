@@ -6,6 +6,7 @@ import { useTranslations } from "next-intl";
 import { Button, Paper, Stack, Typography } from "@mui/material";
 import AddCircleOutlineOutlinedIcon from "@mui/icons-material/AddCircleOutlineOutlined";
 import HistoryOutlinedIcon from "@mui/icons-material/HistoryOutlined";
+import LocalOfferOutlinedIcon from "@mui/icons-material/LocalOfferOutlined";
 import RemoveCircleOutlineOutlinedIcon from "@mui/icons-material/RemoveCircleOutlineOutlined";
 import AppLink from "@/components/AppLink";
 import BackNavButton from "@/components/BackNavButton";
@@ -84,19 +85,32 @@ export default function CuisineSaisieClient() {
             {formatJournalDateLabel(locale, journalDate)}
           </Typography>
         </div>
-        {canCuisineHistorique ? (
+        <div className="flex shrink-0 flex-col items-end gap-1">
           <Button
             component={AppLink}
-            href="/cuisine/historique"
+            href="/cuisine/saisie/vignettes-prix"
             variant="outlined"
             color="success"
             size="small"
-            startIcon={<HistoryOutlinedIcon sx={{ fontSize: 18 }} />}
-            sx={{ textTransform: "none", flexShrink: 0, minHeight: 32, py: 0.25, fontSize: "0.8125rem" }}
+            startIcon={<LocalOfferOutlinedIcon sx={{ fontSize: 18 }} />}
+            sx={{ textTransform: "none", minHeight: 32, py: 0.25, fontSize: "0.8125rem" }}
           >
-            {t("historiqueLink")}
+            {t("vignettesPrixLink")}
           </Button>
-        ) : null}
+          {canCuisineHistorique ? (
+            <Button
+              component={AppLink}
+              href="/cuisine/historique"
+              variant="outlined"
+              color="success"
+              size="small"
+              startIcon={<HistoryOutlinedIcon sx={{ fontSize: 18 }} />}
+              sx={{ textTransform: "none", minHeight: 32, py: 0.25, fontSize: "0.8125rem" }}
+            >
+              {t("historiqueLink")}
+            </Button>
+          ) : null}
+        </div>
       </div>
 
       <Paper

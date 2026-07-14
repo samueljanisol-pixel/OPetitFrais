@@ -20,6 +20,8 @@ export type CuisineFrigoProduct = {
   sales_name_ar?: string | null;
   image_path: string | null;
   /** Présent sur le catalogue picker ; absent sur les jointures journal. */
+  price?: number;
+  /** Présent sur le catalogue picker ; absent sur les jointures journal. */
   active?: boolean;
   subcategory_id: string | null;
   ref_subcategory?:

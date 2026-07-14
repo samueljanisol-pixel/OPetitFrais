@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 import { canAccessPath } from "@/lib/auth/route-permissions";
+import { backofficeUrl, isBackofficeOnlyPath, isShopHost } from "@/lib/shop/hosts";
 
 const PUBLIC_PATHS = ["/login", "/api", "/_next", "/favicon.ico", "/manifest.webmanifest", "/sw.js", "/icons", "/icon.png"];
 
@@ -11,6 +12,16 @@ function isPublic(pathname: string) {
 /** Next.js 16+ : la couche « middleware » s’appelle désormais proxy (fichier `proxy.ts` à côté de `app/`). */
 export async function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
+  const host = req.headers.get("host") ?? "";
+
+  if (isShopHost(host)) {
+    if (isBackofficeOnlyPath(pathname)) {
+      const target = backofficeUrl(pathname, req.nextUrl.search);
+      return NextResponse.redirect(target);
+    }
+    return NextResponse.next();
+  }
+
   if (isPublic(pathname)) return NextResponse.next();
 
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;

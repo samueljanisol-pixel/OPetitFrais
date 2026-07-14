@@ -6,7 +6,7 @@
 
 ## Filtre d’import Sheet
 
-Au clic sur **Importer depuis Google Sheet**, une fenêtre permet de **cocher les champs** à appliquer aux **produits existants** (mise à jour partielle). **Aucune case cochée par défaut** — sans case cochée, seuls les **nouveaux** produits (absents en base) sont créés. Un produit existant nécessite au moins un champ coché pour être modifié. Un **nouveau produit** est toujours créé avec **toutes** les colonnes lues. Le bandeau résume : créés / modifiés / erreurs.
+Au clic sur **Importer depuis Google Sheet**, une fenêtre permet de **cocher les champs** à appliquer aux **produits existants** (mise à jour partielle). **Aucune case cochée par défaut** — sans case cochée, seuls les **nouveaux** produits (absents en base) sont créés. Un produit existant nécessite au moins un champ coché pour être modifié. Un **nouveau produit** est toujours créé avec **toutes** les colonnes lues. Pendant l’import, une **barre de progression** indique l’étape en cours (récupération, analyse, import ligne par ligne). Le bandeau résume ensuite : créés / modifiés / erreurs.
 
 ## Import photos FTP
 

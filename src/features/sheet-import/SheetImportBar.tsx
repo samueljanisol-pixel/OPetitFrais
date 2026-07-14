@@ -79,6 +79,8 @@ type Props = { onDone: () => void; canWriteProducts?: boolean }
 export function SheetImportBar({ onDone, canWriteProducts = false }: Props) {
   const [loading, setLoading] = useState(false)
   const [msg, setMsg] = useState<string | null>(null)
+  const [importProgress, setImportProgress] = useState<number | null>(null)
+  const [importProgressMsg, setImportProgressMsg] = useState<string | null>(null)
   const [ftpLoading, setFtpLoading] = useState(false)
   const [ftpMsg, setFtpMsg] = useState<string | null>(null)
   const [ftpExportLoading, setFtpExportLoading] = useState(false)
@@ -106,9 +108,13 @@ export function SheetImportBar({ onDone, canWriteProducts = false }: Props) {
   const runImport = async (selectedFields: SheetImportFields) => {
     setLoading(true)
     setMsg(null)
+    setImportProgress(0)
+    setImportProgressMsg('Récupération du fichier…')
     const supabase = createSupabaseBrowserClient()
     try {
       const r = await fetch('/api/transition/sheet-json', { cache: 'no-store' })
+      setImportProgress(8)
+      setImportProgressMsg('Analyse des lignes…')
       const j: unknown = await r.json()
       if (!r.ok) {
         setMsg(typeof (j as { error?: string }).error === 'string' ? (j as { error: string }).error : 'Échec du proxy JSON')
@@ -120,11 +126,25 @@ export function SheetImportBar({ onDone, canWriteProducts = false }: Props) {
         onDone()
         return
       }
+      setImportProgress(12)
+      setImportProgressMsg('Préparation des référentiels…')
       const { created, updated, skipped, errors: applyErrs } = await applySheetImport(
         supabase,
         rows,
         selectedFields,
+        (progress) => {
+          if (progress.phase === 'prepare') {
+            setImportProgress(15)
+            setImportProgressMsg('Préparation des référentiels…')
+            return
+          }
+          const pct = 15 + Math.round((progress.current / Math.max(progress.total, 1)) * 85)
+          setImportProgress(Math.min(100, pct))
+          setImportProgressMsg(`Import des produits (${progress.current}/${progress.total})…`)
+        },
       )
+      setImportProgress(100)
+      setImportProgressMsg('Import terminé.')
       setMsg(formatImportResult(created, updated, skipped, parseErrs, applyErrs, selectedFields))
       if (created > 0 || updated > 0) {
         onDone()
@@ -133,6 +153,8 @@ export function SheetImportBar({ onDone, canWriteProducts = false }: Props) {
       setMsg(e instanceof Error ? e.message : String(e))
     } finally {
       setLoading(false)
+      setImportProgress(null)
+      setImportProgressMsg(null)
     }
   }
 
@@ -281,6 +303,14 @@ export function SheetImportBar({ onDone, canWriteProducts = false }: Props) {
           ) : null}
         </div>
         {msg ? <p className="text-amber-900/90 leading-snug whitespace-pre-wrap">{msg}</p> : null}
+        {loading && importProgress != null ? (
+          <div className="border-t border-amber-200/80 pt-2 mt-1">
+            <LinearProgress variant="determinate" value={importProgress} color="warning" />
+            <p className="text-xs text-amber-900/80 mt-1">
+              {importProgressMsg ?? `${importProgress} %`}
+            </p>
+          </div>
+        ) : null}
         {ftpMsg ? (
           <p className="text-amber-900/95 leading-snug whitespace-pre-wrap border-t border-amber-200/80 pt-2 mt-1">
             Import : {ftpMsg}

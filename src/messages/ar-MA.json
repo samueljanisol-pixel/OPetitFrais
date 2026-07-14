@@ -423,6 +423,7 @@
       "saisie": {
         "title": "تسجيل المطبخ",
         "historiqueLink": "التاريخ",
+        "vignettesPrixLink": "ملصقات الأسعار",
         "addEntree": "دخول",
         "addSortie": "خروج",
         "sections": {
@@ -445,6 +446,17 @@
         "backToSaisie": "رجع للتسجيل",
         "uncategorized": "بلا تصنيف فرعي",
         "filterAll": "الكل",
+        "emptyProducts": "ما كاين حتى منتج فالثلاجة.",
+        "columnsPerRowLabel": "منتجات فكل سطر",
+        "columnsPerRowOption": "{count}"
+      },
+      "vignettesPrix": {
+        "title": "ملصقات الأسعار",
+        "printTitle": "ملصقات الأسعار — الثلاجة",
+        "backToSaisie": "رجع للتسجيل",
+        "print": "طباعة",
+        "download": "تنزيل",
+        "uncategorized": "بلا تصنيف فرعي",
         "emptyProducts": "ما كاين حتى منتج فالثلاجة.",
         "columnsPerRowLabel": "منتجات فكل سطر",
         "columnsPerRowOption": "{count}"
@@ -538,5 +550,24 @@
       }
     }
   },
-  "shop": {}
+  "shop": {
+    "title": "كوموندي",
+    "subtitle": "كوّن السّلة ديالك وصيفط لينا اللائحة عبر WhatsApp.",
+    "homeTitle": "O' Petit Frais — كوموندي",
+    "cart": "السلة",
+    "openCart": "حل السّلة",
+    "viewCart": "شوف السّلة",
+    "emptyCart": "السلة ديالك خاوية.",
+    "noProducts": "ما كاين حتى منتج disponible دابا.",
+    "uncategorized": "آخر",
+    "unit": "وحدة",
+    "copyList": "نسخ اللائحة",
+    "copied": "اللائحة تنسخت",
+    "copyFailed": "ما قدرناش ننسخو — نسخ يدوي",
+    "sendWhatsApp": "صيفط عبر WhatsApp",
+    "clearCart": "خوّي السّلة",
+    "close": "سد",
+    "orderTitle": "كوموند O' Petit Frais",
+    "estimatedTotal": "المجموع التقريبي"
+  }
 }

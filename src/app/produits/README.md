@@ -10,7 +10,8 @@
 ## Fiche produit (`ProductFormClient`)
 
 - **Fournisseurs** : cases à cocher (comme pour les conditionnements) ; table `product_supplier`. Le premier coché selon l’ordre référentiel devient `product.supplier_id` (fournisseur principal). Migration `20260702160000_product_supplier.sql`.
-- **Noms** : `name` / `name_ar` = **nom logistique** (interne, commandes fournisseur) ; `sales_name` / `sales_name_ar` = **nom de vente** affiché client (cuisine, locale UI). Migration `20260702140000_product_sales_name.sql`.
+- **Noms** : `name` / `name_ar` = **nom logistique** (interne, commandes fournisseur) ; `sales_name` / `sales_name_ar` = **nom de vente** affiché client (cuisine, boutique `opetitfrais.ma`, locale UI). Migration `20260702140000_product_sales_name.sql`.
+- **Visible vitrine** : si coché (et produit actif), le produit apparaît sur la boutique publique [`/shop`](../shop/README.md) (`opetitfrais.ma`). Champ `product.visible_vitrine`.
 
 - Query **`returnTo`** (chemin interne) : depuis le parcours commande, retour « Retour au parcours » et redirection après **Enregistrer** (`safeReturnPath` dans `src/lib/navigation/safe-return-path.ts`).
 - Avec **`returnTo`** et permission **`commandes_fournisseur.saisie`** (sans `produits.write`) : fiche en lecture seule sur le produit, mais **conditionnements modifiables** (ajout, paramètres, archivage). La section conditionnements n’utilise pas de `fieldset disabled` (sinon les boutons ne reçoivent pas les clics).
@@ -33,7 +34,7 @@ Page mobile pour photographier les produits (PWA ou navigateur) :
 - **Format final** : JPEG **100×100 px**, fond blanc, ratio conservé (`src/lib/products/photo-normalize.ts`).
 - Prévisualisation et validation avant enregistrement ; **rotation** (90° gauche/droite) dans le dialogue de validation.
 - Liste produits : vignette 44×44, filtre **Sans photo** / **Avec photo**.
-- Après détourage : recadrage sur le sujet visible, **agrandissement** pour remplir le cadre avec ~6 % de marge, centrage dans le carré 100×100 (`photo-normalize.ts`).
+- Après détourage : recadrage sur le sujet visible, **agrandissement** pour remplir le cadre avec ~3 % de marge, centrage dans le carré 100×100 (`photo-normalize.ts`).
 - Export FTP : jauge de progression (%).
 - Lien depuis la liste produits (**Photos terrain**) et la fiche produit (`?productId=`).
 

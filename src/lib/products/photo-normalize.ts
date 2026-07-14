@@ -2,9 +2,9 @@ const JPEG_QUALITY = 0.85
 const SIZE = 100
 const ALPHA_THRESHOLD = 12
 /** Marge autour du sujet détouré avant recadrage. */
-const CROP_PADDING_RATIO = 0.06
+const CROP_PADDING_RATIO = 0.03
 /** Marge dans le cadre final 100×100 (le produit remplit l’espace restant). */
-const FRAME_MARGIN_RATIO = 0.06
+const FRAME_MARGIN_RATIO = 0.03
 
 type DrawableSource = HTMLImageElement | HTMLCanvasElement
 

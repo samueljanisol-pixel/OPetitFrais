@@ -1,0 +1,143 @@
+@media print {
+  @page {
+    size: landscape;
+    margin: 8mm;
+  }
+
+  header[role="banner"] {
+    display: none !important;
+  }
+
+  .vignettes-screen {
+    display: none !important;
+  }
+
+  .vignettes-print {
+    display: block !important;
+    position: static !important;
+    visibility: visible !important;
+    width: auto !important;
+    height: auto !important;
+    overflow: visible !important;
+    opacity: 1 !important;
+    pointer-events: auto !important;
+    left: auto !important;
+    top: auto !important;
+  }
+}
+
+.vignettes-print,
+.vignettes-print * {
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+
+.vignettes-print .price-badge {
+  background-color: #16a34a !important;
+  color: #ffffff !important;
+}
+
+.vignettes-print .product-photo {
+  display: block !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+
+.vignettes-print .print-category-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 0.75rem;
+  break-inside: auto;
+  page-break-inside: auto;
+}
+
+.vignettes-print .print-category-table thead {
+  display: table-header-group;
+}
+
+.vignettes-print .print-category-table thead th {
+  text-align: center;
+  font-weight: 700;
+  font-size: 1.125rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #15803d;
+  padding: 0.25rem 0.25rem 0.5rem;
+  break-after: avoid;
+  page-break-after: avoid;
+}
+
+.vignettes-print .print-category-table tbody tr {
+  break-inside: avoid;
+  page-break-inside: avoid;
+}
+
+.vignettes-print .print-category-cell {
+  vertical-align: top;
+  width: calc(100% / var(--print-cols, 8));
+  padding: 0.2rem;
+}
+
+.vignettes-print .print-category-cell--empty {
+  padding: 0;
+  border: none;
+}
+
+.vignettes-print[lang="ar"] h1 {
+  font-size: 1.5rem !important;
+}
+
+.vignettes-print[lang="ar"] .print-category-table thead th {
+  font-size: 1.5rem;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.vignettes-print[lang="ar"] .MuiTypography-caption {
+  font-size: 0.875rem !important;
+  line-height: 1.25 !important;
+}
+
+.vignettes-print[lang="ar"] .price-badge {
+  width: 46px !important;
+  height: 46px !important;
+  font-size: 1.125rem !important;
+}
+
+@media screen {
+  .vignettes-print {
+    position: fixed;
+    left: -10000px;
+    top: 0;
+    visibility: hidden;
+    width: 297mm;
+    pointer-events: none;
+    z-index: -1;
+    background: #ffffff;
+    padding: 8mm;
+    box-sizing: border-box;
+  }
+
+  body.vignettes-exporting header[role="banner"] {
+    visibility: hidden;
+  }
+
+  body.vignettes-exporting .vignettes-screen {
+    visibility: hidden;
+  }
+
+  body.vignettes-exporting .vignettes-print {
+    position: fixed;
+    left: 0;
+    top: 0;
+    visibility: visible;
+    width: 297mm;
+    z-index: 9999;
+    overflow: visible;
+    opacity: 1;
+    pointer-events: none;
+  }
+}

@@ -423,6 +423,7 @@
       "saisie": {
         "title": "Saisie cuisine",
         "historiqueLink": "Historique",
+        "vignettesPrixLink": "Vignettes prix",
         "addEntree": "Entrée",
         "addSortie": "Sortie",
         "sections": {
@@ -445,6 +446,17 @@
         "backToSaisie": "Retour à la saisie",
         "uncategorized": "Sans sous-catégorie",
         "filterAll": "Tout",
+        "emptyProducts": "Aucun produit Frigo actif.",
+        "columnsPerRowLabel": "Produits par ligne",
+        "columnsPerRowOption": "{count}"
+      },
+      "vignettesPrix": {
+        "title": "Vignettes prix",
+        "printTitle": "Vignettes prix — Frigo",
+        "backToSaisie": "Retour à la saisie",
+        "print": "Imprimer",
+        "download": "Télécharger",
+        "uncategorized": "Sans sous-catégorie",
         "emptyProducts": "Aucun produit Frigo actif.",
         "columnsPerRowLabel": "Produits par ligne",
         "columnsPerRowOption": "{count}"
@@ -538,5 +550,24 @@
       }
     }
   },
-  "shop": {}
+  "shop": {
+    "title": "Commander",
+    "subtitle": "Composez votre panier et envoyez-nous votre liste par WhatsApp.",
+    "homeTitle": "O' Petit Frais — Commander",
+    "cart": "Panier",
+    "openCart": "Ouvrir le panier",
+    "viewCart": "Voir le panier",
+    "emptyCart": "Votre panier est vide.",
+    "noProducts": "Aucun produit disponible pour le moment.",
+    "uncategorized": "Autres",
+    "unit": "unité",
+    "copyList": "Copier la liste",
+    "copied": "Liste copiée dans le presse-papiers",
+    "copyFailed": "Impossible de copier — sélectionnez le texte manuellement",
+    "sendWhatsApp": "Envoyer par WhatsApp",
+    "clearCart": "Vider le panier",
+    "close": "Fermer",
+    "orderTitle": "Commande O' Petit Frais",
+    "estimatedTotal": "Total estimé"
+  }
 }

@@ -85,6 +85,14 @@ export type SheetImportResult = {
   errors: string[]
 }
 
+export type SheetImportProgress = {
+  phase: 'prepare' | 'rows'
+  current: number
+  total: number
+}
+
+export type SheetImportProgressCallback = (progress: SheetImportProgress) => void
+
 function buildProductPatch(
   row: SheetRowParsed,
   fields: SheetImportFields,
@@ -221,7 +229,9 @@ export async function applySheetImport(
   supabase: SupabaseClient,
   parsed: SheetRowParsed[],
   fields: SheetImportFields = DEFAULT_SHEET_IMPORT_FIELDS,
+  onProgress?: SheetImportProgressCallback,
 ): Promise<SheetImportResult> {
+  onProgress?.({ phase: 'prepare', current: 0, total: parsed.length })
   const errors: string[] = []
   const updateExisting = hasAnyImportField(fields)
   const [{ data: units }, { data: cats }, { data: sups }, { data: subcats }, { data: products }] =
@@ -253,7 +263,9 @@ export async function applySheetImport(
   let updated = 0
   let skipped = 0
 
-  for (const row of parsed) {
+  for (let rowIndex = 0; rowIndex < parsed.length; rowIndex += 1) {
+    const row = parsed[rowIndex]!
+    onProgress?.({ phase: 'rows', current: rowIndex + 1, total: parsed.length })
     const codeNorm = row.code ? norm(row.code) : ''
     const id =
       (codeNorm && byCode.get(codeNorm)) || (!codeNorm && byName.get(norm(row.nom))) || null

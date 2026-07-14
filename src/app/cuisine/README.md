@@ -20,6 +20,7 @@ Migration : `supabase/migrations/20260702120000_cuisine_journal.sql`.
 | `/cuisine/saisie/ajouter?type=entree\|sortie` | Grille produits Frigo **actifs** ; filtres sous-catégorie ; **3 à 8 produits par ligne** (préférence mémorisée localement) |
 | `/cuisine/saisie/quantite?type=&productId=` | Nouvelle ligne (quantité, min 1, pas ±10/±1) |
 | `/cuisine/saisie/quantite?entryId=` | Modifier ou supprimer une ligne du jour (confirmation avant suppression, icône poubelle) |
+| `/cuisine/saisie/vignettes-prix` | Vignettes prix Frigo : consultation filtrée par sous-catégorie (image, nom, prix) ; **impression** paysage ou **téléchargement PNG** avec toutes les sous-catégories (langue UI, ordre alphabétique, en-tête de catégorie répété si coupure de page) |
 | `/cuisine/historique` | Vue compacte mobile : date, totaux, **tableau dense** par sous-catégorie (Entrées / Sorties / **Ventes par magasin** M1, M2… + **Total**) ; lien **Saisie** si `cuisine.saisie` |
 
 ## Données

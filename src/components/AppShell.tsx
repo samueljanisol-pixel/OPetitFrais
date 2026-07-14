@@ -9,12 +9,17 @@ import { useSessionPermissions } from "@/lib/auth/useSessionPermissions";
 import LocaleSwitcher from "@/components/LocaleSwitcher";
 import NotificationBell from "@/components/NotificationBell";
 
-export default function AppShell({ children }: { children: React.ReactNode }) {
+type AppShellProps = {
+  children: React.ReactNode;
+  shopMode?: boolean;
+};
+
+export default function AppShell({ children, shopMode = false }: AppShellProps) {
   const pathname = usePathname();
   const { loading, displayName } = useSessionPermissions();
   const t = useTranslations("backoffice.shell");
 
-  if (pathname === "/login") {
+  if (pathname === "/login" || shopMode) {
     return <>{children}</>;
   }
 

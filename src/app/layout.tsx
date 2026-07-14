@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import { headers } from "next/headers";
 import { getLocale, getMessages, getTimeZone } from "next-intl/server";
 import "./globals.css";
 import SwRegister from "./swRegister";
@@ -7,6 +8,7 @@ import AppShell from "@/components/AppShell";
 import AppProviders from "@/components/AppProviders";
 import { LocaleClientProvider } from "@/lib/i18n/locale-client";
 import { isRtl, normalizeLocale, type AppLocale } from "@/i18n/config";
+import { isShopHost } from "@/lib/shop/hosts";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -50,6 +52,8 @@ export default async function RootLayout({
   const messages = await getMessages();
   const timeZone = await getTimeZone();
   const dir = isRtl(locale) ? "rtl" : "ltr";
+  const host = (await headers()).get("host");
+  const shopMode = isShopHost(host);
 
   return (
     <html
@@ -65,7 +69,7 @@ export default async function RootLayout({
         >
           <AppProviders>
             <SwRegister />
-            <AppShell>{children}</AppShell>
+            <AppShell shopMode={shopMode}>{children}</AppShell>
           </AppProviders>
         </LocaleClientProvider>
       </body>

@@ -5,7 +5,7 @@ import { refDisplayLabel } from "@/lib/products/ref-display-label";
 import type { CuisineFrigoProduct, CuisineSubcategoryGroup } from "./types";
 
 const FRIGO_PRODUCT_SELECT = `
-  id, code, name, name_ar, sales_name, sales_name_ar, image_path, active, subcategory_id,
+  id, code, name, name_ar, sales_name, sales_name_ar, image_path, price, active, subcategory_id,
   ref_subcategory(id, label, label_ar, sort_order),
   ref_sales_unit(label)
 `;
