@@ -51,10 +51,13 @@ Ajouter dans `C:\Windows\System32\drivers\etc\hosts` :
 127.0.0.1 opetitfrais.janisol.ma
 ```
 
-Puis :
+Puis **redémarrer** `npm run dev` :
 
 - `http://opetitfrais.ma:3000` → boutique
 - `http://opetitfrais.janisol.ma:3000` → backoffice
+- `http://localhost:3000` → boutique aussi (host `localhost` reconnu en dev)
+
+**Next.js 16** : l'accès via `opetitfrais.ma` en dev exige `allowedDevOrigins` dans [`next.config.ts`](../../../next.config.ts). Sans cela, le JS client est bloqué (boutons inactifs, erreur WebSocket `webpack-hmr`).
 
 ## i18n
 

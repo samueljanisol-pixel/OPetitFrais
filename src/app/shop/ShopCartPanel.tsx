@@ -17,9 +17,12 @@ import {
 import { useTranslations } from "next-intl";
 import { useMemo, useState } from "react";
 import { buildOrderText, buildWhatsAppUrl } from "@/lib/shop/format-order-text";
+import { getShopWhatsAppPhone, isShopWhatsAppConfigured } from "@/lib/shop/whatsapp-phone";
 import { addQty, salesUnitCode, subtractQty } from "@/lib/shop/cart-qty";
 import { productDisplayName } from "@/lib/products/product-display-name";
-import { useAppFormat, useAppLocale } from "@/lib/i18n/useAppFormat";
+import { formatShopPriceDh, formatShopQty } from "@/lib/shop/format-price";
+import { labelFromRefForLocale } from "@/lib/commandes-fournisseur/product-display";
+import { useAppLocale } from "@/lib/i18n/useAppFormat";
 import type { ShopCartLine, ShopProduct } from "@/lib/shop/types";
 
 type Props = {
@@ -41,7 +44,6 @@ export default function ShopCartPanel({
 }: Props) {
   const t = useTranslations("shop");
   const locale = useAppLocale();
-  const { formatCurrency, formatNumber } = useAppFormat();
   const [snack, setSnack] = useState<string | null>(null);
 
   const total = useMemo(
@@ -59,7 +61,10 @@ export default function ShopCartPanel({
     [lines, productById, locale, t],
   );
 
-  const whatsAppPhone = process.env.NEXT_PUBLIC_SHOP_WHATSAPP_PHONE ?? "";
+  const whatsAppPhone = getShopWhatsAppPhone();
+  const whatsAppHref = isShopWhatsAppConfigured()
+    ? buildWhatsAppUrl(whatsAppPhone, orderText)
+    : null;
 
   const copyList = async () => {
     try {
@@ -70,13 +75,7 @@ export default function ShopCartPanel({
     }
   };
 
-  const formatLineQty = (line: ShopCartLine) => {
-    const isKg = line.unitCode === "kg";
-    return formatNumber(line.qty, {
-      minimumFractionDigits: isKg ? 1 : 0,
-      maximumFractionDigits: isKg ? 2 : 0,
-    });
-  };
+  const formatLineQty = (line: ShopCartLine) => formatShopQty(locale, line.qty, line.unitCode);
 
   return (
     <>
@@ -107,6 +106,7 @@ export default function ShopCartPanel({
                   const product = productById.get(line.productId);
                   if (!product) return null;
                   const unitCode = line.unitCode;
+                  const unitLabel = labelFromRefForLocale(product.ref_sales_unit, locale);
                   return (
                     <ListItem
                       key={line.productId}
@@ -137,7 +137,7 @@ export default function ShopCartPanel({
                     >
                       <ListItemText
                         primary={productDisplayName(product, locale)}
-                        secondary={`${formatLineQty(line)} ${unitCode === "kg" ? "kg" : t("unit")} — ${formatCurrency(line.qty * line.priceAtAdd)}`}
+                        secondary={`${formatLineQty(line)} ${unitLabel} — ${formatShopPriceDh(locale, line.qty * line.priceAtAdd)}`}
                       />
                     </ListItem>
                   );
@@ -145,26 +145,17 @@ export default function ShopCartPanel({
               </List>
 
               <Typography variant="subtitle1" sx={{ mt: 2, mb: 1.5, fontWeight: 700 }}>
-                {t("estimatedTotal")} : {formatCurrency(total)}
+                {t("estimatedTotal")} : {formatShopPriceDh(locale, total)}
               </Typography>
 
               <Box sx={{ display: "flex", flexDirection: "column", gap: 1 }}>
-                <Button
-                  variant="contained"
-                  color="success"
-                  startIcon={<ContentCopyOutlinedIcon />}
-                  onClick={() => void copyList()}
-                  fullWidth
-                >
-                  {t("copyList")}
-                </Button>
-                {whatsAppPhone ? (
+                {whatsAppHref ? (
                   <Button
-                    variant="outlined"
+                    variant="contained"
                     color="success"
                     startIcon={<WhatsAppIcon />}
                     component="a"
-                    href={buildWhatsAppUrl(whatsAppPhone, orderText)}
+                    href={whatsAppHref}
                     target="_blank"
                     rel="noopener noreferrer"
                     fullWidth
@@ -172,6 +163,15 @@ export default function ShopCartPanel({
                     {t("sendWhatsApp")}
                   </Button>
                 ) : null}
+                <Button
+                  variant="outlined"
+                  color="success"
+                  startIcon={<ContentCopyOutlinedIcon />}
+                  onClick={() => void copyList()}
+                  fullWidth
+                >
+                  {t("copyList")}
+                </Button>
                 <Button variant="text" color="inherit" onClick={onClear} fullWidth>
                   {t("clearCart")}
                 </Button>

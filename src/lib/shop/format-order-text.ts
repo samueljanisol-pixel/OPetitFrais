@@ -1,7 +1,8 @@
 import type { AppLocale } from "@/i18n/config";
-import { formatCurrency, formatNumber } from "@/lib/i18n/format";
+import { formatNumber } from "@/lib/i18n/format";
 import { productDisplayName } from "@/lib/products/product-display-name";
 import { labelFromRefForLocale } from "@/lib/commandes-fournisseur/product-display";
+import { formatShopPriceDh } from "@/lib/shop/format-price";
 import type { ShopCartLine, ShopProduct } from "@/lib/shop/types";
 
 function formatQtyLabel(qty: number, unitCode: string, locale: AppLocale): string {
@@ -40,12 +41,12 @@ export function buildOrderText(
     const qtyLabel = formatQtyLabel(line.qty, line.unitCode, locale);
     const lineTotal = line.qty * line.priceAtAdd;
     total += lineTotal;
-    const priceStr = formatCurrency(locale, lineTotal);
+    const priceStr = formatShopPriceDh(locale, lineTotal);
     rows.push(`${name} — ${qtyLabel} — ${priceStr}`);
   }
 
   rows.push(labels.separator);
-  rows.push(`${labels.total} : ${formatCurrency(locale, total)}`);
+  rows.push(`${labels.total} : ${formatShopPriceDh(locale, total)}`);
   return rows.join("\n");
 }
 

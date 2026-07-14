@@ -15,6 +15,13 @@ if (supabaseUrl) {
 }
 
 const nextConfig: NextConfig = {
+  // Dev : autoriser opetitfrais.ma (fichier hosts) à charger JS/HMR depuis next dev.
+  allowedDevOrigins: [
+    "opetitfrais.ma",
+    "www.opetitfrais.ma",
+    "opetitfrais.janisol.ma",
+    "www.opetitfrais.janisol.ma",
+  ],
   images: {
     remotePatterns: supabaseHost
       ? [

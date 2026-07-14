@@ -13,10 +13,13 @@ export function normalizeHost(host: string): string {
 }
 
 export function getShopHosts(): string[] {
+  const devFallback = "opetitfrais.ma,www.opetitfrais.ma,localhost";
+  const prodFallback = "opetitfrais.ma,www.opetitfrais.ma";
+  const fallback = process.env.NODE_ENV === "development" ? devFallback : prodFallback;
   return parseHostList(
     process.env.SHOP_HOSTS ?? process.env.NEXT_PUBLIC_SHOP_HOSTS,
-    "opetitfrais.ma,www.opetitfrais.ma",
-  );
+    fallback,
+  ).map((h) => normalizeHost(h));
 }
 
 export function getBackofficeHost(): string {

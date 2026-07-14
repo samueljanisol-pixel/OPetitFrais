@@ -1,12 +1,16 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
-import { Box, Chip, Fab, Typography } from "@mui/material";
+import { Box, Button, Chip, Typography } from "@mui/material";
 import ShoppingCartOutlinedIcon from "@mui/icons-material/ShoppingCartOutlined";
+import WhatsAppIcon from "@mui/icons-material/WhatsApp";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { productPhotoPublicUrl } from "@/lib/products/storage";
-import { useAppFormat } from "@/lib/i18n/useAppFormat";
+import { useAppLocale } from "@/lib/i18n/useAppFormat";
+import { formatShopPriceDh } from "@/lib/shop/format-price";
+import { buildOrderText, buildWhatsAppUrl } from "@/lib/shop/format-order-text";
+import { getShopWhatsAppPhone, isShopWhatsAppConfigured } from "@/lib/shop/whatsapp-phone";
 import {
   getCartLineQty,
   readCartFromStorage,
@@ -36,7 +40,7 @@ function flattenProducts(groups: ShopCategoryGroup[]): ShopProduct[] {
 
 export default function ShopOrderClient({ initialGroups, catalogError }: Props) {
   const t = useTranslations("shop");
-  const { formatCurrency } = useAppFormat();
+  const locale = useAppLocale();
   const [groups] = useState(initialGroups);
   const [lines, setLines] = useState<ShopCartLine[]>([]);
   const [cartOpen, setCartOpen] = useState(false);
@@ -44,6 +48,7 @@ export default function ShopOrderClient({ initialGroups, catalogError }: Props) 
     initialGroups[0]?.categoryId ?? null,
   );
   const [hydrated, setHydrated] = useState(false);
+  const skipNextWriteRef = useRef(true);
 
   const supabase = useMemo(() => createSupabaseBrowserClient(), []);
   const productById = useMemo(() => {
@@ -54,14 +59,19 @@ export default function ShopOrderClient({ initialGroups, catalogError }: Props) 
     return map;
   }, [groups]);
 
-  useEffect(() => {
-    const stored = readCartFromStorage();
-    setLines(stored.lines);
+  // useLayoutEffect : charger le panier avant le 1er paint (évite qu'un clic + soit écrasé en dev).
+  useLayoutEffect(() => {
+    setLines(readCartFromStorage().lines);
     setHydrated(true);
+    skipNextWriteRef.current = true;
   }, []);
 
   useEffect(() => {
     if (!hydrated) return;
+    if (skipNextWriteRef.current) {
+      skipNextWriteRef.current = false;
+      return;
+    }
     writeCartToStorage({ lines });
   }, [lines, hydrated]);
 
@@ -69,43 +79,71 @@ export default function ShopOrderClient({ initialGroups, catalogError }: Props) 
     (productId: string, qty: number) => {
       const product = productById.get(productId);
       if (!product) return;
-      const unitCode = salesUnitCode(product.ref_sales_unit);
-      const line = buildCartLineFromProduct(product, qty);
-      setLines((prev) => upsertCartLine(prev, line));
-      if (qty <= 0 && lines.length <= 1) {
-        setCartOpen(false);
-      }
+      setLines((prev) => {
+        const line = buildCartLineFromProduct(product, qty);
+        const next = upsertCartLine(prev, line);
+        if (qty <= 0 && next.length === 0) {
+          setCartOpen(false);
+        }
+        return next;
+      });
     },
-    [productById, lines.length],
+    [productById],
   );
 
   const addProduct = useCallback(
     (product: ShopProduct) => {
       const unitCode = salesUnitCode(product.ref_sales_unit);
-      const current = getCartLineQty(lines, product.id);
-      const nextQty = current > 0 ? addQty(current, unitCode) : minQtyForUnit(unitCode);
-      updateLine(product.id, nextQty);
+      setLines((prev) => {
+        const current = getCartLineQty(prev, product.id);
+        const nextQty = current > 0 ? addQty(current, unitCode) : minQtyForUnit(unitCode);
+        const line = buildCartLineFromProduct(product, nextQty);
+        return upsertCartLine(prev, line);
+      });
     },
-    [lines, updateLine],
+    [],
   );
 
   const removeProduct = useCallback(
     (product: ShopProduct) => {
       const unitCode = salesUnitCode(product.ref_sales_unit);
-      const current = getCartLineQty(lines, product.id);
-      updateLine(product.id, subtractQty(current, unitCode));
+      setLines((prev) => {
+        const current = getCartLineQty(prev, product.id);
+        const nextQty = subtractQty(current, unitCode);
+        const line = buildCartLineFromProduct(product, nextQty);
+        const next = upsertCartLine(prev, line);
+        if (next.length === 0) {
+          setCartOpen(false);
+        }
+        return next;
+      });
     },
-    [lines, updateLine],
+    [],
   );
 
   const cartCount = lines.length;
   const cartTotal = lines.reduce((sum, l) => sum + l.qty * l.priceAtAdd, 0);
 
+  const orderText = useMemo(
+    () =>
+      buildOrderText(lines, productById, locale, {
+        title: t("orderTitle"),
+        total: t("estimatedTotal"),
+        separator: "──────────────────────",
+      }),
+    [lines, productById, locale, t],
+  );
+
+  const whatsAppHref = useMemo(() => {
+    if (!isShopWhatsAppConfigured() || lines.length === 0) return null;
+    return buildWhatsAppUrl(getShopWhatsAppPhone(), orderText);
+  }, [lines.length, orderText]);
+
   const activeGroup = groups.find((g) => g.categoryId === activeCategoryId) ?? groups[0] ?? null;
 
   if (catalogError) {
     return (
-      <ShopShell cartCount={0} onOpenCart={() => setCartOpen(true)}>
+      <ShopShell cartCount={0} cartTotal={0} onOpenCart={() => setCartOpen(true)}>
         <main className="flex flex-1 items-center justify-center px-6 py-16">
           <Typography color="error">{catalogError}</Typography>
         </main>
@@ -115,8 +153,8 @@ export default function ShopOrderClient({ initialGroups, catalogError }: Props) 
 
   return (
     <>
-      <ShopShell cartCount={cartCount} onOpenCart={() => setCartOpen(true)}>
-        <main className="flex min-h-0 flex-1 flex-col bg-gradient-to-b from-emerald-50/80 to-white pb-24">
+      <ShopShell cartCount={cartCount} cartTotal={cartTotal} onOpenCart={() => setCartOpen(true)}>
+        <main className="flex min-h-0 flex-1 flex-col bg-gradient-to-b from-emerald-50/80 to-white pb-28">
           <Box sx={{ px: 2, pt: 2, pb: 1 }}>
             <Typography variant="h5" color="success.dark" sx={{ fontWeight: 800 }}>
               {t("title")}
@@ -170,10 +208,11 @@ export default function ShopOrderClient({ initialGroups, catalogError }: Props) 
                       sx={{
                         display: "grid",
                         gridTemplateColumns: {
-                          xs: "repeat(2, minmax(0, 1fr))",
-                          sm: "repeat(3, minmax(0, 1fr))",
+                          xs: "repeat(3, minmax(0, 1fr))",
+                          sm: "repeat(4, minmax(0, 1fr))",
+                          md: "repeat(5, minmax(0, 1fr))",
                         },
-                        gap: 1.5,
+                        gap: 1,
                       }}
                     >
                       {subgroup.products.map((product) => {
@@ -200,24 +239,49 @@ export default function ShopOrderClient({ initialGroups, catalogError }: Props) 
       </ShopShell>
 
       {cartCount > 0 ? (
-        <Fab
-          color="success"
-          variant="extended"
-          onClick={() => setCartOpen(true)}
+        <Box
           sx={{
             position: "fixed",
-            bottom: 20,
-            left: "50%",
-            transform: "translateX(-50%)",
+            bottom: 16,
+            left: 16,
+            right: 16,
             zIndex: 25,
-            textTransform: "none",
-            fontWeight: 700,
-            px: 2.5,
+            display: "flex",
+            gap: 1,
+            maxWidth: 480,
+            mx: "auto",
           }}
         >
-          <ShoppingCartOutlinedIcon sx={{ mr: 1 }} />
-          {t("viewCart")} · {formatCurrency(cartTotal)}
-        </Fab>
+          <Button
+            variant="outlined"
+            color="success"
+            onClick={() => setCartOpen(true)}
+            startIcon={<ShoppingCartOutlinedIcon />}
+            sx={{
+              flex: whatsAppHref ? "0 1 auto" : 1,
+              textTransform: "none",
+              fontWeight: 700,
+              bgcolor: "background.paper",
+              whiteSpace: "nowrap",
+            }}
+          >
+            {formatShopPriceDh(locale, cartTotal)}
+          </Button>
+          {whatsAppHref ? (
+            <Button
+              variant="contained"
+              color="success"
+              component="a"
+              href={whatsAppHref}
+              target="_blank"
+              rel="noopener noreferrer"
+              startIcon={<WhatsAppIcon />}
+              sx={{ flex: 1, textTransform: "none", fontWeight: 700 }}
+            >
+              {t("sendWhatsApp")}
+            </Button>
+          ) : null}
+        </Box>
       ) : null}
 
       <ShopCartPanel

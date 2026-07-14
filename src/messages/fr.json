@@ -554,6 +554,7 @@
     "title": "Commander",
     "subtitle": "Composez votre panier et envoyez-nous votre liste par WhatsApp.",
     "homeTitle": "O' Petit Frais — Commander",
+    "cartSummary": "{count, plural, one {# produit · {total}} other {# produits · {total}}}",
     "cart": "Panier",
     "openCart": "Ouvrir le panier",
     "viewCart": "Voir le panier",
