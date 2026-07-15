@@ -34,10 +34,24 @@
       "supplierOrders": "Commandes fournisseur",
       "cuisine": "Cuisine",
       "cuisineHistorique": "Historique cuisine",
+      "shopStats": "Boutique en ligne",
       "logout": "Déconnexion",
       "settings": "Paramètres",
       "settingsAria": "Paramètres",
       "homeAria": "O' Petit Frais — accueil"
+    },
+    "shopStats": {
+      "title": "Statistiques boutique",
+      "subtitle": "Visites et paniers de la boutique publique (opetitfrais.ma).",
+      "backHome": "Accueil",
+      "todayVisits": "Visites aujourd'hui",
+      "todayVisitsHint": "Visiteurs uniques sur la journée (heure Maroc).",
+      "activeVisitors": "Visiteurs actifs",
+      "activeVisitorsHint": "Activité dans les {minutes} dernières minutes.",
+      "activeCarts": "Paniers en cours",
+      "activeCartsHint": "Panier non vide, sync dans les {minutes} dernières minutes.",
+      "visitsChartTitle": "Visites par jour (30 derniers jours)",
+      "refreshHint": "Actualisation automatique toutes les {seconds} s."
     },
     "accessDenied": {
       "title": "Accès refusé",
@@ -555,6 +569,7 @@
     "subtitle": "Composez votre panier et envoyez-nous votre liste par WhatsApp.",
     "homeTitle": "O' Petit Frais — Commander",
     "cartSummary": "{count, plural, one {# produit · {total}} other {# produits · {total}}}",
+    "cartProductCount": "{count, plural, one {# produit} other {# produits}}",
     "cart": "Panier",
     "openCart": "Ouvrir le panier",
     "viewCart": "Voir le panier",

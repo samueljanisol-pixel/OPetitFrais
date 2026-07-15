@@ -49,19 +49,15 @@ function toOrderTextLine(
   };
 }
 
-/** Aligne les quantités avec des tabulations (même colonne pour toutes les lignes du bloc). */
-export function formatLinesWithTabQty(lines: Pick<OrderTextLine, "name" | "qtyLabel">[]): string[] {
+/** Aligne les quantités avec des espaces fixes (même colonne pour toutes les lignes du bloc). */
+export function formatLinesWithFixedSpacing(
+  lines: Pick<OrderTextLine, "name" | "qtyLabel">[],
+): string[] {
   if (lines.length === 0) return [];
   const nameWidth = Math.max(...lines.map((l) => l.name.length));
+  const gapAfterName = 2;
 
-  return lines.map(({ name, qtyLabel }) => {
-    if (name.length >= nameWidth) {
-      return `${name}\t${qtyLabel}`;
-    }
-    const gap = nameWidth - name.length;
-    const tabCount = Math.max(1, Math.ceil((gap + 1) / 8));
-    return `${name}${"\t".repeat(tabCount)}${qtyLabel}`;
-  });
+  return lines.map(({ name, qtyLabel }) => `${name.padEnd(nameWidth + gapAfterName, " ")}${qtyLabel}`);
 }
 
 export function buildOrderText(
@@ -91,7 +87,7 @@ export function buildOrderText(
       for (const entry of entries) {
         total += entry.lineTotal;
       }
-      rows.push(...formatLinesWithTabQty(entries));
+      rows.push(...formatLinesWithFixedSpacing(entries));
       rows.push("");
     }
     if (rows[rows.length - 1] === "") rows.pop();
@@ -103,7 +99,7 @@ export function buildOrderText(
     for (const entry of entries) {
       total += entry.lineTotal;
     }
-    rows.push(...formatLinesWithTabQty(entries));
+    rows.push(...formatLinesWithFixedSpacing(entries));
   }
 
   rows.push(labels.separator);

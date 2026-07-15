@@ -84,5 +84,6 @@ export function useSessionPermissions() {
     canCommandesFournisseurVendeursRenommer: can("commandes_fournisseur.vendeurs_renommer"),
     canCuisineSaisie: can("cuisine.saisie"),
     canCuisineHistorique: can("cuisine.historique"),
+    canReadShop: can("shop.read"),
   };
 }

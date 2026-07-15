@@ -9,6 +9,7 @@ import Inventory2OutlinedIcon from '@mui/icons-material/Inventory2Outlined'
 import LocalShippingOutlinedIcon from '@mui/icons-material/LocalShippingOutlined'
 import RestaurantMenuOutlinedIcon from '@mui/icons-material/RestaurantMenuOutlined'
 import SettingsIcon from '@mui/icons-material/Settings'
+import StorefrontOutlinedIcon from '@mui/icons-material/StorefrontOutlined'
 import AppLink from '@/components/AppLink'
 import { useSessionPermissions } from '@/lib/auth/useSessionPermissions'
 import { clearSessionSnapshot } from '@/lib/auth/session-display-cache'
@@ -17,8 +18,15 @@ export default function BackofficeHome() {
   const router = useRouter()
   const t = useTranslations('backoffice.home')
   const tCommon = useTranslations('common')
-  const { loading, can, canReadVentes, canReadParametres, canCuisineSaisie, canCuisineHistorique } =
-    useSessionPermissions()
+  const {
+    loading,
+    can,
+    canReadVentes,
+    canReadShop,
+    canReadParametres,
+    canCuisineSaisie,
+    canCuisineHistorique,
+  } = useSessionPermissions()
   const canCommandesFournisseur =
     can('commandes_fournisseur.saisie') ||
     can('commandes_fournisseur.consolidation') ||
@@ -116,6 +124,29 @@ export default function BackofficeHome() {
                 }}
               >
                 {t('stats')}
+              </Button>
+            ) : null}
+            {canReadShop ? (
+              <Button
+                component={AppLink}
+                href="/boutique/stats"
+                variant="outlined"
+                color="success"
+                size="large"
+                fullWidth
+                startIcon={<StorefrontOutlinedIcon sx={{ fontSize: 28 }} />}
+                sx={{
+                  borderRadius: 2,
+                  textTransform: 'none',
+                  fontWeight: 600,
+                  py: 1.25,
+                  px: 2,
+                  justifyContent: 'flex-start',
+                  gap: 1.25,
+                  '& .MuiButton-startIcon': { mr: 0.5, ml: 0 },
+                }}
+              >
+                {t('shopStats')}
               </Button>
             ) : null}
             {canCommandesFournisseur ? (

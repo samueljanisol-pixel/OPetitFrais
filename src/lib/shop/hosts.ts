@@ -37,6 +37,7 @@ const BACKOFFICE_PATH_PREFIXES = [
   "/ca",
   "/historique-ca",
   "/analyse-stats",
+  "/boutique",
   "/referentiel",
   "/commandes-fournisseur",
   "/cuisine",

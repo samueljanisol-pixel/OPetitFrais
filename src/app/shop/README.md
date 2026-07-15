@@ -10,6 +10,7 @@ Page publique de commande pour les clients particuliers. Accessible sur le domai
    - **Unité** : pas de 1
 3. Panier stocké **uniquement en cache navigateur** (`localStorage`, clé `opf-shop-cart-v1`) — aucune base de données, aucune identification.
 4. Export : copier la liste texte ou ouvrir WhatsApp avec le message pré-rempli.
+5. **Statistiques anonymes** : heartbeat vers `POST /api/shop/analytics/heartbeat` (visiteur UUID en localStorage). Consultation backoffice : [`/boutique/stats`](../boutique/stats/README.md) (permission `shop.read`).
 
 ## Fichiers
 
@@ -20,7 +21,7 @@ Page publique de commande pour les clients particuliers. Accessible sur le domai
 | `ShopShell.tsx` | Header boutique (logo, langue, panier) |
 | `ShopProductCard.tsx` | Carte produit avec +/- |
 | `ShopCartPanel.tsx` | Drawer panier + export |
-| `src/lib/shop/*` | Hosts, catalogue, panier, format export |
+| `src/lib/shop/*` | Hosts, catalogue, panier, format export, analytics |
 | `src/app/page.tsx` | Route `/` selon le domaine (shop vs backoffice) |
 | `src/proxy.ts` | Host boutique public ; redirect chemins backoffice |
 

@@ -23,6 +23,7 @@ import type { ShopCartLine, ShopCategoryGroup, ShopProduct } from "@/lib/shop/ty
 import ShopShell from "@/app/shop/ShopShell";
 import ShopProductCard from "@/app/shop/ShopProductCard";
 import ShopCartPanel, { buildCartLineFromProduct } from "@/app/shop/ShopCartPanel";
+import { useShopAnalytics } from "@/lib/shop/useShopAnalytics";
 
 type Props = {
   initialGroups: ShopCategoryGroup[];
@@ -75,6 +76,8 @@ export default function ShopOrderClient({ initialGroups, catalogError }: Props) 
     }
     writeCartToStorage({ lines });
   }, [lines, hydrated]);
+
+  useShopAnalytics({ lines, hydrated });
 
   const updateLine = useCallback(
     (productId: string, qty: number) => {

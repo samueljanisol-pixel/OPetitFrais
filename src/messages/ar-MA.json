@@ -34,10 +34,24 @@
       "supplierOrders": "طلبيات المزود",
       "cuisine": "المطبخ",
       "cuisineHistorique": "تاريخ المطبخ",
+      "shopStats": "المتجر الإلكتروني",
       "logout": "خرج",
       "settings": "الإعدادات",
       "settingsAria": "الإعدادات",
       "homeAria": "O' Petit Frais — الرئيسية"
+    },
+    "shopStats": {
+      "title": "إحصائيات المتجر",
+      "subtitle": "زيارات وسلات المتجر العام (opetitfrais.ma).",
+      "backHome": "الرئيسية",
+      "todayVisits": "زيارات اليوم",
+      "todayVisitsHint": "زوار فريدون اليوم (توقيت المغرب).",
+      "activeVisitors": "زوار نشطون",
+      "activeVisitorsHint": "نشاط خلال آخر {minutes} دقيقة.",
+      "activeCarts": "سلات جارية",
+      "activeCartsHint": "سلة غير فارغة، آخر مزامنة خلال {minutes} دقيقة.",
+      "visitsChartTitle": "الزيارات حسب اليوم (آخر 30 يومًا)",
+      "refreshHint": "تحديث تلقائي كل {seconds} ث."
     },
     "accessDenied": {
       "title": "الوصول ممنوع",
@@ -555,6 +569,7 @@
     "subtitle": "كوّن السّلة ديالك وصيفط لينا اللائحة عبر WhatsApp.",
     "homeTitle": "O' Petit Frais — كوموندي",
     "cartSummary": "{count, plural, one {# منتج · {total}} other {# منتجات · {total}}}",
+    "cartProductCount": "{count, plural, one {# منتج} other {# منتجات}}",
     "cart": "السلة",
     "openCart": "حل السّلة",
     "viewCart": "شوف السّلة",
