@@ -2,7 +2,7 @@
 
 ## Colonnes lues (seules données importées)
 
-`Actif`, `Code`, `Nom`, `Prix`, `Marge DH Actuelle` (alias « Marge DH »), `UdV`, `Catégorie`, `SousCatégorie` (alias « Sous-Catégorie »), `Fournisseur`, `Marchand` (vendeur achat, rattaché au fournisseur de la ligne — **créé automatiquement** s’il n’existe pas), `Arabe` — voir `mapSheetRow.ts` (`SHEET_COLUMNS`). Colonnes → `product.name` / `product.name_ar` (format feuille inchangé).
+`Actif`, `Code`, `Nom`, `Prix`, `Marge DH Actuelle` (alias « Marge DH »), `UdV`, `UdC` (unité de commande, optionnelle), `UdA` (unité d'achat, optionnelle), `Catégorie`, `SousCatégorie` (alias « Sous-Catégorie »), `Fournisseur`, `Marchand` (vendeur achat, rattaché au fournisseur de la ligne — **créé automatiquement** s’il n’existe pas), `Arabe` — voir `mapSheetRow.ts` (`SHEET_COLUMNS`).
 
 Le proxy `/api/transition/sheet-json` utilise un timeout de 60 s (Apps Script peut être lent au cold start) et réessaie une fois en cas d’échec réseau.
 
@@ -12,12 +12,12 @@ L’import headless est disponible via la tâche **`sheet_import`** (Paramètres
 
 - Fetch Google : [`fetchSheetJsonFromGoogle.ts`](fetchSheetJsonFromGoogle.ts)
 - Exécution : [`src/lib/automated-tasks/tasks/sheetImport.ts`](../lib/automated-tasks/tasks/sheetImport.ts) → `applySheetImport` avec **service role**
-- Config : `updateFields` = `all` (sync complète) ou `new_only` (création sans mise à jour des existants)
+- Config : `importFields` — champs cochés pour les produits existants (`all` / `new_only` legacy en repli)
 - **Planifié** : l’import ne s’exécute que si le JSON export a **changé** depuis le dernier import (hash SHA-256 stocké dans `automated_tasks.config.lastImportContentHash`). Un lancement manuel admin force l’import.
 
 ## Filtre d’import Sheet
 
-Au clic sur **Importer depuis Google Sheet**, une fenêtre permet de **cocher les champs** à appliquer aux **produits existants** (mise à jour partielle). **Aucune case cochée par défaut** — sans case cochée, seuls les **nouveaux** produits (absents en base) sont créés. Un produit existant nécessite au moins un champ coché pour être modifié. Un **nouveau produit** est toujours créé avec **toutes** les colonnes lues. Pendant l’import, une **barre de progression** indique l’étape en cours (récupération, analyse, import ligne par ligne). Le bandeau résume ensuite : créés / modifiés / erreurs.
+Au clic sur **Importer depuis Google Sheet**, une fenêtre permet de **cocher les champs** éligibles pour les **produits existants** (mise à jour partielle). **Aucune case cochée par défaut** — sans case cochée, seuls les **nouveaux** produits (absents en base) sont créés. Pour un produit existant, seuls les champs **cochés et dont la valeur a changé** par rapport à la base sont écrits ; si aucune différence, la ligne est ignorée. Un **nouveau produit** est toujours créé avec **toutes** les colonnes lues. L’import traite les lignes en **parallèle** (mises à jour), insère les créations et l’historique prix par **lots**, et pré-crée vendeurs / sous-catégories manquants avant l’écriture produits.
 
 ## Import photos FTP
 

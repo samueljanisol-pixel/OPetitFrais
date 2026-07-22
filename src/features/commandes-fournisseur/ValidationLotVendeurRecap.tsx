@@ -1,12 +1,20 @@
 "use client";
 
 import { useMemo } from "react";
-import { Typography } from "@mui/material";
+import { TextField, Typography } from "@mui/material";
+import { useTranslations } from "next-intl";
 import VendeurRecapExportBlock from "@/features/commandes-fournisseur/VendeurRecapExportBlock";
 import {
+  vendorExportLocale,
+  vendorRecapCaptureLabels,
+} from "@/lib/commandes-fournisseur/vendor-recap-capture-i18n";
+import {
+  applyLocaleToVendeurRecapRows,
   buildMagasinMxColumnsFromLot,
   buildVendeurRecapGroups,
+  SANS_VENDEUR_KEY,
   type RecapLigneInput,
+  type VendeurRecapGroup,
   type VendeurRef,
 } from "@/lib/commandes-fournisseur/validation-lot-vendeur-recap";
 
@@ -27,7 +35,31 @@ type Props = {
   commandeDateSlug: string;
   lignes: RecapLigneInput[];
   vendeurs: VendeurRef[];
+  vendeurCommentDrafts: Record<string, string>;
+  vendeurCommentEditable: boolean;
+  vendeurCommentSavingKey: string | null;
+  onVendeurCommentDraftChange: (vendeurKey: string, value: string) => void;
+  onVendeurCommentSave: (vendeurKey: string, commentaire: string) => void | Promise<void>;
 };
+
+function vendeurForGroup(vendeurs: VendeurRef[], vendeurKey: string): VendeurRef | undefined {
+  if (vendeurKey === SANS_VENDEUR_KEY) {
+    return undefined;
+  }
+  return vendeurs.find((v) => v.id === vendeurKey);
+}
+
+function localizeGroup(
+  group: VendeurRecapGroup,
+  lignes: RecapLigneInput[],
+  vendeur: VendeurRef | undefined,
+): VendeurRecapGroup {
+  const locale = vendorExportLocale(vendeur?.preferred_locale);
+  const labels = vendorRecapCaptureLabels(locale, "", "");
+  const rows = group.rows.map((row) => ({ ...row }));
+  applyLocaleToVendeurRecapRows(rows, lignes, locale, labels.formatSoitLine);
+  return { ...group, rows };
+}
 
 export default function ValidationLotVendeurRecap({
   lot,
@@ -36,18 +68,29 @@ export default function ValidationLotVendeurRecap({
   commandeDateSlug,
   lignes,
   vendeurs,
+  vendeurCommentDrafts,
+  vendeurCommentEditable,
+  vendeurCommentSavingKey,
+  onVendeurCommentDraftChange,
+  onVendeurCommentSave,
 }: Props) {
+  const t = useTranslations("backoffice.commandes.validation.lotDetail");
   const magasinColumns = useMemo(() => buildMagasinMxColumnsFromLot(lot), [lot]);
-  const lotCommentaire = typeof lot.commentaire === "string" ? lot.commentaire : null;
   const groups = useMemo(
-    () => buildVendeurRecapGroups(lignes, vendeurs, magasinColumns, supplierLabel),
-    [lignes, vendeurs, magasinColumns, supplierLabel],
+    () => buildVendeurRecapGroups(lignes, vendeurs, magasinColumns, supplierLabel, vendeurCommentDrafts),
+    [lignes, vendeurs, magasinColumns, supplierLabel, vendeurCommentDrafts],
+  );
+
+  const localizedGroups = useMemo(
+    () =>
+      groups.map((g) => localizeGroup(g, lignes, vendeurForGroup(vendeurs, g.vendeurKey))),
+    [groups, lignes, vendeurs],
   );
 
   if (groups.length === 0) {
     return (
       <Typography color="text.secondary" variant="body2" className="!mb-4">
-        Aucune ligne pour le récap vendeurs.
+        {t("vendorRecapEmpty")}
       </Typography>
     );
   }
@@ -55,20 +98,50 @@ export default function ValidationLotVendeurRecap({
   return (
     <div className="!mb-6">
       <Typography variant="subtitle1" className="!mb-3" sx={{ fontWeight: 600 }}>
-        Récapitulatif par vendeur
+        {t("vendorRecapSection")}
       </Typography>
-      {groups.map((g) => (
-        <VendeurRecapExportBlock
-          key={g.vendeurKey}
-          group={g}
-          magasinColumns={magasinColumns}
-          supplierLabel={supplierLabel}
-          commandeDateLabel={commandeDateLabel}
-          commandeDateSlug={commandeDateSlug}
-          footerComment={lotCommentaire}
-          footerCommentLabel="Commentaire lot"
-        />
-      ))}
+      {groups.map((g, index) => {
+        const draft = vendeurCommentDrafts[g.vendeurKey] ?? "";
+        const vendeur = vendeurForGroup(vendeurs, g.vendeurKey);
+        const exportLocale = vendorExportLocale(vendeur?.preferred_locale);
+        const localized = localizedGroups[index] ?? g;
+        return (
+          <div key={g.vendeurKey} className="!mb-6">
+            {vendeurCommentEditable ? (
+              <TextField
+                fullWidth
+                multiline
+                minRows={2}
+                maxRows={6}
+                size="small"
+                className="!mb-2"
+                label={t("vendorCommentLabel", { vendor: g.vendeurLabel })}
+                placeholder={t("vendorCommentPlaceholder")}
+                value={draft}
+                onChange={(e) => onVendeurCommentDraftChange(g.vendeurKey, e.target.value)}
+                disabled={vendeurCommentSavingKey === g.vendeurKey}
+                onBlur={(e) => void onVendeurCommentSave(g.vendeurKey, e.target.value)}
+              />
+            ) : draft.trim() ? (
+              <Typography variant="body2" className="!mb-2 whitespace-pre-wrap">
+                {draft.trim()}
+              </Typography>
+            ) : null}
+            <VendeurRecapExportBlock
+              group={localized}
+              magasinColumns={magasinColumns}
+              supplierLabel={supplierLabel}
+              commandeDateLabel={commandeDateLabel}
+              commandeDateSlug={commandeDateSlug}
+              exportLocale={exportLocale}
+              vendeurPhone={vendeur?.phone}
+              whatsAppText={draft}
+              footerComment={g.commentaire?.trim() ? g.commentaire : null}
+              footerCommentLabel={t("vendorCommentExportLabel", { vendor: g.vendeurLabel })}
+            />
+          </div>
+        );
+      })}
     </div>
   );
 }

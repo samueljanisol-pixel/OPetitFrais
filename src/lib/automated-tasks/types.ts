@@ -1,3 +1,5 @@
+import type { SheetImportFields } from '@/features/sheet-import/sheet-import-fields'
+
 export type AutomatedTaskCode = 'sheet_import' | 'ftp_sync'
 
 export type ScheduleKind = 'interval' | 'daily'
@@ -5,7 +7,10 @@ export type ScheduleKind = 'interval' | 'daily'
 export type AutomatedTaskRunStatus = 'running' | 'success' | 'error'
 
 export type SheetImportTaskConfig = {
+  /** Legacy — préférer `importFields`. */
   updateFields?: 'all' | 'new_only'
+  /** Champs cochés pour les produits existants (import planifié). */
+  importFields?: SheetImportFields
   /** Empreinte du dernier import réussi (SHA-256 du JSON export). */
   lastImportContentHash?: string
   lastImportAt?: string

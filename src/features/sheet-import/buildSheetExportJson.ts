@@ -10,6 +10,8 @@ type Row = {
   active: boolean
   name_ar: string | null
   ref_sales_unit: { label: string } | null
+  ref_order_unit: { label: string } | null
+  ref_purchase_unit: { label: string } | null
   ref_category: { label: string } | null
   ref_subcategory: { label: string } | null
   ref_supplier: { label: string } | null
@@ -36,6 +38,8 @@ export async function buildSheetExportPayload(supabase: SupabaseClient) {
       [C.prix]: Number(row.price),
       [C.marge]: row.margin != null && Number.isFinite(Number(row.margin)) ? Number(row.margin) : null,
       [C.udv]: row.ref_sales_unit?.label ?? '',
+      [C.udc]: row.ref_order_unit?.label ?? '',
+      [C.uda]: row.ref_purchase_unit?.label ?? '',
       [C.categorie]: row.ref_category?.label ?? '',
       [C.sousCategorie]: row.ref_subcategory?.label ?? '',
       [C.fournisseur]: row.ref_supplier?.label ?? '',

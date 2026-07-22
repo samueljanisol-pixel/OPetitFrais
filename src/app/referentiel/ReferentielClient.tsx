@@ -30,10 +30,12 @@ import StatusLabelsAdminPanel from './StatusLabelsAdminPanel'
 import StockAdminPanel from './StockAdminPanel'
 import TranslationsAdminPanel from './TranslationsAdminPanel'
 
-type TabId = 'udv' | 'cat' | 'sup' | 'cond' | 'vend' | 'stock' | 'traductions' | 'taches' | 'comptes'
+type TabId = 'udv' | 'udc' | 'uda' | 'cat' | 'sup' | 'cond' | 'vend' | 'stock' | 'traductions' | 'taches' | 'comptes'
 
 const tabLabels: Record<TabId, string> = {
   udv: 'Unités de vente',
+  udc: 'Unités de commande',
+  uda: "Unités d'achat",
   cat: 'Catégories',
   sup: 'Fournisseurs',
   cond: 'Conditionnements',
@@ -46,6 +48,8 @@ const tabLabels: Record<TabId, string> = {
 
 const deleteConfirmPhrase: Partial<Record<TabId, string>> = {
   udv: 'cette unité de vente',
+  udc: 'cette unité de commande',
+  uda: "cette unité d'achat",
   cat: 'cette catégorie',
   sup: 'ce fournisseur',
   cond: 'ce conditionnement',
@@ -117,13 +121,15 @@ export default function ReferentielClient() {
   const showComptesTab = isAdministrator
   const showTachesTab = isAdministrator
   const tabOrder = useMemo(() => {
-    const base: TabId[] = ['udv', 'cat', 'sup', 'cond', 'vend', 'stock', 'traductions']
+    const base: TabId[] = ['udv', 'udc', 'uda', 'cat', 'sup', 'cond', 'vend', 'stock', 'traductions']
     if (showTachesTab) base.push('taches')
     if (showComptesTab) base.push('comptes')
     return base
   }, [showComptesTab, showTachesTab])
   const [tab, setTab] = useState<TabId>('udv')
   const [udv, setUdv] = useState<RefRow[]>([])
+  const [udc, setUdc] = useState<RefRow[]>([])
+  const [uda, setUda] = useState<RefRow[]>([])
   const [cat, setCat] = useState<RefRow[]>([])
   const [subcats, setSubcats] = useState<RefSubcategoryRow[]>([])
   const [sup, setSup] = useState<RefSupplierRow[]>([])
@@ -148,13 +154,17 @@ export default function ReferentielClient() {
     d: '',
     supplier_id: '',
     commande_active: true,
+    phone: '',
+    preferred_locale: 'fr' as 'fr' | 'ar-MA',
   })
 
   const load = useCallback(async () => {
     setErr(null)
     setLoading(true)
-    const [a, b, sc, c, d, e] = await Promise.all([
+    const [a, udcRes, udaRes, b, sc, c, d, e] = await Promise.all([
       supabase.from('ref_sales_unit').select('*').order('sort_order'),
+      supabase.from('ref_order_unit').select('*').order('sort_order'),
+      supabase.from('ref_purchase_unit').select('*').order('sort_order'),
       supabase.from('ref_category').select('*').order('sort_order'),
       supabase.from('ref_subcategory').select('*, ref_category(id, label)').order('sort_order').order('label'),
       supabase.from('ref_supplier').select('*').order('sort_order'),
@@ -165,9 +175,11 @@ export default function ReferentielClient() {
         .order('sort_order')
         .order('label'),
     ])
-    const firstErr = a.error ?? b.error ?? sc.error ?? c.error ?? d.error ?? e.error
+    const firstErr = a.error ?? udcRes.error ?? udaRes.error ?? b.error ?? sc.error ?? c.error ?? d.error ?? e.error
     if (firstErr) setErr(firstErr.message)
     setUdv((a.data as RefRow[]) ?? [])
+    setUdc((udcRes.data as RefRow[]) ?? [])
+    setUda((udaRes.data as RefRow[]) ?? [])
     setCat((b.data as RefRow[]) ?? [])
     setSubcats((sc.data as RefSubcategoryRow[]) ?? [])
     setSup(
@@ -252,10 +264,20 @@ export default function ReferentielClient() {
     setIsNew(true)
     if (tab === 'vend') {
       setEditing({ id: '', supplier_id: sup[0]?.id ?? '', label: '', sort_order: 0 } as RefVendeurRow)
-      setForm({ label: '', label_ar: '', h: '', w: '', d: '', supplier_id: sup[0]?.id ?? '', commande_active: true })
+      setForm({
+        label: '',
+        label_ar: '',
+        h: '',
+        w: '',
+        d: '',
+        supplier_id: sup[0]?.id ?? '',
+        commande_active: true,
+        phone: '',
+        preferred_locale: 'fr',
+      })
     } else {
       setEditing({ id: '', code: '', label: '', sort_order: 0, created_at: '', commande_active: true } as RefSupplierRow)
-      setForm({ label: '', label_ar: '', h: '', w: '', d: '', supplier_id: '', commande_active: true })
+      setForm({ label: '', label_ar: '', h: '', w: '', d: '', supplier_id: '', commande_active: true, phone: '', preferred_locale: 'fr' })
     }
     setOpen(true)
   }
@@ -275,6 +297,9 @@ export default function ReferentielClient() {
           : '',
       commande_active:
         'commande_active' in r && typeof r.commande_active === 'boolean' ? r.commande_active : true,
+      phone: 'phone' in r && typeof r.phone === 'string' ? r.phone : '',
+      preferred_locale:
+        'preferred_locale' in r && r.preferred_locale === 'ar-MA' ? 'ar-MA' : 'fr',
     })
     setOpen(true)
   }
@@ -291,6 +316,8 @@ export default function ReferentielClient() {
 
   const tableName = (t: TabId) => {
     if (t === 'udv') return 'ref_sales_unit'
+    if (t === 'udc') return 'ref_order_unit'
+    if (t === 'uda') return 'ref_purchase_unit'
     if (t === 'cat') return 'ref_category'
     if (t === 'sup') return 'ref_supplier'
     if (t === 'vend') return 'ref_supplier_vendeur'
@@ -337,7 +364,7 @@ export default function ReferentielClient() {
           return
         }
       }
-    } else if (tab === 'cat' || tab === 'udv') {
+    } else if (tab === 'cat' || tab === 'udv' || tab === 'udc' || tab === 'uda') {
       const labelArTrim = form.label_ar.trim()
       const payload = {
         label: form.label.trim(),
@@ -365,11 +392,15 @@ export default function ReferentielClient() {
         setErr('Fournisseur requis pour un vendeur.')
         return
       }
+      const phoneTrim = form.phone.trim()
+      const payload = {
+        supplier_id: supplierId,
+        label: form.label.trim(),
+        phone: phoneTrim.length > 0 ? phoneTrim : null,
+        preferred_locale: form.preferred_locale,
+      }
       if (isNew) {
-        const { error: e0 } = await supabase.from('ref_supplier_vendeur').insert({
-          supplier_id: supplierId,
-          label: form.label.trim(),
-        } as never)
+        const { error: e0 } = await supabase.from('ref_supplier_vendeur').insert(payload as never)
         if (e0) {
           setErr(e0.message)
           return
@@ -377,10 +408,7 @@ export default function ReferentielClient() {
       } else {
         const { error: e0 } = await supabase
           .from('ref_supplier_vendeur')
-          .update({
-            supplier_id: supplierId,
-            label: form.label.trim(),
-          } as never)
+          .update(payload as never)
           .eq('id', editing.id)
         if (e0) {
           setErr(e0.message)
@@ -508,8 +536,54 @@ export default function ReferentielClient() {
         ) : null}
         {tab === 'udv' && (
           <RefTable
-            title="Unités"
+            title="Unités de vente"
             rows={udv}
+            onEdit={openRow}
+            onDelete={requestDelete}
+            extras={[
+              {
+                header: 'Libellé arabe',
+                render: r => {
+                  const ar = (r as RefRow).label_ar?.trim()
+                  return ar && ar.length > 0 ? (
+                    <span dir="rtl" className="block text-right">
+                      {ar}
+                    </span>
+                  ) : (
+                    '—'
+                  )
+                },
+              },
+            ]}
+          />
+        )}
+        {tab === 'udc' && (
+          <RefTable
+            title="Unités de commande"
+            rows={udc}
+            onEdit={openRow}
+            onDelete={requestDelete}
+            extras={[
+              {
+                header: 'Libellé arabe',
+                render: r => {
+                  const ar = (r as RefRow).label_ar?.trim()
+                  return ar && ar.length > 0 ? (
+                    <span dir="rtl" className="block text-right">
+                      {ar}
+                    </span>
+                  ) : (
+                    '—'
+                  )
+                },
+              },
+            ]}
+          />
+        )}
+        {tab === 'uda' && (
+          <RefTable
+            title="Unités d'achat"
+            rows={uda}
             onEdit={openRow}
             onDelete={requestDelete}
             extras={[
@@ -640,6 +714,20 @@ export default function ReferentielClient() {
                   return supRow?.label ?? '—'
                 },
               },
+              {
+                header: 'Téléphone',
+                render: r => {
+                  const phone = (r as RefVendeurRow).phone?.trim()
+                  return phone && phone.length > 0 ? phone : '—'
+                },
+              },
+              {
+                header: 'Langue commande',
+                render: r => {
+                  const loc = (r as RefVendeurRow).preferred_locale
+                  return loc === 'ar-MA' ? 'Arabe' : 'Français'
+                },
+              },
             ]}
           />
         )}
@@ -719,7 +807,7 @@ export default function ReferentielClient() {
           <DialogContent>
             <div className="mt-1 flex flex-col gap-4">
               <TextField label="Libellé" value={form.label} onChange={e => setForm(f => ({ ...f, label: e.target.value }))} size="small" fullWidth />
-              {tab === 'cond' || tab === 'cat' || tab === 'udv' ? (
+              {tab === 'cond' || tab === 'cat' || tab === 'udv' || tab === 'udc' || tab === 'uda' ? (
                 <TextField
                   label="Libellé arabe"
                   value={form.label_ar}
@@ -786,6 +874,36 @@ export default function ReferentielClient() {
                         slotProps={muiSlotPropsDecimalKeypad}
                       />
                     </div>
+                  ) : null}
+                  {tab === 'vend' ? (
+                    <>
+                      <TextField
+                        label="Téléphone WhatsApp"
+                        value={form.phone}
+                        onChange={e => setForm(f => ({ ...f, phone: e.target.value }))}
+                        size="small"
+                        fullWidth
+                        placeholder="212612345678"
+                        helperText="Chiffres uniquement, indicatif pays (ex. 212…)"
+                      />
+                      <FormControl size="small" fullWidth>
+                        <InputLabel id="vendeur-locale-label">Langue export commande</InputLabel>
+                        <Select
+                          labelId="vendeur-locale-label"
+                          label="Langue export commande"
+                          value={form.preferred_locale}
+                          onChange={e =>
+                            setForm(f => ({
+                              ...f,
+                              preferred_locale: e.target.value as 'fr' | 'ar-MA',
+                            }))
+                          }
+                        >
+                          <MenuItem value="fr">Français</MenuItem>
+                          <MenuItem value="ar-MA">Arabe</MenuItem>
+                        </Select>
+                      </FormControl>
+                    </>
                   ) : null}
                 </>
               ) : null}

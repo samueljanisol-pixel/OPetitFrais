@@ -85,6 +85,8 @@ export default function ProductFormClient({ productId, returnTo = null }: Props)
   const [err, setErr] = useState<string | null>(null)
 
   const [units, setUnits] = useState<RefRow[]>([])
+  const [orderUnits, setOrderUnits] = useState<RefRow[]>([])
+  const [purchaseUnits, setPurchaseUnits] = useState<RefRow[]>([])
   const [cats, setCats] = useState<RefRow[]>([])
   const [subcats, setSubcats] = useState<RefSubcategoryRow[]>([])
   const [sups, setSups] = useState<RefRow[]>([])
@@ -165,8 +167,10 @@ export default function ProductFormClient({ productId, returnTo = null }: Props)
   }, [subcats, p.category_id])
 
   const loadRefs = useCallback(async () => {
-    const [u, c, sc, s, co, ma, mg] = await Promise.all([
+    const [u, ou, pu, c, sc, s, co, ma, mg] = await Promise.all([
       supabase.from('ref_sales_unit').select('*').order('sort_order'),
+      supabase.from('ref_order_unit').select('*').order('sort_order'),
+      supabase.from('ref_purchase_unit').select('*').order('sort_order'),
       supabase.from('ref_category').select('*').order('sort_order'),
       supabase.from('ref_subcategory').select('*, ref_category(id, label)').order('sort_order').order('label'),
       supabase.from('ref_supplier').select('*').order('sort_order'),
@@ -178,6 +182,8 @@ export default function ProductFormClient({ productId, returnTo = null }: Props)
       setUnits(u.data as RefRow[])
       if (u.data[0] && isNew) setP(x => ({ ...x, sales_unit_id: (u.data[0] as RefRow).id }))
     }
+    if (ou.data) setOrderUnits(ou.data as RefRow[])
+    if (pu.data) setPurchaseUnits(pu.data as RefRow[])
     if (c.data) {
       setCats(c.data as RefRow[])
       if (c.data[0] && isNew) setP(x => ({ ...x, category_id: (c.data[0] as RefRow).id }))
@@ -409,6 +415,8 @@ export default function ProductFormClient({ productId, returnTo = null }: Props)
       sales_name_ar: p.sales_name_ar?.trim() ? p.sales_name_ar.trim() : null,
       price: Number(p.price) || 0,
       sales_unit_id: p.sales_unit_id!,
+      order_unit_id: p.order_unit_id?.trim() ? p.order_unit_id : null,
+      purchase_unit_id: p.purchase_unit_id?.trim() ? p.purchase_unit_id : null,
       category_id: p.category_id!,
       subcategory_id: p.subcategory_id?.trim() ? p.subcategory_id : null,
       supplier_id: primarySupplierId,
@@ -725,6 +733,50 @@ export default function ProductFormClient({ productId, returnTo = null }: Props)
                 onChange={e => setP(x => ({ ...x, sales_unit_id: e.target.value }))}
               >
                 {units.map(u => (
+                  <MenuItem key={u.id} value={u.id}>
+                    {u.label}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+            <FormControl size="small" sx={{ minWidth: 0, width: '100%', flex: { sm: '1 1 140px' } }}>
+              <InputLabel>Unité de commande</InputLabel>
+              <Select
+                value={p.order_unit_id ?? ''}
+                label="Unité de commande"
+                onChange={e =>
+                  setP(x => ({
+                    ...x,
+                    order_unit_id: e.target.value.length > 0 ? e.target.value : null,
+                  }))
+                }
+              >
+                <MenuItem value="">
+                  <em>Aucune</em>
+                </MenuItem>
+                {orderUnits.map(u => (
+                  <MenuItem key={u.id} value={u.id}>
+                    {u.label}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+            <FormControl size="small" sx={{ minWidth: 0, width: '100%', flex: { sm: '1 1 140px' } }}>
+              <InputLabel>Unité d&apos;achat</InputLabel>
+              <Select
+                value={p.purchase_unit_id ?? ''}
+                label="Unité d'achat"
+                onChange={e =>
+                  setP(x => ({
+                    ...x,
+                    purchase_unit_id: e.target.value.length > 0 ? e.target.value : null,
+                  }))
+                }
+              >
+                <MenuItem value="">
+                  <em>Aucune</em>
+                </MenuItem>
+                {purchaseUnits.map(u => (
                   <MenuItem key={u.id} value={u.id}>
                     {u.label}
                   </MenuItem>

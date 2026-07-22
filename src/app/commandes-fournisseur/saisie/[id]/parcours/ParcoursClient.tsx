@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useTranslations } from "next-intl";
 import Image from "next/image";
-import { Box, Button, Typography } from "@mui/material";
+import { Box, Button, Chip, Typography } from "@mui/material";
 import ChevronRightIcon from "@mui/icons-material/ChevronRight";
 import DescriptionOutlinedIcon from "@mui/icons-material/DescriptionOutlined";
 import AppLink from "@/components/AppLink";
@@ -14,10 +14,11 @@ import {
   type ParcoursProductForQty,
   ParcoursProductQuantityPanel,
   packArray,
-  parseCategoryLabel,
   preferredPackRoute,
   pKeyForProduct,
   uKeyForProduct,
+  buildParcoursCategoryNav,
+  categoryKeyForProduct,
 } from "@/features/commandes-fournisseur/parcours-product-quantity";
 import { useSessionPermissions } from "@/lib/auth/useSessionPermissions";
 import {
@@ -37,6 +38,7 @@ type Product = ParcoursProductForQty & {
   name: string;
   name_ar?: string | null;
   code: string;
+  category_id?: string;
   ref_category: unknown;
   photoUrl?: string | null;
 };
@@ -65,6 +67,7 @@ export default function ParcoursClient({ commandeId }: { commandeId: string }) {
   const [refreshingProduct, setRefreshingProduct] = useState(false);
   const indexRef = useRef(0);
   const productsRef = useRef<Product[]>([]);
+  const categoryChipRefs = useRef<Map<string, HTMLDivElement>>(new Map());
   indexRef.current = index;
   productsRef.current = products;
 
@@ -345,7 +348,19 @@ export default function ParcoursClient({ commandeId }: { commandeId: string }) {
   const isLast = index >= n - 1;
   const posLabel = n > 0 ? t("position", { current: index + 1, total: n }) : t("position", { current: 0, total: 0 });
 
-  const catLabel = useMemo(() => (current ? parseCategoryLabel(current.ref_category) : ""), [current]);
+  const categoryNav = useMemo(() => buildParcoursCategoryNav(products), [products]);
+  const currentCategoryKey = current ? categoryKeyForProduct(current) : "";
+
+  useEffect(() => {
+    if (!currentCategoryKey) {
+      return;
+    }
+    categoryChipRefs.current.get(currentCategoryKey)?.scrollIntoView({
+      behavior: "smooth",
+      block: "nearest",
+      inline: "nearest",
+    });
+  }, [currentCategoryKey, index]);
 
   const currentBlocks = useMemo(() => {
     if (!current) return null;
@@ -441,16 +456,58 @@ export default function ParcoursClient({ commandeId }: { commandeId: string }) {
         ) : null}
       </div>
 
-      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-y-contain">
-        <Typography
-          variant="body2"
-          color="text.secondary"
-          className="!mb-1 block w-full text-center !text-[0.9375rem] sm:!text-base"
-          component="span"
-          sx={{ fontWeight: 600 }}
+      {categoryNav.length > 0 ? (
+        <Box
+          component="nav"
+          aria-label={t("categoryNavAria")}
+          className="!mb-2 shrink-0"
+          sx={{
+            display: "flex",
+            justifyContent: "center",
+            gap: 1,
+            overflowX: "auto",
+            pb: 0.5,
+            mx: -0.5,
+            px: 0.5,
+            WebkitOverflowScrolling: "touch",
+            scrollbarWidth: "thin",
+          }}
         >
-          {catLabel}
-        </Typography>
+          {categoryNav.map((cat) => {
+            const selected = cat.key === currentCategoryKey;
+            return (
+              <Box
+                key={cat.key}
+                ref={(el: HTMLDivElement | null) => {
+                  if (el) {
+                    categoryChipRefs.current.set(cat.key, el);
+                  } else {
+                    categoryChipRefs.current.delete(cat.key);
+                  }
+                }}
+                sx={{ flexShrink: 0 }}
+              >
+                <Chip
+                  label={cat.label}
+                  size="medium"
+                  clickable
+                  color={selected ? "success" : "default"}
+                  variant={selected ? "filled" : "outlined"}
+                  onClick={() => setIndex(cat.startIndex)}
+                  sx={{
+                    fontWeight: selected ? 700 : 500,
+                    fontSize: "0.9375rem",
+                    height: 36,
+                    "& .MuiChip-label": { px: 1.5 },
+                  }}
+                />
+              </Box>
+            );
+          })}
+        </Box>
+      ) : null}
+
+      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-y-contain">
         <div className="mb-3 flex w-full justify-center">
           <div className="relative h-36 w-full max-w-[6rem] shrink-0">
             {typeof current.photoUrl === "string" && current.photoUrl.length > 0 ? (

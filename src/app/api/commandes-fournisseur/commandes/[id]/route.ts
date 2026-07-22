@@ -79,13 +79,14 @@ export async function GET(_req: Request, ctx: Ctx) {
     code: string;
     vendeur_id: string | null;
     ref_sales_unit: unknown;
+    ref_order_unit?: unknown;
     ref_category?: unknown;
   };
   let productMap: Record<string, ProductRow> = {};
   if (pids.length > 0) {
     const { data: prods } = await supabase
       .from("product")
-      .select("id, name, name_ar, code, vendeur_id, ref_sales_unit(label, label_ar, code), ref_category(label, sort_order)")
+      .select("id, name, name_ar, code, vendeur_id, ref_sales_unit(label, label_ar, code), ref_order_unit(label, label_ar, code), ref_category(label, sort_order)")
       .in("id", pids);
     productMap = Object.fromEntries((prods ?? []).map((p) => [p.id, p as ProductRow]));
   }
@@ -184,6 +185,7 @@ export async function GET(_req: Request, ctx: Ctx) {
               code: product.code,
               name_ar: product.name_ar,
               ref_sales_unit: product.ref_sales_unit,
+              ref_order_unit: product.ref_order_unit,
             }
           : null,
         uniteVente,

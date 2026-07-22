@@ -10,7 +10,7 @@ import {
   SUPPLIER_COMMANDE_INACTIVE_MSG,
 } from "@/lib/commandes-fournisseur/supplier-commande-active";
 
-const PRODUCT_SELECT = `id, code, name, name_ar, category_id, supplier_id, image_path, allow_unit_in_commande, ref_category(label, sort_order), ref_sales_unit(label, label_ar, code), product_packaging(${COMMANDE_PACKAGING_SELECT})`;
+const PRODUCT_SELECT = `id, code, name, name_ar, category_id, supplier_id, image_path, allow_unit_in_commande, ref_category(label, sort_order), ref_sales_unit(label, label_ar, code), ref_order_unit(label, label_ar, code), product_packaging(${COMMANDE_PACKAGING_SELECT})`;
 
 type ProductRow = Record<string, unknown> & { id: string; name: string };
 

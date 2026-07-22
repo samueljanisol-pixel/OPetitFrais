@@ -17,6 +17,8 @@ import {
   TableHead,
   TableRow,
   TextField,
+  ToggleButton,
+  ToggleButtonGroup,
   Typography,
 } from "@mui/material";
 import { alpha } from "@mui/material/styles";
@@ -25,7 +27,7 @@ import ProductArabicSubtitle from "@/components/ProductArabicSubtitle";
 import AppLink from "@/components/AppLink";
 import { useSessionPermissions } from "@/lib/auth/useSessionPermissions";
 import { useStatusLabels } from "@/lib/statusLabels/useStatusLabels";
-import { buildLotProductDisplayInfo, buildSoitLine } from "@/lib/commandes-fournisseur/product-display";
+import { buildLotProductDisplayInfo, buildSoitLine, recapLigneQtyUnitLabel, type PackagingRowForDisplay } from "@/lib/commandes-fournisseur/product-display";
 import CommandeFournisseurProductPicker, {
   type ProductPickRow,
 } from "@/features/commandes-fournisseur/CommandeFournisseurProductPicker";
@@ -38,6 +40,7 @@ import {
 import { DecimalQtyTextField } from "@/components/commandes-fournisseur/DecimalQtyTextField";
 import LigneCommentaireSaisieControls from "@/components/commandes-fournisseur/LigneCommentaireSaisieControls";
 import { useAppFormat } from "@/lib/i18n/useAppFormat";
+import type { AppLocale } from "@/i18n/config";
 import { useBackChevronIcon } from "@/lib/i18n/useBackChevronIcon";
 import type {
   CommentaireMagasinCell,
@@ -46,10 +49,13 @@ import type {
 import { roundQty2 } from "@/lib/commandes-fournisseur/qty-parse";
 import ValidationLotVendeurRecap from "@/features/commandes-fournisseur/ValidationLotVendeurRecap";
 import { lotCommandeDateInfo } from "@/lib/commandes-fournisseur/lot-commande-date";
+import { magasinCodeMx } from "@/lib/commandes-fournisseur/magasin-code-mx";
 import type {
+  MatrixGroupBy,
   RecapLigneInput,
   VendeurRef,
 } from "@/lib/commandes-fournisseur/validation-lot-vendeur-recap";
+import { buildMatrixDisplayItems } from "@/lib/commandes-fournisseur/validation-lot-vendeur-recap";
 
 type ProductE = {
   id: string;
@@ -57,6 +63,7 @@ type ProductE = {
   name_ar?: string | null;
   code: string;
   ref_sales_unit?: unknown;
+  ref_order_unit?: unknown;
   ref_category?: unknown;
   product_packaging?: unknown;
 } | null;
@@ -140,10 +147,13 @@ function magLabel(m: MagE): string {
   return o.nom ? String(o.nom) : String(o.code ?? "—");
 }
 
-/** Magasins des commandes incluses dans le lot (colonnes stables même si qté à 0). */
-function magasinColumnsFromLot(lot: Lot | null): { id: string; label: string }[] {
-  const mags: { id: string; label: string }[] = [];
+/** Colonnes magasins : code MXX en en-tête, nom magasin pour aria / commentaires. */
+function magasinColumnsFromLot(
+  lot: Lot | null,
+): { id: string; mxCode: string; storeLabel: string }[] {
+  const mags: { id: string; mxCode: string; storeLabel: string }[] = [];
   const seen = new Set<string>();
+  let idx = 0;
   for (const inc of lot?.commande_fournisseur_lot_inclusion ?? []) {
     const cf = inc.commande_fournisseur;
     if (!cf) {
@@ -154,9 +164,21 @@ function magasinColumnsFromLot(lot: Lot | null): { id: string; label: string }[]
       continue;
     }
     seen.add(id);
-    mags.push({ id, label: magLabel(cf.magasins) });
+    const code = one(
+      cf.magasins as
+        | { code?: string | null }
+        | { code?: string | null }[]
+        | null
+        | undefined,
+    )?.code;
+    mags.push({
+      id,
+      mxCode: magasinCodeMx(code, idx),
+      storeLabel: magLabel(cf.magasins),
+    });
+    idx += 1;
   }
-  mags.sort((a, b) => a.label.localeCompare(b.label, "fr"));
+  mags.sort((a, b) => a.mxCode.localeCompare(b.mxCode, "fr", { numeric: true }));
   return mags;
 }
 
@@ -168,6 +190,51 @@ function magasinsForMagasinId(lot: Lot | null, magasinId: string): MagE {
     }
   }
   return null;
+}
+
+const LOT_CATEGORY_HEADER_BG_SX = {
+  py: 1,
+  px: 2,
+  borderRadius: 1,
+  bgcolor: (t: { palette: { mode: string; success: { main: string } } }) =>
+    t.palette.mode === "dark"
+      ? alpha(t.palette.success.main, 0.24)
+      : alpha(t.palette.success.main, 0.16),
+} as const;
+
+const LOT_CATEGORY_HEADER_TEXT_SX = {
+  width: "100%",
+  textAlign: "center" as const,
+  fontWeight: 700,
+  fontSize: "1.0625rem",
+  lineHeight: 1.25,
+  letterSpacing: "0.03em",
+} as const;
+
+function packagingForLotLigne(
+  p: ProductE,
+  productPackagingId: string | null,
+): PackagingRowForDisplay | null {
+  if (!p || !productPackagingId) {
+    return null;
+  }
+  const raw = p.product_packaging;
+  const packs = !raw ? [] : Array.isArray(raw) ? raw : [raw];
+  const pack = packs.find((row) => (row as { id?: string }).id === productPackagingId);
+  return (pack as PackagingRowForDisplay | undefined) ?? null;
+}
+
+function lotLigneQtyUnitLabel(l: LotLigne, p: ProductE, locale: AppLocale): string {
+  return recapLigneQtyUnitLabel(
+    {
+      product_packaging_id: l.product_packaging_id,
+      packaging: packagingForLotLigne(p, l.product_packaging_id),
+      product: p
+        ? { ref_order_unit: p.ref_order_unit, ref_sales_unit: p.ref_sales_unit }
+        : null,
+    },
+    locale,
+  );
 }
 
 function normalizeProduct(raw: ProductE | unknown): ProductE {
@@ -202,7 +269,7 @@ export default function ValidationLotDetailClient({ lotId }: { lotId: string }) 
   const tCommandesCommon = useTranslations("backoffice.commandes.common");
   const tCommandesErrors = useTranslations("backoffice.commandes.errors");
   const tCommon = useTranslations("common");
-  const { formatDate, formatNumber } = useAppFormat();
+  const { formatDate, formatNumber, locale } = useAppFormat();
   const BackChevronIcon = useBackChevronIcon();
   const genericError = tCommandesErrors("generic");
   const { labelFor } = useStatusLabels();
@@ -227,8 +294,11 @@ export default function ValidationLotDetailClient({ lotId }: { lotId: string }) 
     productLabel: string;
   } | null>(null);
   const [lotCommentDraft, setLotCommentDraft] = useState("");
+  const [vendeurCommentDrafts, setVendeurCommentDrafts] = useState<Record<string, string>>({});
+  const [matrixGroupBy, setMatrixGroupBy] = useState<MatrixGroupBy>("category");
   const [cmdComments, setCmdComments] = useState<Record<string, string>>({});
   const [lotCommentSaving, setLotCommentSaving] = useState(false);
+  const [vendeurCommentSavingKey, setVendeurCommentSavingKey] = useState<string | null>(null);
   const [cmdCommentSavingId, setCmdCommentSavingId] = useState<string | null>(null);
   /** Quantité par cellule au focus : enregistrement seulement si la valeur a changé au blur. */
   const cellFocusBaseline = useRef<Record<string, number>>({});
@@ -244,6 +314,7 @@ export default function ValidationLotDetailClient({ lotId }: { lotId: string }) 
         lot?: Lot;
         lignes?: LotLigne[];
         vendeurs?: VendeurRef[];
+        vendeurCommentaires?: Record<string, string | null>;
         error?: string;
       };
       if (!res.ok) {
@@ -254,6 +325,11 @@ export default function ValidationLotDetailClient({ lotId }: { lotId: string }) 
       setLot(j.lot ?? null);
       setLignes(j.lignes ?? []);
       setVendeurs(j.vendeurs ?? []);
+      const vc: Record<string, string> = {};
+      for (const [key, value] of Object.entries(j.vendeurCommentaires ?? {})) {
+        vc[key] = typeof value === "string" ? value : "";
+      }
+      setVendeurCommentDrafts(vc);
     } catch (e) {
       setErr(e instanceof Error ? e.message : genericError);
     } finally {
@@ -596,6 +672,53 @@ export default function ValidationLotDetailClient({ lotId }: { lotId: string }) 
     [lot, lotId, load, genericError],
   );
 
+  const patchVendeurCommentaire = useCallback(
+    async (vendeurKey: string, nextRaw: string) => {
+      const lotCur = lot;
+      if (!lotCur || (lotCur.status !== "brouillon" && lotCur.status !== "prete")) {
+        return;
+      }
+      const stored = nextRaw.trim() === "" ? null : nextRaw.trim();
+      const prevTrim = vendeurCommentDrafts[vendeurKey]?.trim() ?? "";
+      if ((stored ?? "") === prevTrim) {
+        return;
+      }
+      setVendeurCommentSavingKey(vendeurKey);
+      setErr(null);
+      try {
+        const res = await fetch(`/api/commandes-fournisseur/validation/lots/${lotId}`, {
+          method: "PATCH",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            vendeurCommentaire: { vendeurKey, commentaire: stored },
+          }),
+        });
+        const j = (await res.json()) as { error?: string };
+        if (!res.ok) {
+          setErr(j.error ?? genericError);
+          await load();
+          return;
+        }
+        setVendeurCommentDrafts((prev) => {
+          const next = { ...prev };
+          if (stored === null) {
+            delete next[vendeurKey];
+          } else {
+            next[vendeurKey] = stored;
+          }
+          return next;
+        });
+      } catch (e) {
+        setErr(e instanceof Error ? e.message : genericError);
+        await load();
+      } finally {
+        setVendeurCommentSavingKey(null);
+      }
+    },
+    [genericError, load, lot, lotId, vendeurCommentDrafts],
+  );
+
   const patchCommandeCommentaire = useCallback(
     async (commandeId: string, nextRaw: string) => {
       const lotCur = lot;
@@ -714,6 +837,14 @@ export default function ValidationLotDetailClient({ lotId }: { lotId: string }) 
   const rSup = one(lot.ref_supplier as { label?: string } | { label?: string }[]);
   const supplierName = rSup && "label" in rSup && rSup.label ? String(rSup.label) : tCommandesCommon("emDash");
   const editable = lot.status === "brouillon";
+  const vendeurCommentEditable = lot.status === "brouillon" || lot.status === "prete";
+  const matrixDisplayItems = buildMatrixDisplayItems(
+    recapLignes,
+    matrixGroupBy,
+    vendeurs,
+    supplierName,
+    tCommandesCommon("noCategory"),
+  );
   const readyAtText = lot.marque_prete_at
     ? tLotDetail("readyAtSuffix", {
         date: formatDate(lot.marque_prete_at, { dateStyle: "short", timeStyle: "short" }),
@@ -794,13 +925,33 @@ export default function ValidationLotDetailClient({ lotId }: { lotId: string }) 
         </Typography>
       ) : (
         <div className="!mb-6 overflow-x-auto">
+          <div className="!mb-2 flex flex-wrap items-center justify-between gap-2">
+            <ToggleButtonGroup
+              size="small"
+              exclusive
+              value={matrixGroupBy}
+              onChange={(_e, value: MatrixGroupBy | null) => {
+                if (value) {
+                  setMatrixGroupBy(value);
+                }
+              }}
+              aria-label={tLotDetail("matrixGroupByAria")}
+            >
+              <ToggleButton value="category" sx={{ textTransform: "none" }}>
+                {tLotDetail("matrixGroupByCategory")}
+              </ToggleButton>
+              <ToggleButton value="vendeur" sx={{ textTransform: "none" }}>
+                {tLotDetail("matrixGroupByVendor")}
+              </ToggleButton>
+            </ToggleButtonGroup>
+          </div>
           <Table size="small">
             <TableHead>
               <TableRow>
                 <TableCell sx={{ minWidth: 200 }}>{tCommandesCommon("product")}</TableCell>
                 {magasinColumns.map((m) => (
                   <TableCell key={m.id} align="right" sx={{ minWidth: 88, whiteSpace: "nowrap" }}>
-                    {m.label}
+                    {m.mxCode}
                   </TableCell>
                 ))}
                 <TableCell align="right" sx={{ fontWeight: 600, minWidth: 56 }}>
@@ -817,13 +968,83 @@ export default function ValidationLotDetailClient({ lotId }: { lotId: string }) 
               </TableRow>
             </TableHead>
             <TableBody>
-              {lignes.map((l, i) => {
-                const catKey = (l.categoryLabel ?? "").trim() || tCommandesCommon("noCategory");
-                const prevCat =
-                  i > 0
-                    ? ((lignes[i - 1]?.categoryLabel ?? "").trim() || tCommandesCommon("noCategory"))
-                    : null;
-                const showCategoryHeader = i === 0 || catKey !== prevCat;
+              {matrixDisplayItems.map((item, itemIdx) => {
+                if (item.type === "header") {
+                  if (item.header.kind === "category") {
+                    return (
+                      <TableRow key={`cat-${item.header.label}-${itemIdx}`}>
+                        <TableCell colSpan={matrixCategoryColSpan} sx={LOT_CATEGORY_HEADER_BG_SX}>
+                          <Typography
+                            variant="subtitle1"
+                            color="success"
+                            component="div"
+                            sx={LOT_CATEGORY_HEADER_TEXT_SX}
+                          >
+                            {item.header.label}
+                          </Typography>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  }
+                  const vendeurKey = item.header.vendeurKey;
+                  return (
+                    <Fragment key={`vendeur-${vendeurKey}-${itemIdx}`}>
+                      <TableRow>
+                        <TableCell colSpan={matrixCategoryColSpan} sx={LOT_CATEGORY_HEADER_BG_SX}>
+                          <Typography
+                            variant="subtitle1"
+                            color="success"
+                            component="div"
+                            sx={LOT_CATEGORY_HEADER_TEXT_SX}
+                          >
+                            {item.header.label}
+                          </Typography>
+                        </TableCell>
+                      </TableRow>
+                      <TableRow>
+                        <TableCell colSpan={matrixCategoryColSpan} sx={{ py: 0.75, px: 1.25 }}>
+                          {vendeurCommentEditable ? (
+                            <TextField
+                              fullWidth
+                              multiline
+                              minRows={2}
+                              maxRows={6}
+                              size="small"
+                              label={tLotDetail("vendorCommentLabel")}
+                              placeholder={tLotDetail("vendorCommentPlaceholder")}
+                              value={vendeurCommentDrafts[vendeurKey] ?? ""}
+                              onChange={(e) =>
+                                setVendeurCommentDrafts((prev) => ({
+                                  ...prev,
+                                  [vendeurKey]: e.target.value,
+                                }))
+                              }
+                              disabled={vendeurCommentSavingKey === vendeurKey}
+                              onBlur={(e) => {
+                                if (vendeurCommentSavingKey !== vendeurKey) {
+                                  void patchVendeurCommentaire(vendeurKey, e.target.value);
+                                }
+                              }}
+                            />
+                          ) : vendeurCommentDrafts[vendeurKey]?.trim() ? (
+                            <Typography variant="body2" className="whitespace-pre-wrap">
+                              {vendeurCommentDrafts[vendeurKey]?.trim()}
+                            </Typography>
+                          ) : (
+                            <Typography variant="body2" color="text.secondary" sx={{ fontStyle: "italic" }}>
+                              {tCommandesCommon("noComment")}
+                            </Typography>
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    </Fragment>
+                  );
+                }
+
+                const l = lignes[item.index];
+                if (!l) {
+                  return null;
+                }
                 const p = normalizeProduct(l.product);
                 const display = buildLotProductDisplayInfo(
                   p
@@ -840,33 +1061,9 @@ export default function ValidationLotDetailClient({ lotId }: { lotId: string }) 
                 });
                 const tot = mags.reduce((s, n) => s + n, 0);
                 const soitLine = buildSoitLine(display, tot);
+                const unitLabel = lotLigneQtyUnitLabel(l, p, locale);
                 return (
-                  <Fragment key={l.id}>
-                    {showCategoryHeader ? (
-                      <TableRow>
-                        <TableCell
-                          colSpan={matrixCategoryColSpan}
-                          sx={{
-                            py: 0.85,
-                            px: 1.25,
-                            bgcolor: (t) =>
-                              t.palette.mode === "dark"
-                                ? alpha(t.palette.success.main, 0.18)
-                                : alpha(t.palette.success.main, 0.1),
-                          }}
-                        >
-                          <Typography
-                            variant="subtitle2"
-                            color="success"
-                            component="div"
-                            sx={{ fontWeight: 700, letterSpacing: "0.02em", width: "100%" }}
-                          >
-                            {catKey}
-                          </Typography>
-                        </TableCell>
-                      </TableRow>
-                    ) : null}
-                  <TableRow>
+                  <TableRow key={l.id}>
                     <TableCell>
                       <Typography variant="body2" className="!font-medium">
                         {productName(p)}
@@ -905,7 +1102,7 @@ export default function ValidationLotDetailClient({ lotId }: { lotId: string }) 
                               slotProps={{
                                 htmlInput: {
                                   "aria-label": tCommandesCommon("quantityForStoreAria", {
-                                    storeLabel: col.label,
+                                    storeLabel: col.storeLabel,
                                   }),
                                 },
                               }}
@@ -937,7 +1134,7 @@ export default function ValidationLotDetailClient({ lotId }: { lotId: string }) 
                           ) : null}
                         </Box>
                       );
-                      const cellTargets = targetsForMagasinCell(l, col.id, col.label);
+                      const cellTargets = targetsForMagasinCell(l, col.id, col.storeLabel);
 
                       return (
                         <TableCell key={col.id} align="right">
@@ -968,41 +1165,27 @@ export default function ValidationLotDetailClient({ lotId }: { lotId: string }) 
                         textAlign: "left",
                       }}
                     >
-                      {display.isCond && display.condTitre ? (
-                        <>
-                          <Typography
-                            variant="caption"
-                            color="text.secondary"
-                            component="span"
-                            sx={{
-                              display: "block",
-                              whiteSpace: "nowrap",
-                              lineHeight: 1.35,
-                              overflow: "hidden",
-                              textOverflow: "ellipsis",
-                              maxWidth: "min(260px, 40vw)",
-                            }}
-                            title={display.condTitre}
-                          >
-                            {display.condTitre}
-                          </Typography>
-                          {soitLine ? (
-                            <Typography
-                              variant="body2"
-                              color="text.secondary"
-                              sx={{ mt: 0.5, display: "block", lineHeight: 1.35, textAlign: "left" }}
-                            >
-                              {soitLine}
-                            </Typography>
-                          ) : null}
-                        </>
-                      ) : display.uniteVente && display.uniteVente !== "—" ? (
+                      {unitLabel !== "—" ? (
                         <Typography
                           variant="caption"
                           color="text.secondary"
                           sx={{ display: "block", lineHeight: 1.35, textAlign: "left" }}
                         >
-                          {display.uniteVente}
+                          {unitLabel}
+                        </Typography>
+                      ) : null}
+                      {soitLine ? (
+                        <Typography
+                          variant="caption"
+                          color="text.secondary"
+                          sx={{
+                            mt: unitLabel !== "—" ? 0.35 : 0,
+                            display: "block",
+                            lineHeight: 1.25,
+                            textAlign: "left",
+                          }}
+                        >
+                          {soitLine}
                         </Typography>
                       ) : null}
                     </TableCell>
@@ -1021,7 +1204,6 @@ export default function ValidationLotDetailClient({ lotId }: { lotId: string }) 
                       </TableCell>
                     ) : null}
                   </TableRow>
-                  </Fragment>
                 );
               })}
             </TableBody>
@@ -1037,6 +1219,13 @@ export default function ValidationLotDetailClient({ lotId }: { lotId: string }) 
           commandeDateSlug={commandeDate.slug}
           lignes={recapLignes}
           vendeurs={vendeurs}
+          vendeurCommentDrafts={vendeurCommentDrafts}
+          vendeurCommentEditable={vendeurCommentEditable}
+          vendeurCommentSavingKey={vendeurCommentSavingKey}
+          onVendeurCommentDraftChange={(vendeurKey, value) =>
+            setVendeurCommentDrafts((prev) => ({ ...prev, [vendeurKey]: value }))
+          }
+          onVendeurCommentSave={patchVendeurCommentaire}
         />
       ) : null}
 

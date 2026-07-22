@@ -38,6 +38,8 @@ export type RefVendeurRow = {
   supplier_id: string
   label: string
   sort_order: number
+  phone?: string | null
+  preferred_locale?: string | null
   created_at?: string
   ref_supplier?: RefRow | RefRow[] | null
 }
@@ -48,6 +50,10 @@ export type ProductRow = {
   name: string
   price: number
   sales_unit_id: string
+  /** Unité de commande fournisseur (UdC). */
+  order_unit_id?: string | null
+  /** Unité d'achat fournisseur (UdA). */
+  purchase_unit_id?: string | null
   category_id: string
   /** Sous-catégorie optionnelle (doit correspondre à category_id). */
   subcategory_id?: string | null
@@ -111,6 +117,8 @@ export type ProductPriceHistoryRow = {
 
 export type ProductWithRefs = ProductRow & {
   ref_sales_unit: RefRow | null
+  ref_order_unit: RefRow | null
+  ref_purchase_unit: RefRow | null
   ref_category: RefRow | null
   ref_subcategory: RefSubcategoryRow | RefRow | null
   ref_supplier: RefRow | null

@@ -11,6 +11,8 @@ export const SHEET_COLUMNS = {
   prix: 'Prix',
   marge: 'Marge DH Actuelle',
   udv: 'UdV',
+  udc: 'UdC',
+  uda: 'UdA',
   categorie: 'Catégorie',
   sousCategorie: 'SousCatégorie',
   fournisseur: 'Fournisseur',
@@ -25,6 +27,10 @@ export type SheetRowParsed = {
   prix: number
   marge: number | null
   udv: string
+  /** Unité de commande (colonne « UdC ») — optionnelle. */
+  udc: string
+  /** Unité d'achat (colonne « UdA ») — optionnelle. */
+  uda: string
   categorie: string
   sousCategorie: string
   fournisseur: string
@@ -78,7 +84,7 @@ function numMarge(v: unknown): number | null {
 }
 
 /**
- * Extrait une ligne d’export en ne retenant **que** Actif, Code, Nom, Prix, Marge DH, UdV, Catégorie, SousCatégorie, Fournisseur, Marchand, Arabe.
+ * Extrait une ligne d’export en ne retenant **que** Actif, Code, Nom, Prix, Marge DH, UdV, UdC, UdA, Catégorie, SousCatégorie, Fournisseur, Marchand, Arabe.
  * Les `aliases` ne servent qu’en secours (orthographe / casse) ; le fichier canonique est les clés de {@link SHEET_COLUMNS}.
  */
 export function parseSheetRow(
@@ -101,6 +107,12 @@ export function parseSheetRow(
   if (!udv) {
     return { ok: false, error: `Ligne ${lineIndex + 1} (${nom}) : « ${SHEET_COLUMNS.udv} » manquant` }
   }
+  const udc = str(
+    getCell(row, SHEET_COLUMNS.udc, ['udc', 'UDC', 'Unité de commande', 'Unite de commande']),
+  )
+  const uda = str(
+    getCell(row, SHEET_COLUMNS.uda, ['uda', 'UDA', "Unité d'achat", 'Unite d achat', 'Unité achat']),
+  )
   const cat = str(getCell(row, SHEET_COLUMNS.categorie, ['Categorie', 'categorie', 'catégorie']))
   if (!cat) {
     return { ok: false, error: `Ligne ${lineIndex + 1} (${nom}) : « ${SHEET_COLUMNS.categorie} » manquant` }
@@ -134,6 +146,8 @@ export function parseSheetRow(
       prix,
       marge,
       udv,
+      udc,
+      uda,
       categorie: cat,
       sousCategorie,
       fournisseur: fourn,

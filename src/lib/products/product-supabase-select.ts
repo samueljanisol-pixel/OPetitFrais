@@ -13,10 +13,10 @@ export const PRODUCT_SUPPLIER_PRODUCT_EMBED = "product!product_supplier_product_
 
 export const PRODUCT_LIST_SELECT = `*, ref_sales_unit(*), ref_category(*), ${PRODUCT_PRIMARY_SUPPLIER_EMBED}(*)`;
 
-export const PRODUCT_FORM_SELECT = `*, ref_sales_unit(*), ref_category(*), ref_subcategory(*), ${PRODUCT_PRIMARY_SUPPLIER_EMBED}(*)`;
+export const PRODUCT_FORM_SELECT = `*, ref_sales_unit(*), ref_order_unit(*), ref_purchase_unit(*), ref_category(*), ref_subcategory(*), ${PRODUCT_PRIMARY_SUPPLIER_EMBED}(*)`;
 
 export const PRODUCT_CATALOG_MATCH_SELECT = `id, code, name, category_id, supplier_id, ref_category(id, label), ${PRODUCT_PRIMARY_SUPPLIER_EMBED}(id, label), ref_sales_unit(label, code)`;
 
-export const PRODUCT_COMMANDE_SEARCH_SELECT = `id, code, name, name_ar, category_id, supplier_id, allow_unit_in_commande, ${PRODUCT_PRIMARY_SUPPLIER_EMBED}(code, label), ref_category(label, sort_order), ref_sales_unit(label, label_ar, code), product_packaging(${COMMANDE_PACKAGING_SELECT})`;
+export const PRODUCT_COMMANDE_SEARCH_SELECT = `id, code, name, name_ar, category_id, supplier_id, allow_unit_in_commande, ${PRODUCT_PRIMARY_SUPPLIER_EMBED}(code, label), ref_category(label, sort_order), ref_sales_unit(label, label_ar, code), ref_order_unit(label, label_ar, code), product_packaging(${COMMANDE_PACKAGING_SELECT})`;
 
-export const PRODUCT_SHEET_EXPORT_SELECT = `code, name, price, margin, active, name_ar, ref_sales_unit (label), ref_category (label), ref_subcategory (label), ${PRODUCT_PRIMARY_SUPPLIER_EMBED} (label), ref_supplier_vendeur (label)`;
+export const PRODUCT_SHEET_EXPORT_SELECT = `code, name, price, margin, active, name_ar, ref_sales_unit (label), ref_order_unit (label), ref_purchase_unit (label), ref_category (label), ref_subcategory (label), ${PRODUCT_PRIMARY_SUPPLIER_EMBED} (label), ref_supplier_vendeur (label)`;

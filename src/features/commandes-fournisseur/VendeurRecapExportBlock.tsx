@@ -1,16 +1,25 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { Box, Button, Typography } from "@mui/material";
 import ImageOutlinedIcon from "@mui/icons-material/ImageOutlined";
+import WhatsAppIcon from "@mui/icons-material/WhatsApp";
 import { useTranslations } from "next-intl";
-import { exportElementAsPng } from "@/lib/commandes-fournisseur/export-element-png";
+import {
+  exportElementAsPng,
+  shareVendorOrderWhatsApp,
+} from "@/lib/commandes-fournisseur/export-element-png";
 import {
   captureRootSx,
   vendeurHeaderVisible,
   VendeurRecapCaptureHeader,
   VendeurRecapTable,
 } from "@/features/commandes-fournisseur/vendeur-recap-export-parts";
+import type { AppLocale } from "@/i18n/config";
+import {
+  vendorRecapCaptureLabels,
+  type VendorRecapCaptureLabels,
+} from "@/lib/commandes-fournisseur/vendor-recap-capture-i18n";
 import type { MagasinMxColumn, VendeurRecapGroup } from "@/lib/commandes-fournisseur/validation-lot-vendeur-recap";
 
 type Props = {
@@ -19,6 +28,9 @@ type Props = {
   supplierLabel: string;
   commandeDateLabel: string;
   commandeDateSlug: string;
+  exportLocale?: AppLocale;
+  vendeurPhone?: string | null;
+  whatsAppText?: string | null;
   /** Commentaire lot ou commande affiché sous le tableau. */
   footerComment?: string | null;
   footerCommentLabel?: string;
@@ -42,6 +54,9 @@ export default function VendeurRecapExportBlock({
   supplierLabel,
   commandeDateLabel,
   commandeDateSlug,
+  exportLocale = "fr",
+  vendeurPhone,
+  whatsAppText,
   footerComment,
   footerCommentLabel = "Commentaire lot",
   hideTablePreview = false,
@@ -54,7 +69,18 @@ export default function VendeurRecapExportBlock({
   const tc = useTranslations("backoffice.commandes.common");
   const captureRef = useRef<HTMLDivElement>(null);
   const [exporting, setExporting] = useState(false);
+  const [whatsAppBusy, setWhatsAppBusy] = useState(false);
   const [exportErr, setExportErr] = useState<string | null>(null);
+
+  const captureLabels: VendorRecapCaptureLabels = useMemo(
+    () => vendorRecapCaptureLabels(exportLocale, supplierLabel, commandeDateLabel, commandeParLabel),
+    [exportLocale, supplierLabel, commandeDateLabel, commandeParLabel],
+  );
+
+  const filename = useMemo(
+    () => `commande-${commandeDateSlug}-${supplierLabel}-${group.vendeurLabel}.png`,
+    [commandeDateSlug, group.vendeurLabel, supplierLabel],
+  );
 
   const onExport = useCallback(async () => {
     const el = captureRef.current;
@@ -63,38 +89,62 @@ export default function VendeurRecapExportBlock({
     }
     setExporting(true);
     setExportErr(null);
-    const filename = `commande-${commandeDateSlug}-${supplierLabel}-${group.vendeurLabel}.png`;
     const result = await exportElementAsPng(el, filename);
     if (!result.ok) {
       setExportErr(result.error);
     }
     setExporting(false);
-  }, [commandeDateSlug, group.vendeurLabel, supplierLabel]);
+  }, [filename]);
+
+  const onWhatsApp = useCallback(async () => {
+    const el = captureRef.current;
+    if (!el) {
+      return;
+    }
+    const phone = vendeurPhone?.trim() ?? "";
+    if (phone.length === 0) {
+      setExportErr(tc("whatsAppPhoneMissing"));
+      return;
+    }
+    setWhatsAppBusy(true);
+    setExportErr(null);
+    const result = await shareVendorOrderWhatsApp({
+      element: el,
+      filename,
+      phone,
+      text: whatsAppText?.trim() ?? "",
+    });
+    if (!result.ok) {
+      setExportErr(result.error);
+    }
+    setWhatsAppBusy(false);
+  }, [filename, tc, vendeurPhone, whatsAppText]);
 
   const footer = footerComment?.trim() ?? "";
   const magasinHeader = headerMagasinName?.trim() ?? "";
-  const parLabel = commandeParLabel?.trim() ?? "";
   const productCount = productCountLabel?.trim() ?? "";
   const showVendeurHeader = vendeurHeaderVisible(group.vendeurLabel, supplierLabel);
+  const phoneTrim = vendeurPhone?.trim() ?? "";
 
   const tableLabels = {
-    product: "Produit",
-    quantity: magasinColumnHeader ?? "Quantité",
-    total: tc("total"),
-    udvCond: tc("udvCond"),
-    noLines: tc("noLines"),
+    product: captureLabels.product,
+    quantity: magasinColumnHeader ?? tc("quantity"),
+    total: captureLabels.total,
+    udvCond: captureLabels.udvCond,
+    noLines: captureLabels.noLines,
   };
 
   const captureContent = (
-    <Box ref={captureRef} sx={captureRootSx}>
+    <Box ref={captureRef} sx={{ ...captureRootSx, direction: captureLabels.dir }}>
       <VendeurRecapCaptureHeader
         magasinHeader={magasinHeader}
-        supplierOrderLine={`Commande Fournisseur : ${supplierLabel}`}
+        supplierOrderLine={captureLabels.supplierOrderLine}
         vendeurLabel={group.vendeurLabel}
         showVendeurHeader={showVendeurHeader}
-        orderOnLine={`Commande du ${commandeDateLabel}`}
-        orderByLine={parLabel.length > 0 ? `par ${parLabel}` : null}
+        orderOnLine={captureLabels.orderOnLine}
+        orderByLine={captureLabels.orderByLine}
         productCount={productCount}
+        dir={captureLabels.dir}
       />
       <VendeurRecapTable
         group={group}
@@ -128,12 +178,26 @@ export default function VendeurRecapExportBlock({
           variant="outlined"
           size="small"
           startIcon={<ImageOutlinedIcon />}
-          disabled={exporting || group.rows.length === 0}
+          disabled={exporting || whatsAppBusy || group.rows.length === 0}
           onClick={() => void onExport()}
           sx={{ textTransform: "none" }}
         >
           {exporting ? "…" : tc("exportImage")}
         </Button>
+        {phoneTrim.length > 0 ? (
+          <Button
+            type="button"
+            variant="contained"
+            size="small"
+            color="success"
+            startIcon={<WhatsAppIcon />}
+            disabled={exporting || whatsAppBusy || group.rows.length === 0}
+            onClick={() => void onWhatsApp()}
+            sx={{ textTransform: "none" }}
+          >
+            {whatsAppBusy ? "…" : tc("sendWhatsApp")}
+          </Button>
+        ) : null}
       </div>
       {exportErr ? (
         <Typography color="error" variant="body2" className="!mb-2">

@@ -28,20 +28,17 @@ export type PackagingWithSupplierLinks = {
 };
 
 /**
- * Colis visible pour une commande fournisseur :
- * - produit déjà rattaché au fournisseur de la commande → tous les colis achetables ;
- * - sinon colis dont le conditionnement réf. ou les liaisons product_packaging_supplier ciblent ce fournisseur ;
- * - ou colis « génériques » (pas de fournisseur sur le réf. ni liaison explicite).
+ * Colis visible pour une commande fournisseur **F** :
+ * - conditionnement réf. (`ref_conditionnement.supplier_id`) = **F**, ou
+ * - liaison `product_packaging_supplier` vers **F**.
+ * Les colis sans lien fournisseur ou liés à un autre fournisseur sont exclus.
  */
 export function packagingMatchesCommandeSupplier(
   pkg: PackagingWithSupplierLinks,
   commandSupplierId: string | null | undefined,
-  productSupplierId: string | null | undefined,
+  _productSupplierId?: string | null | undefined,
 ): boolean {
   if (!commandSupplierId) {
-    return true;
-  }
-  if (productSupplierId === commandSupplierId) {
     return true;
   }
   const condSid = conditionnementSupplierId(pkg.ref_conditionnement);
@@ -50,9 +47,6 @@ export function packagingMatchesCommandeSupplier(
     return true;
   }
   if (linked.includes(commandSupplierId)) {
-    return true;
-  }
-  if (!condSid && linked.length === 0) {
     return true;
   }
   return false;

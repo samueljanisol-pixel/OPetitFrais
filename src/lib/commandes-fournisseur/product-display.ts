@@ -26,6 +26,38 @@ export function labelFromRefForLocale(raw: unknown, locale: AppLocale): string {
   return t ? String(t) : "—";
 }
 
+/** UdC pour la saisie commande ; repli sur UdV si UdC absente. */
+export function orderUnitLabelForLocale(
+  orderUnitRaw: unknown,
+  salesUnitRaw: unknown,
+  locale: AppLocale,
+): string {
+  const order = labelFromRefForLocale(orderUnitRaw, locale);
+  if (order !== "—") return order;
+  return labelFromRefForLocale(salesUnitRaw, locale);
+}
+
+/** Unité affichée à côté de la quantité (récap / saisie) : UdC ou libellé conditionnement. */
+export function recapLigneQtyUnitLabel(
+  l: {
+    product_packaging_id?: string | null;
+    uniteVente?: string;
+    packaging?: PackagingRowForDisplay | null;
+    product?: { ref_order_unit?: unknown; ref_sales_unit?: unknown } | null;
+  },
+  locale: AppLocale,
+): string {
+  const isCond = Boolean(l.product_packaging_id);
+  if (isCond && l.packaging) {
+    return packagingConditionnementLabelForLocale(l.packaging, locale);
+  }
+  if (l.product) {
+    return orderUnitLabelForLocale(l.product.ref_order_unit, l.product.ref_sales_unit, locale);
+  }
+  const fallback = l.uniteVente?.trim();
+  return fallback && fallback !== "—" ? fallback : "—";
+}
+
 /** UdV conditionnement = référentiel « Unité » (colis compté en pièces). */
 export function isPackSalesUnitUnite(raw: unknown): boolean {
   const o = refMini(raw);
@@ -175,6 +207,56 @@ export function buildLotProductDisplayInfo(
   const packSalesUnitIsUnite = isPackSalesUnitUnite(pr.ref_sales_unit);
   const condPackUniteVente = labelFromRef(pr.ref_sales_unit);
   const condTitre = buildPackagingCondTitre(pr);
+  return {
+    uniteVente,
+    condPackUniteVente,
+    condTitre,
+    packContentQty: Number.isFinite(packQty) ? packQty : null,
+    isCond: true,
+    packSalesUnitIsUnite,
+  };
+}
+
+/** Variante localisée de {@link buildLotProductDisplayInfo}. */
+export function buildLotProductDisplayInfoForLocale(
+  product:
+    | {
+        ref_sales_unit?: unknown;
+        product_packaging?: PPack | PPack[] | null | unknown;
+      }
+    | null
+    | undefined,
+  ligneProductPackagingId: string | null,
+  locale: AppLocale,
+): ProductDisplayInfo {
+  const noCond = {
+    uniteVente: "—" as string,
+    condPackUniteVente: null as string | null,
+    condTitre: null as string | null,
+    packContentQty: null as number | null,
+    isCond: false,
+    packSalesUnitIsUnite: false,
+  };
+  if (!product) {
+    return noCond;
+  }
+  const uniteVente = labelFromRefForLocale(product.ref_sales_unit, locale);
+  const packs = packArray(product.product_packaging as PPack | PPack[] | null | undefined);
+  if (packs.length === 0) {
+    return { ...noCond, uniteVente };
+  }
+  if (ligneProductPackagingId == null || ligneProductPackagingId === "") {
+    return { ...noCond, uniteVente };
+  }
+  const pr =
+    packs.find((p) => p.id === ligneProductPackagingId) ?? packs[0] ?? null;
+  if (!pr) {
+    return { ...noCond, uniteVente };
+  }
+  const packQty = typeof pr.quantity === "string" ? parseFloat(pr.quantity) : Number(pr.quantity);
+  const packSalesUnitIsUnite = isPackSalesUnitUnite(pr.ref_sales_unit);
+  const condPackUniteVente = labelFromRefForLocale(pr.ref_sales_unit, locale);
+  const condTitre = buildPackagingCondTitreForLocale(pr, locale);
   return {
     uniteVente,
     condPackUniteVente,

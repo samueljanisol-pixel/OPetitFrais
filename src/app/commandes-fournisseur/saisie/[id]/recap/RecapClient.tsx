@@ -27,7 +27,6 @@ import CommentOutlinedIcon from "@mui/icons-material/CommentOutlined";
 import DeleteOutlineOutlinedIcon from "@mui/icons-material/DeleteOutlineOutlined";
 import LigneSaisieComments from "@/components/commandes-fournisseur/LigneSaisieComments";
 import AppLink from "@/components/AppLink";
-import ProductArabicSubtitle from "@/components/ProductArabicSubtitle";
 import CommandeFournisseurProductPicker, {
   type ProductPickRow,
 } from "@/features/commandes-fournisseur/CommandeFournisseurProductPicker";
@@ -45,9 +44,14 @@ import { commandeLigneKey } from "@/lib/commandes-fournisseur/commande-ligne-key
 import {
   buildSoitLineForLocale,
   recapCondTitreForLocale,
+  recapLigneQtyUnitLabel,
   type PackagingRowForDisplay,
 } from "@/lib/commandes-fournisseur/product-display";
 import { clampQtyToApiRange, roundQty2 } from "@/lib/commandes-fournisseur/qty-parse";
+import {
+  productLogisticDisplayIsArabic,
+  productLogisticDisplayName,
+} from "@/lib/products/product-display-name";
 import CommandeSaisieRecapExport from "@/features/commandes-fournisseur/CommandeSaisieRecapExport";
 import { useAppFormat } from "@/lib/i18n/useAppFormat";
 import type { AppLocale } from "@/i18n/config";
@@ -61,7 +65,7 @@ type Ligne = {
   line_comment: string | null;
   hors_fournisseur: boolean;
   vendeur_id?: string | null;
-  product: { name: string; code: string; name_ar?: string | null; ref_sales_unit?: unknown } | null;
+  product: { name: string; code: string; name_ar?: string | null; ref_sales_unit?: unknown; ref_order_unit?: unknown } | null;
   /** Unité de vente du produit (réf. produit) : affichage à l’unité. */
   uniteVente?: string;
   /** UdV du conditionnement (pour « Soit … »). */
@@ -102,25 +106,95 @@ function formatSoit(
   return formatNumber(n, { minimumFractionDigits: 0, maximumFractionDigits: 2 });
 }
 
-/** Grille fixe : ± | qté | unité | ± — même gabarit sur toutes les lignes (avec ou sans « Soit »). */
-const QTE_GRID_ROW =
-  "grid shrink-0 grid-cols-[2.35rem_4.25rem_2.25rem_2.35rem] items-center gap-x-0.5 sm:grid-cols-[2.5rem_4.25rem_2.25rem_2.5rem] sm:gap-x-1";
-
-const QTE_STEP_BTN = "!min-w-0 !w-full !max-w-full !px-1 sm:!px-2";
+/** Gabarit ± | qté | ± sur une ligne ; unité et « Soit » en dessous. */
+const QTE_STEP_BTN_SX = {
+  py: 0.25,
+  minHeight: 0,
+  fontSize: "0.8125rem",
+  width: "2.15rem",
+  minWidth: "2.15rem",
+  flexShrink: 0,
+  px: 0.5,
+} as const;
 
 const QTE_FIELD_SX = {
-  "& .MuiInputBase-input": { py: 0.65, textAlign: "center" as const, px: 0.5 },
-  width: "100%",
-  minWidth: 0,
-  maxWidth: "none",
+  "& .MuiInputBase-input": { py: 0.3, textAlign: "center" as const, px: 0.35 },
+  width: "4rem",
+  minWidth: "3.25rem",
+  maxWidth: "4.25rem",
+  flexShrink: 0,
 };
 
-const QTE_UNIT_CELL = "min-w-0 truncate text-left";
+const QTE_UNIT_SX = {
+  display: "block",
+  maxWidth: "9.75rem",
+  fontSize: "0.6875rem",
+  lineHeight: 1.15,
+  textAlign: "center" as const,
+  whiteSpace: "normal" as const,
+};
 
-const QTE_SOIT_CELL =
-  "col-span-2 min-w-0 whitespace-nowrap text-center text-[0.8125rem] leading-tight tabular-nums sm:text-sm";
+const QTE_SOIT_SX = {
+  fontSize: "0.6875rem",
+  lineHeight: 1.1,
+  textAlign: "center" as const,
+  whiteSpace: "nowrap" as const,
+  tabularNums: true,
+};
 
-const QTE_COND_TITRE_CELL = "col-span-4 min-w-0 text-center leading-tight";
+const RECAP_CATEGORY_HEADER_BG_SX = {
+  py: 1,
+  px: 2,
+  borderRadius: 1,
+  bgcolor: (t: { palette: { mode: string; success: { main: string } } }) =>
+    t.palette.mode === "dark"
+      ? alpha(t.palette.success.main, 0.24)
+      : alpha(t.palette.success.main, 0.16),
+} as const;
+
+const RECAP_CATEGORY_HEADER_LIST_SX = {
+  ...RECAP_CATEGORY_HEADER_BG_SX,
+  mx: -2,
+} as const;
+
+const RECAP_CATEGORY_HEADER_TEXT_SX = {
+  width: "100%",
+  textAlign: "center" as const,
+  fontWeight: 700,
+  fontSize: "1.0625rem",
+  lineHeight: 1.25,
+  letterSpacing: "0.03em",
+} as const;
+
+function RecapProductName({
+  product,
+  productId,
+  locale,
+}: {
+  product: { name: string; name_ar?: string | null } | null;
+  productId: string;
+  locale: AppLocale;
+}) {
+  if (!product) {
+    return (
+      <Typography variant="body2" className="!font-medium !leading-tight">
+        {productId}
+      </Typography>
+    );
+  }
+  const isArabic = productLogisticDisplayIsArabic(product, locale);
+  return (
+    <Typography
+      variant="body2"
+      className="!font-medium !leading-tight"
+      dir={isArabic ? "rtl" : undefined}
+      lang={isArabic ? "ar" : undefined}
+      sx={isArabic ? { textAlign: "right" } : undefined}
+    >
+      {productLogisticDisplayName(product, locale)}
+    </Typography>
+  );
+}
 
 function recapLigneCondDisplay(
   l: Ligne,
@@ -148,21 +222,6 @@ function recapLigneCondDisplay(
   return { condTitre, soitLine };
 }
 
-function RecapCondTitre({ label }: { label: string }) {
-  return (
-    <div className={QTE_GRID_ROW}>
-      <Typography
-        variant="caption"
-        color="text.secondary"
-        component="span"
-        className={QTE_COND_TITRE_CELL}
-      >
-        {label}
-      </Typography>
-    </div>
-  );
-}
-
 function StepQte({
   value,
   uniteVente,
@@ -188,13 +247,12 @@ function StepQte({
     (d: number) => () =>
       onChange(Math.max(0, roundQty2(roundQty2(value) + d)));
   return (
-    <div className="flex max-w-full shrink-0 flex-col items-stretch gap-0.5">
-      <div className={QTE_GRID_ROW}>
+    <div className="flex max-w-full shrink-0 flex-col items-center gap-0.25">
+      <div className="flex items-center gap-0.5">
         <Button
           size="small"
           variant="outlined"
-          className={QTE_STEP_BTN}
-          sx={{ py: 0.5 }}
+          sx={QTE_STEP_BTN_SX}
           onClick={() => step(-1)()}
           disabled={value < 1}
           aria-label={value < 1 ? minQtyRemoveLineAria : decreaseByOneAria}
@@ -208,41 +266,30 @@ function StepQte({
           sx={QTE_FIELD_SX}
           slotProps={{ htmlInput: { "aria-label": quantityProductAria } }}
         />
-        {hideUnit ? (
-          <span className={QTE_UNIT_CELL} aria-hidden />
-        ) : (
-          <Typography
-            variant="caption"
-            color="text.secondary"
-            className={QTE_UNIT_CELL}
-            title={uniteVente}
-          >
-            {uniteVente}
-          </Typography>
-        )}
         <Button
           size="small"
           variant="outlined"
-          className={QTE_STEP_BTN}
-          sx={{ py: 0.5 }}
+          sx={QTE_STEP_BTN_SX}
           onClick={() => step(1)()}
         >
           +1
         </Button>
       </div>
+      {!hideUnit && uniteVente !== "—" ? (
+        <Typography
+          variant="caption"
+          color="text.secondary"
+          component="span"
+          title={uniteVente}
+          sx={QTE_UNIT_SX}
+        >
+          {uniteVente}
+        </Typography>
+      ) : null}
       {soitLine ? (
-        <div className={QTE_GRID_ROW}>
-          <span aria-hidden />
-          <Typography
-            variant="body2"
-            color="text.secondary"
-            component="p"
-            className={QTE_SOIT_CELL}
-          >
-            {soitLine}
-          </Typography>
-          <span aria-hidden />
-        </div>
+        <Typography variant="caption" color="text.secondary" component="p" sx={QTE_SOIT_SX}>
+          {soitLine}
+        </Typography>
       ) : null}
     </div>
   );
@@ -750,9 +797,8 @@ export default function RecapClient({ commandeId }: { commandeId: string }) {
       {editable ? (
       <List dense disablePadding>
         {lignes.map((l, i) => {
-          const u = l.uniteVente ?? emDash;
-          const isCond = Boolean(l.product_packaging_id);
-          const { condTitre: condTitreDisplay, soitLine: soitCond } = recapLigneCondDisplay(l, locale, tc);
+          const unitLabel = recapLigneQtyUnitLabel(l, locale);
+          const { soitLine: soitCond } = recapLigneCondDisplay(l, locale, tc);
           const catKey = (l.categoryLabel ?? "").trim() || tc("noCategory");
           const prevCat =
             i > 0 ? ((lignes[i - 1]!.categoryLabel ?? "").trim() || tc("noCategory")) : null;
@@ -763,45 +809,32 @@ export default function RecapClient({ commandeId }: { commandeId: string }) {
                 <ListItem
                   component="li"
                   disableGutters
-                  className={`!flex-col !items-stretch ${i > 0 ? "!mt-2" : "!mt-0"} !mb-1`}
-                  sx={{
-                    borderRadius: 1,
-                    px: 1.25,
-                    py: 0.75,
-                    bgcolor: (t) =>
-                      t.palette.mode === "dark"
-                        ? alpha(t.palette.success.main, 0.18)
-                        : alpha(t.palette.success.main, 0.1),
-                  }}
+                  className={`!flex-col !items-stretch ${i > 0 ? "!mt-2" : "!mt-0"} !mb-1.5`}
+                  sx={RECAP_CATEGORY_HEADER_LIST_SX}
                 >
                   <Typography
-                    variant="subtitle2"
+                    variant="subtitle1"
                     component="div"
                     color="success"
-                    className="w-full"
-                    sx={{ fontWeight: 700, letterSpacing: "0.02em" }}
+                    sx={RECAP_CATEGORY_HEADER_TEXT_SX}
                   >
                     {catKey}
                   </Typography>
                 </ListItem>
               ) : null}
-              <ListItem disableGutters className="!flex-col !items-stretch !mb-2">
-              <div className="flex w-full min-w-0 items-start justify-between gap-1.5 sm:gap-2">
+              <ListItem disableGutters className="!flex-col !items-stretch !mb-1">
+              <div className="flex w-full min-w-0 items-center justify-between gap-1 sm:gap-1.5">
                 <div className="min-w-0 flex-1 overflow-hidden pr-0 sm:pr-1">
-                  <Typography variant="body2" className="!font-medium">
-                    {l.product?.name ?? l.product_id}
-                  </Typography>
-                  <ProductArabicSubtitle nameAr={l.product?.name_ar} matchNameLine />
+                  <RecapProductName product={l.product} productId={l.product_id} locale={locale} />
                 </div>
-                <div className="flex shrink-0 flex-col items-end gap-0.5">
+                <div className="flex shrink-0 flex-col items-end gap-0.25">
                     <>
-                    <div className="flex items-start gap-0.5">
-                      <div className="flex flex-col items-stretch gap-0.5">
-                        {condTitreDisplay ? <RecapCondTitre label={condTitreDisplay} /> : null}
+                    <div className="flex items-center gap-0.5">
+                      <div className="flex flex-col items-stretch gap-0.25">
                         <StepQte
                           value={l.qte}
-                          uniteVente={u}
-                          hideUnit={isCond}
+                          uniteVente={unitLabel}
+                          hideUnit={false}
                           soitLine={soitCond}
                           decreaseByOneAria={tc("decreaseByOneAria")}
                           minQtyRemoveLineAria={tc("minQtyRemoveLineAria")}
@@ -809,26 +842,6 @@ export default function RecapClient({ commandeId }: { commandeId: string }) {
                           onChange={(q) => setLigneQte(i, q)}
                         />
                       </div>
-                      <IconButton
-                        type="button"
-                        size="small"
-                        color="error"
-                        aria-label={tc("removeLineAria")}
-                        onClick={() => void onDeleteLigne(i)}
-                        disabled={saving}
-                        className="!mt-0.5"
-                      >
-                        <DeleteOutlineOutlinedIcon fontSize="small" />
-                      </IconButton>
-                    </div>
-                    <div className="flex max-w-full items-start justify-end gap-0.5">
-                      {l.line_comment ? (
-                        <LigneSaisieComments
-                          comments={[]}
-                          lineComment={l.line_comment}
-                          variant="chip"
-                        />
-                      ) : null}
                       <IconButton
                         type="button"
                         size="small"
@@ -842,11 +855,30 @@ export default function RecapClient({ commandeId }: { commandeId: string }) {
                       >
                         <CommentOutlinedIcon fontSize="small" />
                       </IconButton>
+                      <IconButton
+                        type="button"
+                        size="small"
+                        color="error"
+                        aria-label={tc("removeLineAria")}
+                        onClick={() => void onDeleteLigne(i)}
+                        disabled={saving}
+                      >
+                        <DeleteOutlineOutlinedIcon fontSize="small" />
+                      </IconButton>
                     </div>
+                    {l.line_comment ? (
+                      <div className="flex max-w-full justify-end">
+                        <LigneSaisieComments
+                          comments={[]}
+                          lineComment={l.line_comment}
+                          variant="chip"
+                        />
+                      </div>
+                    ) : null}
                     </>
                 </div>
               </div>
-              <Divider className="!my-2" />
+              <Divider className="!my-1" />
             </ListItem>
             </Fragment>
           );
@@ -857,14 +889,14 @@ export default function RecapClient({ commandeId }: { commandeId: string }) {
           size="small"
           className="!mb-2"
           sx={{
-            "& .MuiTableCell-root": { py: 1, px: 1, verticalAlign: "top" },
+            "& .MuiTableCell-root": { py: 0.75, px: 1, verticalAlign: "top" },
             "& .MuiTableHead-root .MuiTableCell-root": { fontWeight: 700 },
           }}
         >
           <TableHead>
             <TableRow>
               <TableCell>Produit</TableCell>
-              <TableCell align="right" sx={{ minWidth: 72 }}>
+              <TableCell align="center" sx={{ minWidth: 72 }}>
                 {tc("quantity")}
               </TableCell>
               <TableCell sx={{ minWidth: 120 }}>{tc("udvCond")}</TableCell>
@@ -872,15 +904,9 @@ export default function RecapClient({ commandeId }: { commandeId: string }) {
           </TableHead>
           <TableBody>
             {lignes.map((l, i) => {
-              const u = l.uniteVente ?? emDash;
-              const isCond = Boolean(l.product_packaging_id);
-              const { condTitre: condTitreDisplay, soitLine: soitCond } = recapLigneCondDisplay(
-                l,
-                locale,
-                tc,
-              );
-              const udvMain =
-                isCond && condTitreDisplay ? condTitreDisplay : u !== emDash ? u : emDash;
+              const unitLabel = recapLigneQtyUnitLabel(l, locale);
+              const { soitLine: soitCond } = recapLigneCondDisplay(l, locale, tc);
+              const udvMain = unitLabel !== emDash ? unitLabel : emDash;
               const udvSub = soitCond;
               const catKey = (l.categoryLabel ?? "").trim() || tc("noCategory");
               const prevCat =
@@ -890,21 +916,12 @@ export default function RecapClient({ commandeId }: { commandeId: string }) {
                 <Fragment key={l.id}>
                   {showCategoryHeader ? (
                     <TableRow>
-                      <TableCell
-                        colSpan={3}
-                        sx={{
-                          py: 0.85,
-                          bgcolor: (t) =>
-                            t.palette.mode === "dark"
-                              ? alpha(t.palette.success.main, 0.18)
-                              : alpha(t.palette.success.main, 0.1),
-                        }}
-                      >
+                      <TableCell colSpan={3} sx={RECAP_CATEGORY_HEADER_BG_SX}>
                         <Typography
-                          variant="subtitle2"
+                          variant="subtitle1"
                           color="success"
                           component="div"
-                          sx={{ fontWeight: 700, letterSpacing: "0.02em" }}
+                          sx={RECAP_CATEGORY_HEADER_TEXT_SX}
                         >
                           {catKey}
                         </Typography>
@@ -913,17 +930,14 @@ export default function RecapClient({ commandeId }: { commandeId: string }) {
                   ) : null}
                   <TableRow>
                     <TableCell>
-                      <Typography variant="body2" className="!font-medium">
-                        {l.product?.name ?? l.product_id}
-                      </Typography>
-                      <ProductArabicSubtitle nameAr={l.product?.name_ar} matchNameLine />
+                      <RecapProductName product={l.product} productId={l.product_id} locale={locale} />
                     </TableCell>
-                    <TableCell align="right">
+                    <TableCell align="center">
                       <Box
                         sx={{
                           display: "inline-flex",
                           flexDirection: "column",
-                          alignItems: "flex-end",
+                          alignItems: "center",
                           gap: 0.5,
                           fontVariantNumeric: "tabular-nums",
                         }}
@@ -1139,10 +1153,13 @@ export default function RecapClient({ commandeId }: { commandeId: string }) {
         <DialogContent>
           {pendingProduct ? (
             <>
-              <Typography variant="subtitle2" className="!mb-2 !font-semibold">
-                {pendingProduct.name}
-              </Typography>
-              <ProductArabicSubtitle nameAr={pendingProduct.name_ar} matchNameLine />
+              <Box className="!mb-2">
+                <RecapProductName
+                  product={pendingProduct}
+                  productId={pendingProduct.id}
+                  locale={locale}
+                />
+              </Box>
               {condPanelProps ? <ParcoursProductQuantityPanel {...condPanelProps} /> : null}
             </>
           ) : null}

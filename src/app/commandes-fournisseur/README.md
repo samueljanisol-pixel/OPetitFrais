@@ -34,20 +34,26 @@ Lorsque le lot est **prêt pour l’achat**, le commentaire du lot est affiché 
 
 Sur `/commandes-fournisseur/validation/lots/[id]`, lorsque le statut est **`prete`** :
 
-1. **Matrice consolidation** en haut (lecture seule, noms des magasins — comme avant).
+1. **Matrice consolidation** en haut (lecture seule) : colonnes magasins en **codes MXX** (ex. M01).
 2. **Récap groupé par vendeur** en dessous (`ValidationLotVendeurRecap`) :
 
 - Colonnes magasins en **codes MXX** (ex. M01, M12) — pas le nom du magasin (`magasinCodeMx`).
 - Tableau par vendeur : **Produit** (libellé français + **nom arabe** `product.name_ar` si renseigné), quantités par MXX, **Total**, **UdV / cond.** (avec « Soit … » si conditionnement). Si le fournisseur n’a **aucun marchand** (`vendeurs` vide), le groupe sans `vendeur_id` est intitulé avec le **nom du fournisseur** (plus « Sans vendeur »).
 - **Date de commande** dans l’image exportée et dans le nom du fichier (`validated_at` ou `created_at` des commandes incluses ; plage si plusieurs jours).
-- **Commentaires** : `line_comment` dans la **cellule quantité** du magasin (bas à droite, souvent en arabe, `dir="rtl"`). Optionnel : commentaire du lot en bas de l’image. Noms produit : **arabe puis français**, alignés à droite dans la colonne Produit.
+- **Commentaires** : `line_comment` dans la **cellule quantité** du magasin (bas à droite, souvent en arabe, `dir="rtl"`). Optionnel : **commentaire par vendeur** (table `commande_fournisseur_lot_vendeur_comment`, éditable en brouillon et quand le lot est prêt) affiché sous chaque groupe vendeur et en bas de l’image exportée. Noms produit : **arabe puis français**, alignés à droite dans la colonne Produit.
 - Bouton **Exporter en image** par vendeur : capture PNG (`html2canvas`) puis **partage natif** (`navigator.share` avec fichier) sur mobile, sinon **téléchargement** du PNG — pour envoi WhatsApp, e-mail, SMS, etc. Nom de fichier du type `commande-2026-05-19-{fournisseur}-{vendeur}.png`.
+- Bouton **Envoyer WhatsApp** (si le vendeur a un **téléphone** renseigné dans Paramètres → Vendeurs) : génère l’image dans la **langue du vendeur** (`preferred_locale`), partage le PNG + ouvre WhatsApp avec le **commentaire vendeur** en texte pré-rempli.
 
 Le GET lot validation renvoie aussi `vendeurs` (`ref_supplier_vendeur` du fournisseur), `product.name_ar`, et les dates `created_at` / `validated_at` des commandes incluses.
 
-## Matrice lot — groupement par catégorie
+## Matrice lot — groupement catégorie ou vendeur
 
-Les lignes produit du lot sont **triées comme au récap commande** (`ref_category.sort_order`, libellé, nom produit) et le GET renvoie **`categoryLabel`** par ligne. Dans la matrice, une **ligne d’en-tête** par groupe (fond vert léger, comme le récap) sépare les familles (ex. Fruit, « Sans catégorie » si besoin).
+Sur le détail lot validation, un **toggle** permet d’afficher la matrice **par catégorie** (défaut) ou **par vendeur**.
+
+- **Par catégorie** : lignes triées comme au récap commande (`ref_category.sort_order`, libellé, nom produit) ; en-tête bandeau vert par famille (ex. Fruit, « Sans catégorie »).
+- **Par vendeur** : en-tête par marchand (`vendeur_id` ou nom fournisseur si aucun vendeur) avec **champ commentaire vendeur** (sauvegarde au blur, statuts lot `brouillon` ou `prete`). API : `PATCH` `{ vendeurCommentaire: { vendeurKey, commentaire } }` ; GET renvoie `vendeurCommentaires`.
+
+Le GET renvoie **`categoryLabel`** par ligne pour le groupement catégorie.
 
 ### Internationalisation (détail lot validation)
 
@@ -62,7 +68,9 @@ Le composant client s’appuie aussi sur `useAppFormat()` (dates/nombres selon l
 
 ### Colonne UdV / conditionnement (validation)
 
-Comme au **récap saisie** : si la ligne est en conditionnement (`product_packaging_id`), la colonne affiche le libellé colis (`condTitre`, ex. « Carton (12 Kg) ») et éventuellement **« Soit … »** sous le total ; sinon l’**unité de vente** du produit (ex. Kg).
+**En-têtes colonnes magasin** (matrice consolidation, tous statuts lot) : codes **MXX** (`magasinCodeMx`, ex. M01) — le nom complet du magasin reste utilisé pour l’accessibilité et les commentaires.
+
+Comme au **récap saisie** : la colonne affiche l’**UdC** (`ref_order_unit`, repli UdV) à l’unité, ou le **libellé conditionnement** si colis ; **« Soit … »** en dessous si applicable.
 
 - À la **création du lot**, `product_packaging_id` est repris de chaque ligne de commande (agrégation par produit **et** conditionnement).
 - Pour les lots déjà créés sans cette FK, le **GET lot** complète depuis les lignes `commande_fournisseur_ligne` lorsqu’un seul conditionnement distinct existe pour le produit.
@@ -108,15 +116,13 @@ Ajout manuel au lot (brouillon / achat) : refus uniquement si le **même conditi
 
 ### Conditionnements et fournisseur de la commande
 
-Pour une commande du fournisseur **F**, les colis affichés (parcours, récap, recherche produit) incluent :
+Pour une commande du fournisseur **F**, les colis affichés (parcours, récap, recherche produit) sont **uniquement** :
 
-- tous les colis achetables si le **produit** est rattaché à **F** (`product.supplier_id` ou **`product_supplier`**) ;
-- sinon les colis dont le **conditionnement réf.** (`ref_conditionnement.supplier_id`) ou les liaisons **`product_packaging_supplier`** ciblent **F** ;
-- le **parcours** et la **recherche produit** incluent aussi les produits liés via **`product_supplier`** (fournisseurs secondaires). Migration `20260702160000_product_supplier.sql`.
-- les colis « génériques » (pas de fournisseur sur le réf. ni liaison explicite).
+- les colis dont le **conditionnement réf.** (`ref_conditionnement.supplier_id`) ou une liaison **`product_packaging_supplier`** cible **F** ;
+- plus la saisie **à l’unité** (UdC) si le produit l’autorise (`allow_unit_in_commande`) ;
 - les colis **archivés** sur la fiche produit (`archived_at` renseigné) sont **exclus** (filtre `filterActivePackaging` ; le select API inclut `archived_at`).
 
-Le **parcours** liste aussi les produits actifs qui ont au moins un tel colis pour **F**, même si `product.supplier_id` est différent, ainsi que les produits déjà présents sur la commande.
+Le **parcours** et la **recherche produit** incluent aussi les produits liés via **`product_supplier`** (fournisseurs secondaires). Migration `20260702160000_product_supplier.sql`.
 
 ### Commentaire par ligne (`line_comment`)
 
@@ -145,6 +151,16 @@ Les quantités stockées en base sont en **`numeric(14,2)`** (au plus **2 décim
   - `PATCH /api/commandes-fournisseur/achat/suppliers/[supplierId]/vendeurs/[vendeurId]` avec `{ label }` : renommage réservé à la permission **`commandes_fournisseur.vendeurs_renommer`** (cohérence RLS dans la migration SQL associée).
 
 Sur **détail lot achat**, un bouton « crayon » à côté du titre du vendeur permet le renommage lorsque cette permission est accordée.
+
+## Script Excel — vendeur par produit
+
+Le fichier `Unité de commande.xlsx` (blocs par vendeur marché) alimente aussi `product.vendeur_id` :
+
+```bash
+npx tsx scripts/apply-vendeur-from-excel.ts "chemin/Unité de commande.xlsx"
+```
+
+Le parseur (`scripts/parse-order-units-excel.py`) lit le nom vendeur en en-tête de chaque bloc (ligne « Français ») et associe chaque code produit au vendeur `ref_supplier_vendeur` du fournisseur **Marché** (correspondance par libellé).
 
 ### Internationalisation UI (achat détail)
 

@@ -3,17 +3,13 @@ import { fetchSheetJsonFromGoogle } from '@/features/sheet-import/fetchSheetJson
 import { parseSheetJsonToRows } from '@/features/sheet-import/mapSheetRow'
 import { applySheetImport } from '@/features/sheet-import/applySheetImport'
 import {
-  ALL_SHEET_IMPORT_FIELDS,
-  DEFAULT_SHEET_IMPORT_FIELDS,
+  importFieldsFromTaskConfig,
   type SheetImportFields,
 } from '@/features/sheet-import/sheet-import-fields'
 import type { AutomatedTaskRow, TaskExecutionOptions, TaskExecutionResult } from '../types'
 
 function fieldsFromConfig(config: AutomatedTaskRow['config']): SheetImportFields {
-  if (config.updateFields === 'new_only') {
-    return DEFAULT_SHEET_IMPORT_FIELDS
-  }
-  return ALL_SHEET_IMPORT_FIELDS
+  return importFieldsFromTaskConfig(config)
 }
 
 async function persistImportFingerprint(

@@ -1,10 +1,14 @@
 import type { AppLocale } from "@/i18n/config";
 import { magasinCodeMx } from "@/lib/commandes-fournisseur/magasin-code-mx";
+import {
+  productLogisticDisplayIsArabic,
+  productLogisticDisplayName,
+} from "@/lib/products/product-display-name";
 import { lotCommandeDateInfo, type LotCommandeDateInfo } from "@/lib/commandes-fournisseur/lot-commande-date";
 import {
   buildSoitLineForLocale,
   labelFromRefForLocale,
-  recapCondTitreForLocale,
+  recapLigneQtyUnitLabel,
   type PackagingRowForDisplay,
   type ProductDisplayInfo,
 } from "@/lib/commandes-fournisseur/product-display";
@@ -38,6 +42,7 @@ export type CommandeSaisieExportLigne = {
     name_ar?: string | null;
     code?: string;
     ref_sales_unit?: unknown;
+    ref_order_unit?: unknown;
   } | null;
 };
 
@@ -106,7 +111,7 @@ function displayFromSaisieLigne(
     pack?.ref_sales_unit != null
       ? labelFromRefForLocale(pack.ref_sales_unit, locale)
       : (l.condPackUniteVente ?? productUdv);
-  const condTitre = recapCondTitreForLocale(l.condTitre, pack, locale);
+  const condTitre = l.condTitre?.trim() || null;
   return {
     uniteVente: productUdv,
     condPackUniteVente: isCond ? packUdv : null,
@@ -176,12 +181,12 @@ function applyLocaleToRecapRows(
       src.qte > 0
         ? buildSoitLineForLocale(display, src.qte, locale, pack, formatSoitLine)
         : null;
-    if (display.isCond && display.condTitre) {
-      rows[i]!.udvCond = display.condTitre;
-      rows[i]!.udvCondSub = soitLine;
-    } else {
-      rows[i]!.udvCond = display.uniteVente !== "—" ? display.uniteVente : "—";
-      rows[i]!.udvCondSub = soitLine;
+    const qtyUnit = recapLigneQtyUnitLabel(src, locale);
+    rows[i]!.udvCond = qtyUnit !== "—" ? qtyUnit : "—";
+    rows[i]!.udvCondSub = soitLine;
+    if (src.product) {
+      rows[i]!.productDisplayName = productLogisticDisplayName(src.product, locale);
+      rows[i]!.productDisplayIsArabic = productLogisticDisplayIsArabic(src.product, locale);
     }
     const cat = src.categoryLabel
       ? { label: src.categoryLabel, sort_order: null as number | null }

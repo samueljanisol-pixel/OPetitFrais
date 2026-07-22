@@ -26,6 +26,8 @@ type LotPatchBody = {
   removeLotLigneId?: string;
   /** Commentaire général du lot (brouillon uniquement). */
   lotCommentaire?: string | null;
+  /** Commentaire par vendeur (brouillon ou prêt). */
+  vendeurCommentaire?: { vendeurKey: string; commentaire: string | null };
 };
 
 async function recomputeQteAchat(
@@ -135,12 +137,12 @@ export async function GET(_req: Request, ctx: Ctx) {
     supabase
       .from("commande_fournisseur_lot_ligne")
       .select(
-        "id, product_id, product_packaging_id, qte_achat, qte_besoin_fige, vendeur_id, marque_achete, prix_achat_unitaire, montant_ligne_achat, product(id, name, name_ar, code, ref_sales_unit(label), ref_category(label, sort_order), product_packaging(id, quantity, nom, nom_ar, ref_conditionnement(label, label_ar), ref_sales_unit(label))), commande_fournisseur_lot_ligne_magasin(magasin_id, qte, magasins(id, code, nom))",
+        "id, product_id, product_packaging_id, qte_achat, qte_besoin_fige, vendeur_id, marque_achete, prix_achat_unitaire, montant_ligne_achat, product(id, name, name_ar, code, ref_sales_unit(label, label_ar, code), ref_order_unit(label, label_ar, code), ref_category(label, sort_order), product_packaging(id, quantity, nom, nom_ar, ref_conditionnement(label, label_ar), ref_sales_unit(label, label_ar, code))), commande_fournisseur_lot_ligne_magasin(magasin_id, qte, magasins(id, code, nom))",
       )
       .eq("lot_id", id),
     supabase
       .from("ref_supplier_vendeur")
-      .select("id, label")
+      .select("id, label, phone, preferred_locale")
       .eq("supplier_id", supplierId)
       .order("sort_order", { ascending: true })
       .order("label", { ascending: true }),
@@ -234,11 +236,35 @@ export async function GET(_req: Request, ctx: Ctx) {
   });
 
   const vendeurs = (vendeursRes.data ?? []).map((v) => {
-    const row = v as { id: string; label: string };
-    return { id: row.id, label: row.label };
+    const row = v as {
+      id: string;
+      label: string;
+      phone?: string | null;
+      preferred_locale?: string | null;
+    };
+    return {
+      id: row.id,
+      label: row.label,
+      phone: row.phone ?? null,
+      preferred_locale: row.preferred_locale ?? "fr",
+    };
   });
 
-  return NextResponse.json({ lot, lignes: lignesWithCategory, vendeurs });
+  const { data: vendeurCommentRows, error: vce } = await supabase
+    .from("commande_fournisseur_lot_vendeur_comment")
+    .select("vendeur_key, commentaire")
+    .eq("lot_id", id);
+  if (vce) {
+    return NextResponse.json({ error: vce.message }, { status: 500 });
+  }
+  const vendeurCommentaires: Record<string, string | null> = {};
+  for (const row of vendeurCommentRows ?? []) {
+    const key = (row as { vendeur_key: string }).vendeur_key;
+    const comment = (row as { commentaire: string | null }).commentaire;
+    vendeurCommentaires[key] = typeof comment === "string" ? comment : null;
+  }
+
+  return NextResponse.json({ lot, lignes: lignesWithCategory, vendeurs, vendeurCommentaires });
 }
 
 export async function PATCH(req: Request, ctx: Ctx) {
@@ -260,18 +286,76 @@ export async function PATCH(req: Request, ctx: Ctx) {
     body.setMagasinQte !== undefined,
     body.removeLotLigneId != null,
     body.lotCommentaire !== undefined,
+    body.vendeurCommentaire !== undefined,
   ].filter(Boolean).length;
   if (nKeys !== 1) {
     return NextResponse.json(
       {
         error:
-          "Un seul de : status (prete ou brouillon), setMagasinQte, removeLotLigneId, lotCommentaire",
+          "Un seul de : status (prete ou brouillon), setMagasinQte, removeLotLigneId, lotCommentaire, vendeurCommentaire",
       },
       { status: 400 },
     );
   }
 
   const supabase = await createSupabaseServerClient();
+
+  if (body.vendeurCommentaire !== undefined) {
+    const payload = body.vendeurCommentaire;
+    if (
+      !payload ||
+      typeof payload.vendeurKey !== "string" ||
+      payload.vendeurKey.trim().length === 0
+    ) {
+      return NextResponse.json({ error: "vendeurCommentaire invalide" }, { status: 400 });
+    }
+    if (payload.commentaire !== null && typeof payload.commentaire !== "string") {
+      return NextResponse.json({ error: "vendeurCommentaire invalide" }, { status: 400 });
+    }
+    const { data: lotCur, error: reVc } = await supabase
+      .from("commande_fournisseur_lot")
+      .select("id, status")
+      .eq("id", id)
+      .maybeSingle();
+    if (reVc || !lotCur) {
+      return NextResponse.json({ error: reVc?.message ?? "Introuvable" }, { status: reVc ? 500 : 404 });
+    }
+    const lotStatus = (lotCur as { status: string }).status;
+    if (lotStatus !== "brouillon" && lotStatus !== "prete") {
+      return NextResponse.json({ error: "Modification impossible : lot verrouillé" }, { status: 409 });
+    }
+    const vendeurKey = payload.vendeurKey.trim();
+    const stored =
+      payload.commentaire === null
+        ? null
+        : payload.commentaire.trim().length > 0
+          ? payload.commentaire.trim()
+          : null;
+    if (stored === null) {
+      const { error: de } = await supabase
+        .from("commande_fournisseur_lot_vendeur_comment")
+        .delete()
+        .eq("lot_id", id)
+        .eq("vendeur_key", vendeurKey);
+      if (de) {
+        return NextResponse.json({ error: de.message }, { status: 500 });
+      }
+    } else {
+      const { error: ue } = await supabase.from("commande_fournisseur_lot_vendeur_comment").upsert(
+        {
+          lot_id: id,
+          vendeur_key: vendeurKey,
+          commentaire: stored,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: "lot_id,vendeur_key" },
+      );
+      if (ue) {
+        return NextResponse.json({ error: ue.message }, { status: 500 });
+      }
+    }
+    return NextResponse.json({ ok: true });
+  }
 
   if (body.lotCommentaire !== undefined) {
     if (body.lotCommentaire !== null && typeof body.lotCommentaire !== "string") {

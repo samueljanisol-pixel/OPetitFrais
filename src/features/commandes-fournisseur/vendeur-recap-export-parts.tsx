@@ -31,9 +31,18 @@ export const captureRootSx = {
   maxWidth: "none",
   background: "#fff",
   p: 2,
-  fontFamily: "system-ui, sans-serif",
+  fontFamily: "Arial, Helvetica, sans-serif",
   boxSizing: "border-box" as const,
 };
+
+const exportProductNameSx = (isArabic: boolean) =>
+  ({
+    fontWeight: 500,
+    fontSize: "0.875rem",
+    lineHeight: 1.25,
+    whiteSpace: "nowrap" as const,
+    textAlign: isArabic ? ("right" as const) : ("inherit" as const),
+  }) as const;
 
 type TableLabels = {
   product: string;
@@ -66,11 +75,11 @@ export function VendeurRecapTable({
         <TableRow>
           <TableCell align="right">{labels.product}</TableCell>
           {magasinColumns.map((m) => (
-            <TableCell key={m.id} align="right">
+            <TableCell key={m.id} align="center">
               {magasinColumnHeader ?? m.mxCode}
             </TableCell>
           ))}
-          {showTotalColumn ? <TableCell align="right">{labels.total}</TableCell> : null}
+          {showTotalColumn ? <TableCell align="center">{labels.total}</TableCell> : null}
           <TableCell align="left">{labels.udvCond}</TableCell>
         </TableRow>
       </TableHead>
@@ -83,42 +92,51 @@ export function VendeurRecapTable({
           group.rows.map((row) => (
             <TableRow key={row.ligneId}>
               <TableCell align="right" sx={{ verticalAlign: "middle" }}>
-                <Box
-                  sx={{
-                    display: "inline-flex",
-                    flexDirection: "column",
-                    alignItems: "flex-end",
-                    textAlign: "right",
-                  }}
-                >
-                  {row.nameAr ? (
-                    <Typography
-                      variant="body2"
-                      component="div"
-                      dir="rtl"
-                      sx={{
-                        fontSize: "1rem",
-                        fontWeight: 600,
-                        lineHeight: 1.35,
-                        whiteSpace: "nowrap",
-                      }}
-                    >
-                      {row.nameAr}
-                    </Typography>
-                  ) : null}
+                {row.productDisplayName ? (
                   <Typography
                     variant="body2"
                     component="div"
+                    dir={row.productDisplayIsArabic ? "rtl" : undefined}
+                    lang={row.productDisplayIsArabic ? "ar" : undefined}
+                    sx={exportProductNameSx(row.productDisplayIsArabic === true)}
+                  >
+                    {row.productDisplayName}
+                  </Typography>
+                ) : (
+                  <Box
                     sx={{
-                      fontWeight: 500,
-                      lineHeight: 1.3,
-                      mt: row.nameAr ? 0.25 : 0,
-                      whiteSpace: "nowrap",
+                      display: "inline-flex",
+                      flexDirection: "column",
+                      alignItems: "flex-end",
+                      textAlign: "right",
                     }}
                   >
-                    {row.productName}
-                  </Typography>
-                </Box>
+                    {row.nameAr ? (
+                      <Typography
+                        variant="body2"
+                        component="div"
+                        dir="rtl"
+                        lang="ar"
+                        sx={{
+                          ...exportProductNameSx(true),
+                          fontWeight: 600,
+                        }}
+                      >
+                        {row.nameAr}
+                      </Typography>
+                    ) : null}
+                    <Typography
+                      variant="body2"
+                      component="div"
+                      sx={{
+                        ...exportProductNameSx(false),
+                        mt: row.nameAr ? 0.25 : 0,
+                      }}
+                    >
+                      {row.productName}
+                    </Typography>
+                  </Box>
+                )}
               </TableCell>
               {row.mags.map((v, i) => {
                 const magComment = row.magComments[i]?.trim() ?? "";
@@ -127,7 +145,7 @@ export function VendeurRecapTable({
                 return (
                   <TableCell
                     key={`${row.ligneId}-${i}`}
-                    align="right"
+                    align="center"
                     sx={{ verticalAlign: hasComment ? "top" : "middle" }}
                   >
                     {hasComment ? (
@@ -135,7 +153,7 @@ export function VendeurRecapTable({
                         sx={{
                           display: "inline-flex",
                           flexDirection: "column",
-                          alignItems: "flex-end",
+                          alignItems: "center",
                           gap: 0.25,
                         }}
                       >
@@ -156,7 +174,7 @@ export function VendeurRecapTable({
                             lineHeight: 1.25,
                             fontSize: "0.6875rem",
                             color: "text.secondary",
-                            textAlign: "right",
+                            textAlign: "center",
                             whiteSpace: "nowrap",
                           }}
                         >
@@ -176,7 +194,7 @@ export function VendeurRecapTable({
                 );
               })}
               {showTotalColumn ? (
-                <TableCell align="right" sx={{ fontWeight: 700, verticalAlign: "middle" }}>
+                <TableCell align="center" sx={{ fontWeight: 700, verticalAlign: "middle" }}>
                   {formatRecapQtyCell(row.total)}
                 </TableCell>
               ) : null}
@@ -213,6 +231,7 @@ type CaptureHeaderProps = {
   orderOnLine: string;
   orderByLine: string | null;
   productCount: string;
+  dir?: "rtl" | "ltr";
 };
 
 export function VendeurRecapCaptureHeader({
@@ -223,20 +242,34 @@ export function VendeurRecapCaptureHeader({
   orderOnLine,
   orderByLine,
   productCount,
+  dir,
 }: CaptureHeaderProps) {
   const parLabel = orderByLine?.trim() ?? "";
+  const textDir = dir === "rtl" ? "rtl" : undefined;
   return (
     <>
       {magasinHeader.length > 0 ? (
-        <Typography variant="subtitle1" sx={{ fontWeight: 700, mb: 0.5, whiteSpace: "nowrap" }}>
+        <Typography
+          variant="subtitle1"
+          dir={textDir}
+          sx={{ fontWeight: 700, mb: 0.5, whiteSpace: "nowrap", textAlign: dir === "rtl" ? "right" : "inherit" }}
+        >
           {magasinHeader}
         </Typography>
       ) : null}
-      {magasinHeader.length > 0 ? (
-        <Typography variant="subtitle1" sx={{ fontWeight: 700, mb: 0.5, whiteSpace: "nowrap" }}>
-          {supplierOrderLine}
-        </Typography>
-      ) : null}
+      <Typography
+        variant="subtitle1"
+        dir={textDir}
+        sx={{
+          fontWeight: 700,
+          mb: 0.5,
+          whiteSpace: "nowrap",
+          mt: magasinHeader.length > 0 ? 0.5 : 0,
+          textAlign: dir === "rtl" ? "right" : "inherit",
+        }}
+      >
+        {supplierOrderLine}
+      </Typography>
       {showVendeurHeader ? (
         <Typography
           variant="subtitle1"

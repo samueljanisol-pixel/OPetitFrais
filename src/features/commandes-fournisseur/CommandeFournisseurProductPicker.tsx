@@ -35,6 +35,7 @@ export type ProductPickRow = {
   allow_unit_in_commande?: boolean | null;
   ref_category?: unknown;
   ref_sales_unit?: unknown;
+  ref_order_unit?: unknown;
   ref_supplier?: unknown;
   product_packaging?: unknown;
 };

@@ -18,6 +18,22 @@ export function productLogisticNameAr(product: ProductNameFields): string | null
   return ar || null;
 }
 
+/** Nom logistique selon la locale UI (une seule langue affichée). */
+export function productLogisticDisplayName(product: ProductNameFields, locale: AppLocale): string {
+  if (locale === "ar-MA") {
+    const ar = productLogisticNameAr(product);
+    if (ar) return ar;
+  }
+  return productLogisticNameFr(product);
+}
+
+export function productLogisticDisplayIsArabic(
+  product: ProductNameFields,
+  locale: AppLocale,
+): boolean {
+  return locale === "ar-MA" && productLogisticNameAr(product) != null;
+}
+
 /** Nom de vente français (repli sur logistique). */
 export function productSalesNameFr(product: ProductNameFields): string {
   const sales = product.sales_name?.trim();

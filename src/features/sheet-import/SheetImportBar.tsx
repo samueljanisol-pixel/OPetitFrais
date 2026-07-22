@@ -340,7 +340,8 @@ export function SheetImportBar({ onDone, canWriteProducts = false }: Props) {
         <DialogContent dividers>
           <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
             Correspondance produit par <strong>Code</strong> ou par <strong>Nom</strong> si le code feuille est vide.
-            Les champs cochés s’appliquent aux <strong>produits existants</strong> uniquement ; un{' '}
+            Les champs cochés définissent les colonnes éligibles pour les <strong>produits existants</strong> ;
+            seules les valeurs <strong>modifiées</strong> par rapport à la base sont importées. Un{' '}
             <strong>nouveau produit</strong> est toujours créé avec <strong>toutes</strong> les colonnes de la feuille.
             Sans case cochée, seuls les <strong>nouveaux</strong> produits sont importés.
           </Typography>

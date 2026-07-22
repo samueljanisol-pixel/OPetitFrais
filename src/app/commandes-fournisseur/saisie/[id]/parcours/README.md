@@ -5,12 +5,13 @@ Route : `/commandes-fournisseur/saisie/[id]/parcours`
 ## Mise en page
 
 - Barre **Précédent / Suivant / Terminer** fixée en bas de l’écran (sous l’en-tête app).
-- Zone produit (catégorie, photo, quantités) **défilable** si le contenu dépasse la hauteur disponible.
+- **Navigation par catégories** : bandeau horizontal de puces (toutes les catégories du parcours) sous l’en-tête ; clic → saut au premier produit de la catégorie ; la catégorie courante est mise en évidence.
+- Zone produit (photo, quantités) **défilable** si le contenu dépasse la hauteur disponible.
 - Emplacement photo **toujours réservé** (`h-36`, max `6rem`) : sans image, zone vide — le libellé et les quantités ne remontent pas.
 - Nom arabe (`name_ar`) : slot réservé sous le titre FR (`ProductArabicSubtitle` + `reserveSpace`) même si vide.
 - Ligne **« Soit … »** (conditionnement) : hauteur réservée même absente (à l’unité ou colis sans conversion).
 - **Croix rouge** à droite du champ qté (position absolue) si qté &gt; 0 : remise à zéro ; le champ reste **centré** entre les ±.
-- **À l’unité** : libellé UdV (ex. Kg) **centré sous** la rangée ±, comme le libellé colis en conditionnement.
+- **À l’unité** : libellé **UdC** (`ref_order_unit`, repli UdV si absent) **centré sous** la rangée ±, comme le libellé colis en conditionnement.
 
 ## Fiche produit
 
@@ -22,4 +23,4 @@ Route : `/commandes-fournisseur/saisie/[id]/parcours`
 
 ## Conditionnements affichés
 
-Liste via `GET /api/commandes-fournisseur/parcours-produits` puis `applyCommandeProductPackagingFilter` : colis **non archivés** (`archived_at` null), **achetables** pour le magasin, éligibles pour le **fournisseur de la commande** (aligné fiche produit). Les conditionnements **archivés** sur la fiche ne doivent plus apparaître au parcours (champ `archived_at` requis dans `COMMANDE_PACKAGING_SELECT`).
+Liste via `GET /api/commandes-fournisseur/parcours-produits` puis `applyCommandeProductPackagingFilter` : colis **non archivés** (`archived_at` null), **achetables** pour le magasin, **liés au fournisseur de la commande** (`ref_conditionnement.supplier_id` ou `product_packaging_supplier`). Sans colis éligible : saisie **à l’unité** (UdC) si `allow_unit_in_commande`.

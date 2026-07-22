@@ -9,6 +9,7 @@ import { DecimalQtyTextField } from "@/components/commandes-fournisseur/DecimalQ
 import { clampQtyToApiRange, roundQty2 } from "@/lib/commandes-fournisseur/qty-parse";
 import {
   labelFromRefForLocale,
+  orderUnitLabelForLocale,
   packagingConditionnementLabelForLocale,
 } from "@/lib/commandes-fournisseur/product-display";
 import { commandeAllowsUnitProduct } from "@/lib/products/packagingEligibility";
@@ -111,6 +112,7 @@ export type PPack = {
 export type ParcoursProductForQty = {
   id: string;
   ref_sales_unit?: unknown;
+  ref_order_unit?: unknown;
   product_packaging: PPack[] | PPack | null | undefined;
   /** Si false, pas de commande à l’unité (uniquement colis éligibles). */
   allow_unit_in_commande?: boolean | null;
@@ -120,11 +122,13 @@ export type ParcoursProductForQty = {
 export function parcoursShapeFromPickRow(p: {
   id: string;
   ref_sales_unit?: unknown;
+  ref_order_unit?: unknown;
   product_packaging?: unknown;
 }): ParcoursProductForQty {
   return {
     id: p.id,
     ref_sales_unit: p.ref_sales_unit,
+    ref_order_unit: p.ref_order_unit,
     product_packaging: (p.product_packaging ?? null) as ParcoursProductForQty["product_packaging"],
   };
 }
@@ -178,6 +182,39 @@ export function packArray(p: ParcoursProductForQty["product_packaging"]): PPack[
 export function parseCategoryLabel(raw: unknown): string {
   const c = (Array.isArray(raw) ? raw[0] : raw) as { label?: string } | null | undefined;
   return c?.label?.trim() ? String(c.label) : "—";
+}
+
+export type ParcoursCategoryNavItem = {
+  key: string;
+  label: string;
+  startIndex: number;
+};
+
+export function categoryKeyForProduct(p: {
+  category_id?: string | null;
+  ref_category?: unknown;
+}): string {
+  const cid = typeof p.category_id === "string" ? p.category_id.trim() : "";
+  if (cid.length > 0) {
+    return cid;
+  }
+  return parseCategoryLabel(p.ref_category);
+}
+
+/** Indices de début de chaque catégorie dans la liste parcours (ordre API). */
+export function buildParcoursCategoryNav(
+  products: Array<{ category_id?: string | null; ref_category?: unknown }>,
+): ParcoursCategoryNavItem[] {
+  const items: ParcoursCategoryNavItem[] = [];
+  for (let i = 0; i < products.length; i++) {
+    const p = products[i]!;
+    const key = categoryKeyForProduct(p);
+    if (items.length > 0 && items[items.length - 1]!.key === key) {
+      continue;
+    }
+    items.push({ key, label: parseCategoryLabel(p.ref_category), startIndex: i });
+  }
+  return items;
 }
 
 const QTY_HALF_STEP = 0.5;
@@ -476,7 +513,7 @@ export function ParcoursProductQuantityPanel({
   const { formatNumber, locale } = useAppFormat();
   const p = product;
   const packs = packArray(p.product_packaging);
-  const productUnit = labelFromRefForLocale(p.ref_sales_unit, locale);
+  const productUnit = orderUnitLabelForLocale(p.ref_order_unit, p.ref_sales_unit, locale);
   const uk = uKeyForProduct(p.id);
   const formatQty = useCallback(
     (value: number) =>
