@@ -48,7 +48,9 @@ Le GET lot validation renvoie aussi `vendeurs` (`ref_supplier_vendeur` du fourni
 
 ## Matrice lot — groupement catégorie ou vendeur
 
-Sur le détail lot validation, un **toggle** permet d’afficher la matrice **par catégorie** (défaut) ou **par vendeur**.
+Sur le détail lot validation, un **toggle** permet d’afficher la matrice **par catégorie** (défaut) ou **par vendeur** — **uniquement en statut brouillon**.
+
+- **Lot prêt** : matrice **toujours par catégorie** ; vendeurs, commentaires et export en bas (`ValidationLotVendeurRecap`).
 
 - **Par catégorie** : lignes triées comme au récap commande (`ref_category.sort_order`, libellé, nom produit) ; en-tête bandeau vert par famille (ex. Fruit, « Sans catégorie »).
 - **Par vendeur** : en-tête par marchand (`vendeur_id` ou nom fournisseur si aucun vendeur) avec **champ commentaire vendeur** (sauvegarde au blur, statuts lot `brouillon` ou `prete`). API : `PATCH` `{ vendeurCommentaire: { vendeurKey, commentaire } }` ; GET renvoie `vendeurCommentaires`.

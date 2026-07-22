@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState, type ReactNode } from "react";
 import { Box, Button, Typography } from "@mui/material";
 import ImageOutlinedIcon from "@mui/icons-material/ImageOutlined";
 import WhatsAppIcon from "@mui/icons-material/WhatsApp";
@@ -31,9 +31,11 @@ type Props = {
   exportLocale?: AppLocale;
   vendeurPhone?: string | null;
   whatsAppText?: string | null;
-  /** Commentaire lot ou commande affiché sous le tableau. */
+  /** Commentaire lot ou commande affiché sous le tableau dans l’image exportée. */
   footerComment?: string | null;
   footerCommentLabel?: string;
+  /** Champ commentaire affiché sous le tableau à l’écran (hors capture PNG). */
+  commentField?: ReactNode;
   /** Masque l’aperçu tableau à l’écran (export seul). */
   hideTablePreview?: boolean;
   /** Colonne Total (plusieurs magasins lot validation). */
@@ -48,6 +50,56 @@ type Props = {
   productCountLabel?: string | null;
 };
 
+function ExportActionButtons({
+  exporting,
+  whatsAppBusy,
+  disabled,
+  onExport,
+  onWhatsApp,
+  showWhatsApp,
+  exportLabel,
+  whatsAppLabel,
+}: {
+  exporting: boolean;
+  whatsAppBusy: boolean;
+  disabled: boolean;
+  onExport: () => void;
+  onWhatsApp: () => void;
+  showWhatsApp: boolean;
+  exportLabel: string;
+  whatsAppLabel: string;
+}) {
+  return (
+    <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+      <Button
+        type="button"
+        variant="outlined"
+        size="small"
+        startIcon={<ImageOutlinedIcon />}
+        disabled={disabled || exporting || whatsAppBusy}
+        onClick={onExport}
+        sx={{ textTransform: "none" }}
+      >
+        {exporting ? "…" : exportLabel}
+      </Button>
+      {showWhatsApp ? (
+        <Button
+          type="button"
+          variant="contained"
+          size="small"
+          color="success"
+          startIcon={<WhatsAppIcon />}
+          disabled={disabled || exporting || whatsAppBusy}
+          onClick={onWhatsApp}
+          sx={{ textTransform: "none" }}
+        >
+          {whatsAppBusy ? "…" : whatsAppLabel}
+        </Button>
+      ) : null}
+    </div>
+  );
+}
+
 export default function VendeurRecapExportBlock({
   group,
   magasinColumns,
@@ -59,6 +111,7 @@ export default function VendeurRecapExportBlock({
   whatsAppText,
   footerComment,
   footerCommentLabel = "Commentaire lot",
+  commentField,
   hideTablePreview = false,
   showTotalColumn = true,
   magasinColumnHeader,
@@ -122,9 +175,12 @@ export default function VendeurRecapExportBlock({
 
   const footer = footerComment?.trim() ?? "";
   const magasinHeader = headerMagasinName?.trim() ?? "";
+  const parLabel = captureLabels.orderByLine?.trim() ?? "";
   const productCount = productCountLabel?.trim() ?? "";
   const showVendeurHeader = vendeurHeaderVisible(group.vendeurLabel, supplierLabel);
   const phoneTrim = vendeurPhone?.trim() ?? "";
+  const rowsEmpty = group.rows.length === 0;
+  const textDir = captureLabels.dir === "rtl" ? "rtl" : undefined;
 
   const tableLabels = {
     product: captureLabels.product,
@@ -133,6 +189,19 @@ export default function VendeurRecapExportBlock({
     udvCond: captureLabels.udvCond,
     noLines: captureLabels.noLines,
   };
+
+  const actionButtons = (
+    <ExportActionButtons
+      exporting={exporting}
+      whatsAppBusy={whatsAppBusy}
+      disabled={rowsEmpty}
+      onExport={() => void onExport()}
+      onWhatsApp={() => void onWhatsApp()}
+      showWhatsApp={phoneTrim.length > 0}
+      exportLabel={tc("exportImage")}
+      whatsAppLabel={tc("sendWhatsApp")}
+    />
+  );
 
   const captureContent = (
     <Box ref={captureRef} sx={{ ...captureRootSx, direction: captureLabels.dir }}>
@@ -170,42 +239,15 @@ export default function VendeurRecapExportBlock({
     </Box>
   );
 
-  return (
-    <Box className={hideTablePreview ? "!mb-3" : "!mb-8"}>
-      <div className="!mb-2 flex flex-wrap items-center justify-end gap-2">
-        <Button
-          type="button"
-          variant="outlined"
-          size="small"
-          startIcon={<ImageOutlinedIcon />}
-          disabled={exporting || whatsAppBusy || group.rows.length === 0}
-          onClick={() => void onExport()}
-          sx={{ textTransform: "none" }}
-        >
-          {exporting ? "…" : tc("exportImage")}
-        </Button>
-        {phoneTrim.length > 0 ? (
-          <Button
-            type="button"
-            variant="contained"
-            size="small"
-            color="success"
-            startIcon={<WhatsAppIcon />}
-            disabled={exporting || whatsAppBusy || group.rows.length === 0}
-            onClick={() => void onWhatsApp()}
-            sx={{ textTransform: "none" }}
-          >
-            {whatsAppBusy ? "…" : tc("sendWhatsApp")}
-          </Button>
+  if (hideTablePreview) {
+    return (
+      <Box className="!mb-3">
+        <div className="!mb-2 flex flex-wrap items-center justify-end gap-2">{actionButtons}</div>
+        {exportErr ? (
+          <Typography color="error" variant="body2" className="!mb-2">
+            {exportErr}
+          </Typography>
         ) : null}
-      </div>
-      {exportErr ? (
-        <Typography color="error" variant="body2" className="!mb-2">
-          {exportErr}
-        </Typography>
-      ) : null}
-
-      {hideTablePreview ? (
         <Box
           aria-hidden
           sx={{
@@ -219,11 +261,86 @@ export default function VendeurRecapExportBlock({
         >
           {captureContent}
         </Box>
-      ) : (
-        <Box className="max-w-full overflow-x-auto" sx={{ display: "inline-block" }}>
-          {captureContent}
-        </Box>
-      )}
+      </Box>
+    );
+  }
+
+  return (
+    <Box className="!mb-8">
+      <Box className="max-w-full overflow-x-auto" sx={{ ...captureRootSx, display: "block" }}>
+        <div className="mb-1 flex flex-wrap items-start justify-between gap-2">
+          <Box sx={{ minWidth: 0, flex: 1, textAlign: captureLabels.dir === "rtl" ? "right" : "left" }}>
+            {magasinHeader.length > 0 ? (
+              <Typography variant="subtitle1" dir={textDir} sx={{ fontWeight: 700, whiteSpace: "nowrap" }}>
+                {magasinHeader}
+              </Typography>
+            ) : null}
+            <Typography variant="subtitle1" dir={textDir} sx={{ fontWeight: 700, whiteSpace: "nowrap" }}>
+              {captureLabels.supplierOrderLine}
+            </Typography>
+            {showVendeurHeader ? (
+              <Typography variant="subtitle1" dir={textDir} sx={{ fontWeight: 700, whiteSpace: "nowrap" }}>
+                {group.vendeurLabel}
+              </Typography>
+            ) : null}
+          </Box>
+          {actionButtons}
+        </div>
+        <Typography
+          variant="caption"
+          color="text.secondary"
+          dir={textDir}
+          sx={{ display: "block", mb: parLabel.length > 0 ? 0.25 : 1, whiteSpace: "nowrap" }}
+        >
+          {captureLabels.orderOnLine}
+        </Typography>
+        {parLabel.length > 0 ? (
+          <Typography
+            variant="caption"
+            color="text.secondary"
+            dir={textDir}
+            sx={{ display: "block", mb: productCount.length > 0 ? 0.25 : 1, whiteSpace: "nowrap" }}
+          >
+            {parLabel}
+          </Typography>
+        ) : null}
+        {productCount.length > 0 ? (
+          <Typography
+            variant="body2"
+            color="text.secondary"
+            dir={textDir}
+            sx={{ display: "block", mb: 1, fontWeight: 600, whiteSpace: "nowrap" }}
+          >
+            {productCount}
+          </Typography>
+        ) : null}
+        <VendeurRecapTable
+          group={group}
+          magasinColumns={magasinColumns}
+          showTotalColumn={showTotalColumn}
+          magasinColumnHeader={magasinColumnHeader}
+          labels={tableLabels}
+        />
+        {commentField ? <Box className="!mt-3">{commentField}</Box> : null}
+      </Box>
+      {exportErr ? (
+        <Typography color="error" variant="body2" className="!mt-2">
+          {exportErr}
+        </Typography>
+      ) : null}
+      <Box
+        aria-hidden
+        sx={{
+          position: "fixed",
+          left: -10000,
+          top: 0,
+          pointerEvents: "none",
+          opacity: 0,
+          overflow: "hidden",
+        }}
+      >
+        {captureContent}
+      </Box>
     </Box>
   );
 }

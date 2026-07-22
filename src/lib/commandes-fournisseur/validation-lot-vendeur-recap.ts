@@ -42,6 +42,7 @@ export type RecapLigneInput = {
     name_ar?: string | null;
     code?: string;
     ref_sales_unit?: unknown;
+    ref_order_unit?: unknown;
     ref_category?: unknown;
     product_packaging?: unknown;
   } | null;
@@ -102,7 +103,8 @@ export type MatrixDisplayHeader =
 
 export type MatrixDisplayItem<T> =
   | { type: "header"; header: MatrixDisplayHeader }
-  | { type: "row"; ligne: T; index: number };
+  | { type: "row"; ligne: T; index: number }
+  | { type: "vendeurComment"; vendeurKey: string };
 
 export function buildMatrixDisplayItems<T extends RecapLigneInput>(
   lignes: T[],
@@ -157,6 +159,7 @@ export function buildMatrixDisplayItems<T extends RecapLigneInput>(
       const index = lignes.findIndex((x) => x.id === l.id);
       items.push({ type: "row", ligne: l, index: index >= 0 ? index : 0 });
     }
+    items.push({ type: "vendeurComment", vendeurKey: key });
   }
   return items;
 }
@@ -285,7 +288,7 @@ function buildRecapRow(l: RecapLigneInput, magasinColumns: MagasinMxColumn[]): V
   };
 }
 
-function sortRecapLignesByCategory(lignes: RecapLigneInput[]): RecapLigneInput[] {
+function sortRecapLignesByCategory<T extends RecapLigneInput>(lignes: T[]): T[] {
   return [...lignes].sort((a, b) => {
     const pa = one(a.product);
     const pb = one(b.product);
@@ -405,8 +408,14 @@ export function applyLocaleToVendeurRecapRows(
     row.udvCond = udvCond;
     row.udvCondSub = udvCondSub;
     if (p) {
-      row.productDisplayName = productLogisticDisplayName(p, locale);
-      row.productDisplayIsArabic = productLogisticDisplayIsArabic(p, locale);
+      row.productDisplayName = productLogisticDisplayName(
+        { name: p.name?.trim() ? String(p.name) : "—", name_ar: p.name_ar },
+        locale,
+      );
+      row.productDisplayIsArabic = productLogisticDisplayIsArabic(
+        { name: p.name?.trim() ? String(p.name) : "—", name_ar: p.name_ar },
+        locale,
+      );
     }
   }
 }

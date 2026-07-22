@@ -8,7 +8,7 @@
 import { execSync } from "node:child_process";
 import { resolve } from "node:path";
 import { config } from "dotenv";
-import { createClient } from "@supabase/supabase-js";
+import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import {
   primarySupplierIdFromSelection,
   syncProductSuppliers,
@@ -40,7 +40,7 @@ function parseExcel(path: string): ExcelEntry[] {
 }
 
 async function loadVendeurSupplierMap(
-  supabase: ReturnType<typeof createClient>,
+  supabase: SupabaseClient,
 ): Promise<Map<string, string>> {
   const { data, error } = await supabase.from("ref_supplier_vendeur").select("id, supplier_id");
   if (error) throw new Error(error.message);

@@ -37,7 +37,6 @@ type Props = {
   vendeurs: VendeurRef[];
   vendeurCommentDrafts: Record<string, string>;
   vendeurCommentEditable: boolean;
-  vendeurCommentSavingKey: string | null;
   onVendeurCommentDraftChange: (vendeurKey: string, value: string) => void;
   onVendeurCommentSave: (vendeurKey: string, commentaire: string) => void | Promise<void>;
 };
@@ -70,7 +69,6 @@ export default function ValidationLotVendeurRecap({
   vendeurs,
   vendeurCommentDrafts,
   vendeurCommentEditable,
-  vendeurCommentSavingKey,
   onVendeurCommentDraftChange,
   onVendeurCommentSave,
 }: Props) {
@@ -105,28 +103,28 @@ export default function ValidationLotVendeurRecap({
         const vendeur = vendeurForGroup(vendeurs, g.vendeurKey);
         const exportLocale = vendorExportLocale(vendeur?.preferred_locale);
         const localized = localizedGroups[index] ?? g;
+        const commentField =
+          vendeurCommentEditable ? (
+            <TextField
+              fullWidth
+              multiline
+              minRows={2}
+              maxRows={6}
+              size="small"
+              label={t("vendorCommentLabel", { vendor: g.vendeurLabel })}
+              placeholder={t("vendorCommentPlaceholder")}
+              value={draft}
+              onChange={(e) => onVendeurCommentDraftChange(g.vendeurKey, e.target.value)}
+              onBlur={(e) => onVendeurCommentSave(g.vendeurKey, e.target.value)}
+            />
+          ) : draft.trim() ? (
+            <Typography variant="body2" className="whitespace-pre-wrap">
+              {draft.trim()}
+            </Typography>
+          ) : null;
+
         return (
           <div key={g.vendeurKey} className="!mb-6">
-            {vendeurCommentEditable ? (
-              <TextField
-                fullWidth
-                multiline
-                minRows={2}
-                maxRows={6}
-                size="small"
-                className="!mb-2"
-                label={t("vendorCommentLabel", { vendor: g.vendeurLabel })}
-                placeholder={t("vendorCommentPlaceholder")}
-                value={draft}
-                onChange={(e) => onVendeurCommentDraftChange(g.vendeurKey, e.target.value)}
-                disabled={vendeurCommentSavingKey === g.vendeurKey}
-                onBlur={(e) => void onVendeurCommentSave(g.vendeurKey, e.target.value)}
-              />
-            ) : draft.trim() ? (
-              <Typography variant="body2" className="!mb-2 whitespace-pre-wrap">
-                {draft.trim()}
-              </Typography>
-            ) : null}
             <VendeurRecapExportBlock
               group={localized}
               magasinColumns={magasinColumns}
@@ -138,6 +136,7 @@ export default function ValidationLotVendeurRecap({
               whatsAppText={draft}
               footerComment={g.commentaire?.trim() ? g.commentaire : null}
               footerCommentLabel={t("vendorCommentExportLabel", { vendor: g.vendeurLabel })}
+              commentField={commentField}
             />
           </div>
         );

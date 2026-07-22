@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import {
@@ -48,6 +48,7 @@ import type {
 } from "@/lib/commandes-fournisseur/ligne-saisie-comments";
 import { roundQty2 } from "@/lib/commandes-fournisseur/qty-parse";
 import ValidationLotVendeurRecap from "@/features/commandes-fournisseur/ValidationLotVendeurRecap";
+import { useVendeurCommentPersistence } from "@/features/commandes-fournisseur/useVendeurCommentPersistence";
 import { lotCommandeDateInfo } from "@/lib/commandes-fournisseur/lot-commande-date";
 import { magasinCodeMx } from "@/lib/commandes-fournisseur/magasin-code-mx";
 import type {
@@ -294,14 +295,27 @@ export default function ValidationLotDetailClient({ lotId }: { lotId: string }) 
     productLabel: string;
   } | null>(null);
   const [lotCommentDraft, setLotCommentDraft] = useState("");
-  const [vendeurCommentDrafts, setVendeurCommentDrafts] = useState<Record<string, string>>({});
   const [matrixGroupBy, setMatrixGroupBy] = useState<MatrixGroupBy>("category");
   const [cmdComments, setCmdComments] = useState<Record<string, string>>({});
   const [lotCommentSaving, setLotCommentSaving] = useState(false);
-  const [vendeurCommentSavingKey, setVendeurCommentSavingKey] = useState<string | null>(null);
   const [cmdCommentSavingId, setCmdCommentSavingId] = useState<string | null>(null);
   /** Quantité par cellule au focus : enregistrement seulement si la valeur a changé au blur. */
   const cellFocusBaseline = useRef<Record<string, number>>({});
+
+  const loadRef = useRef<(() => Promise<void>) | null>(null);
+
+  const {
+    drafts: vendeurCommentDrafts,
+    applyServerDrafts: applyVendeurCommentDrafts,
+    onDraftChange: onVendeurCommentDraftChange,
+    onDraftBlur: onVendeurCommentBlur,
+  } = useVendeurCommentPersistence({
+    lotId,
+    lotStatus: lot?.status,
+    genericError,
+    onError: (message) => setErr(message),
+    onReload: () => loadRef.current?.() ?? Promise.resolve(),
+  });
 
   const load = useCallback(async () => {
     setErr(null);
@@ -329,13 +343,15 @@ export default function ValidationLotDetailClient({ lotId }: { lotId: string }) 
       for (const [key, value] of Object.entries(j.vendeurCommentaires ?? {})) {
         vc[key] = typeof value === "string" ? value : "";
       }
-      setVendeurCommentDrafts(vc);
+      applyVendeurCommentDrafts(vc);
     } catch (e) {
       setErr(e instanceof Error ? e.message : genericError);
     } finally {
       setDataLoading(false);
     }
-  }, [lotId, genericError]);
+  }, [lotId, genericError, applyVendeurCommentDrafts]);
+
+  loadRef.current = load;
 
   useEffect(() => {
     if (!loading && !can("commandes_fournisseur.consolidation")) {
@@ -672,53 +688,6 @@ export default function ValidationLotDetailClient({ lotId }: { lotId: string }) 
     [lot, lotId, load, genericError],
   );
 
-  const patchVendeurCommentaire = useCallback(
-    async (vendeurKey: string, nextRaw: string) => {
-      const lotCur = lot;
-      if (!lotCur || (lotCur.status !== "brouillon" && lotCur.status !== "prete")) {
-        return;
-      }
-      const stored = nextRaw.trim() === "" ? null : nextRaw.trim();
-      const prevTrim = vendeurCommentDrafts[vendeurKey]?.trim() ?? "";
-      if ((stored ?? "") === prevTrim) {
-        return;
-      }
-      setVendeurCommentSavingKey(vendeurKey);
-      setErr(null);
-      try {
-        const res = await fetch(`/api/commandes-fournisseur/validation/lots/${lotId}`, {
-          method: "PATCH",
-          credentials: "include",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            vendeurCommentaire: { vendeurKey, commentaire: stored },
-          }),
-        });
-        const j = (await res.json()) as { error?: string };
-        if (!res.ok) {
-          setErr(j.error ?? genericError);
-          await load();
-          return;
-        }
-        setVendeurCommentDrafts((prev) => {
-          const next = { ...prev };
-          if (stored === null) {
-            delete next[vendeurKey];
-          } else {
-            next[vendeurKey] = stored;
-          }
-          return next;
-        });
-      } catch (e) {
-        setErr(e instanceof Error ? e.message : genericError);
-        await load();
-      } finally {
-        setVendeurCommentSavingKey(null);
-      }
-    },
-    [genericError, load, lot, lotId, vendeurCommentDrafts],
-  );
-
   const patchCommandeCommentaire = useCallback(
     async (commandeId: string, nextRaw: string) => {
       const lotCur = lot;
@@ -838,9 +807,10 @@ export default function ValidationLotDetailClient({ lotId }: { lotId: string }) 
   const supplierName = rSup && "label" in rSup && rSup.label ? String(rSup.label) : tCommandesCommon("emDash");
   const editable = lot.status === "brouillon";
   const vendeurCommentEditable = lot.status === "brouillon" || lot.status === "prete";
+  const matrixGroupByEffective: MatrixGroupBy = lot.status === "prete" ? "category" : matrixGroupBy;
   const matrixDisplayItems = buildMatrixDisplayItems(
     recapLignes,
-    matrixGroupBy,
+    matrixGroupByEffective,
     vendeurs,
     supplierName,
     tCommandesCommon("noCategory"),
@@ -925,26 +895,28 @@ export default function ValidationLotDetailClient({ lotId }: { lotId: string }) 
         </Typography>
       ) : (
         <div className="!mb-6 overflow-x-auto">
-          <div className="!mb-2 flex flex-wrap items-center justify-between gap-2">
-            <ToggleButtonGroup
-              size="small"
-              exclusive
-              value={matrixGroupBy}
-              onChange={(_e, value: MatrixGroupBy | null) => {
-                if (value) {
-                  setMatrixGroupBy(value);
-                }
-              }}
-              aria-label={tLotDetail("matrixGroupByAria")}
-            >
-              <ToggleButton value="category" sx={{ textTransform: "none" }}>
-                {tLotDetail("matrixGroupByCategory")}
-              </ToggleButton>
-              <ToggleButton value="vendeur" sx={{ textTransform: "none" }}>
-                {tLotDetail("matrixGroupByVendor")}
-              </ToggleButton>
-            </ToggleButtonGroup>
-          </div>
+          {lot.status === "brouillon" ? (
+            <div className="!mb-2 flex flex-wrap items-center justify-between gap-2">
+              <ToggleButtonGroup
+                size="small"
+                exclusive
+                value={matrixGroupBy}
+                onChange={(_e, value: MatrixGroupBy | null) => {
+                  if (value) {
+                    setMatrixGroupBy(value);
+                  }
+                }}
+                aria-label={tLotDetail("matrixGroupByAria")}
+              >
+                <ToggleButton value="category" sx={{ textTransform: "none" }}>
+                  {tLotDetail("matrixGroupByCategory")}
+                </ToggleButton>
+                <ToggleButton value="vendeur" sx={{ textTransform: "none" }}>
+                  {tLotDetail("matrixGroupByVendor")}
+                </ToggleButton>
+              </ToggleButtonGroup>
+            </div>
+          ) : null}
           <Table size="small">
             <TableHead>
               <TableRow>
@@ -988,56 +960,50 @@ export default function ValidationLotDetailClient({ lotId }: { lotId: string }) 
                   }
                   const vendeurKey = item.header.vendeurKey;
                   return (
-                    <Fragment key={`vendeur-${vendeurKey}-${itemIdx}`}>
-                      <TableRow>
-                        <TableCell colSpan={matrixCategoryColSpan} sx={LOT_CATEGORY_HEADER_BG_SX}>
-                          <Typography
-                            variant="subtitle1"
-                            color="success"
-                            component="div"
-                            sx={LOT_CATEGORY_HEADER_TEXT_SX}
-                          >
-                            {item.header.label}
+                    <TableRow key={`vendeur-${vendeurKey}-${itemIdx}`}>
+                      <TableCell colSpan={matrixCategoryColSpan} sx={LOT_CATEGORY_HEADER_BG_SX}>
+                        <Typography
+                          variant="subtitle1"
+                          color="success"
+                          component="div"
+                          sx={LOT_CATEGORY_HEADER_TEXT_SX}
+                        >
+                          {item.header.label}
+                        </Typography>
+                      </TableCell>
+                    </TableRow>
+                  );
+                }
+
+                if (item.type === "vendeurComment") {
+                  const vendeurKey = item.vendeurKey;
+                  return (
+                    <TableRow key={`vendeur-comment-${vendeurKey}-${itemIdx}`}>
+                      <TableCell colSpan={matrixCategoryColSpan} sx={{ py: 0.75, px: 1.25 }}>
+                        {vendeurCommentEditable ? (
+                          <TextField
+                            fullWidth
+                            multiline
+                            minRows={2}
+                            maxRows={6}
+                            size="small"
+                            label={tLotDetail("vendorCommentLabel")}
+                            placeholder={tLotDetail("vendorCommentPlaceholder")}
+                            value={vendeurCommentDrafts[vendeurKey] ?? ""}
+                            onChange={(e) => onVendeurCommentDraftChange(vendeurKey, e.target.value)}
+                            onBlur={(e) => onVendeurCommentBlur(vendeurKey, e.target.value)}
+                          />
+                        ) : vendeurCommentDrafts[vendeurKey]?.trim() ? (
+                          <Typography variant="body2" className="whitespace-pre-wrap">
+                            {vendeurCommentDrafts[vendeurKey]?.trim()}
                           </Typography>
-                        </TableCell>
-                      </TableRow>
-                      <TableRow>
-                        <TableCell colSpan={matrixCategoryColSpan} sx={{ py: 0.75, px: 1.25 }}>
-                          {vendeurCommentEditable ? (
-                            <TextField
-                              fullWidth
-                              multiline
-                              minRows={2}
-                              maxRows={6}
-                              size="small"
-                              label={tLotDetail("vendorCommentLabel")}
-                              placeholder={tLotDetail("vendorCommentPlaceholder")}
-                              value={vendeurCommentDrafts[vendeurKey] ?? ""}
-                              onChange={(e) =>
-                                setVendeurCommentDrafts((prev) => ({
-                                  ...prev,
-                                  [vendeurKey]: e.target.value,
-                                }))
-                              }
-                              disabled={vendeurCommentSavingKey === vendeurKey}
-                              onBlur={(e) => {
-                                if (vendeurCommentSavingKey !== vendeurKey) {
-                                  void patchVendeurCommentaire(vendeurKey, e.target.value);
-                                }
-                              }}
-                            />
-                          ) : vendeurCommentDrafts[vendeurKey]?.trim() ? (
-                            <Typography variant="body2" className="whitespace-pre-wrap">
-                              {vendeurCommentDrafts[vendeurKey]?.trim()}
-                            </Typography>
-                          ) : (
-                            <Typography variant="body2" color="text.secondary" sx={{ fontStyle: "italic" }}>
-                              {tCommandesCommon("noComment")}
-                            </Typography>
-                          )}
-                        </TableCell>
-                      </TableRow>
-                    </Fragment>
+                        ) : (
+                          <Typography variant="body2" color="text.secondary" sx={{ fontStyle: "italic" }}>
+                            {tCommandesCommon("noComment")}
+                          </Typography>
+                        )}
+                      </TableCell>
+                    </TableRow>
                   );
                 }
 
@@ -1221,11 +1187,8 @@ export default function ValidationLotDetailClient({ lotId }: { lotId: string }) 
           vendeurs={vendeurs}
           vendeurCommentDrafts={vendeurCommentDrafts}
           vendeurCommentEditable={vendeurCommentEditable}
-          vendeurCommentSavingKey={vendeurCommentSavingKey}
-          onVendeurCommentDraftChange={(vendeurKey, value) =>
-            setVendeurCommentDrafts((prev) => ({ ...prev, [vendeurKey]: value }))
-          }
-          onVendeurCommentSave={patchVendeurCommentaire}
+          onVendeurCommentDraftChange={onVendeurCommentDraftChange}
+          onVendeurCommentSave={onVendeurCommentBlur}
         />
       ) : null}
 

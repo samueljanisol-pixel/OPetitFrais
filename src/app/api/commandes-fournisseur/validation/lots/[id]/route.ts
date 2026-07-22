@@ -328,8 +328,8 @@ export async function PATCH(req: Request, ctx: Ctx) {
     const stored =
       payload.commentaire === null
         ? null
-        : payload.commentaire.trim().length > 0
-          ? payload.commentaire.trim()
+        : typeof payload.commentaire === "string" && payload.commentaire.trim().length > 0
+          ? payload.commentaire
           : null;
     if (stored === null) {
       const { error: de } = await supabase
