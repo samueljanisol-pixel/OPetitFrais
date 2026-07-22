@@ -45,6 +45,14 @@ La route historique `src/app/api/ca/historique/stream/route.ts` a reçu les mêm
 - **`npm run build`** puis **`npm run start`** : comportement de référence proche de la prod (Vercel, etc.).
 - **`npm run sync:day`** : import FTP → Supabase pour **une** date (`scripts/run-sync.ts`, lit `.env.local`) et enregistre une entrée dans **`sync_runs`** (comme le cron `POST /api/supabase/sync/run`).
 - **`npm run sync:all`** : parcourt le FTP, repère **toutes** les dates `YYYY-MM-DD` dans les noms de fichiers sous `/ventes`, puis appelle `syncDateToSupabase` pour chacune (`scripts/run-sync-all.ts`). Filtres optionnels : `npm run sync:all -- 2026-01-01 2026-04-30` ; limite : variable `SYNC_ALL_MAX_DAYS`. À la fin, une ligne est ajoutée dans **`sync_runs`** pour alimenter `/api/supabase/sync/status`.
+
+### Tâches automatisées (cron)
+
+- **Dispatcher** : `GET/POST /api/automated-tasks/tick` — appelé par Vercel Cron toutes les **5 minutes** (`vercel.json`). Auth : `CRON_SECRET` ou `SYNC_TOKEN` (header `Authorization: Bearer`, `x-cron-secret`, ou `?token=`).
+- **Registre** : tables `automated_tasks` / `automated_task_runs` (migration `20260722140000_automated_tasks.sql`).
+- **UI** : Paramètres → onglet **Tâches automatisées** (administrateur) — activation, période, lancement manuel, historique.
+- **Tâches** : `ftp_sync` (CA), `sheet_import` (Google Sheet → produits).
+- **Compatibilité** : `POST /api/supabase/sync/run` (Raspberry Pi) délègue à la tâche `ftp_sync`. Statut footer : `/api/supabase/sync/status` lit `automated_task_runs` en priorité.
 - Module partagé **`src/lib/ventesJson.ts`** : extraction `total_jour`, `total_mois`, lignes `ventes` (nom + **code = clé JSON** ex. `"91": { article, qte, total }`, ou champ `code` interne), paniers — utilisé par **`src/lib/sync/ftpToSupabase.ts`**.
 - Rapprochement ventes ↔ catalogue : **`src/lib/ca/productCatalogMatch.ts`** remplit `ca_product_day.product_id` par **`product.code`** uniquement (JSON `code` caisse, padding `000001`).
 

@@ -45,3 +45,17 @@ Onglet **Traductions** dans Paramètres : édition des libellés **par zone** (a
 - Une valeur identique au défaut JSON **supprime** la surcharge en base ; au chargement, les surcharges sont fusionnées dans les messages ([`src/i18n/request.ts`](../../i18n/request.ts) côté serveur, [`locale-client.tsx`](../../lib/i18n/locale-client.tsx) après enregistrement).
 
 **Droits** : lecture pour tout utilisateur authentifié ; écriture = permission `parametres.write` ou administrateur (comme les autres référentiels).
+
+## Tâches automatisées (administrateur)
+
+Onglet **Tâches automatisées** visible uniquement pour le rôle **administrateur** (comme l’onglet Administration).
+
+- Composant : [`AutomatedTasksAdminPanel.tsx`](AutomatedTasksAdminPanel.tsx)
+- Tables : `automated_tasks`, `automated_task_runs` — migration `20260722140000_automated_tasks.sql`
+- API admin : `GET/PATCH /api/admin/automated-tasks`, `POST …/[id]/run`, `GET …/[id]/runs`
+- Cron Vercel : `GET/POST /api/automated-tasks/tick` (toutes les 5 min, secret `CRON_SECRET`)
+- Tâches v1 :
+  - **`ftp_sync`** — synchro CA FTP → Supabase (remplace le cron direct `/api/supabase/sync/run` dans `vercel.json`)
+  - **`sheet_import`** — import catalogue depuis Google Sheet (service role, config `updateFields`: `all` | `new_only`). **Importé uniquement si le contenu export a changé** (empreinte SHA-256) depuis le dernier import réussi ; « Lancer maintenant » force l’import.
+
+Les horaires **quotidiens** sont en **UTC**. L’historique et le statut footer CA lisent `automated_task_runs` en priorité (repli `sync_runs` pour FTP).

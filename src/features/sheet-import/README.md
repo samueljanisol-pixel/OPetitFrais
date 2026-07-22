@@ -2,7 +2,18 @@
 
 ## Colonnes lues (seules données importées)
 
-`Actif`, `Code`, `Nom`, `Prix`, `Marge DH Actuelle` (alias « Marge DH »), `UdV`, `Catégorie`, `SousCatégorie` (alias « Sous-Catégorie »), `Fournisseur`, `Arabe` — voir `mapSheetRow.ts` (`SHEET_COLUMNS`). Colonnes → `product.name` / `product.name_ar` (format feuille inchangé).
+`Actif`, `Code`, `Nom`, `Prix`, `Marge DH Actuelle` (alias « Marge DH »), `UdV`, `Catégorie`, `SousCatégorie` (alias « Sous-Catégorie »), `Fournisseur`, `Marchand` (vendeur achat, rattaché au fournisseur de la ligne — **créé automatiquement** s’il n’existe pas), `Arabe` — voir `mapSheetRow.ts` (`SHEET_COLUMNS`). Colonnes → `product.name` / `product.name_ar` (format feuille inchangé).
+
+Le proxy `/api/transition/sheet-json` utilise un timeout de 60 s (Apps Script peut être lent au cold start) et réessaie une fois en cas d’échec réseau.
+
+## Import planifié (tâche automatisée)
+
+L’import headless est disponible via la tâche **`sheet_import`** (Paramètres → **Tâches automatisées**, administrateur).
+
+- Fetch Google : [`fetchSheetJsonFromGoogle.ts`](fetchSheetJsonFromGoogle.ts)
+- Exécution : [`src/lib/automated-tasks/tasks/sheetImport.ts`](../lib/automated-tasks/tasks/sheetImport.ts) → `applySheetImport` avec **service role**
+- Config : `updateFields` = `all` (sync complète) ou `new_only` (création sans mise à jour des existants)
+- **Planifié** : l’import ne s’exécute que si le JSON export a **changé** depuis le dernier import (hash SHA-256 stocké dans `automated_tasks.config.lastImportContentHash`). Un lancement manuel admin force l’import.
 
 ## Filtre d’import Sheet
 

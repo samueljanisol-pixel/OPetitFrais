@@ -24,12 +24,13 @@ import BackNavButton from '@/components/BackNavButton'
 import { createSupabaseBrowserClient } from '@/lib/supabase/client'
 import type { RefConditionnementRow, RefRow, RefSubcategoryRow, RefSupplierRow, RefVendeurRow } from '@/lib/products/types'
 import { muiSlotPropsDecimalKeypad } from '@/lib/mui/numericTextFieldProps'
+import AutomatedTasksAdminPanel from './AutomatedTasksAdminPanel'
 import MagasinsAdminPanel from './MagasinsAdminPanel'
 import StatusLabelsAdminPanel from './StatusLabelsAdminPanel'
 import StockAdminPanel from './StockAdminPanel'
 import TranslationsAdminPanel from './TranslationsAdminPanel'
 
-type TabId = 'udv' | 'cat' | 'sup' | 'cond' | 'vend' | 'stock' | 'traductions' | 'comptes'
+type TabId = 'udv' | 'cat' | 'sup' | 'cond' | 'vend' | 'stock' | 'traductions' | 'taches' | 'comptes'
 
 const tabLabels: Record<TabId, string> = {
   udv: 'Unités de vente',
@@ -39,6 +40,7 @@ const tabLabels: Record<TabId, string> = {
   vend: 'Vendeurs',
   stock: 'Stock',
   traductions: 'Traductions',
+  taches: 'Tâches automatisées',
   comptes: 'Administration',
 }
 
@@ -113,11 +115,13 @@ export default function ReferentielClient() {
   const supabase = useMemo(() => createSupabaseBrowserClient(), [])
   const { isAdministrator, canAdminUsers, canAdminRoles, canAdminMagasins } = useSessionPermissions()
   const showComptesTab = isAdministrator
+  const showTachesTab = isAdministrator
   const tabOrder = useMemo(() => {
     const base: TabId[] = ['udv', 'cat', 'sup', 'cond', 'vend', 'stock', 'traductions']
+    if (showTachesTab) base.push('taches')
     if (showComptesTab) base.push('comptes')
     return base
-  }, [showComptesTab])
+  }, [showComptesTab, showTachesTab])
   const [tab, setTab] = useState<TabId>('udv')
   const [udv, setUdv] = useState<RefRow[]>([])
   const [cat, setCat] = useState<RefRow[]>([])
@@ -183,7 +187,8 @@ export default function ReferentielClient() {
 
   useEffect(() => {
     if (!showComptesTab && tab === 'comptes') setTab('udv')
-  }, [showComptesTab, tab])
+    if (!showTachesTab && tab === 'taches') setTab('udv')
+  }, [showComptesTab, showTachesTab, tab])
 
   const openNewSubcat = () => {
     setSubcatIsNew(true)
@@ -294,7 +299,7 @@ export default function ReferentielClient() {
   }
 
   const save = async () => {
-    if (!editing || tab === 'comptes' || tab === 'stock' || tab === 'traductions') return
+    if (!editing || tab === 'comptes' || tab === 'taches' || tab === 'stock' || tab === 'traductions') return
     setErr(null)
     if (tab === 'cond') {
       const h = form.h ? Number(form.h) : null
@@ -409,7 +414,7 @@ export default function ReferentielClient() {
   }
 
   const requestDelete = (row: { id: string; label: string }) => {
-    if (tab === 'comptes' || tab === 'stock' || tab === 'traductions') return
+    if (tab === 'comptes' || tab === 'taches' || tab === 'stock' || tab === 'traductions') return
     setDeleteConfirm({ tab, id: row.id, label: row.label })
   }
 
@@ -464,12 +469,13 @@ export default function ReferentielClient() {
             <Tab key={k} value={k} label={tabLabels[k]} />
           ))}
         </Tabs>
-        {tab !== 'comptes' && tab !== 'stock' && tab !== 'traductions' ? (
+        {tab !== 'comptes' && tab !== 'taches' && tab !== 'stock' && tab !== 'traductions' ? (
           <Button variant="contained" color="success" onClick={openNew} sx={{ mb: 2, textTransform: 'none' }}>
             Ajouter — {tabLabels[tab]}
           </Button>
         ) : null}
         {tab === 'traductions' ? <TranslationsAdminPanel /> : null}
+        {tab === 'taches' ? <AutomatedTasksAdminPanel /> : null}
         {tab === 'comptes' ? (
           <>
             <Box className="mb-4 rounded-lg border border-slate-200 bg-white/90 p-4 shadow-sm">

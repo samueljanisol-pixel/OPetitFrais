@@ -13,6 +13,7 @@ type Row = {
   ref_category: { label: string } | null
   ref_subcategory: { label: string } | null
   ref_supplier: { label: string } | null
+  ref_supplier_vendeur: { label: string } | null
 }
 
 /**
@@ -38,6 +39,7 @@ export async function buildSheetExportPayload(supabase: SupabaseClient) {
       [C.categorie]: row.ref_category?.label ?? '',
       [C.sousCategorie]: row.ref_subcategory?.label ?? '',
       [C.fournisseur]: row.ref_supplier?.label ?? '',
+      [C.marchand]: row.ref_supplier_vendeur?.label ?? '',
       [C.arabe]: ar,
     }
   })

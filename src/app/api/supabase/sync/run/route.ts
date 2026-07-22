@@ -1,67 +1,61 @@
 import { NextResponse } from "next/server";
-import { executeScheduledFtpSync } from "@/lib/sync/scheduledFtpSync";
+import { verifyCronSecret } from "@/lib/auth/verify-cron-secret";
+import { executeAutomatedTask, loadTaskByCode } from "@/lib/automated-tasks";
+import { createSupabaseServiceRoleClient } from "@/lib/supabase/server";
 
 export async function GET(req: Request) {
   return POST(req);
 }
 
 export async function POST(req: Request) {
-  const url = new URL(req.url);
-  const auth = req.headers.get("authorization");
-  const bearer =
-    auth?.startsWith("Bearer ") ? auth.slice("Bearer ".length).trim() : null;
-  const token =
-    url.searchParams.get("token") ||
-    req.headers.get("x-cron-secret") ||
-    bearer;
-  const expected = process.env.CRON_SECRET || process.env.SYNC_TOKEN;
-  if (!expected) {
-    return NextResponse.json(
-      {
-        error: "Unauthorized",
-        hint: "Définis CRON_SECRET ou SYNC_TOKEN dans .env.local (puis redémarre next dev).",
-      },
-      { status: 401 },
-    );
-  }
-  if (!token || token !== expected) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const gate = verifyCronSecret(req);
+  if (!gate.ok) {
+    return NextResponse.json({ error: gate.error }, { status: gate.status });
   }
 
-  const result = await executeScheduledFtpSync();
+  let supabase;
+  try {
+    supabase = createSupabaseServiceRoleClient();
+  } catch (e) {
+    const m = e instanceof Error ? e.message : String(e);
+    return NextResponse.json({ error: m }, { status: 503 });
+  }
 
-  if (result.insertError) {
+  const task = await loadTaskByCode(supabase, "ftp_sync");
+  if (!task) {
     return NextResponse.json(
-      {
-        ok: false,
-        status: "error",
-        message: result.message,
-        processedDays: result.processedDays,
-        lastSyncedDate: result.lastSyncedDate,
-      },
-      { status: 500 },
+      { error: "Tâche ftp_sync introuvable (migration automated_tasks ?)" },
+      { status: 503 },
     );
   }
 
-  if (!result.ok) {
-    return NextResponse.json(
-      {
-        ok: false,
-        status: result.status,
-        message: result.message,
-        processedDays: result.processedDays,
-        lastSyncedDate: result.lastSyncedDate,
-        syncRunId: result.syncRunId,
-      },
-      { status: 500 },
-    );
-  }
+  try {
+    const outcome = await executeAutomatedTask(supabase, task, { force: true });
+    const result = outcome.result;
+    if (!outcome.skipped && result && !result.ok) {
+      return NextResponse.json(
+        {
+          ok: false,
+          status: "error",
+          message: result.message,
+          processedDays: result.stats.processedDays ?? 0,
+          lastSyncedDate: result.stats.lastSyncedDate ?? null,
+          syncRunId: result.stats.syncRunId ?? null,
+        },
+        { status: 500 },
+      );
+    }
 
-  return NextResponse.json({
-    ok: true,
-    status: result.status,
-    processedDays: result.processedDays,
-    lastSyncedDate: result.lastSyncedDate,
-    syncRunId: result.syncRunId ?? null,
-  });
+    return NextResponse.json({
+      ok: true,
+      status: "success",
+      processedDays: result?.stats.processedDays ?? 0,
+      lastSyncedDate: result?.stats.lastSyncedDate ?? null,
+      syncRunId: result?.stats.syncRunId ?? null,
+      outcome,
+    });
+  } catch (e) {
+    const m = e instanceof Error ? e.message : String(e);
+    return NextResponse.json({ ok: false, status: "error", message: m }, { status: 500 });
+  }
 }

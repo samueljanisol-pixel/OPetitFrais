@@ -19,4 +19,4 @@ export const PRODUCT_CATALOG_MATCH_SELECT = `id, code, name, category_id, suppli
 
 export const PRODUCT_COMMANDE_SEARCH_SELECT = `id, code, name, name_ar, category_id, supplier_id, allow_unit_in_commande, ${PRODUCT_PRIMARY_SUPPLIER_EMBED}(code, label), ref_category(label, sort_order), ref_sales_unit(label, label_ar, code), product_packaging(${COMMANDE_PACKAGING_SELECT})`;
 
-export const PRODUCT_SHEET_EXPORT_SELECT = `code, name, price, margin, active, name_ar, ref_sales_unit (label), ref_category (label), ref_subcategory (label), ${PRODUCT_PRIMARY_SUPPLIER_EMBED} (label)`;
+export const PRODUCT_SHEET_EXPORT_SELECT = `code, name, price, margin, active, name_ar, ref_sales_unit (label), ref_category (label), ref_subcategory (label), ${PRODUCT_PRIMARY_SUPPLIER_EMBED} (label), ref_supplier_vendeur (label)`;

@@ -115,7 +115,13 @@ export function SheetImportBar({ onDone, canWriteProducts = false }: Props) {
       const r = await fetch('/api/transition/sheet-json', { cache: 'no-store' })
       setImportProgress(8)
       setImportProgressMsg('Analyse des lignes…')
-      const j: unknown = await r.json()
+      let j: unknown
+      try {
+        j = await r.json()
+      } catch {
+        setMsg(`Échec de lecture du JSON (${r.status}). Réessayez.`)
+        return
+      }
       if (!r.ok) {
         setMsg(typeof (j as { error?: string }).error === 'string' ? (j as { error: string }).error : 'Échec du proxy JSON')
         return

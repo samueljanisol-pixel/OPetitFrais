@@ -9,6 +9,7 @@ export type SheetImportFieldKey =
   | 'categorie'
   | 'sousCategorie'
   | 'fournisseur'
+  | 'marchand'
   | 'arabe'
 
 export type SheetImportFields = Record<SheetImportFieldKey, boolean>
@@ -23,6 +24,7 @@ export const SHEET_IMPORT_FIELD_LABELS: Record<SheetImportFieldKey, string> = {
   categorie: 'Catégorie',
   sousCategorie: 'SousCatégorie',
   fournisseur: 'Fournisseur',
+  marchand: 'Marchand (Vendeur)',
   arabe: 'Arabe',
 }
 
@@ -40,6 +42,7 @@ export const DEFAULT_SHEET_IMPORT_FIELDS: SheetImportFields = {
   categorie: false,
   sousCategorie: false,
   fournisseur: false,
+  marchand: false,
   arabe: false,
 }
 
@@ -54,6 +57,7 @@ export const ALL_SHEET_IMPORT_FIELDS: SheetImportFields = {
   categorie: true,
   sousCategorie: true,
   fournisseur: true,
+  marchand: true,
   arabe: true,
 }
 

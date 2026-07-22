@@ -1,6 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { insertProductPriceHistoryRow, pricingSnapshotChanged, type ProductPricingSnapshot } from '@/lib/products/priceHistory'
-import type { RefRow, RefSubcategoryRow } from '@/lib/products/types'
+import type { RefRow, RefSubcategoryRow, RefVendeurRow } from '@/lib/products/types'
 import { syncProductSuppliers } from '@/lib/products/product-supplier'
 import type { SheetRowParsed } from './mapSheetRow'
 import {
@@ -17,6 +17,7 @@ type Refs = {
   byCatCode: Map<string, string>
   bySupLabel: Map<string, string>
   bySupCode: Map<string, string>
+  byVendeurKey: Map<string, string>
   bySubcatKey: Map<string, string>
 }
 
@@ -26,10 +27,15 @@ function subcatKey(categoryId: string, label: string): string {
   return `${categoryId}\0${norm(label)}`
 }
 
+function vendeurKey(supplierId: string, label: string): string {
+  return `${supplierId}\0${norm(label)}`
+}
+
 function buildRefs(
   units: RefRow[],
   cats: RefRow[],
   sups: RefRow[],
+  vendeurs: RefVendeurRow[],
   subcats: RefSubcategoryRow[],
 ): Refs {
   const byUnitLabel = new Map<string, string>()
@@ -50,11 +56,15 @@ function buildRefs(
     bySupLabel.set(norm(s.label), s.id)
     bySupCode.set(norm(s.code), s.id)
   }
+  const byVendeurKey = new Map<string, string>()
+  for (const v of vendeurs) {
+    byVendeurKey.set(vendeurKey(v.supplier_id, v.label), v.id)
+  }
   const bySubcatKey = new Map<string, string>()
   for (const sc of subcats) {
     bySubcatKey.set(subcatKey(sc.category_id, sc.label), sc.id)
   }
-  return { byUnitLabel, byUnitCode, byCatLabel, byCatCode, bySupLabel, bySupCode, bySubcatKey }
+  return { byUnitLabel, byUnitCode, byCatLabel, byCatCode, bySupLabel, bySupCode, byVendeurKey, bySubcatKey }
 }
 
 function resolveId(maps: Map<string, string>[], raw: string): string | null {
@@ -147,6 +157,74 @@ function buildProductPatch(
   return { patch, errors }
 }
 
+async function findOrCreateVendeur(
+  supabase: SupabaseClient,
+  supplierId: string,
+  label: string,
+  refs: Refs,
+): Promise<string | { error: string }> {
+  const trimmed = label.trim()
+  const key = vendeurKey(supplierId, trimmed)
+  const existing = refs.byVendeurKey.get(key)
+  if (existing) return existing
+
+  const { data, error } = await supabase
+    .from('ref_supplier_vendeur')
+    .insert({ supplier_id: supplierId, label: trimmed, sort_order: 0 } as never)
+    .select('id, supplier_id, label')
+    .single()
+  if (error) {
+    const { data: retry } = await supabase
+      .from('ref_supplier_vendeur')
+      .select('id, supplier_id, label')
+      .eq('supplier_id', supplierId)
+      .ilike('label', trimmed)
+      .maybeSingle()
+    if (retry) {
+      const row = retry as RefVendeurRow
+      refs.byVendeurKey.set(vendeurKey(row.supplier_id, row.label), row.id)
+      return row.id
+    }
+    return { error: error.message }
+  }
+  const inserted = data as RefVendeurRow
+  refs.byVendeurKey.set(vendeurKey(inserted.supplier_id, inserted.label), inserted.id)
+  return inserted.id
+}
+
+async function applyMarchandToPatch(
+  supabase: SupabaseClient,
+  row: SheetRowParsed,
+  fields: SheetImportFields,
+  refs: Refs,
+  patch: Record<string, unknown>,
+): Promise<string[]> {
+  const errors: string[] = []
+  if (!fields.marchand) return errors
+
+  if (!row.marchand.trim()) {
+    patch.vendeur_id = null
+    return errors
+  }
+
+  const supplierId =
+    (typeof patch.supplier_id === 'string' && patch.supplier_id.length > 0
+      ? patch.supplier_id
+      : null) ?? resolveId([refs.bySupLabel, refs.bySupCode], row.fournisseur)
+  if (!supplierId) {
+    errors.push(`« ${row.nom} » : marchand « ${row.marchand} » sans fournisseur valide.`)
+    return errors
+  }
+
+  const resolved = await findOrCreateVendeur(supabase, supplierId, row.marchand, refs)
+  if (typeof resolved === 'object' && 'error' in resolved) {
+    errors.push(`« ${row.nom} » : marchand « ${row.marchand} » : ${resolved.error}`)
+    return errors
+  }
+  patch.vendeur_id = resolved
+  return errors
+}
+
 async function findOrCreateSubcategory(
   supabase: SupabaseClient,
   categoryId: string,
@@ -234,11 +312,12 @@ export async function applySheetImport(
   onProgress?.({ phase: 'prepare', current: 0, total: parsed.length })
   const errors: string[] = []
   const updateExisting = hasAnyImportField(fields)
-  const [{ data: units }, { data: cats }, { data: sups }, { data: subcats }, { data: products }] =
+  const [{ data: units }, { data: cats }, { data: sups }, { data: vendeurs }, { data: subcats }, { data: products }] =
     await Promise.all([
       supabase.from('ref_sales_unit').select('*'),
       supabase.from('ref_category').select('*'),
       supabase.from('ref_supplier').select('*'),
+      supabase.from('ref_supplier_vendeur').select('id, supplier_id, label, sort_order'),
       supabase.from('ref_subcategory').select('id, category_id, label, code, sort_order'),
       supabase.from('product').select('id, code, name'),
     ])
@@ -249,6 +328,7 @@ export async function applySheetImport(
     units as RefRow[],
     cats as RefRow[],
     sups as RefRow[],
+    (vendeurs as RefVendeurRow[]) ?? [],
     (subcats as RefSubcategoryRow[]) ?? [],
   )
   const byCode = new Map<string, string>()
@@ -285,6 +365,11 @@ export async function applySheetImport(
       const subErrors = await applySubcategoryToPatch(supabase, row, fields, refs, patch, categoryId)
       if (subErrors.length > 0) {
         errors.push(...subErrors)
+        continue
+      }
+      const marchandErrors = await applyMarchandToPatch(supabase, row, fields, refs, patch)
+      if (marchandErrors.length > 0) {
+        errors.push(...marchandErrors)
         continue
       }
 
@@ -354,6 +439,17 @@ export async function applySheetImport(
       )
       if (createSubErrors.length > 0) {
         errors.push(...createSubErrors)
+        continue
+      }
+      const createMarchandErrors = await applyMarchandToPatch(
+        supabase,
+        row,
+        ALL_SHEET_IMPORT_FIELDS,
+        refs,
+        fullPatch,
+      )
+      if (createMarchandErrors.length > 0) {
+        errors.push(...createMarchandErrors)
         continue
       }
       const insert: Record<string, unknown> = {
