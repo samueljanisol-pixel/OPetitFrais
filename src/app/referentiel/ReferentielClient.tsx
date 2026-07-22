@@ -883,8 +883,8 @@ export default function ReferentielClient() {
                         onChange={e => setForm(f => ({ ...f, phone: e.target.value }))}
                         size="small"
                         fullWidth
-                        placeholder="212612345678"
-                        helperText="Chiffres uniquement, indicatif pays (ex. 212…)"
+                        placeholder="212612345678 ou 0612345678"
+                        helperText="Indicatif pays recommandé (212…). Un 0 initial local est converti automatiquement."
                       />
                       <FormControl size="small" fullWidth>
                         <InputLabel id="vendeur-locale-label">Langue export commande</InputLabel>

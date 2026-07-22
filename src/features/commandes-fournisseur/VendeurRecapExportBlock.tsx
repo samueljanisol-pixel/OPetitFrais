@@ -20,6 +20,7 @@ import {
   vendorRecapCaptureLabels,
   type VendorRecapCaptureLabels,
 } from "@/lib/commandes-fournisseur/vendor-recap-capture-i18n";
+import { normalizeWhatsAppPhone, openWhatsAppChat } from "@/lib/whatsapp/url";
 import type { MagasinMxColumn, VendeurRecapGroup } from "@/lib/commandes-fournisseur/validation-lot-vendeur-recap";
 
 type Props = {
@@ -149,28 +150,33 @@ export default function VendeurRecapExportBlock({
     setExporting(false);
   }, [filename]);
 
-  const onWhatsApp = useCallback(async () => {
+  const onWhatsApp = useCallback(() => {
     const el = captureRef.current;
     if (!el) {
       return;
     }
     const phone = vendeurPhone?.trim() ?? "";
-    if (phone.length === 0) {
+    if (!normalizeWhatsAppPhone(phone)) {
       setExportErr(tc("whatsAppPhoneMissing"));
       return;
     }
+    const text = whatsAppText?.trim() ?? "";
+    const waWindow = openWhatsAppChat(phone, text);
+
     setWhatsAppBusy(true);
     setExportErr(null);
-    const result = await shareVendorOrderWhatsApp({
+    void shareVendorOrderWhatsApp({
       element: el,
       filename,
       phone,
-      text: whatsAppText?.trim() ?? "",
+      text,
+      waWindow,
+    }).then((result) => {
+      if (!result.ok) {
+        setExportErr(result.error);
+      }
+      setWhatsAppBusy(false);
     });
-    if (!result.ok) {
-      setExportErr(result.error);
-    }
-    setWhatsAppBusy(false);
   }, [filename, tc, vendeurPhone, whatsAppText]);
 
   const footer = footerComment?.trim() ?? "";
@@ -178,7 +184,7 @@ export default function VendeurRecapExportBlock({
   const parLabel = captureLabels.orderByLine?.trim() ?? "";
   const productCount = productCountLabel?.trim() ?? "";
   const showVendeurHeader = vendeurHeaderVisible(group.vendeurLabel, supplierLabel);
-  const phoneTrim = vendeurPhone?.trim() ?? "";
+  const whatsAppPhoneOk = normalizeWhatsAppPhone(vendeurPhone?.trim() ?? "") !== null;
   const rowsEmpty = group.rows.length === 0;
   const textDir = captureLabels.dir === "rtl" ? "rtl" : undefined;
 
@@ -197,7 +203,7 @@ export default function VendeurRecapExportBlock({
       disabled={rowsEmpty}
       onExport={() => void onExport()}
       onWhatsApp={() => void onWhatsApp()}
-      showWhatsApp={phoneTrim.length > 0}
+      showWhatsApp={whatsAppPhoneOk}
       exportLabel={tc("exportImage")}
       whatsAppLabel={tc("sendWhatsApp")}
     />

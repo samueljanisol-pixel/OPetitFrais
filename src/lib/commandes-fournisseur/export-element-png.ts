@@ -1,5 +1,5 @@
 /** Capture un élément DOM en PNG et propose partage mobile ou téléchargement. */
-import { buildWhatsAppUrl } from "@/lib/whatsapp/url";
+import { buildWhatsAppUrl, normalizeWhatsAppPhone, openWhatsAppChat } from "@/lib/whatsapp/url";
 
 async function captureElementToPngFile(
   element: HTMLElement,
@@ -79,41 +79,38 @@ export async function shareVendorOrderWhatsApp({
   filename,
   phone,
   text,
+  /** Fenêtre WhatsApp déjà ouverte dans le geste clic (évite le bloqueur de popups). */
+  waWindow,
 }: {
   element: HTMLElement;
   filename: string;
   phone: string;
   text: string;
+  waWindow?: Window | null;
 }): Promise<{ ok: true } | { ok: false; error: string }> {
-  const cleanedPhone = phone.replace(/\D/g, "");
-  if (cleanedPhone.length < 8) {
+  const normalized = normalizeWhatsAppPhone(phone);
+  if (!normalized) {
     return { ok: false, error: "Numéro invalide" };
   }
+
+  const trimmedText = text.trim();
 
   const captured = await captureElementToPngFile(element, filename);
   if (!captured.ok) {
     return captured;
   }
 
-  const { file } = captured;
-  const trimmedText = text.trim();
+  downloadPngFile(captured.file);
 
-  if (typeof navigator !== "undefined" && typeof navigator.share === "function") {
+  if (waWindow && !waWindow.closed) {
     try {
-      const payload = trimmedText.length > 0 ? { files: [file], text: trimmedText } : { files: [file] };
-      if (navigator.canShare?.(payload)) {
-        await navigator.share(payload);
-        window.open(buildWhatsAppUrl(cleanedPhone, trimmedText), "_blank", "noopener,noreferrer");
-        return { ok: true };
-      }
-    } catch (shareErr) {
-      if (shareErr instanceof Error && shareErr.name === "AbortError") {
-        return { ok: true };
-      }
+      waWindow.location.href = buildWhatsAppUrl(phone, trimmedText);
+    } catch {
+      openWhatsAppChat(phone, trimmedText);
     }
+  } else {
+    openWhatsAppChat(phone, trimmedText);
   }
 
-  downloadPngFile(file);
-  window.open(buildWhatsAppUrl(cleanedPhone, trimmedText), "_blank", "noopener,noreferrer");
   return { ok: true };
 }
