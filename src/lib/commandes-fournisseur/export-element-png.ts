@@ -45,6 +45,18 @@ function downloadPngFile(file: File): void {
   URL.revokeObjectURL(url);
 }
 
+async function copyPngToClipboard(file: File): Promise<boolean> {
+  try {
+    if (typeof ClipboardItem === "undefined" || !navigator.clipboard?.write) {
+      return false;
+    }
+    await navigator.clipboard.write([new ClipboardItem({ [file.type]: file })]);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export async function exportElementAsPng(
   element: HTMLElement,
   filename: string,
@@ -73,44 +85,62 @@ export async function exportElementAsPng(
   return { ok: true };
 }
 
-/** Partage image + texte puis ouvre WhatsApp avec le commentaire pré-rempli. */
+/** Ouvre la conversation WhatsApp du vendeur et propose l’image (partage natif, presse-papiers ou téléchargement). */
 export async function shareVendorOrderWhatsApp({
   element,
   filename,
   phone,
-  text,
-  /** Fenêtre WhatsApp déjà ouverte dans le geste clic (évite le bloqueur de popups). */
   waWindow,
 }: {
   element: HTMLElement;
   filename: string;
   phone: string;
-  text: string;
   waWindow?: Window | null;
-}): Promise<{ ok: true } | { ok: false; error: string }> {
-  const normalized = normalizeWhatsAppPhone(phone);
-  if (!normalized) {
+}): Promise<{ ok: true; imageShared: boolean } | { ok: false; error: string }> {
+  if (!normalizeWhatsAppPhone(phone)) {
     return { ok: false, error: "Numéro invalide" };
   }
-
-  const trimmedText = text.trim();
 
   const captured = await captureElementToPngFile(element, filename);
   if (!captured.ok) {
     return captured;
   }
 
-  downloadPngFile(captured.file);
+  const { file } = captured;
+  let imageShared = false;
 
-  if (waWindow && !waWindow.closed) {
+  if (typeof navigator !== "undefined" && typeof navigator.share === "function") {
     try {
-      waWindow.location.href = buildWhatsAppUrl(phone, trimmedText);
-    } catch {
-      openWhatsAppChat(phone, trimmedText);
+      if (navigator.canShare?.({ files: [file] })) {
+        await navigator.share({ files: [file], title: file.name });
+        imageShared = true;
+      }
+    } catch (shareErr) {
+      if (shareErr instanceof Error && shareErr.name === "AbortError") {
+        return { ok: true, imageShared: false };
+      }
     }
-  } else {
-    openWhatsAppChat(phone, trimmedText);
   }
 
-  return { ok: true };
+  if (!imageShared) {
+    const copied = await copyPngToClipboard(file);
+    if (copied) {
+      imageShared = true;
+    } else {
+      downloadPngFile(file);
+    }
+  }
+
+  const waUrl = buildWhatsAppUrl(phone);
+  if (waWindow && !waWindow.closed) {
+    try {
+      waWindow.location.href = waUrl;
+    } catch {
+      openWhatsAppChat(phone);
+    }
+  } else if (!imageShared || typeof navigator === "undefined" || !navigator.share) {
+    openWhatsAppChat(phone);
+  }
+
+  return { ok: true, imageShared };
 }

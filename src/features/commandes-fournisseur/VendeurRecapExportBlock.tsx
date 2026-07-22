@@ -31,7 +31,6 @@ type Props = {
   commandeDateSlug: string;
   exportLocale?: AppLocale;
   vendeurPhone?: string | null;
-  whatsAppText?: string | null;
   /** Commentaire lot ou commande affiché sous le tableau dans l’image exportée. */
   footerComment?: string | null;
   footerCommentLabel?: string;
@@ -109,9 +108,8 @@ export default function VendeurRecapExportBlock({
   commandeDateSlug,
   exportLocale = "fr",
   vendeurPhone,
-  whatsAppText,
   footerComment,
-  footerCommentLabel = "Commentaire lot",
+  footerCommentLabel = "Commentaire",
   commentField,
   hideTablePreview = false,
   showTotalColumn = true,
@@ -160,8 +158,7 @@ export default function VendeurRecapExportBlock({
       setExportErr(tc("whatsAppPhoneMissing"));
       return;
     }
-    const text = whatsAppText?.trim() ?? "";
-    const waWindow = openWhatsAppChat(phone, text);
+    const waWindow = openWhatsAppChat(phone);
 
     setWhatsAppBusy(true);
     setExportErr(null);
@@ -169,7 +166,6 @@ export default function VendeurRecapExportBlock({
       element: el,
       filename,
       phone,
-      text,
       waWindow,
     }).then((result) => {
       if (!result.ok) {
@@ -177,7 +173,7 @@ export default function VendeurRecapExportBlock({
       }
       setWhatsAppBusy(false);
     });
-  }, [filename, tc, vendeurPhone, whatsAppText]);
+  }, [filename, tc, vendeurPhone]);
 
   const footer = footerComment?.trim() ?? "";
   const magasinHeader = headerMagasinName?.trim() ?? "";

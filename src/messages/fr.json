@@ -270,7 +270,7 @@
           "matrixGroupByVendor": "Par vendeur",
           "vendorCommentLabel": "Commentaire vendeur",
           "vendorCommentPlaceholder": "Commentaire pour ce vendeur…",
-          "vendorCommentExportLabel": "Commentaire {vendor}",
+          "vendorCommentExportLabel": "Commentaire",
           "markReadyForPurchase": "Marquer prêt pour l'achat",
           "cancelLot": "Annuler le lot",
           "lotCommentSection": "Commentaire du lot",

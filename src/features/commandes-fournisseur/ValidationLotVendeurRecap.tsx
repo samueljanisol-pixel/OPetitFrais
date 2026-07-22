@@ -133,9 +133,8 @@ export default function ValidationLotVendeurRecap({
               commandeDateSlug={commandeDateSlug}
               exportLocale={exportLocale}
               vendeurPhone={vendeur?.phone}
-              whatsAppText={draft}
               footerComment={g.commentaire?.trim() ? g.commentaire : null}
-              footerCommentLabel={t("vendorCommentExportLabel", { vendor: g.vendeurLabel })}
+              footerCommentLabel={t("vendorCommentExportLabel")}
               commentField={commentField}
             />
           </div>

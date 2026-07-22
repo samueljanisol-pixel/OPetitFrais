@@ -270,7 +270,7 @@
           "matrixGroupByVendor": "حسب البائع",
           "vendorCommentLabel": "تعليق البائع",
           "vendorCommentPlaceholder": "تعليق لهذا البائع…",
-          "vendorCommentExportLabel": "تعليق {vendor}",
+          "vendorCommentExportLabel": "تعليق",
           "markReadyForPurchase": "علّم جاهز للشرا",
           "cancelLot": "annuler اللوط",
           "lotCommentSection": "تعليق اللوط",
