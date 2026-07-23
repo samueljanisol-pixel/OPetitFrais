@@ -1,13 +1,17 @@
 "use client";
 
-import { useCallback, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Box, Button, Typography } from "@mui/material";
 import ImageOutlinedIcon from "@mui/icons-material/ImageOutlined";
 import WhatsAppIcon from "@mui/icons-material/WhatsApp";
 import { useTranslations } from "next-intl";
 import {
+  canSharePngFile,
+  captureElementToPngFile,
+  copyPngToClipboard,
   exportElementAsPng,
-  shareVendorOrderWhatsApp,
+  sharePngFileNative,
+  vendorWhatsAppHref,
 } from "@/lib/commandes-fournisseur/export-element-png";
 import {
   captureRootSx,
@@ -20,7 +24,7 @@ import {
   vendorRecapCaptureLabels,
   type VendorRecapCaptureLabels,
 } from "@/lib/commandes-fournisseur/vendor-recap-capture-i18n";
-import { normalizeWhatsAppPhone, openWhatsAppChat } from "@/lib/whatsapp/url";
+import { normalizeWhatsAppPhone } from "@/lib/whatsapp/url";
 import type { MagasinMxColumn, VendeurRecapGroup } from "@/lib/commandes-fournisseur/validation-lot-vendeur-recap";
 
 type Props = {
@@ -31,44 +35,44 @@ type Props = {
   commandeDateSlug: string;
   exportLocale?: AppLocale;
   vendeurPhone?: string | null;
-  /** Commentaire lot ou commande affiché sous le tableau dans l’image exportée. */
   footerComment?: string | null;
   footerCommentLabel?: string;
-  /** Champ commentaire affiché sous le tableau à l’écran (hors capture PNG). */
   commentField?: ReactNode;
-  /** Masque l’aperçu tableau à l’écran (export seul). */
   hideTablePreview?: boolean;
-  /** Colonne Total (plusieurs magasins lot validation). */
   showTotalColumn?: boolean;
-  /** En-tête des colonnes magasin (ex. « Quantité » au lieu de MXX). */
   magasinColumnHeader?: string;
-  /** En-tête image : nom du magasin (commande saisie). */
   headerMagasinName?: string | null;
-  /** Sous la date : « par {utilisateur} ». */
   commandeParLabel?: string | null;
-  /** Ex. « 12 produits » — affiché au-dessus du tableau dans l’image. */
   productCountLabel?: string | null;
+};
+
+type ActionButtonsProps = {
+  exporting: boolean;
+  whatsAppBusy: boolean;
+  disabled: boolean;
+  exportLabel: string;
+  whatsAppLabel: string;
+  whatsAppHref: string | null;
+  useNativeShare: boolean;
+  onExport: () => void;
+  onWhatsAppShare: () => void;
+  onWhatsAppDesktop: () => void;
 };
 
 function ExportActionButtons({
   exporting,
   whatsAppBusy,
   disabled,
-  onExport,
-  onWhatsApp,
-  showWhatsApp,
   exportLabel,
   whatsAppLabel,
-}: {
-  exporting: boolean;
-  whatsAppBusy: boolean;
-  disabled: boolean;
-  onExport: () => void;
-  onWhatsApp: () => void;
-  showWhatsApp: boolean;
-  exportLabel: string;
-  whatsAppLabel: string;
-}) {
+  whatsAppHref,
+  useNativeShare,
+  onExport,
+  onWhatsAppShare,
+  onWhatsAppDesktop,
+}: ActionButtonsProps) {
+  const showWhatsApp = whatsAppHref !== null;
+
   return (
     <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
       <Button
@@ -83,18 +87,33 @@ function ExportActionButtons({
         {exporting ? "…" : exportLabel}
       </Button>
       {showWhatsApp ? (
-        <Button
-          type="button"
-          variant="contained"
-          size="small"
-          color="success"
-          startIcon={<WhatsAppIcon />}
-          disabled={disabled || exporting || whatsAppBusy}
-          onClick={onWhatsApp}
-          sx={{ textTransform: "none" }}
-        >
-          {whatsAppBusy ? "…" : whatsAppLabel}
-        </Button>
+        useNativeShare ? (
+          <Button
+            type="button"
+            variant="contained"
+            size="small"
+            color="success"
+            startIcon={<WhatsAppIcon />}
+            disabled={disabled || exporting || whatsAppBusy}
+            onClick={onWhatsAppShare}
+            sx={{ textTransform: "none" }}
+          >
+            {whatsAppBusy ? "…" : whatsAppLabel}
+          </Button>
+        ) : (
+          <Button
+            type="button"
+            variant="contained"
+            size="small"
+            color="success"
+            startIcon={<WhatsAppIcon />}
+            disabled={disabled || exporting || whatsAppBusy}
+            onClick={onWhatsAppDesktop}
+            sx={{ textTransform: "none" }}
+          >
+            {whatsAppBusy ? "…" : whatsAppLabel}
+          </Button>
+        )
       ) : null}
     </div>
   );
@@ -120,9 +139,11 @@ export default function VendeurRecapExportBlock({
 }: Props) {
   const tc = useTranslations("backoffice.commandes.common");
   const captureRef = useRef<HTMLDivElement>(null);
+  const pngFileRef = useRef<File | null>(null);
   const [exporting, setExporting] = useState(false);
   const [whatsAppBusy, setWhatsAppBusy] = useState(false);
   const [exportErr, setExportErr] = useState<string | null>(null);
+  const [pngReady, setPngReady] = useState(false);
 
   const captureLabels: VendorRecapCaptureLabels = useMemo(
     () => vendorRecapCaptureLabels(exportLocale, supplierLabel, commandeDateLabel, commandeParLabel),
@@ -133,6 +154,51 @@ export default function VendeurRecapExportBlock({
     () => `commande-${commandeDateSlug}-${supplierLabel}-${group.vendeurLabel}.png`,
     [commandeDateSlug, group.vendeurLabel, supplierLabel],
   );
+
+  const whatsAppHref = useMemo(() => {
+    const phone = vendeurPhone?.trim() ?? "";
+    return vendorWhatsAppHref(phone);
+  }, [vendeurPhone]);
+
+  const useNativeShare = pngReady && pngFileRef.current !== null && canSharePngFile(pngFileRef.current);
+
+  const ensurePngFile = useCallback(async (): Promise<File | null> => {
+    if (pngFileRef.current) {
+      return pngFileRef.current;
+    }
+    const el = captureRef.current;
+    if (!el) {
+      return null;
+    }
+    const captured = await captureElementToPngFile(el, filename);
+    if (!captured.ok) {
+      setExportErr(captured.error);
+      return null;
+    }
+    pngFileRef.current = captured.file;
+    setPngReady(true);
+    return captured.file;
+  }, [filename]);
+
+  useEffect(() => {
+    pngFileRef.current = null;
+    setPngReady(false);
+    const el = captureRef.current;
+    if (!el || group.rows.length === 0) {
+      return;
+    }
+    let cancelled = false;
+    void captureElementToPngFile(el, filename).then((captured) => {
+      if (cancelled || !captured.ok) {
+        return;
+      }
+      pngFileRef.current = captured.file;
+      setPngReady(true);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [filename, group, footerComment, exportLocale, supplierLabel, commandeDateLabel]);
 
   const onExport = useCallback(async () => {
     const el = captureRef.current;
@@ -148,32 +214,37 @@ export default function VendeurRecapExportBlock({
     setExporting(false);
   }, [filename]);
 
-  const onWhatsApp = useCallback(() => {
-    const el = captureRef.current;
-    if (!el) {
-      return;
-    }
-    const phone = vendeurPhone?.trim() ?? "";
-    if (!normalizeWhatsAppPhone(phone)) {
-      setExportErr(tc("whatsAppPhoneMissing"));
-      return;
-    }
-    const waWindow = openWhatsAppChat(phone);
-
+  const onWhatsAppShare = useCallback(() => {
     setWhatsAppBusy(true);
     setExportErr(null);
-    void shareVendorOrderWhatsApp({
-      element: el,
-      filename,
-      phone,
-      waWindow,
-    }).then((result) => {
-      if (!result.ok) {
-        setExportErr(result.error);
-      }
-      setWhatsAppBusy(false);
-    });
-  }, [filename, tc, vendeurPhone]);
+    void ensurePngFile()
+      .then(async (file) => {
+        if (!file) {
+          return;
+        }
+        const result = await sharePngFileNative(file);
+        if (!result.ok) {
+          setExportErr(result.error);
+        }
+      })
+      .finally(() => setWhatsAppBusy(false));
+  }, [ensurePngFile]);
+
+  const onWhatsAppDesktop = useCallback(() => {
+    if (!whatsAppHref) {
+      return;
+    }
+    setWhatsAppBusy(true);
+    setExportErr(null);
+    void ensurePngFile()
+      .then(async (file) => {
+        if (file) {
+          await copyPngToClipboard(file);
+        }
+        window.open(whatsAppHref, "_blank", "noopener,noreferrer");
+      })
+      .finally(() => setWhatsAppBusy(false));
+  }, [ensurePngFile, whatsAppHref]);
 
   const footer = footerComment?.trim() ?? "";
   const magasinHeader = headerMagasinName?.trim() ?? "";
@@ -197,11 +268,13 @@ export default function VendeurRecapExportBlock({
       exporting={exporting}
       whatsAppBusy={whatsAppBusy}
       disabled={rowsEmpty}
-      onExport={() => void onExport()}
-      onWhatsApp={() => void onWhatsApp()}
-      showWhatsApp={whatsAppPhoneOk}
       exportLabel={tc("exportImage")}
       whatsAppLabel={tc("sendWhatsApp")}
+      whatsAppHref={whatsAppPhoneOk ? whatsAppHref : null}
+      useNativeShare={useNativeShare}
+      onExport={() => void onExport()}
+      onWhatsAppShare={onWhatsAppShare}
+      onWhatsAppDesktop={onWhatsAppDesktop}
     />
   );
 

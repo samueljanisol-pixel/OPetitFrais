@@ -1,7 +1,7 @@
 /** Capture un élément DOM en PNG et propose partage mobile ou téléchargement. */
-import { buildWhatsAppUrl, normalizeWhatsAppPhone, openWhatsAppChat } from "@/lib/whatsapp/url";
+import { buildWhatsAppUrl, normalizeWhatsAppPhone } from "@/lib/whatsapp/url";
 
-async function captureElementToPngFile(
+export async function captureElementToPngFile(
   element: HTMLElement,
   filename: string,
 ): Promise<{ ok: true; file: File } | { ok: false; error: string }> {
@@ -45,7 +45,7 @@ function downloadPngFile(file: File): void {
   URL.revokeObjectURL(url);
 }
 
-async function copyPngToClipboard(file: File): Promise<boolean> {
+export async function copyPngToClipboard(file: File): Promise<boolean> {
   try {
     if (typeof ClipboardItem === "undefined" || !navigator.clipboard?.write) {
       return false;
@@ -54,6 +54,29 @@ async function copyPngToClipboard(file: File): Promise<boolean> {
     return true;
   } catch {
     return false;
+  }
+}
+
+export function canSharePngFile(file: File): boolean {
+  if (typeof navigator === "undefined" || typeof navigator.share !== "function") {
+    return false;
+  }
+  return navigator.canShare?.({ files: [file] }) ?? false;
+}
+
+/** Partage natif de l’image (mobile) — même principe que « Exporter en image ». */
+export async function sharePngFileNative(file: File): Promise<{ ok: true } | { ok: false; error: string }> {
+  if (!canSharePngFile(file)) {
+    return { ok: false, error: "Partage non disponible" };
+  }
+  try {
+    await navigator.share({ files: [file], title: file.name });
+    return { ok: true };
+  } catch (shareErr) {
+    if (shareErr instanceof Error && shareErr.name === "AbortError") {
+      return { ok: true };
+    }
+    return { ok: false, error: shareErr instanceof Error ? shareErr.message : "Erreur partage" };
   }
 }
 
@@ -67,80 +90,19 @@ export async function exportElementAsPng(
   }
 
   const { file } = captured;
-
-  if (typeof navigator !== "undefined" && typeof navigator.share === "function") {
-    try {
-      if (navigator.canShare?.({ files: [file] })) {
-        await navigator.share({ files: [file], title: file.name });
-        return { ok: true };
-      }
-    } catch (shareErr) {
-      if (shareErr instanceof Error && shareErr.name === "AbortError") {
-        return { ok: true };
-      }
-    }
+  const shared = await sharePngFileNative(file);
+  if (shared.ok) {
+    return { ok: true };
   }
 
   downloadPngFile(file);
   return { ok: true };
 }
 
-/** Ouvre la conversation WhatsApp du vendeur et propose l’image (partage natif, presse-papiers ou téléchargement). */
-export async function shareVendorOrderWhatsApp({
-  element,
-  filename,
-  phone,
-  waWindow,
-}: {
-  element: HTMLElement;
-  filename: string;
-  phone: string;
-  waWindow?: Window | null;
-}): Promise<{ ok: true; imageShared: boolean } | { ok: false; error: string }> {
+/** URL wa.me vers le vendeur (comme le panier boutique). */
+export function vendorWhatsAppHref(phone: string): string | null {
   if (!normalizeWhatsAppPhone(phone)) {
-    return { ok: false, error: "Numéro invalide" };
+    return null;
   }
-
-  const captured = await captureElementToPngFile(element, filename);
-  if (!captured.ok) {
-    return captured;
-  }
-
-  const { file } = captured;
-  let imageShared = false;
-
-  if (typeof navigator !== "undefined" && typeof navigator.share === "function") {
-    try {
-      if (navigator.canShare?.({ files: [file] })) {
-        await navigator.share({ files: [file], title: file.name });
-        imageShared = true;
-      }
-    } catch (shareErr) {
-      if (shareErr instanceof Error && shareErr.name === "AbortError") {
-        return { ok: true, imageShared: false };
-      }
-    }
-  }
-
-  if (!imageShared) {
-    const copied = await copyPngToClipboard(file);
-    if (copied) {
-      imageShared = true;
-    } else {
-      downloadPngFile(file);
-    }
-  }
-
-  const waUrl = buildWhatsAppUrl(phone);
-  if (waWindow && !waWindow.closed) {
-    try {
-      waWindow.location.href = waUrl;
-    } catch {
-      openWhatsAppChat(phone);
-    }
-  } else if (!imageShared || typeof navigator === "undefined" || !navigator.share) {
-    openWhatsAppChat(phone);
-  }
-
-  return { ok: true, imageShared };
+  return buildWhatsAppUrl(phone);
 }
