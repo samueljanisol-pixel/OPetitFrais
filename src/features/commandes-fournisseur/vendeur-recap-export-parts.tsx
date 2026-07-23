@@ -1,6 +1,7 @@
 "use client";
 
 import { Box, Table, TableBody, TableCell, TableHead, TableRow, Typography } from "@mui/material";
+import { ARABIC_FONT_FAMILY, notoSansArabic } from "@/lib/fonts/noto-sans-arabic";
 import {
   formatRecapQtyCell,
   type MagasinMxColumn,
@@ -13,15 +14,21 @@ export const exportTableSx = {
   tableLayout: "auto" as const,
   "& .MuiTableCell-root": {
     border: "1px solid #ccc",
-    py: 0.5,
-    px: 0.5,
+    py: 1.5,
+    px: 0.75,
     fontSize: "0.8125rem",
+    lineHeight: 1.55,
     whiteSpace: "nowrap" as const,
     width: "auto",
+    verticalAlign: "middle",
   },
   "& .MuiTableHead-root .MuiTableCell-root": {
     fontWeight: 700,
     bgcolor: "#f5f5f5",
+    py: 1,
+  },
+  "& .MuiTableBody-root .MuiTableRow-root": {
+    height: "auto",
   },
 };
 
@@ -35,13 +42,21 @@ export const captureRootSx = {
   boxSizing: "border-box" as const,
 };
 
+export const arabicTextSx = {
+  fontFamily: ARABIC_FONT_FAMILY,
+  fontFeatureSettings: '"liga" 1, "calt" 1',
+} as const;
+
+export const arabicTextClassName = notoSansArabic.className;
+
 const exportProductNameSx = (isArabic: boolean) =>
   ({
     fontWeight: 500,
     fontSize: "0.875rem",
-    lineHeight: 1.25,
+    lineHeight: 1.55,
     whiteSpace: "nowrap" as const,
     textAlign: isArabic ? ("right" as const) : ("inherit" as const),
+    ...(isArabic ? arabicTextSx : {}),
   }) as const;
 
 type TableLabels = {
@@ -58,6 +73,7 @@ type VendeurRecapTableProps = {
   showTotalColumn?: boolean;
   magasinColumnHeader?: string;
   labels: TableLabels;
+  captureDir?: "rtl" | "ltr";
 };
 
 export function VendeurRecapTable({
@@ -66,21 +82,46 @@ export function VendeurRecapTable({
   showTotalColumn = true,
   magasinColumnHeader,
   labels,
+  captureDir = "ltr",
 }: VendeurRecapTableProps) {
   const colSpan = 2 + magasinColumns.length + (showTotalColumn ? 1 : 0);
+  const headerArabicSx = captureDir === "rtl" ? arabicTextSx : {};
 
   return (
     <Table size="small" sx={exportTableSx}>
       <TableHead>
         <TableRow>
-          <TableCell align="right">{labels.product}</TableCell>
+          <TableCell
+            align="right"
+            dir={captureDir === "rtl" ? "rtl" : undefined}
+            lang={captureDir === "rtl" ? "ar" : undefined}
+            sx={headerArabicSx}
+          >
+            {labels.product}
+          </TableCell>
           {magasinColumns.map((m) => (
             <TableCell key={m.id} align="center">
               {magasinColumnHeader ?? m.mxCode}
             </TableCell>
           ))}
-          {showTotalColumn ? <TableCell align="center">{labels.total}</TableCell> : null}
-          <TableCell align="left">{labels.udvCond}</TableCell>
+          {showTotalColumn ? (
+            <TableCell
+              align="center"
+              dir={captureDir === "rtl" ? "rtl" : undefined}
+              lang={captureDir === "rtl" ? "ar" : undefined}
+              sx={headerArabicSx}
+            >
+              {labels.total}
+            </TableCell>
+          ) : null}
+          <TableCell
+            align="left"
+            dir={captureDir === "rtl" ? "rtl" : undefined}
+            lang={captureDir === "rtl" ? "ar" : undefined}
+            sx={headerArabicSx}
+          >
+            {labels.udvCond}
+          </TableCell>
         </TableRow>
       </TableHead>
       <TableBody>
@@ -96,6 +137,7 @@ export function VendeurRecapTable({
                   <Typography
                     variant="body2"
                     component="div"
+                    className={row.productDisplayIsArabic ? arabicTextClassName : undefined}
                     dir={row.productDisplayIsArabic ? "rtl" : undefined}
                     lang={row.productDisplayIsArabic ? "ar" : undefined}
                     sx={exportProductNameSx(row.productDisplayIsArabic === true)}
@@ -115,6 +157,7 @@ export function VendeurRecapTable({
                       <Typography
                         variant="body2"
                         component="div"
+                        className={arabicTextClassName}
                         dir="rtl"
                         lang="ar"
                         sx={{
@@ -130,7 +173,7 @@ export function VendeurRecapTable({
                       component="div"
                       sx={{
                         ...exportProductNameSx(false),
-                        mt: row.nameAr ? 0.25 : 0,
+                        mt: row.nameAr ? 0.5 : 0,
                       }}
                     >
                       {row.productName}
@@ -154,7 +197,8 @@ export function VendeurRecapTable({
                           display: "inline-flex",
                           flexDirection: "column",
                           alignItems: "center",
-                          gap: 0.25,
+                          gap: 0.5,
+                          py: 0.25,
                         }}
                       >
                         {qtyStr ? (
@@ -169,13 +213,16 @@ export function VendeurRecapTable({
                         <Typography
                           variant="caption"
                           component="div"
+                          className={arabicTextClassName}
                           dir="rtl"
+                          lang="ar"
                           sx={{
-                            lineHeight: 1.25,
+                            lineHeight: 1.45,
                             fontSize: "0.6875rem",
                             color: "text.secondary",
                             textAlign: "center",
                             whiteSpace: "nowrap",
+                            ...arabicTextSx,
                           }}
                         >
                           {magComment}
@@ -199,8 +246,8 @@ export function VendeurRecapTable({
                 </TableCell>
               ) : null}
               <TableCell align="left">
-                <Box sx={{ display: "inline-flex", flexDirection: "column", whiteSpace: "nowrap" }}>
-                  <Typography variant="caption" component="div" sx={{ lineHeight: 1.3 }}>
+                <Box sx={{ display: "inline-flex", flexDirection: "column", whiteSpace: "nowrap", gap: 0.35 }}>
+                  <Typography variant="caption" component="div" sx={{ lineHeight: 1.45 }}>
                     {row.udvCond}
                   </Typography>
                   {row.udvCondSub ? (
@@ -208,7 +255,7 @@ export function VendeurRecapTable({
                       variant="caption"
                       color="text.secondary"
                       component="div"
-                      sx={{ lineHeight: 1.25, mt: 0.25 }}
+                      sx={{ lineHeight: 1.4 }}
                     >
                       {row.udvCondSub}
                     </Typography>
@@ -246,13 +293,22 @@ export function VendeurRecapCaptureHeader({
 }: CaptureHeaderProps) {
   const parLabel = orderByLine?.trim() ?? "";
   const textDir = dir === "rtl" ? "rtl" : undefined;
+  const headerArabicSx = dir === "rtl" ? arabicTextSx : {};
   return (
     <>
       {magasinHeader.length > 0 ? (
         <Typography
           variant="subtitle1"
           dir={textDir}
-          sx={{ fontWeight: 700, mb: 0.5, whiteSpace: "nowrap", textAlign: dir === "rtl" ? "right" : "inherit" }}
+          lang={dir === "rtl" ? "ar" : undefined}
+          className={dir === "rtl" ? arabicTextClassName : undefined}
+          sx={{
+            fontWeight: 700,
+            mb: 0.5,
+            whiteSpace: "nowrap",
+            textAlign: dir === "rtl" ? "right" : "inherit",
+            ...headerArabicSx,
+          }}
         >
           {magasinHeader}
         </Typography>
@@ -260,12 +316,15 @@ export function VendeurRecapCaptureHeader({
       <Typography
         variant="subtitle1"
         dir={textDir}
+        lang={dir === "rtl" ? "ar" : undefined}
+        className={dir === "rtl" ? arabicTextClassName : undefined}
         sx={{
           fontWeight: 700,
           mb: 0.5,
           whiteSpace: "nowrap",
           mt: magasinHeader.length > 0 ? 0.5 : 0,
           textAlign: dir === "rtl" ? "right" : "inherit",
+          ...headerArabicSx,
         }}
       >
         {supplierOrderLine}
@@ -281,7 +340,15 @@ export function VendeurRecapCaptureHeader({
       <Typography
         variant="caption"
         color="text.secondary"
-        sx={{ display: "block", mb: parLabel.length > 0 ? 0.25 : 1.5, whiteSpace: "nowrap" }}
+        dir={textDir}
+        lang={dir === "rtl" ? "ar" : undefined}
+        className={dir === "rtl" ? arabicTextClassName : undefined}
+        sx={{
+          display: "block",
+          mb: parLabel.length > 0 ? 0.25 : 1.5,
+          whiteSpace: "nowrap",
+          ...headerArabicSx,
+        }}
       >
         {orderOnLine}
       </Typography>
@@ -289,7 +356,15 @@ export function VendeurRecapCaptureHeader({
         <Typography
           variant="caption"
           color="text.secondary"
-          sx={{ display: "block", mb: productCount.length > 0 ? 0.25 : 1.5, whiteSpace: "nowrap" }}
+          dir={textDir}
+          lang={dir === "rtl" ? "ar" : undefined}
+          className={dir === "rtl" ? arabicTextClassName : undefined}
+          sx={{
+            display: "block",
+            mb: productCount.length > 0 ? 0.25 : 1.5,
+            whiteSpace: "nowrap",
+            ...headerArabicSx,
+          }}
         >
           {parLabel}
         </Typography>
@@ -298,7 +373,16 @@ export function VendeurRecapCaptureHeader({
         <Typography
           variant="body2"
           color="text.secondary"
-          sx={{ display: "block", mb: 1.5, fontWeight: 600, whiteSpace: "nowrap" }}
+          dir={textDir}
+          lang={dir === "rtl" ? "ar" : undefined}
+          className={dir === "rtl" ? arabicTextClassName : undefined}
+          sx={{
+            display: "block",
+            mb: 1.5,
+            fontWeight: 600,
+            whiteSpace: "nowrap",
+            ...headerArabicSx,
+          }}
         >
           {productCount}
         </Typography>

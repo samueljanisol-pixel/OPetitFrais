@@ -1,26 +1,21 @@
 /** Capture un élément DOM en PNG et propose partage mobile ou téléchargement. */
+import { getFontEmbedCSS, toBlob } from "html-to-image";
 import { buildWhatsAppUrl, normalizeWhatsAppPhone } from "@/lib/whatsapp/url";
+import { ensureArabicFontsReady } from "@/lib/fonts/noto-sans-arabic";
 
 export async function captureElementToPngFile(
   element: HTMLElement,
   filename: string,
 ): Promise<{ ok: true; file: File } | { ok: false; error: string }> {
   try {
-    const html2canvas = (await import("html2canvas")).default;
-    const w = Math.ceil(element.scrollWidth);
-    const h = Math.ceil(element.scrollHeight);
-    const canvas = await html2canvas(element, {
-      scale: 2,
+    await ensureArabicFontsReady();
+    const fontEmbedCSS = await getFontEmbedCSS(element, { cacheBust: true });
+    const blob = await toBlob(element, {
+      pixelRatio: 2,
       backgroundColor: "#ffffff",
-      logging: false,
-      useCORS: true,
-      width: w,
-      height: h,
-      windowWidth: w,
-      windowHeight: h,
-    });
-    const blob = await new Promise<Blob | null>((resolve) => {
-      canvas.toBlob((b) => resolve(b), "image/png", 1);
+      cacheBust: true,
+      fontEmbedCSS,
+      preferredFontFormat: "woff2",
     });
     if (!blob) {
       return { ok: false, error: "Impossible de générer l'image" };

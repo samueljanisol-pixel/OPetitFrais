@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import { notoSansArabic } from "@/lib/fonts/noto-sans-arabic";
 import { headers } from "next/headers";
 import { getLocale, getMessages, getTimeZone } from "next-intl/server";
 import "./globals.css";
@@ -59,7 +60,7 @@ export default async function RootLayout({
     <html
       lang={locale}
       dir={dir}
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      className={`${geistSans.variable} ${geistMono.variable} ${notoSansArabic.variable} h-full antialiased`}
     >
       <body className="flex min-h-full flex-col">
         <LocaleClientProvider

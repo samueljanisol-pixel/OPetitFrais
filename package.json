@@ -24,7 +24,7 @@
     "@supabase/ssr": "^0.10.2",
     "@supabase/supabase-js": "^2.103.0",
     "basic-ftp": "^5.2.2",
-    "html2canvas": "^1.4.1",
+    "html-to-image": "^1.11.13",
     "jszip": "^3.10.1",
     "next": "16.2.3",
     "next-intl": "^4.12.0",

@@ -16,6 +16,6 @@ Lorsque le statut n’est plus **en saisie** (`validee`, `integree`), un bloc **
 - **Noms produits** dans l’image : même logique que le récap (un seul nom selon locale, police Arial/Helvetica, `body2` medium).
 - Le tableau d’export est **hors écran** ; la page affiche le même format colonnes en lecture seule.
 - L’image inclut le **nombre de lignes produit** (ex. « 12 produits ») au-dessus du tableau, comme sur la page.
-- Partage natif mobile ou téléchargement (`html2canvas`, `export-element-png.ts`).
+- Partage natif mobile ou téléchargement (`html-to-image`, `export-element-png.ts`).
 
 Données : GET `/api/commandes-fournisseur/commandes/[id]` (`validated_at` pour la date du fichier).

@@ -12,6 +12,8 @@ import {
   vendorWhatsAppHref,
 } from "@/lib/commandes-fournisseur/export-element-png";
 import {
+  arabicTextSx,
+  arabicTextClassName,
   captureRootSx,
   vendeurHeaderVisible,
   VendeurRecapCaptureHeader,
@@ -267,13 +269,21 @@ export default function VendeurRecapExportBlock({
         showTotalColumn={showTotalColumn}
         magasinColumnHeader={magasinColumnHeader}
         labels={tableLabels}
+        captureDir={captureLabels.dir}
       />
       {footer ? (
         <Typography
           variant="caption"
           component="p"
-          className="!mt-2"
-          sx={{ lineHeight: 1.4, whiteSpace: "nowrap", maxWidth: "none" }}
+          className={captureLabels.dir === "rtl" ? `!mt-2 ${arabicTextClassName}` : "!mt-2"}
+          dir={captureLabels.dir === "rtl" ? "rtl" : undefined}
+          lang={captureLabels.dir === "rtl" ? "ar" : undefined}
+          sx={{
+            lineHeight: 1.4,
+            whiteSpace: "nowrap",
+            maxWidth: "none",
+            ...(captureLabels.dir === "rtl" ? arabicTextSx : {}),
+          }}
         >
           <Box component="span" sx={{ fontWeight: 700 }}>
             {footerCommentLabel}
@@ -301,7 +311,6 @@ export default function VendeurRecapExportBlock({
             left: -10000,
             top: 0,
             pointerEvents: "none",
-            opacity: 0,
             overflow: "hidden",
           }}
         >
@@ -366,6 +375,7 @@ export default function VendeurRecapExportBlock({
           showTotalColumn={showTotalColumn}
           magasinColumnHeader={magasinColumnHeader}
           labels={tableLabels}
+          captureDir={captureLabels.dir}
         />
         {commentField ? <Box className="!mt-3">{commentField}</Box> : null}
       </Box>
@@ -381,7 +391,6 @@ export default function VendeurRecapExportBlock({
           left: -10000,
           top: 0,
           pointerEvents: "none",
-          opacity: 0,
           overflow: "hidden",
         }}
       >
