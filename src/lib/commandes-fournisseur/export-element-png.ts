@@ -36,13 +36,24 @@ export async function captureElementToPngFile(
   }
 }
 
-function downloadPngFile(file: File): void {
+function downloadPngFile(file: File, downloadName?: string): void {
   const url = URL.createObjectURL(file);
   const a = document.createElement("a");
   a.href = url;
-  a.download = file.name;
+  a.download = downloadName ?? file.name;
   a.click();
   URL.revokeObjectURL(url);
+}
+
+/** Suffixe horodaté pour éviter la demande « remplacer le fichier » à chaque envoi. */
+export function uniquePngDownloadName(baseFilename: string): string {
+  const withoutExt = baseFilename.replace(/\.png$/i, "");
+  const safeBase = withoutExt.replace(/[^\w\u0600-\u06FF\-]+/g, "_").slice(0, 72) || "commande";
+  return `${safeBase}-${Date.now()}.png`;
+}
+
+export function downloadPngFileUnique(file: File, baseFilename: string): void {
+  downloadPngFile(file, uniquePngDownloadName(baseFilename));
 }
 
 export async function copyPngToClipboard(file: File): Promise<boolean> {
