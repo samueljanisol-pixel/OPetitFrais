@@ -28,8 +28,9 @@ Filtres **Magasin** et **Catégorie** (catalogue `product` via `ca_product_day.p
 
 Dans les cartes **Total global** (jour) et **Total du mois** :
 
-- Formule : **qty × marge unitaire** à la date de vente (`product_price_history`), uniquement produits avec marge **explicitement** renseignée.
-- Affichage : montant + **% du CA total** + **% du CA avec marge** (CA des seuls produits avec marge connue) ; colonne TOP 10 **Bénéfice** avec % du CA produit.
+- Formule : **qty × marge unitaire** à la date de vente (`product_price_history`), uniquement produits avec marge **explicitement** renseignée et `qty > 0`.
+- Agrégat unique : `fetchBenefitTotalsForDateRange` (même moteur que `/historique-ca` et Analyse Stats sans filtres) — résolution produit = id DB, sinon code article catalogue, sinon UUID brut.
+- Affichage : montant + **% du CA total** + **% du CA avec marge** (CA des seuls produits avec marge connue) ; colonne TOP 10 **Bénéfice** avec % du CA produit (enrichissement ligne à ligne, hors total carte).
 
 ## TOP 10 catégories
 

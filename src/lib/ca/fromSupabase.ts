@@ -5,12 +5,9 @@ import type { CaResponse, CaRecordRef, CaTopProduitLine, CaTopProduitsPayload, H
 import { buildTopProduitRankings, filterTopProduitLines } from "./topProduits";
 import { fetchTotalKgQtyForDateRange, monthDateBounds, sumKgQtyFromTopProduitLines } from "./totalKg";
 import {
-  dedupeProductLinesByMagasin,
   enrichCaTopProduitLines,
   fetchBenefitByDayMagasinForDateRange,
   fetchBenefitTotalsForDateRange,
-  sumBenefitFromLines,
-  sumCaFromLinesWithKnownBenefit,
 } from "./benefitFromSales";
 
 function isoDateMinusDays(iso: string, days: number) {
@@ -282,7 +279,7 @@ export async function fetchCaDashboardFromSupabase(
   }
 
   const monthBounds = monthDateBounds(ym);
-  const [dayQ, j1Q, j7Q, monthQ, hourQ, maxDayRecords, topProduitsRaw, totalKgMois, monthBenefitTotals] =
+  const [dayQ, j1Q, j7Q, monthQ, hourQ, maxDayRecords, topProduitsRaw, totalKgMois, monthBenefitTotals, dayBenefitTotals] =
     await Promise.all([
     dayQb,
     j1Qb,
@@ -293,6 +290,7 @@ export async function fetchCaDashboardFromSupabase(
     buildTopProduitsForDate(supabase, date, magIn),
     fetchTotalKgQtyForDateRange(supabase, monthBounds.from, monthBounds.to, magIn),
     fetchBenefitTotalsForDateRange(supabase, monthBounds.from, monthBounds.to, magIn),
+    fetchBenefitTotalsForDateRange(supabase, date, date, magIn),
   ]);
 
   const firstErr = dayQ.error || j1Q.error || j7Q.error || monthQ.error || hourQ.error;
@@ -391,12 +389,20 @@ export async function fetchCaDashboardFromSupabase(
 
   const totalKgJour = topProduits.available ? sumKgQtyFromTopProduitLines(topProduits.lines) : 0;
 
-  let totalBenefitJour: number | undefined;
-  let caWithMarginJour: number | undefined;
+  // Totaux bénéfice : même agrégat que le mois et l'historique (`fetchBenefitTotalsForDateRange`).
+  // Les lignes TOP restent enrichies pour l'affichage, mais ne servent plus au total carte.
+  const totalBenefitJour =
+    typeof dayBenefitTotals === "object" && "benefit" in dayBenefitTotals
+      ? dayBenefitTotals.benefit
+      : undefined;
+  const caWithMarginJour =
+    typeof dayBenefitTotals === "object" && "caWithMargin" in dayBenefitTotals
+      ? dayBenefitTotals.caWithMargin
+      : undefined;
+
   if (topProduits.available && topProduits.lines.length > 0) {
     const enriched = await enrichCaTopProduitLines(supabase, topProduits.lines, date);
     if (!("error" in enriched)) {
-      const deduped = dedupeProductLinesByMagasin(enriched);
       topProduits = {
         ...topProduits,
         lines: enriched,
@@ -407,8 +413,6 @@ export async function fetchCaDashboardFromSupabase(
           filterTopProduitLines(enriched, "all", "all"),
         ).byQty,
       };
-      totalBenefitJour = sumBenefitFromLines(deduped);
-      caWithMarginJour = sumCaFromLinesWithKnownBenefit(deduped);
     }
   }
 

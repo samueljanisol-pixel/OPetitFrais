@@ -47,7 +47,7 @@ Le bouton **Analyser** déclenche le chargement (pas de requête à chaque chang
 - Après migration : relancer `npm run sync:day -- <date>` ou `sync:all` sur les jours à jour pour peupler `product_id` sur les nouvelles syncs.
 - **Filtre magasin** : nécessite des données ventilées par magasin (`M1`, `M2`, …). Relancer la sync FTP des jours concernés si seules des lignes `__all__` existent.
 - **Graphique vs historique** : les totaux filtres proviennent des ventes produit (`ca_product_day`), pas de `ca_day` ; un écart avec l’historique CA global reste possible.
-- **Bénéfice** : `qty × marge` à la date, sans double comptage magasin. Marge prise en compte seulement si renseignée explicitement (marge produit, marge rétroactive, ou ≠ formule auto vente − coûts).
+- **Bénéfice** : `qty × marge` à la date (`qty > 0` uniquement), sans double comptage magasin. Marge prise en compte seulement si renseignée explicitement. Sans filtres catégorie/fournisseur/produit : aligné sur `/ca` et `/historique-ca` (même formule ; l’UUID `product_id` est conservé même hors index catalogue).
 
 ## Composants
 

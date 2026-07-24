@@ -42,6 +42,6 @@ En ouvrant le mois, chaque jour affiche le CA, le bénéfice estimé du jour, le
 
 - Source : Supabase (`fetchHistoriqueFromSupabase`), avec sync FTP automatique au premier chargement si stale.
 - CA / paniers : table `ca_day`.
-- Bénéfice estimé : table `ca_product_day` + historique de marges explicites (`fetchBenefitByDayMagasinForDateRange`) — produits sans marge renseignée exclus.
+- Bénéfice estimé : table `ca_product_day` + historique de marges explicites (`fetchBenefitByDayMagasinForDateRange`) — mêmes règles que `/ca` (jour et mois) ; produits sans marge renseignée ou `qty ≤ 0` exclus ; résolution produit alignée sur le catalogue (id / code article).
 - Borne basse : `2025-05-13` (`HISTORIQUE_FROM_ISO`).
 - Périmètre magasin restreint (`session.magasinsRestricted`) : CA et bénéfice limités aux magasins assignés au profil.

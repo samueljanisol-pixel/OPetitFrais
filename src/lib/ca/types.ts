@@ -49,7 +49,7 @@ export type CaResponse = {
     totalGlobal: number
     /** Somme des quantités vendues (UdV Kg) sur le mois calendaire. */
     totalKg?: number
-    /** Bénéfice estimé sur le mois calendaire (même règles que totalBenefitJour). */
+    /** Bénéfice estimé sur le mois calendaire (même agrégat `fetchBenefitTotalsForDateRange` que le jour / l’historique). */
     totalBenefit?: number
     /** CA du mois sur les produits avec marge connue (même périmètre que totalBenefit). */
     caWithMargin?: number

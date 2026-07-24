@@ -54,7 +54,8 @@ function lineFromCatalog(
   }
   return {
     name: article,
-    productId: null,
+    // Conserver l'UUID DB même hors index catalogue (sinon le bénéfice disparaît).
+    productId,
     categoryId: null,
     categoryLabel: null,
     supplierId: null,

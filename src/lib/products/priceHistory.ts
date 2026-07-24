@@ -179,7 +179,7 @@ export function marginAtDateForBenefit(
 
 export function computeBenefit(qty: number, margin: number | null): number | null {
   if (margin == null || !Number.isFinite(margin)) return null
-  if (!Number.isFinite(qty)) return null
+  if (!Number.isFinite(qty) || qty <= 0) return null
   return qty * margin
 }
 
