@@ -7,6 +7,7 @@ import { fetchTotalKgQtyForDateRange, monthDateBounds, sumKgQtyFromTopProduitLin
 import {
   dedupeProductLinesByMagasin,
   enrichCaTopProduitLines,
+  fetchBenefitByDayMagasinForDateRange,
   fetchBenefitTotalsForDateRange,
   sumBenefitFromLines,
   sumCaFromLinesWithKnownBenefit,
@@ -461,32 +462,77 @@ export async function fetchHistoriqueFromSupabase(
   opts?: { magasinCodes?: string[] },
 ): Promise<{ data: HistoriquePayload } | { error: string }> {
   const codes = opts?.magasinCodes;
+  const magIn = codes === undefined ? undefined : codes.length === 0 ? ["__none__"] : codes;
   let hq = supabase.from("ca_day").select("date,magasin,total,nb_paniers").gte("date", from).lte("date", to);
   if (codes !== undefined) {
     hq = codes.length === 0 ? hq.in("magasin", ["__none__"]) : hq.in("magasin", codes);
   }
-  const { data: rows, error } = await hq.order("date", { ascending: true });
+  const [dayRes, benefitBreakdown] = await Promise.all([
+    hq.order("date", { ascending: true }),
+    fetchBenefitByDayMagasinForDateRange(supabase, from, to, magIn),
+  ]);
 
-  if (error) return { error: error.message };
+  if (dayRes.error) return { error: dayRes.error.message };
+  if ("error" in benefitBreakdown) return { error: benefitBreakdown.error };
 
   const byDate = new Map<
     string,
-    { totalGlobal: number; nbPaniersGlobal: number; magasins: Record<string, number>; magasinsNbPaniers: Record<string, number> }
+    {
+      totalGlobal: number
+      nbPaniersGlobal: number
+      magasins: Record<string, number>
+      magasinsNbPaniers: Record<string, number>
+      totalBenefit: number
+      caWithMargin: number
+      magasinsBenefit: Record<string, number>
+      magasinsCaWithMargin: Record<string, number>
+    }
   >();
-  for (const r of rows ?? []) {
+  for (const r of dayRes.data ?? []) {
     const d = normalizeDateCell(r.date);
     const t = typeof r.total === "number" ? r.total : Number(r.total);
     if (!Number.isFinite(t)) continue;
     const nbRaw = typeof r.nb_paniers === "number" ? r.nb_paniers : Number(r.nb_paniers);
     const nb = Number.isFinite(nbRaw) ? nbRaw : 0;
     if (!byDate.has(d)) {
-      byDate.set(d, { totalGlobal: 0, nbPaniersGlobal: 0, magasins: {}, magasinsNbPaniers: {} });
+      byDate.set(d, {
+        totalGlobal: 0,
+        nbPaniersGlobal: 0,
+        magasins: {},
+        magasinsNbPaniers: {},
+        totalBenefit: 0,
+        caWithMargin: 0,
+        magasinsBenefit: {},
+        magasinsCaWithMargin: {},
+      });
     }
     const entry = byDate.get(d)!;
     entry.totalGlobal += t;
     entry.nbPaniersGlobal += nb;
     entry.magasins[r.magasin] = (entry.magasins[r.magasin] ?? 0) + t;
     entry.magasinsNbPaniers[r.magasin] = (entry.magasinsNbPaniers[r.magasin] ?? 0) + nb;
+  }
+
+  for (const [date, dayBenefit] of benefitBreakdown) {
+    if (!byDate.has(date)) {
+      byDate.set(date, {
+        totalGlobal: 0,
+        nbPaniersGlobal: 0,
+        magasins: {},
+        magasinsNbPaniers: {},
+        totalBenefit: 0,
+        caWithMargin: 0,
+        magasinsBenefit: {},
+        magasinsCaWithMargin: {},
+      });
+    }
+    const entry = byDate.get(date)!;
+    entry.totalBenefit = dayBenefit.benefit;
+    entry.caWithMargin = dayBenefit.caWithMargin;
+    for (const [mag, magTotals] of Object.entries(dayBenefit.byMag)) {
+      entry.magasinsBenefit[mag] = magTotals.benefit;
+      entry.magasinsCaWithMargin[mag] = magTotals.caWithMargin;
+    }
   }
 
   const days: HistoriqueDayRow[] = Array.from(byDate.entries())
@@ -497,6 +543,10 @@ export async function fetchHistoriqueFromSupabase(
       nbPaniersGlobal: v.nbPaniersGlobal,
       magasins: v.magasins,
       magasinsNbPaniers: v.magasinsNbPaniers,
+      totalBenefit: v.totalBenefit,
+      caWithMargin: v.caWithMargin,
+      magasinsBenefit: v.magasinsBenefit,
+      magasinsCaWithMargin: v.magasinsCaWithMargin,
     }));
 
   const payload: HistoriquePayload = { from, to, days };

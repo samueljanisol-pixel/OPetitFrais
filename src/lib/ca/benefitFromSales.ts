@@ -22,27 +22,62 @@ export type BenefitTotals = {
   caWithMargin: number
 }
 
+export type BenefitDayMagTotals = {
+  benefit: number
+  caWithMargin: number
+  byMag: Record<string, BenefitTotals>
+}
+
+export type BenefitByDayMagasin = Map<string, BenefitDayMagTotals>
+
 function normalizeDateCell(v: unknown): string {
   if (typeof v === 'string') return v.slice(0, 10)
   if (v instanceof Date) return v.toISOString().slice(0, 10)
   return String(v).slice(0, 10)
 }
 
+function emptyBenefitTotals(): BenefitTotals {
+  return { benefit: 0, caWithMargin: 0 }
+}
+
+function addBenefitLine(acc: BenefitTotals, lineBenefit: number, lineCa: number) {
+  if (lineCa > 0) acc.caWithMargin += lineCa
+  if (Number.isFinite(lineBenefit)) acc.benefit += lineBenefit
+}
+
 function sumBenefitAndCaFromProductDayRows(
   rows: CaProductBenefitRow[],
   history: MarginHistoryIndex,
 ): BenefitTotals {
+  const breakdown = sumBenefitByDayMagasinFromProductDayRows(rows, history)
+  let benefit = 0
+  let caWithMargin = 0
+  for (const day of breakdown.values()) {
+    benefit += day.benefit
+    caWithMargin += day.caWithMargin
+  }
+  return { benefit, caWithMargin }
+}
+
+function sumBenefitByDayMagasinFromProductDayRows(
+  rows: CaProductBenefitRow[],
+  history: MarginHistoryIndex,
+): BenefitByDayMagasin {
   const byDate = new Map<string, CaProductBenefitRow[]>()
   for (const row of rows) {
     if (!byDate.has(row.date)) byDate.set(row.date, [])
     byDate.get(row.date)!.push(row)
   }
 
-  let benefit = 0
-  let caWithMargin = 0
-  for (const dayRows of byDate.values()) {
+  const out: BenefitByDayMagasin = new Map()
+  for (const [date, dayRows] of byDate) {
     const hasPerMag = dayRows.some(r => r.magasin !== '__all__')
     const source = hasPerMag ? dayRows.filter(r => r.magasin !== '__all__') : dayRows
+    const dayTotals: BenefitDayMagTotals = {
+      benefit: 0,
+      caWithMargin: 0,
+      byMag: {},
+    }
     for (const r of source) {
       const productId = r.product_id
       if (!productId) continue
@@ -51,21 +86,24 @@ function sumBenefitAndCaFromProductDayRows(
       const margin = marginAtDateForBenefit(history.get(productId), r.date)
       if (margin == null || !Number.isFinite(margin)) continue
       const lineCa = Number.isFinite(r.total) ? r.total : 0
-      if (lineCa > 0) caWithMargin += lineCa
       const lineBenefit = computeBenefit(qty, margin)
-      if (lineBenefit != null && Number.isFinite(lineBenefit)) benefit += lineBenefit
+      if (lineBenefit == null || !Number.isFinite(lineBenefit)) continue
+      addBenefitLine(dayTotals, lineBenefit, lineCa)
+      const mag = r.magasin || '__all__'
+      if (!dayTotals.byMag[mag]) dayTotals.byMag[mag] = emptyBenefitTotals()
+      addBenefitLine(dayTotals.byMag[mag], lineBenefit, lineCa)
     }
+    out.set(date, dayTotals)
   }
-  return { benefit, caWithMargin }
+  return out
 }
 
-/** Bénéfice + CA (produits avec marge) sur une plage de dates (`ca_product_day`). */
-export async function fetchBenefitTotalsForDateRange(
+async function fetchCaProductBenefitRows(
   supabase: SupabaseClient,
   from: string,
   to: string,
   magIn?: string[],
-): Promise<BenefitTotals | { error: string }> {
+): Promise<CaProductBenefitRow[] | { error: string }> {
   const PAGE = 1000
   const allRows: CaProductBenefitRow[] = []
   let offset = 0
@@ -99,6 +137,19 @@ export async function fetchBenefitTotalsForDateRange(
     if (offset > 500_000) return { error: 'Trop de lignes produit sur cette période.' }
   }
 
+  return allRows
+}
+
+/** Bénéfice + CA (produits avec marge) sur une plage de dates (`ca_product_day`). */
+export async function fetchBenefitTotalsForDateRange(
+  supabase: SupabaseClient,
+  from: string,
+  to: string,
+  magIn?: string[],
+): Promise<BenefitTotals | { error: string }> {
+  const allRows = await fetchCaProductBenefitRows(supabase, from, to, magIn)
+  if ('error' in allRows) return allRows
+
   const productIds = allRows
     .map(r => r.product_id)
     .filter((id): id is string => id != null && id.length > 0)
@@ -106,6 +157,28 @@ export async function fetchBenefitTotalsForDateRange(
   if ('error' in ctx) return ctx
 
   return sumBenefitAndCaFromProductDayRows(allRows, ctx.history)
+}
+
+/**
+ * Bénéfice + CA avec marge, ventilés par jour et par magasin (`ca_product_day`).
+ * Même règles que `fetchBenefitTotalsForDateRange` (marge explicite uniquement).
+ */
+export async function fetchBenefitByDayMagasinForDateRange(
+  supabase: SupabaseClient,
+  from: string,
+  to: string,
+  magIn?: string[],
+): Promise<BenefitByDayMagasin | { error: string }> {
+  const allRows = await fetchCaProductBenefitRows(supabase, from, to, magIn)
+  if ('error' in allRows) return allRows
+
+  const productIds = allRows
+    .map(r => r.product_id)
+    .filter((id): id is string => id != null && id.length > 0)
+  const ctx = await loadBenefitContext(supabase, productIds)
+  if ('error' in ctx) return ctx
+
+  return sumBenefitByDayMagasinFromProductDayRows(allRows, ctx.history)
 }
 
 /** Bénéfice total sur une plage de dates (`ca_product_day`). */

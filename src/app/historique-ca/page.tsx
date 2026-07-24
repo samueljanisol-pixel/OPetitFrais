@@ -81,6 +81,12 @@ export default function HistoriqueCA() {
     }
   }, [])
 
+  const benefitPctOfCa = (benefit: number, ca: unknown) => {
+    const n = typeof ca === 'number' ? ca : Number(ca)
+    if (!Number.isFinite(benefit) || !Number.isFinite(n) || n <= 0) return null
+    return (benefit / n) * 100
+  }
+
   useEffect(() => {
     if (sessionLoading) return
     let cancelled = false
@@ -96,7 +102,7 @@ export default function HistoriqueCA() {
         }
         if (cancelled) return
 
-        setLoadHint('Chargement…')
+        setLoadHint('Chargement CA et bénéfice estimé…')
         const supabase = createSupabaseBrowserClient()
         const caOpts =
           session?.magasinsRestricted
@@ -134,8 +140,17 @@ export default function HistoriqueCA() {
       (acc, d) => acc + (Number.isFinite(d.nbPaniersGlobal) ? d.nbPaniersGlobal : 0),
       0,
     )
+    const totalBenefit = days.reduce(
+      (acc, d) => acc + (Number.isFinite(d.totalBenefit) ? d.totalBenefit : 0),
+      0,
+    )
+    const totalCaWithMargin = days.reduce(
+      (acc, d) => acc + (Number.isFinite(d.caWithMargin) ? d.caWithMargin : 0),
+      0,
+    )
     const avgPerDay = days.length ? totalGlobal / days.length : 0
     const avgPaniersPerDay = days.length ? totalPaniers / days.length : 0
+    const avgBenefitPerDay = days.length ? totalBenefit / days.length : 0
 
     const months = new Map<
       string,
@@ -144,10 +159,15 @@ export default function HistoriqueCA() {
         days: DayRow[]
         total: number
         totalPaniers: number
+        totalBenefit: number
+        caWithMargin: number
         avg: number
         avgPaniers: number
+        avgBenefit: number
         caByMag: Record<string, number>
         paniersByMag: Record<string, number>
+        benefitByMag: Record<string, number>
+        caWithMarginByMag: Record<string, number>
         maxDay?: string
         minDay?: string
       }
@@ -161,16 +181,23 @@ export default function HistoriqueCA() {
           days: [],
           total: 0,
           totalPaniers: 0,
+          totalBenefit: 0,
+          caWithMargin: 0,
           avg: 0,
           avgPaniers: 0,
+          avgBenefit: 0,
           caByMag: {},
           paniersByMag: {},
+          benefitByMag: {},
+          caWithMarginByMag: {},
         })
       }
       const m = months.get(ym)!
       m.days.push(d)
       m.total += d.totalGlobal
       m.totalPaniers += Number.isFinite(d.nbPaniersGlobal) ? d.nbPaniersGlobal : 0
+      m.totalBenefit += Number.isFinite(d.totalBenefit) ? d.totalBenefit : 0
+      m.caWithMargin += Number.isFinite(d.caWithMargin) ? d.caWithMargin : 0
       for (const [mag, rawCa] of Object.entries(d.magasins)) {
         const ca = typeof rawCa === 'number' ? rawCa : Number(rawCa)
         if (!Number.isFinite(ca)) continue
@@ -181,12 +208,23 @@ export default function HistoriqueCA() {
         if (!Number.isFinite(nb)) continue
         m.paniersByMag[mag] = (m.paniersByMag[mag] ?? 0) + nb
       }
+      for (const [mag, rawBen] of Object.entries(d.magasinsBenefit ?? {})) {
+        const ben = typeof rawBen === 'number' ? rawBen : Number(rawBen)
+        if (!Number.isFinite(ben)) continue
+        m.benefitByMag[mag] = (m.benefitByMag[mag] ?? 0) + ben
+      }
+      for (const [mag, rawCaM] of Object.entries(d.magasinsCaWithMargin ?? {})) {
+        const caM = typeof rawCaM === 'number' ? rawCaM : Number(rawCaM)
+        if (!Number.isFinite(caM)) continue
+        m.caWithMarginByMag[mag] = (m.caWithMarginByMag[mag] ?? 0) + caM
+      }
     }
 
     for (const m of months.values()) {
       m.days.sort((a, b) => a.date.localeCompare(b.date))
       m.avg = m.days.length ? m.total / m.days.length : 0
       m.avgPaniers = m.days.length ? m.totalPaniers / m.days.length : 0
+      m.avgBenefit = m.days.length ? m.totalBenefit / m.days.length : 0
       if (m.days.length) {
         let max = m.days[0]
         let min = m.days[0]
@@ -203,6 +241,7 @@ export default function HistoriqueCA() {
     const monthCount = monthList.length
     const avgPerMonth = monthCount > 0 ? totalGlobal / monthCount : 0
     const avgPaniersPerMonth = monthCount > 0 ? totalPaniers / monthCount : 0
+    const avgBenefitPerMonth = monthCount > 0 ? totalBenefit / monthCount : 0
 
     const sortedDates = [...days].sort((a, b) => a.date.localeCompare(b.date))
     const from = sortedDates[0]?.date ?? null
@@ -235,10 +274,14 @@ export default function HistoriqueCA() {
       days,
       totalGlobal,
       totalPaniers,
+      totalBenefit,
+      totalCaWithMargin,
       avgPerDay,
       avgPaniersPerDay,
+      avgBenefitPerDay,
       avgPerMonth,
       avgPaniersPerMonth,
+      avgBenefitPerMonth,
       monthList,
       recordDay,
       recordDaysByMagasin,
@@ -449,6 +492,45 @@ export default function HistoriqueCA() {
                 {computed.monthList.length} mois avec données
               </div>
             </div>
+            <div className="min-w-0 rounded-2xl border border-teal-200 bg-teal-50/70 px-3 py-4 shadow-sm backdrop-blur sm:px-5">
+              <div className="text-[10px] font-medium uppercase tracking-wide text-teal-800/80 sm:text-xs">
+                Bénéfice estimé
+              </div>
+              <div className="mt-1 break-words text-lg font-semibold text-slate-900 sm:text-2xl">
+                {formatMAD(computed.totalBenefit)}
+              </div>
+              {(() => {
+                const pctTotal = benefitPctOfCa(computed.totalBenefit, computed.totalGlobal)
+                const pctScoped = benefitPctOfCa(computed.totalBenefit, computed.totalCaWithMargin)
+                if (pctTotal == null && pctScoped == null) return null
+                return (
+                  <div className="mt-1 text-[10px] leading-tight text-teal-900/80 sm:text-[11px]">
+                    {pctTotal != null ? `${formatPct(pctTotal)} du CA` : null}
+                    {pctTotal != null && pctScoped != null ? ' · ' : null}
+                    {pctScoped != null ? `${formatPct(pctScoped)} du CA avec marge` : null}
+                  </div>
+                )
+              })()}
+            </div>
+            <div className="min-w-0 rounded-2xl border border-teal-200 bg-white/80 px-3 py-4 shadow-sm backdrop-blur sm:px-5">
+              <div className="text-[10px] font-medium uppercase tracking-wide text-teal-700/80 sm:text-xs">
+                Moy. bénéfice / jour
+              </div>
+              <div className="mt-1 break-words text-lg font-semibold text-slate-900 sm:text-2xl">
+                {formatMAD(computed.avgBenefitPerDay)}
+              </div>
+            </div>
+            <div className="min-w-0 rounded-2xl border border-teal-200 bg-white/80 px-3 py-4 shadow-sm backdrop-blur sm:px-5">
+              <div className="text-[10px] font-medium uppercase tracking-wide text-teal-700/80 sm:text-xs">
+                Moy. bénéfice / mois
+              </div>
+              <div className="mt-1 break-words text-lg font-semibold text-slate-900 sm:text-2xl">
+                {formatMAD(computed.avgBenefitPerMonth)}
+              </div>
+              <div className="mt-1 text-[10px] leading-tight text-slate-500 sm:text-[11px]">
+                produits avec marge renseignée uniquement
+              </div>
+            </div>
           </div>
 
           {computed.recordDaysByMagasin.length > 0 ? (
@@ -496,7 +578,7 @@ export default function HistoriqueCA() {
                     <div className="mt-1 text-sm text-slate-600">{m.days.length} jour(s)</div>
                   </div>
                   <div className="flex w-full min-w-0 flex-col gap-2 sm:max-w-2xl">
-                    <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+                    <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
                       <div className="rounded-xl bg-emerald-600 px-4 py-2 text-white shadow-sm">
                         <div className="text-[11px] font-medium uppercase tracking-wide text-white/80">Total mois</div>
                         <div className="text-lg font-semibold">{formatMAD(m.total)}</div>
@@ -506,6 +588,30 @@ export default function HistoriqueCA() {
                           Moyenne / jour
                         </div>
                         <div className="text-lg font-semibold text-slate-900">{formatMAD(m.avg)}</div>
+                      </div>
+                      <div className="rounded-xl border border-teal-200 bg-teal-50/80 px-4 py-2 shadow-sm">
+                        <div className="text-[11px] font-medium uppercase tracking-wide text-teal-800/80">
+                          Bénéfice estimé
+                        </div>
+                        <div className="text-lg font-semibold text-slate-900">{formatMAD(m.totalBenefit)}</div>
+                        {(() => {
+                          const pctTotal = benefitPctOfCa(m.totalBenefit, m.total)
+                          const pctScoped = benefitPctOfCa(m.totalBenefit, m.caWithMargin)
+                          if (pctTotal == null && pctScoped == null) {
+                            return (
+                              <div className="mt-0.5 text-[10px] text-teal-800/70">
+                                produits avec marge uniquement
+                              </div>
+                            )
+                          }
+                          return (
+                            <div className="mt-0.5 text-[10px] leading-tight text-teal-900/80">
+                              {pctTotal != null ? `${formatPct(pctTotal)} du CA` : null}
+                              {pctTotal != null && pctScoped != null ? ' · ' : null}
+                              {pctScoped != null ? `${formatPct(pctScoped)} marge` : null}
+                            </div>
+                          )
+                        })()}
                       </div>
                       <div className="rounded-xl border border-violet-200 bg-violet-50/80 px-4 py-2 shadow-sm">
                         <div className="text-[11px] font-medium uppercase tracking-wide text-violet-800/80">
@@ -531,6 +637,11 @@ export default function HistoriqueCA() {
                             .map(([mag, totalCa]) => {
                               const avgMag = m.days.length ? totalCa / m.days.length : 0
                               const pctCa = m.total > 0 ? (totalCa / m.total) * 100 : null
+                              const magBenefit = m.benefitByMag[mag] ?? 0
+                              const magCaWithMargin = m.caWithMarginByMag[mag] ?? 0
+                              const avgBenefit = m.days.length ? magBenefit / m.days.length : 0
+                              const pctBenTotal = benefitPctOfCa(magBenefit, totalCa)
+                              const pctBenScoped = benefitPctOfCa(magBenefit, magCaWithMargin)
                               return (
                                 <div
                                   key={`${m.ym}-ca-${mag}`}
@@ -550,6 +661,24 @@ export default function HistoriqueCA() {
                                   </div>
                                   <div className="truncate text-[10px] text-slate-600">
                                     {formatMAD(avgMag)} <span className="text-slate-500">moy./jour</span>
+                                  </div>
+                                  <div className="mt-1 border-t border-slate-200/80 pt-1">
+                                    <div className="truncate text-[9px] font-medium uppercase tracking-wide text-teal-800/80">
+                                      Bénéfice estimé
+                                    </div>
+                                    <div className="mt-0.5 truncate text-xs font-semibold text-teal-950">
+                                      {formatMAD(magBenefit)}
+                                    </div>
+                                    {pctBenTotal != null || pctBenScoped != null ? (
+                                      <div className="truncate text-[10px] text-teal-900/80">
+                                        {pctBenTotal != null ? `${formatPct(pctBenTotal)} du CA` : null}
+                                        {pctBenTotal != null && pctBenScoped != null ? ' · ' : null}
+                                        {pctBenScoped != null ? `${formatPct(pctBenScoped)} marge` : null}
+                                      </div>
+                                    ) : null}
+                                    <div className="truncate text-[10px] text-teal-800/80">
+                                      {formatMAD(avgBenefit)} <span className="text-teal-700/70">moy./jour</span>
+                                    </div>
                                   </div>
                                 </div>
                               )
@@ -600,9 +729,11 @@ export default function HistoriqueCA() {
                   const magKeys = new Set([
                     ...Object.keys(d.magasins),
                     ...Object.keys(d.magasinsNbPaniers),
+                    ...Object.keys(d.magasinsBenefit ?? {}),
                   ])
                   const magasinsSorted = [...magKeys].sort((a, b) => a.localeCompare(b))
                   const dayNbPaniers = Number.isFinite(d.nbPaniersGlobal) ? d.nbPaniersGlobal : 0
+                  const dayBenefit = Number.isFinite(d.totalBenefit) ? d.totalBenefit : 0
                   return (
                     <div key={d.date} className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
                       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
@@ -612,6 +743,19 @@ export default function HistoriqueCA() {
                         </div>
                         <div className="flex flex-col items-start gap-0.5 sm:items-end">
                           <div className={`text-lg font-semibold ${amountClass}`}>{formatMAD(d.totalGlobal)}</div>
+                          {dayBenefit > 0 ? (
+                            <div className="text-sm font-medium text-teal-800">
+                              Bénéfice : {formatMAD(dayBenefit)}
+                              {(() => {
+                                const pct = benefitPctOfCa(dayBenefit, d.totalGlobal)
+                                return pct != null ? (
+                                  <span className="ml-1 text-xs font-normal text-teal-700/80">
+                                    ({formatPct(pct)} du CA)
+                                  </span>
+                                ) : null
+                              })()}
+                            </div>
+                          ) : null}
                           {dayNbPaniers > 0 ? (
                             <div className="text-sm font-medium text-violet-800">
                               {formatCount(dayNbPaniers)} panier{dayNbPaniers > 1 ? 's' : ''}
@@ -626,9 +770,13 @@ export default function HistoriqueCA() {
                           const rawNb = d.magasinsNbPaniers[mag]
                           const nb =
                             typeof rawNb === 'number' ? rawNb : rawNb != null ? Number(rawNb) : undefined
+                          const rawBen = d.magasinsBenefit?.[mag]
+                          const ben =
+                            typeof rawBen === 'number' ? rawBen : rawBen != null ? Number(rawBen) : undefined
                           const hasCa = ca != null && Number.isFinite(ca)
                           const hasNb = nb != null && Number.isFinite(nb) && nb > 0
-                          if (!hasCa && !hasNb) return null
+                          const hasBen = ben != null && Number.isFinite(ben) && ben > 0
+                          if (!hasCa && !hasNb && !hasBen) return null
                           return (
                             <div
                               key={`${d.date}-${mag}`}
@@ -639,6 +787,21 @@ export default function HistoriqueCA() {
                               </div>
                               {hasCa ? (
                                 <div className="mt-0.5 text-sm font-semibold text-slate-900">{formatMAD(ca)}</div>
+                              ) : null}
+                              {hasBen ? (
+                                <div className="mt-0.5 text-xs font-medium text-teal-800">
+                                  Bénéfice : {formatMAD(ben)}
+                                  {hasCa
+                                    ? (() => {
+                                        const pct = benefitPctOfCa(ben, ca)
+                                        return pct != null ? (
+                                          <span className="ml-1 font-normal text-teal-700/80">
+                                            ({formatPct(pct)})
+                                          </span>
+                                        ) : null
+                                      })()
+                                    : null}
+                                </div>
                               ) : null}
                               {hasNb ? (
                                 <div className="mt-0.5 text-xs font-medium text-violet-800">

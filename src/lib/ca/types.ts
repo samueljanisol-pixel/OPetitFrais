@@ -72,6 +72,14 @@ export type HistoriqueDayRow = {
   nbPaniersGlobal: number
   magasins: Record<string, number>
   magasinsNbPaniers: Record<string, number>
+  /** Bénéfice estimé du jour (qté × marge ; produits sans marge exclus). */
+  totalBenefit: number
+  /** CA du jour sur les produits avec marge connue (même périmètre que totalBenefit). */
+  caWithMargin: number
+  /** Bénéfice estimé par code magasin. */
+  magasinsBenefit: Record<string, number>
+  /** CA avec marge connue par code magasin (même périmètre que magasinsBenefit). */
+  magasinsCaWithMargin: Record<string, number>
 }
 
 export type HistoriquePayload =
