@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { isTaskDue } from './schedule'
 import { executeAutomatedTask, type ExecuteTaskOutcome } from './executeTask'
+import { reconcileStaleTaskRuns } from './staleRuns'
 import type { AutomatedTaskRow } from './types'
 
 export type TickDueTasksResult = {
@@ -12,6 +13,8 @@ export type TickDueTasksResult = {
 
 export async function tickDueTasks(supabase: SupabaseClient): Promise<TickDueTasksResult> {
   const now = new Date()
+  await reconcileStaleTaskRuns(supabase)
+
   const { data, error } = await supabase
     .from('automated_tasks')
     .select('*')

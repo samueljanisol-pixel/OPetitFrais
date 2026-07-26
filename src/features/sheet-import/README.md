@@ -6,6 +6,16 @@
 
 Le proxy `/api/transition/sheet-json` utilise un timeout de 60 s (Apps Script peut être lent au cold start) et réessaie une fois en cas d’échec réseau.
 
+## Export JSON BDD (équivalent Sheet)
+
+`GET /api/transition/sheet-json-export` — mêmes données produit que l’export Sheet, clés :
+
+`code`, `Actif`, `Nom`, `Prix`, `PrixAchat` (`product.cost_purchase`), `Fournisseur`, `Catégorie`, `SousCatégorie`, `Arabe`, `UdV`.
+
+- **Sans connexion** : `GET /api/transition/sheet-json-export?token=…` — même token dans `SHEET_JSON_EXPORT_TOKEN` et `NEXT_PUBLIC_SHEET_JSON_EXPORT_TOKEN` (bouton **Export JSON (BDD)**).
+- **Date dernière modif** (équivalent Google `?format=date`) : `GET /api/transition/sheet-json-export?format=date&token=…` → `{ "lastModified": "YYYYMMDDHHmmss" }` (`max(product.updated_at)`, fuseau Africa/Casablanca).
+- Session `produits.read` : chemin sans token (secours).
+
 ## Import planifié (tâche automatisée)
 
 L’import headless est disponible via la tâche **`sheet_import`** (Paramètres → **Tâches automatisées**, administrateur).

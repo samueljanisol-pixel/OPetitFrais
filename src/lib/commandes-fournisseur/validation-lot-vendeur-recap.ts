@@ -351,6 +351,58 @@ export function buildVendeurRecapGroups(
   return groups;
 }
 
+export type LotExportSection = {
+  label: string;
+  rows: VendeurRecapRow[];
+};
+
+/** Sections export PNG — regroupement par catégorie produit. */
+export function buildCategoryExportSections(
+  lignes: RecapLigneInput[],
+  magasinColumns: MagasinMxColumn[],
+  noCategoryLabel: string,
+): LotExportSection[] {
+  const sorted = sortRecapLignesByCategory(lignes);
+  const sections: LotExportSection[] = [];
+  let currentLabel: string | null = null;
+  let bucket: RecapLigneInput[] = [];
+
+  const flush = () => {
+    if (currentLabel != null && bucket.length > 0) {
+      sections.push({
+        label: currentLabel,
+        rows: buildRecapRows(bucket, magasinColumns),
+      });
+    }
+  };
+
+  for (const l of sorted) {
+    const catKey = (l.categoryLabel ?? "").trim() || noCategoryLabel;
+    if (catKey !== currentLabel) {
+      flush();
+      currentLabel = catKey;
+      bucket = [l];
+    } else {
+      bucket.push(l);
+    }
+  }
+  flush();
+  return sections;
+}
+
+/** Sections export PNG — regroupement par vendeur. */
+export function buildVendeurExportSections(
+  lignes: RecapLigneInput[],
+  vendeurs: VendeurRef[],
+  magasinColumns: MagasinMxColumn[],
+  supplierLabel?: string,
+): LotExportSection[] {
+  return buildVendeurRecapGroups(lignes, vendeurs, magasinColumns, supplierLabel).map((g) => ({
+    label: g.vendeurLabel,
+    rows: g.rows,
+  }));
+}
+
 export function formatRecapQtyCell(n: number): string {
   if (!Number.isFinite(n) || n <= 0) {
     return "";

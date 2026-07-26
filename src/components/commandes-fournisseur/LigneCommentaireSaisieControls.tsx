@@ -5,7 +5,6 @@ import { useTranslations } from "next-intl";
 import {
   Box,
   Button,
-  Dialog,
   DialogActions,
   DialogContent,
   DialogTitle,
@@ -16,6 +15,7 @@ import {
   Typography,
 } from "@mui/material";
 import CommentOutlinedIcon from "@mui/icons-material/CommentOutlined";
+import FormDialog from "@/lib/mui/FormDialog";
 import LigneSaisieComments from "@/components/commandes-fournisseur/LigneSaisieComments";
 import type { SaisieLigneTarget } from "@/lib/commandes-fournisseur/ligne-saisie-comments";
 
@@ -236,7 +236,7 @@ export default function LigneCommentaireSaisieControls({
     <>
       {controlsUi}
 
-      <Dialog open={dialogOpen} onClose={closeDialog} fullWidth maxWidth="sm">
+      <FormDialog open={dialogOpen} onClose={closeDialog} fullWidth maxWidth="sm">
         <DialogTitle sx={{ pb: 0.5 }}>
           {draft.trim().length > 0 || activeTarget?.lineComment
             ? t("dialogTitleEdit")
@@ -324,7 +324,7 @@ export default function LigneCommentaireSaisieControls({
             </Button>
           </div>
         </DialogActions>
-      </Dialog>
+      </FormDialog>
     </>
   );
 }

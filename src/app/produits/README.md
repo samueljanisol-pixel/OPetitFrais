@@ -2,8 +2,13 @@
 
 ## Liste (`ProduitsListClient`)
 
+- Colonne **Actif** : switch par ligne (permission `produits.write`) qui met à jour `product.active` immédiatement. Avec le filtre « Actifs », une désactivation retire la ligne de la liste.
+- Filtre **Actif** : par défaut **Tous** (actifs et inactifs).
+- Tri par défaut : **Nom** croissant.
 - Filtre **Recherche (nom)** : insensible à la casse et aux accents (ex. « peche » trouve « Pêche »). Cherche aussi dans `name_ar`.
 - **Import Google Sheet** : colonnes **Nom** / **Arabe** → `product.name` / `product.name_ar` ; **UdV** → `sales_unit_id` ; **UdC** → `order_unit_id` ; **UdA** → `purchase_unit_id` ; **Catégorie** + **SousCatégorie** ; **Marge DH Actuelle** → `product.margin` ; **Marchand** → `product.vendeur_id`. Voir `src/features/sheet-import/`.
+- **Export JSON (BDD)** : `GET /api/transition/sheet-json-export?token=…` — clés `code`, `Actif`, `Nom`, `Prix`, `PrixAchat`, `Fournisseur`, `Catégorie`, `SousCatégorie`, `Arabe`, `UdV`. Token : `SHEET_JSON_EXPORT_TOKEN` + `NEXT_PUBLIC_SHEET_JSON_EXPORT_TOKEN` (pas besoin d’être connecté).
+- **Date dernière modif** : `GET /api/transition/sheet-json-export?format=date&token=…` → `{ "lastModified": "YYYYMMDDHHmmss" }` (comme le [script Google `?format=date`](https://script.google.com/macros/s/AKfycbyUwUcDK6FrQW6wzg2MBnunvElNp1MSyH_aw_yQ8E5r3a938l-tmdBmQTOuhNVZYfeS/exec?format=date)).
 - **Sous-catégories** : table `ref_subcategory` (rattachée à `ref_category`), champ optionnel `product.subcategory_id`. Fiche produit + onglet Catégories dans **Paramètres**. Migration `20260701160000_ref_subcategory.sql`.
 - **Libellés arabes** : colonnes `label_ar` sur `ref_category` et `ref_subcategory` (Paramètres → Catégories). Migration `20260702130000_ref_category_subcategory_label_ar.sql`.
 

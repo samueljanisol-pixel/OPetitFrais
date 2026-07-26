@@ -87,7 +87,12 @@ Les mêmes principes s’appliquent à **`src/app/historique-ca/page.tsx`** pour
 | Page historique, EventSource | `src/app/historique-ca/page.tsx` |
 | Scripts dev (Webpack) | `package.json` |
 | Auth / routes publiques | `middleware.ts` |
+| Dialogues de formulaire MUI | `src/lib/mui/FormDialog.tsx`, `.cursor/rules/Form-Dialog.mdc` |
+
+### Dialogues de formulaire (MUI)
+
+Toute fenêtre **avec saisie** (TextField, Select, Checkbox, etc.) utilise **`FormDialog`** — pas de fermeture au clic extérieur ni avec Échap. Confirmations destructives et affichage lecture seule gardent `Dialog` standard. Voir [`.cursor/rules/Form-Dialog.mdc`](../.cursor/rules/Form-Dialog.mdc).
 
 ---
 
-*Dernière mise à jour : notes consolidées sur le développement du tableau de bord CA, SSE et environnement local.*
+*Dernière mise à jour : notes consolidées sur le développement du tableau de bord CA, SSE, environnement local et conventions UI.*

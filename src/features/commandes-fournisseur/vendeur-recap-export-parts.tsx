@@ -5,6 +5,7 @@ import { ARABIC_FONT_FAMILY, notoSansArabic } from "@/lib/fonts/noto-sans-arabic
 import {
   formatRecapQtyCell,
   type MagasinMxColumn,
+  type LotExportSection,
   type VendeurRecapGroup,
 } from "@/lib/commandes-fournisseur/validation-lot-vendeur-recap";
 
@@ -272,7 +273,6 @@ export function VendeurRecapTable({
 
 type CaptureHeaderProps = {
   magasinHeader: string;
-  supplierOrderLine: string;
   vendeurLabel: string;
   showVendeurHeader: boolean;
   orderOnLine: string;
@@ -283,7 +283,6 @@ type CaptureHeaderProps = {
 
 export function VendeurRecapCaptureHeader({
   magasinHeader,
-  supplierOrderLine,
   vendeurLabel,
   showVendeurHeader,
   orderOnLine,
@@ -313,22 +312,6 @@ export function VendeurRecapCaptureHeader({
           {magasinHeader}
         </Typography>
       ) : null}
-      <Typography
-        variant="subtitle1"
-        dir={textDir}
-        lang={dir === "rtl" ? "ar" : undefined}
-        className={dir === "rtl" ? arabicTextClassName : undefined}
-        sx={{
-          fontWeight: 700,
-          mb: 0.5,
-          whiteSpace: "nowrap",
-          mt: magasinHeader.length > 0 ? 0.5 : 0,
-          textAlign: dir === "rtl" ? "right" : "inherit",
-          ...headerArabicSx,
-        }}
-      >
-        {supplierOrderLine}
-      </Typography>
       {showVendeurHeader ? (
         <Typography
           variant="subtitle1"
@@ -400,5 +383,51 @@ export function vendeurHeaderVisible(
   return (
     vendeurTrim.length > 0 &&
     vendeurTrim.localeCompare(supplierTrim, "fr", { sensitivity: "accent" }) !== 0
+  );
+}
+
+type LotGroupedRecapTableProps = {
+  sections: LotExportSection[];
+  magasinColumns: MagasinMxColumn[];
+  labels: TableLabels;
+  captureDir?: "rtl" | "ltr";
+  showTotalColumn?: boolean;
+};
+
+export function LotGroupedRecapTable({
+  sections,
+  magasinColumns,
+  labels,
+  captureDir = "ltr",
+  showTotalColumn = true,
+}: LotGroupedRecapTableProps) {
+  return (
+    <>
+      {sections.map((section) => (
+        <Box key={section.label} sx={{ mb: 1.5 }}>
+          <Typography
+            variant="subtitle1"
+            sx={{
+              fontWeight: 700,
+              color: "success.main",
+              bgcolor: "#e8f5e9",
+              px: 1,
+              py: 0.75,
+              mb: 0.5,
+              whiteSpace: "nowrap",
+            }}
+          >
+            {section.label}
+          </Typography>
+          <VendeurRecapTable
+            group={{ vendeurKey: section.label, vendeurLabel: section.label, rows: section.rows }}
+            magasinColumns={magasinColumns}
+            showTotalColumn={showTotalColumn}
+            labels={labels}
+            captureDir={captureDir}
+          />
+        </Box>
+      ))}
+    </>
   );
 }

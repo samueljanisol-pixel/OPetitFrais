@@ -1,27 +1,23 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { buildSheetExportPayload } from '@/features/sheet-import/buildSheetExportJson'
+import { fetchProductLastModified } from '@/features/sheet-import/productLastModified'
+import { authorizeSheetDbExport } from '@/features/sheet-import/sheetDbExportAuth'
 import { createSupabaseServiceRoleClient } from '@/lib/supabase/server'
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
 
 /**
- * Export produits (JSON, mêmes clés que l’import Google Sheet).
- * Accès : `GET /api/transition/sheet-json-export?token=VOTRE_SECRET` (défini par `SHEET_JSON_EXPORT_TOKEN` côté serveur).
- * S’affiche dans l’onglet du navigateur (comme le proxy import) ; pas de téléchargement forcé. Autre machine : curl, script, signet.
+ * Export produits JSON (équivalent fichier Google Sheet).
+ *
+ * - Liste : `GET /api/transition/sheet-json-export?token=…`
+ *   colonnes code, Actif, Nom, Prix, PrixAchat, Fournisseur, Catégorie, SousCatégorie, Arabe, UdV
+ * - Date dernière modif : `GET …?format=date&token=…` → `{ "lastModified": "YYYYMMDDHHmmss" }`
+ *   (même forme que le script Google `?format=date`)
  */
 export async function GET(req: NextRequest) {
-  const expected = process.env.SHEET_JSON_EXPORT_TOKEN
-  if (!expected || !expected.trim()) {
-    return NextResponse.json(
-      { error: 'Export désactivé : variable d’environnement SHEET_JSON_EXPORT_TOKEN non définie côté serveur.' },
-      { status: 503 },
-    )
-  }
-  const token = req.nextUrl.searchParams.get('token')?.trim() ?? ''
-  if (token.length === 0 || token !== expected) {
-    return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
-  }
+  const auth = await authorizeSheetDbExport(req)
+  if (!auth.ok) return auth.response
 
   let supabase
   try {
@@ -31,7 +27,16 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: m }, { status: 503 })
   }
 
+  const format = (req.nextUrl.searchParams.get('format') ?? '').trim().toLowerCase()
+
   try {
+    if (format === 'date') {
+      const payload = await fetchProductLastModified(supabase)
+      return NextResponse.json(payload, {
+        headers: { 'Cache-Control': 'no-store' },
+      })
+    }
+
     const rows = await buildSheetExportPayload(supabase)
     const body = JSON.stringify(rows, null, 2)
     return new NextResponse(body, {

@@ -8,6 +8,7 @@ function mapProfileRow(p: {
   login: string | null;
   prenom: string;
   nom: string;
+  phone?: string | null;
   role_id: string;
   roles: unknown;
   profile_magasins?: unknown[] | null;
@@ -24,6 +25,7 @@ function mapProfileRow(p: {
     login: p.login,
     prenom: p.prenom,
     nom: p.nom,
+    phone: typeof p.phone === "string" && p.phone.trim().length > 0 ? p.phone.trim() : null,
     role_id: p.role_id,
     roles: p.roles,
     magasins,
@@ -46,7 +48,7 @@ export async function GET() {
   const { data: profiles, error } = await service
     .from("profiles")
     .select(
-      "user_id, login, prenom, nom, role_id, roles(id, name, slug), profile_magasins(magasin_id, magasins(id, code, nom))",
+      "user_id, login, prenom, nom, phone, role_id, roles(id, name, slug), profile_magasins(magasin_id, magasins(id, code, nom))",
     )
     .order("nom", { ascending: true });
 
@@ -81,6 +83,7 @@ export async function POST(req: Request) {
     password?: string;
     prenom?: string;
     nom?: string;
+    phone?: string | null;
     role_id?: string;
     magasin_ids?: string[];
   };
@@ -93,6 +96,11 @@ export async function POST(req: Request) {
   const password = body.password ?? "";
   const prenom = (body.prenom ?? "").trim();
   const nom = (body.nom ?? "").trim();
+  const phoneRaw = body.phone;
+  const phone =
+    phoneRaw === null || phoneRaw === undefined || String(phoneRaw).trim().length === 0
+      ? null
+      : String(phoneRaw).trim();
   const role_id = body.role_id ?? "";
   const emailRaw = (body.email ?? "").trim();
   const loginRaw = (body.login ?? "").trim();
@@ -133,6 +141,7 @@ export async function POST(req: Request) {
       login: loginRaw || null,
       prenom,
       nom,
+      phone,
       role_id,
     })
     .eq("user_id", created.user.id)
@@ -149,6 +158,7 @@ export async function POST(req: Request) {
       login: loginRaw || null,
       prenom,
       nom,
+      phone,
       role_id,
     });
     if (ie) {
@@ -190,6 +200,7 @@ export async function POST(req: Request) {
       login: loginRaw || null,
       prenom,
       nom,
+      phone,
       role_id,
     },
   });

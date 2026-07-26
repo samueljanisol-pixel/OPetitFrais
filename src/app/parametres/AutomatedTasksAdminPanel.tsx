@@ -20,8 +20,10 @@ import {
   Switch,
   Typography,
 } from '@mui/material'
-import type { AutomatedTaskRunRow, AutomatedTaskRow, ScheduleKind } from '@/lib/automated-tasks'
+import type { AutomatedTaskRunRow, AutomatedTaskRow, ScheduleKind } from '@/lib/automated-tasks/types'
 import { describeNextRunAt } from '@/lib/automated-tasks/schedule'
+import { isRunLikelyStale } from '@/lib/automated-tasks/staleRuns'
+import FormDialog from '@/lib/mui/FormDialog'
 import {
   importFieldsFromTaskConfig,
   SHEET_IMPORT_FIELD_KEYS,
@@ -71,6 +73,7 @@ function errorSamplesFromStats(stats: Record<string, unknown>): string[] {
 
 function runSummaryShort(run: AutomatedTaskRunRow): string {
   const stats = run.stats ?? {}
+  if (stats.stale === true) return 'Interrompu (bloqué)'
   if (stats.skippedUnchanged === true) return 'Sheet inchangé'
   const parts: string[] = []
   const created = statNumber(stats, 'created')
@@ -85,6 +88,14 @@ function runSummaryShort(run: AutomatedTaskRunRow): string {
   if (errCount > 0) parts.push(`${errCount} erreur(s)`)
   if (parts.length > 0) return parts.join(' · ')
   return run.status === 'success' ? 'OK' : '—'
+}
+
+function lastRunLabel(run: AutomatedTaskRunRow | null, fallbackAt: string | null): string {
+  if (!run) return formatDt(fallbackAt)
+  if (run.status === 'running') {
+    return `${formatDt(run.started_at)} (démarrée)`
+  }
+  return formatDt(run.finished_at ?? fallbackAt)
 }
 
 function importFieldsSummary(fields: SheetImportFields): string {
@@ -121,7 +132,7 @@ function ImportFieldsDialog({
   }
 
   return (
-    <Dialog open={open} onClose={onClose} maxWidth="xs" fullWidth>
+    <FormDialog open={open} onClose={onClose} maxWidth="xs" fullWidth>
       <DialogTitle sx={{ pb: 1 }}>Produits existants</DialogTitle>
       <DialogContent dividers>
         <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
@@ -158,7 +169,7 @@ function ImportFieldsDialog({
           Fermer
         </Button>
       </DialogActions>
-    </Dialog>
+    </FormDialog>
   )
 }
 
@@ -560,7 +571,7 @@ function TaskCard({
           <span style={{ color: nextRun.isOverdue ? '#b45309' : undefined }}>{nextRun.label}</span>
         </Typography>
         <Typography variant="body2" sx={{ mt: 0.5 }}>
-          <strong>Dernière exécution :</strong> {formatDt(task.lastRun?.finished_at ?? task.last_run_at)}
+          <strong>Dernière exécution :</strong> {lastRunLabel(task.lastRun, task.last_run_at)}
           {task.lastRun ? (
             <>
               {' '}
@@ -568,6 +579,11 @@ function TaskCard({
             </>
           ) : null}
         </Typography>
+        {task.lastRun?.status === 'running' && isRunLikelyStale(task.lastRun) ? (
+          <Typography variant="caption" color="warning.main" sx={{ display: 'block', mt: 0.5 }}>
+            Exécution bloquée depuis longtemps — elle sera marquée interrompue au prochain chargement ou lancement.
+          </Typography>
+        ) : null}
         {task.lastRun ? (
           <Typography variant="body2" sx={{ mt: 0.5 }}>
             <strong>Résumé :</strong> {runSummaryShort(task.lastRun)}{' '}

@@ -28,6 +28,7 @@ import DeleteOutlineOutlinedIcon from "@mui/icons-material/DeleteOutlineOutlined
 import EditOutlinedIcon from "@mui/icons-material/EditOutlined";
 import { useTranslations } from "next-intl";
 import AppLink from "@/components/AppLink";
+import FormDialog from "@/lib/mui/FormDialog";
 import ProductArabicSubtitle from "@/components/ProductArabicSubtitle";
 import CommandeFournisseurProductPicker, {
   type ProductPickRow,
@@ -1991,7 +1992,7 @@ export default function AchatLotDetailClient({ lotId }: { lotId: string }) {
             alreadyPresentLabel={tCommonOrder("alreadyInLot")}
             onSelect={handleProductChosenFromPicker}
           />
-          <Dialog open={condDialogOpen} onClose={handleCondLotDialogClose} fullWidth maxWidth="sm">
+          <FormDialog open={condDialogOpen} onClose={handleCondLotDialogClose} fullWidth maxWidth="sm">
             <DialogTitle sx={{ pb: 0.5 }}>{t("condDialogTitle")}</DialogTitle>
             <DialogContent>
               {pendingProduct ? (
@@ -2024,7 +2025,7 @@ export default function AchatLotDetailClient({ lotId }: { lotId: string }) {
                 {t("addToLot")}
               </Button>
             </DialogActions>
-          </Dialog>
+          </FormDialog>
         </>
       ) : null}
 
@@ -2048,7 +2049,7 @@ export default function AchatLotDetailClient({ lotId }: { lotId: string }) {
         </DialogActions>
       </Dialog>
 
-      <Dialog
+      <FormDialog
         open={renameVendeurId != null}
         onClose={() => {
           if (renameVendeurBusy) return;
@@ -2086,9 +2087,9 @@ export default function AchatLotDetailClient({ lotId }: { lotId: string }) {
             {renameVendeurBusy ? <CircularProgress size={18} /> : tCommon("save")}
           </Button>
         </DialogActions>
-      </Dialog>
+      </FormDialog>
 
-      <Dialog open={newVendeurDlg} onClose={() => setNewVendeurDlg(false)}>
+      <FormDialog open={newVendeurDlg} onClose={() => setNewVendeurDlg(false)}>
         <DialogTitle>{t("newVendorDialog.title")}</DialogTitle>
         <DialogContent>
           <TextField
@@ -2112,7 +2113,7 @@ export default function AchatLotDetailClient({ lotId }: { lotId: string }) {
             {newVendeurBusy ? <CircularProgress size={18} /> : t("newVendorDialog.add")}
           </Button>
         </DialogActions>
-      </Dialog>
+      </FormDialog>
     </main>
   );
 }

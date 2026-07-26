@@ -28,6 +28,8 @@ type LotPatchBody = {
   lotCommentaire?: string | null;
   /** Commentaire par vendeur (brouillon ou prêt). */
   vendeurCommentaire?: { vendeurKey: string; commentaire: string | null };
+  /** Marque l’envoi WhatsApp pour un vendeur (lot prêt). */
+  whatsappSent?: { vendeurKey: string };
 };
 
 async function recomputeQteAchat(
@@ -252,19 +254,26 @@ export async function GET(_req: Request, ctx: Ctx) {
 
   const { data: vendeurCommentRows, error: vce } = await supabase
     .from("commande_fournisseur_lot_vendeur_comment")
-    .select("vendeur_key, commentaire")
+    .select("vendeur_key, commentaire, whatsapp_sent_at")
     .eq("lot_id", id);
   if (vce) {
     return NextResponse.json({ error: vce.message }, { status: 500 });
   }
   const vendeurCommentaires: Record<string, string | null> = {};
+  const vendeurWhatsAppSent: Record<string, boolean> = {};
   for (const row of vendeurCommentRows ?? []) {
-    const key = (row as { vendeur_key: string }).vendeur_key;
-    const comment = (row as { commentaire: string | null }).commentaire;
+    const typed = row as {
+      vendeur_key: string;
+      commentaire: string | null;
+      whatsapp_sent_at: string | null;
+    };
+    const key = typed.vendeur_key;
+    const comment = typed.commentaire;
     vendeurCommentaires[key] = typeof comment === "string" ? comment : null;
+    vendeurWhatsAppSent[key] = typed.whatsapp_sent_at != null;
   }
 
-  return NextResponse.json({ lot, lignes: lignesWithCategory, vendeurs, vendeurCommentaires });
+  return NextResponse.json({ lot, lignes: lignesWithCategory, vendeurs, vendeurCommentaires, vendeurWhatsAppSent });
 }
 
 export async function PATCH(req: Request, ctx: Ctx) {
@@ -287,18 +296,53 @@ export async function PATCH(req: Request, ctx: Ctx) {
     body.removeLotLigneId != null,
     body.lotCommentaire !== undefined,
     body.vendeurCommentaire !== undefined,
+    body.whatsappSent !== undefined,
   ].filter(Boolean).length;
   if (nKeys !== 1) {
     return NextResponse.json(
       {
         error:
-          "Un seul de : status (prete ou brouillon), setMagasinQte, removeLotLigneId, lotCommentaire, vendeurCommentaire",
+          "Un seul de : status (prete ou brouillon), setMagasinQte, removeLotLigneId, lotCommentaire, vendeurCommentaire, whatsappSent",
       },
       { status: 400 },
     );
   }
 
   const supabase = await createSupabaseServerClient();
+
+  if (body.whatsappSent !== undefined) {
+    const payload = body.whatsappSent;
+    if (!payload || typeof payload.vendeurKey !== "string" || payload.vendeurKey.trim().length === 0) {
+      return NextResponse.json({ error: "whatsappSent invalide" }, { status: 400 });
+    }
+    const { data: lotCur, error: reWa } = await supabase
+      .from("commande_fournisseur_lot")
+      .select("id, status")
+      .eq("id", id)
+      .maybeSingle();
+    if (reWa || !lotCur) {
+      return NextResponse.json({ error: reWa?.message ?? "Introuvable" }, { status: reWa ? 500 : 404 });
+    }
+    const lotStatus = (lotCur as { status: string }).status;
+    if (lotStatus !== "brouillon" && lotStatus !== "prete") {
+      return NextResponse.json({ error: "Modification impossible : lot verrouillé" }, { status: 409 });
+    }
+    const vendeurKey = payload.vendeurKey.trim();
+    const sentAt = new Date().toISOString();
+    const { error: ue } = await supabase.from("commande_fournisseur_lot_vendeur_comment").upsert(
+      {
+        lot_id: id,
+        vendeur_key: vendeurKey,
+        whatsapp_sent_at: sentAt,
+        updated_at: sentAt,
+      },
+      { onConflict: "lot_id,vendeur_key" },
+    );
+    if (ue) {
+      return NextResponse.json({ error: ue.message }, { status: 500 });
+    }
+    return NextResponse.json({ ok: true, whatsappSentAt: sentAt });
+  }
 
   if (body.vendeurCommentaire !== undefined) {
     const payload = body.vendeurCommentaire;
@@ -332,13 +376,35 @@ export async function PATCH(req: Request, ctx: Ctx) {
           ? payload.commentaire
           : null;
     if (stored === null) {
-      const { error: de } = await supabase
+      const { data: existingRow, error: reExisting } = await supabase
         .from("commande_fournisseur_lot_vendeur_comment")
-        .delete()
+        .select("whatsapp_sent_at")
         .eq("lot_id", id)
-        .eq("vendeur_key", vendeurKey);
-      if (de) {
-        return NextResponse.json({ error: de.message }, { status: 500 });
+        .eq("vendeur_key", vendeurKey)
+        .maybeSingle();
+      if (reExisting) {
+        return NextResponse.json({ error: reExisting.message }, { status: 500 });
+      }
+      const hasWhatsAppSent =
+        (existingRow as { whatsapp_sent_at?: string | null } | null)?.whatsapp_sent_at != null;
+      if (hasWhatsAppSent) {
+        const { error: ue } = await supabase
+          .from("commande_fournisseur_lot_vendeur_comment")
+          .update({ commentaire: null, updated_at: new Date().toISOString() })
+          .eq("lot_id", id)
+          .eq("vendeur_key", vendeurKey);
+        if (ue) {
+          return NextResponse.json({ error: ue.message }, { status: 500 });
+        }
+      } else {
+        const { error: de } = await supabase
+          .from("commande_fournisseur_lot_vendeur_comment")
+          .delete()
+          .eq("lot_id", id)
+          .eq("vendeur_key", vendeurKey);
+        if (de) {
+          return NextResponse.json({ error: de.message }, { status: 500 });
+        }
       }
     } else {
       const { error: ue } = await supabase.from("commande_fournisseur_lot_vendeur_comment").upsert(

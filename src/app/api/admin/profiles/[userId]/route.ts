@@ -12,6 +12,7 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ userId: strin
   let body: {
     prenom?: string;
     nom?: string;
+    phone?: string | null;
     role_id?: string;
     login?: string | null;
     password?: string;
@@ -41,6 +42,10 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ userId: strin
   if (typeof body.prenom === "string") profilePatch.prenom = body.prenom.trim();
   if (typeof body.nom === "string") profilePatch.nom = body.nom.trim();
   if (typeof body.role_id === "string") profilePatch.role_id = body.role_id;
+  if ("phone" in body) {
+    const v = body.phone;
+    profilePatch.phone = v === null || v === "" ? null : String(v).trim();
+  }
   if ("login" in body) {
     const v = body.login;
     profilePatch.login = v === null || v === "" ? null : String(v).trim();

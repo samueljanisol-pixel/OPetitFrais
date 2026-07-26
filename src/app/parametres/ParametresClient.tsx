@@ -21,6 +21,7 @@ import {
   Typography,
 } from '@mui/material'
 import BackNavButton from '@/components/BackNavButton'
+import FormDialog from '@/lib/mui/FormDialog'
 import { createSupabaseBrowserClient } from '@/lib/supabase/client'
 import type { RefConditionnementRow, RefRow, RefSubcategoryRow, RefSupplierRow, RefVendeurRow } from '@/lib/products/types'
 import { muiSlotPropsDecimalKeypad } from '@/lib/mui/numericTextFieldProps'
@@ -29,8 +30,9 @@ import MagasinsAdminPanel from './MagasinsAdminPanel'
 import StatusLabelsAdminPanel from './StatusLabelsAdminPanel'
 import StockAdminPanel from './StockAdminPanel'
 import TranslationsAdminPanel from './TranslationsAdminPanel'
+import ChauffeurAdminPanel from './ChauffeurAdminPanel'
 
-type TabId = 'udv' | 'udc' | 'uda' | 'cat' | 'sup' | 'cond' | 'vend' | 'stock' | 'traductions' | 'taches' | 'comptes'
+type TabId = 'udv' | 'udc' | 'uda' | 'cat' | 'sup' | 'cond' | 'vend' | 'commandes' | 'stock' | 'traductions' | 'taches' | 'comptes'
 
 const tabLabels: Record<TabId, string> = {
   udv: 'Unités de vente',
@@ -40,6 +42,7 @@ const tabLabels: Record<TabId, string> = {
   sup: 'Fournisseurs',
   cond: 'Conditionnements',
   vend: 'Vendeurs',
+  commandes: 'Commandes',
   stock: 'Stock',
   traductions: 'Traductions',
   taches: 'Tâches automatisées',
@@ -115,13 +118,13 @@ function RefTable<T extends { id: string; label: string }>({
   )
 }
 
-export default function ReferentielClient() {
+export default function ParametresClient() {
   const supabase = useMemo(() => createSupabaseBrowserClient(), [])
   const { isAdministrator, canAdminUsers, canAdminRoles, canAdminMagasins } = useSessionPermissions()
   const showComptesTab = isAdministrator
   const showTachesTab = isAdministrator
   const tabOrder = useMemo(() => {
-    const base: TabId[] = ['udv', 'udc', 'uda', 'cat', 'sup', 'cond', 'vend', 'stock', 'traductions']
+    const base: TabId[] = ['udv', 'udc', 'uda', 'cat', 'sup', 'cond', 'vend', 'commandes', 'stock', 'traductions']
     if (showTachesTab) base.push('taches')
     if (showComptesTab) base.push('comptes')
     return base
@@ -326,7 +329,7 @@ export default function ReferentielClient() {
   }
 
   const save = async () => {
-    if (!editing || tab === 'comptes' || tab === 'taches' || tab === 'stock' || tab === 'traductions') return
+    if (!editing || tab === 'comptes' || tab === 'taches' || tab === 'stock' || tab === 'traductions' || tab === 'commandes') return
     setErr(null)
     if (tab === 'cond') {
       const h = form.h ? Number(form.h) : null
@@ -442,7 +445,7 @@ export default function ReferentielClient() {
   }
 
   const requestDelete = (row: { id: string; label: string }) => {
-    if (tab === 'comptes' || tab === 'taches' || tab === 'stock' || tab === 'traductions') return
+    if (tab === 'comptes' || tab === 'taches' || tab === 'stock' || tab === 'traductions' || tab === 'commandes') return
     setDeleteConfirm({ tab, id: row.id, label: row.label })
   }
 
@@ -465,8 +468,16 @@ export default function ReferentielClient() {
 
   if (loading)
     return (
-      <div className="p-6">
-        <p className="text-slate-600">Chargement…</p>
+      <div className="min-h-screen bg-gradient-to-br from-emerald-50 via-white to-rose-50 p-4 md:p-8">
+        <div className="mx-auto max-w-6xl">
+          <BackNavButton href="/" size="small">
+            Accueil
+          </BackNavButton>
+          <Typography variant="h4" component="h1" sx={{ fontWeight: 600, color: '#0f172a', mt: 1, mb: 2 }}>
+            Paramètres
+          </Typography>
+          <p className="text-slate-600">Chargement…</p>
+        </div>
       </div>
     )
 
@@ -497,12 +508,13 @@ export default function ReferentielClient() {
             <Tab key={k} value={k} label={tabLabels[k]} />
           ))}
         </Tabs>
-        {tab !== 'comptes' && tab !== 'taches' && tab !== 'stock' && tab !== 'traductions' ? (
+        {tab !== 'comptes' && tab !== 'taches' && tab !== 'stock' && tab !== 'traductions' && tab !== 'commandes' ? (
           <Button variant="contained" color="success" onClick={openNew} sx={{ mb: 2, textTransform: 'none' }}>
             Ajouter — {tabLabels[tab]}
           </Button>
         ) : null}
         {tab === 'traductions' ? <TranslationsAdminPanel /> : null}
+        {tab === 'commandes' ? <ChauffeurAdminPanel /> : null}
         {tab === 'taches' ? <AutomatedTasksAdminPanel /> : null}
         {tab === 'comptes' ? (
           <>
@@ -802,7 +814,7 @@ export default function ReferentielClient() {
           </DialogActions>
         </Dialog>
 
-        <Dialog open={open} onClose={() => setOpen(false)} fullWidth maxWidth="sm">
+        <FormDialog open={open} onClose={() => setOpen(false)} fullWidth maxWidth="sm">
           <DialogTitle>{isNew ? 'Ajouter' : 'Modifier'}</DialogTitle>
           <DialogContent>
             <div className="mt-1 flex flex-col gap-4">
@@ -915,9 +927,9 @@ export default function ReferentielClient() {
               Enregistrer
             </Button>
           </DialogActions>
-        </Dialog>
+        </FormDialog>
 
-        <Dialog open={subcatOpen} onClose={() => setSubcatOpen(false)} fullWidth maxWidth="sm">
+        <FormDialog open={subcatOpen} onClose={() => setSubcatOpen(false)} fullWidth maxWidth="sm">
           <DialogTitle>{subcatIsNew ? 'Ajouter une sous-catégorie' : 'Modifier la sous-catégorie'}</DialogTitle>
           <DialogContent>
             <div className="mt-1 flex flex-col gap-4">
@@ -961,7 +973,7 @@ export default function ReferentielClient() {
               Enregistrer
             </Button>
           </DialogActions>
-        </Dialog>
+        </FormDialog>
       </div>
     </div>
   )

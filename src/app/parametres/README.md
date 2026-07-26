@@ -1,4 +1,10 @@
-# Paramètres (référentiels)
+# Paramètres
+
+## Dialogues de formulaire (convention projet)
+
+Toute fenêtre MUI **avec saisie** (TextField, Select, Checkbox, etc.) utilise **`FormDialog`** (`src/lib/mui/FormDialog.tsx`) : pas de fermeture au clic extérieur ni avec Échap. Les confirmations (supprimer, annuler) et l’affichage lecture seule gardent `Dialog` standard. Règle Cursor : [`.cursor/rules/Form-Dialog.mdc`](../../.cursor/rules/Form-Dialog.mdc).
+
+Les fenêtres **Ajouter / Modifier** (référentiels, magasins, champs import planifié) suivent cette convention — uniquement via **Annuler** ou **Enregistrer**.
 
 ## Unités de vente
 
@@ -51,6 +57,16 @@ Migration : `20260619120000_unify_marchand_vendeur.sql` (fusion de l’ancien `r
 - **`product.subcategory_id`** : optionnel ; doit correspondre à la catégorie du produit.
 - Import Google Sheet : colonne **Sous-Catégorie** (création auto si absente). Migration `20260701160000_ref_subcategory.sql`.
 
+## Commandes fournisseur
+
+Onglet **Commandes** : choix du **chauffeur** pour l’envoi WhatsApp depuis un lot prêt (export consolidation).
+
+- Composant : [`ChauffeurAdminPanel.tsx`](ChauffeurAdminPanel.tsx)
+- Table `ref_app_setting` — clé `chauffeur_user_id` (UUID `profiles.user_id`) — migration `20260725230000_profiles_phone_chauffeur_setting.sql`
+- Téléphone du chauffeur : champ **`profiles.phone`** (saisie dans **Administration → Utilisateurs**)
+- API : `GET/PATCH /api/ref/chauffeur`, `GET /api/ref/chauffeur/users` (liste pour le select)
+- Écriture : permission `parametres.write` ; lecture chauffeur : consolidation ou paramètres
+
 ## Traductions (interface)
 
 Onglet **Traductions** dans Paramètres : édition des libellés **par zone** (accueil, login, commandes, etc.) sans modifier les fichiers JSON du dépôt.
@@ -75,4 +91,4 @@ Onglet **Tâches automatisées** visible uniquement pour le rôle **administrate
   - **`ftp_sync`** — synchro CA FTP → Supabase (remplace le cron direct `/api/supabase/sync/run` dans `vercel.json`)
   - **`sheet_import`** — import catalogue depuis Google Sheet (service role, config `importFields` : champs cochés pour les produits existants). **Importé uniquement si le contenu export a changé** (empreinte SHA-256) depuis le dernier import réussi ; « Lancer maintenant » force l’import.
 
-Les horaires **quotidiens** sont en **UTC**. L’historique et le statut footer CA lisent `automated_task_runs` en priorité (repli `sync_runs` pour FTP).
+Les horaires **quotidiens** sont en **UTC**. L’historique et le statut footer CA lisent `automated_task_runs` en priorité (repli `sync_runs` pour FTP). Un run resté **En cours** plus de 20 minutes (timeout serverless, crash) est automatiquement marqué **Interrompu** au chargement de l’onglet, au tick cron ou au lancement manuel.

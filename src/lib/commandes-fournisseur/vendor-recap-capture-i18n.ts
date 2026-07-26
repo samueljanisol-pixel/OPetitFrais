@@ -8,7 +8,6 @@ type CommonMessages = {
   noLines: string;
   soitLine: string;
   captureProduct: string;
-  captureSupplierOrder: string;
   captureOrderOn: string;
   captureOrderBy: string;
 };
@@ -22,7 +21,6 @@ function commonForLocale(locale: AppLocale): CommonMessages {
     noLines: c.noLines,
     soitLine: c.soitLine,
     captureProduct: c.captureProduct,
-    captureSupplierOrder: c.captureSupplierOrder,
     captureOrderOn: c.captureOrderOn,
     captureOrderBy: c.captureOrderBy,
   };
@@ -37,7 +35,6 @@ export type VendorRecapCaptureLabels = {
   total: string;
   udvCond: string;
   noLines: string;
-  supplierOrderLine: string;
   orderOnLine: string;
   orderByLine: string | null;
   formatSoitLine: (qty: string, unit: string) => string;
@@ -50,7 +47,7 @@ export function vendorExportLocale(raw: string | null | undefined): AppLocale {
 
 export function vendorRecapCaptureLabels(
   locale: AppLocale,
-  supplierLabel: string,
+  _supplierLabel: string,
   commandeDateLabel: string,
   commandeParLabel?: string | null,
 ): VendorRecapCaptureLabels {
@@ -61,7 +58,6 @@ export function vendorRecapCaptureLabels(
     total: c.total,
     udvCond: c.udvCond,
     noLines: c.noLines,
-    supplierOrderLine: interpolate(c.captureSupplierOrder, { supplier: supplierLabel }),
     orderOnLine: interpolate(c.captureOrderOn, { date: commandeDateLabel }),
     orderByLine: par.length > 0 ? interpolate(c.captureOrderBy, { name: par }) : null,
     formatSoitLine: (qty, unit) => interpolate(c.soitLine, { qty, unit }),

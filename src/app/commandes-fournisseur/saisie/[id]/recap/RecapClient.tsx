@@ -27,6 +27,7 @@ import CommentOutlinedIcon from "@mui/icons-material/CommentOutlined";
 import DeleteOutlineOutlinedIcon from "@mui/icons-material/DeleteOutlineOutlined";
 import LigneSaisieComments from "@/components/commandes-fournisseur/LigneSaisieComments";
 import AppLink from "@/components/AppLink";
+import FormDialog from "@/lib/mui/FormDialog";
 import CommandeFournisseurProductPicker, {
   type ProductPickRow,
 } from "@/features/commandes-fournisseur/CommandeFournisseurProductPicker";
@@ -1082,7 +1083,7 @@ export default function RecapClient({ commandeId }: { commandeId: string }) {
         </DialogActions>
       </Dialog>
 
-      <Dialog open={lineCommentIndex !== null} onClose={closeLineComment} fullWidth maxWidth="sm">
+      <FormDialog open={lineCommentIndex !== null} onClose={closeLineComment} fullWidth maxWidth="sm">
         <DialogTitle sx={{ pb: 0.5 }}>
           {lineCommentDraft.trim().length > 0 || (lineCommentIndex !== null && lignes[lineCommentIndex]?.line_comment)
             ? tc("commentLine")
@@ -1146,9 +1147,9 @@ export default function RecapClient({ commandeId }: { commandeId: string }) {
             </Button>
           </div>
         </DialogActions>
-      </Dialog>
+      </FormDialog>
 
-      <Dialog open={condDialogOpen} onClose={handleCondDialogClose} fullWidth maxWidth="sm">
+      <FormDialog open={condDialogOpen} onClose={handleCondDialogClose} fullWidth maxWidth="sm">
         <DialogTitle sx={{ pb: 0.5 }}>{t("condDialog.title")}</DialogTitle>
         <DialogContent>
           {pendingProduct ? (
@@ -1179,7 +1180,7 @@ export default function RecapClient({ commandeId }: { commandeId: string }) {
             {hasExistingLinesForPending ? t("condDialog.saveExisting") : t("condDialog.addNew")}
           </Button>
         </DialogActions>
-      </Dialog>
+      </FormDialog>
     </main>
   );
 }

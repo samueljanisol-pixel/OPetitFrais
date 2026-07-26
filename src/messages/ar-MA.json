@@ -171,6 +171,7 @@
         "exportImage": "صوّر كصورة",
         "exportImageSection": "تصدير صورة",
         "sendWhatsApp": "إرسال واتساب",
+        "whatsAppAlreadySent": "تم فتح واتساب لهذا البائع",
         "whatsAppPhoneMissing": "ما كاينش رقم لهاد البائع",
         "captureProduct": "المنتج",
         "captureSupplierOrder": "طلبية المزود : {supplier}",
@@ -310,6 +311,16 @@
             "title": "التغليف",
             "hint": "الاختيار الأول بحال فالإدخال فالمحل؛ تقدر تختار بالوحدة ولا تغليف آخر.",
             "addToLot": "زيد لللوط"
+          },
+          "consolidationExport": {
+            "exportByCategory": "صوّر PNG (حسب الفئة)",
+            "exportByVendor": "صوّر PNG (حسب البائع)",
+            "sendWhatsAppDriver": "واتساب السائق",
+            "driverConfigured": "السائق : {name} ({phone})",
+            "driverNotConfigured": "ما كاينش سائق — اختاره ف",
+            "driverSettingsLink": "الإعدادات → الطلبيات",
+            "driverPhoneInvalid": "رقم السائق غير صالح — صحّحو فملف المستخدم.",
+            "lotCommentExportLabel": "تعليق اللوط"
           }
         }
       },

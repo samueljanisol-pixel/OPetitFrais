@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { requireApiAdministrator } from '@/lib/auth/require-administrator-api'
 import { createSupabaseServiceRoleClient } from '@/lib/supabase/server'
 import type { AutomatedTaskRunRow, AutomatedTaskRow } from '@/lib/automated-tasks'
+import { reconcileStaleTaskRuns } from '@/lib/automated-tasks/staleRuns'
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
@@ -17,6 +18,13 @@ export async function GET() {
     supabase = createSupabaseServiceRoleClient()
   } catch {
     return NextResponse.json({ error: 'Service role non configurée' }, { status: 500 })
+  }
+
+  try {
+    await reconcileStaleTaskRuns(supabase)
+  } catch (e) {
+    const message = e instanceof Error ? e.message : String(e)
+    return NextResponse.json({ error: message }, { status: 500 })
   }
 
   const { data: tasks, error } = await supabase

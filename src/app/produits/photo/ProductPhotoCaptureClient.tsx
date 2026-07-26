@@ -28,6 +28,7 @@ import RotateRightIcon from '@mui/icons-material/RotateRight'
 import CloudUploadIcon from '@mui/icons-material/CloudUpload'
 import BackNavButton from '@/components/BackNavButton'
 import AppLink from '@/components/AppLink'
+import FormDialog from '@/lib/mui/FormDialog'
 import { createSupabaseBrowserClient } from '@/lib/supabase/client'
 import { useSessionPermissions } from '@/lib/auth/useSessionPermissions'
 import { textIncludesFolded } from '@/lib/text/fold-for-search'
@@ -561,9 +562,11 @@ export default function ProductPhotoCaptureClient() {
         </Typography>
       ) : null}
 
-      <Dialog
+      <FormDialog
         open={preview != null}
-        onClose={() => !saving && closePreview()}
+        onClose={() => {
+          if (!saving) closePreview()
+        }}
         fullWidth
         maxWidth="xs"
         fullScreen={false}
@@ -648,7 +651,7 @@ export default function ProductPhotoCaptureClient() {
             Valider
           </Button>
         </DialogActions>
-      </Dialog>
+      </FormDialog>
 
       <Dialog open={exportOpen} onClose={() => !exportBusy && setExportOpen(false)} fullWidth maxWidth="xs">
         <DialogTitle>Exporter vers le FTP</DialogTitle>

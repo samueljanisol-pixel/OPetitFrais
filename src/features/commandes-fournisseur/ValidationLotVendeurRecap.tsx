@@ -39,6 +39,8 @@ type Props = {
   vendeurCommentEditable: boolean;
   onVendeurCommentDraftChange: (vendeurKey: string, value: string) => void;
   onVendeurCommentSave: (vendeurKey: string, commentaire: string) => void | Promise<void>;
+  vendeurWhatsAppSent?: Record<string, boolean>;
+  onVendeurWhatsAppSent?: (vendeurKey: string) => void | Promise<void>;
 };
 
 function vendeurForGroup(vendeurs: VendeurRef[], vendeurKey: string): VendeurRef | undefined {
@@ -71,6 +73,8 @@ export default function ValidationLotVendeurRecap({
   vendeurCommentEditable,
   onVendeurCommentDraftChange,
   onVendeurCommentSave,
+  vendeurWhatsAppSent = {},
+  onVendeurWhatsAppSent,
 }: Props) {
   const t = useTranslations("backoffice.commandes.validation.lotDetail");
   const magasinColumns = useMemo(() => buildMagasinMxColumnsFromLot(lot), [lot]);
@@ -136,6 +140,10 @@ export default function ValidationLotVendeurRecap({
               footerComment={g.commentaire?.trim() ? g.commentaire : null}
               footerCommentLabel={t("vendorCommentExportLabel")}
               commentField={commentField}
+              whatsAppSent={vendeurWhatsAppSent[g.vendeurKey] === true}
+              onWhatsAppSent={
+                onVendeurWhatsAppSent ? () => onVendeurWhatsAppSent(g.vendeurKey) : undefined
+              }
             />
           </div>
         );

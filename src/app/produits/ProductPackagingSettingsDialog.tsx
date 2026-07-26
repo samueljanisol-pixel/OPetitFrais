@@ -4,7 +4,6 @@ import { useEffect, useMemo, useState } from 'react'
 import {
   Button,
   Checkbox,
-  Dialog,
   DialogActions,
   DialogContent,
   DialogTitle,
@@ -16,6 +15,7 @@ import {
   TextField,
   Typography,
 } from '@mui/material'
+import FormDialog from '@/lib/mui/FormDialog'
 import { createSupabaseBrowserClient } from '@/lib/supabase/client'
 import { muiSlotPropsDecimalKeypad } from '@/lib/mui/numericTextFieldProps'
 import type { RefRow, RefVendeurRow } from '@/lib/products/types'
@@ -362,7 +362,7 @@ export function ProductPackagingSettingsDialog({
 
   return (
     <>
-    <Dialog open={open} onClose={onClose} fullWidth maxWidth="sm">
+    <FormDialog open={open} onClose={onClose} fullWidth maxWidth="sm">
       <DialogTitle>Paramètres du conditionnement</DialogTitle>
       <DialogContent
         sx={{
@@ -574,11 +574,13 @@ export function ProductPackagingSettingsDialog({
           </Button>
         ) : null}
       </DialogActions>
-    </Dialog>
+    </FormDialog>
 
-    <Dialog
+    <FormDialog
       open={createVendeurDialogOpen}
-      onClose={() => !creatingVendeur && setCreateVendeurDialogOpen(false)}
+      onClose={() => {
+        if (!creatingVendeur) setCreateVendeurDialogOpen(false)
+      }}
       fullWidth
       maxWidth="xs"
     >
@@ -640,7 +642,7 @@ export function ProductPackagingSettingsDialog({
           {creatingVendeur ? '…' : 'Créer'}
         </Button>
       </DialogActions>
-    </Dialog>
+    </FormDialog>
     </>
   )
 }

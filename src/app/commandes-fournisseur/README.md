@@ -35,14 +35,15 @@ Lorsque le lot est **prêt pour l’achat**, le commentaire du lot est affiché 
 Sur `/commandes-fournisseur/validation/lots/[id]`, lorsque le statut est **`prete`** :
 
 1. **Matrice consolidation** en haut (lecture seule) : colonnes magasins en **codes MXX** (ex. M01).
-2. **Récap groupé par vendeur** en dessous (`ValidationLotVendeurRecap`) :
+2. **Export consolidation** (sous « Revenir en saisie ») : deux PNG de toute la commande — **par catégorie** et **par vendeur** — plus **WhatsApp chauffeur** (télécharge les deux images puis ouvre `wa.me`). Le chauffeur est choisi dans **Paramètres → Commandes** (utilisateur avec téléphone renseigné sur sa fiche). Migration `20260725230000_profiles_phone_chauffeur_setting.sql`.
+3. **Récap groupé par vendeur** en dessous (`ValidationLotVendeurRecap`) :
 
 - Colonnes magasins en **codes MXX** (ex. M01, M12) — pas le nom du magasin (`magasinCodeMx`).
 - Tableau par vendeur : **Produit** (libellé français + **nom arabe** `product.name_ar` si renseigné), quantités par MXX, **Total**, **UdV / cond.** (avec « Soit … » si conditionnement). Si le fournisseur n’a **aucun marchand** (`vendeurs` vide), le groupe sans `vendeur_id` est intitulé avec le **nom du fournisseur** (plus « Sans vendeur »).
-- **Date de commande** dans l’image exportée et dans le nom du fichier (`validated_at` ou `created_at` des commandes incluses ; plage si plusieurs jours).
+- **Date de commande** dans l’image exportée et dans le nom du fichier (`validated_at` ou `created_at` des commandes incluses ; plage si plusieurs jours). L’en-tête export **n’affiche plus** la ligne « Commande Fournisseur : … » (nom du vendeur ou magasin suffit).
 - **Commentaires** : `line_comment` dans la **cellule quantité** du magasin (bas à droite, souvent en arabe, `dir="rtl"`). Optionnel : **commentaire par vendeur** (table `commande_fournisseur_lot_vendeur_comment`, éditable en brouillon et quand le lot est prêt) affiché sous chaque groupe vendeur et en bas de l’image exportée. Noms produit : **arabe puis français**, alignés à droite dans la colonne Produit ; police **Noto Sans Arabic** (ligatures) pour l’écran et l’export PNG.
 - Bouton **Exporter en image** par vendeur : capture PNG (`html-to-image`, rendu navigateur + polices embarquées) puis **partage natif** (`navigator.share` avec fichier) sur mobile, sinon **téléchargement** du PNG — pour envoi WhatsApp, e-mail, SMS, etc. Nom de fichier du type `commande-2026-05-19-{fournisseur}-{vendeur}.png`.
-- Bouton **Envoyer WhatsApp** (si le vendeur a un **téléphone** renseigné dans Paramètres → Vendeurs) : télécharge l’image en arrière-plan (nom unique horodaté à chaque clic, ex. `commande-2026-05-19-fournisseur-vendeur-1734567890123.png`) et ouvre directement la conversation `wa.me` du vendeur (comme le panier boutique). L’image est pré-capturée dans la langue du vendeur ; le commentaire figure dans l’image, pas dans le message WhatsApp.
+- Bouton **Envoyer WhatsApp** (si le vendeur a un **téléphone** renseigné dans Paramètres → Vendeurs) : télécharge l’image en arrière-plan (nom unique horodaté à chaque clic, ex. `commande-2026-05-19-fournisseur-vendeur-1734567890123.png`) et ouvre directement la conversation `wa.me` du vendeur (comme le panier boutique). L’image est pré-capturée dans la langue du vendeur ; le commentaire figure dans l’image, pas dans le message WhatsApp. Une **coche verte** apparaît à côté du bouton après le premier clic (enregistré en base par lot et vendeur, visible pour toute l’équipe). Migration `20260725220000_lot_vendeur_whatsapp_sent.sql` — colonne `whatsapp_sent_at` sur `commande_fournisseur_lot_vendeur_comment` ; `PATCH` `{ whatsappSent: { vendeurKey } }`.
 
 Le GET lot validation renvoie aussi `vendeurs` (`ref_supplier_vendeur` du fournisseur), `product.name_ar`, et les dates `created_at` / `validated_at` des commandes incluses.
 
@@ -166,6 +167,20 @@ Le parseur (`scripts/parse-order-units-excel.py`) lit le nom vendeur en en-tête
 
 ### Internationalisation UI (achat détail)
 
+
+## Impression ticket caisse WinDev
+
+Ne pas utiliser le PDF en caisse. Formats recommandés :
+
+```
+GET /api/caisse/commande-ticket?magasin={code}&token=…&format=txt
+GET /api/caisse/commande-ticket?magasin={code}&token=…&format=json
+```
+
+- **txt** : texte brut → impression directe imprimante ticket  
+- **json** : données → état d’impression WinDev natif  
+
+Doc : [`/api/caisse/README.md`](../api/caisse/README.md).
 
 ## Notifications (validation magasin)
 

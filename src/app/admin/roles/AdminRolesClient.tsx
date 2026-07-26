@@ -3,11 +3,11 @@
 import { useEffect, useMemo, useState } from "react";
 import { roleSlugFromName } from "@/lib/auth/role-slug";
 import AddIcon from "@mui/icons-material/Add";
+import FormDialog from "@/lib/mui/FormDialog";
 import {
   Box,
   Button,
   Checkbox,
-  Dialog,
   DialogActions,
   DialogContent,
   DialogTitle,
@@ -195,7 +195,7 @@ export default function AdminRolesClient() {
         </Paper>
       ) : null}
 
-      <Dialog open={createOpen} onClose={closeCreateDialog} fullWidth maxWidth="xs">
+      <FormDialog open={createOpen} onClose={closeCreateDialog} fullWidth maxWidth="xs">
         <DialogTitle>Nouveau rôle</DialogTitle>
         <DialogContent>
           <TextField
@@ -236,7 +236,7 @@ export default function AdminRolesClient() {
             {createBusy ? "Création…" : "Créer"}
           </Button>
         </DialogActions>
-      </Dialog>
+      </FormDialog>
 
       <Paper className="!p-4">
         <Typography variant="subtitle2" className="!mb-2 !font-semibold">

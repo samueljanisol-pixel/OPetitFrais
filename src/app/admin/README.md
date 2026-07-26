@@ -91,7 +91,7 @@ Migration fondatrice : `supabase/migrations/20260423120000_profiles_roles_permis
 | `produits.read` | produits | Voir le catalogue | `/produits`, `/produits/[id]` |
 | `produits.write` | produits | Créer / modifier produits | `/produits/nouveau`, édition fiche |
 | `ventes.read` | ventes | Voir CA et historique | `/ca`, `/historique-ca`, `/analyse-stats` |
-| `parametres.read` | parametres | Voir Paramètres | `/referentiel` |
+| `parametres.read` | parametres | Voir Paramètres | `/parametres` |
 | `parametres.write` | parametres | Modifier Paramètres | édition référentiels |
 | `admin.utilisateurs` | admin | Gérer les utilisateurs | `/admin/utilisateurs`, onglet Comptes |
 | `admin.roles` | admin | Gérer rôles et permissions | `/admin/roles`, onglet Comptes |
@@ -141,7 +141,7 @@ Voir [`utilisateurs/README.md`](utilisateurs/README.md) pour les détails API `m
 |------|------------|-----------|
 | `/admin/utilisateurs` | `admin.utilisateurs` | `AdminUsersClient.tsx` |
 | `/admin/roles` | `admin.roles` | `AdminRolesClient.tsx` |
-| Paramètres → onglet **Comptes** | slug `administrateur` uniquement | `ReferentielClient.tsx` |
+| Paramètres → onglet **Comptes** | slug `administrateur` uniquement | `ParametresClient.tsx` |
 
 L'onglet Comptes regroupe utilisateurs, rôles et magasins pour l'administrateur système. Les pages `/admin/*` restent accessibles avec les permissions métier correspondantes.
 

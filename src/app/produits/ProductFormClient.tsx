@@ -19,6 +19,7 @@ import {
 } from '@mui/material'
 import BackNavButton from '@/components/BackNavButton'
 import AppLink from '@/components/AppLink'
+import FormDialog from '@/lib/mui/FormDialog'
 import { createSupabaseBrowserClient } from '@/lib/supabase/client'
 import { defaultMargin } from '@/lib/products/margin'
 import { productPhotoPublicUrl, removeProductPhoto, uploadProductPhoto } from '@/lib/products/storage'
@@ -1097,9 +1098,11 @@ export default function ProductFormClient({ productId, returnTo = null }: Props)
               vendeurs={vendeurs}
               onSaved={() => void reloadPacks()}
             />
-            <Dialog
+            <FormDialog
               open={addPackDialogOpen}
-              onClose={() => !addPackSaving && setAddPackDialogOpen(false)}
+              onClose={() => {
+                if (!addPackSaving) setAddPackDialogOpen(false)
+              }}
               fullWidth
               maxWidth="xs"
             >
@@ -1195,7 +1198,7 @@ export default function ProductFormClient({ productId, returnTo = null }: Props)
                   {addPackSaving ? '…' : 'Ajouter'}
                 </Button>
               </DialogActions>
-            </Dialog>
+            </FormDialog>
             <Dialog open={pendingRemovePack != null} onClose={closeRemovePackDialog} fullWidth maxWidth="sm">
               <DialogTitle sx={{ pb: 0.5 }}>Archiver le conditionnement</DialogTitle>
               <DialogContent>
@@ -1321,7 +1324,14 @@ export default function ProductFormClient({ productId, returnTo = null }: Props)
                 </Button>
               </div>
             ) : null}
-            <Dialog open={retroDialogOpen} onClose={() => !retroSaving && setRetroDialogOpen(false)} fullWidth maxWidth="xs">
+            <FormDialog
+              open={retroDialogOpen}
+              onClose={() => {
+                if (!retroSaving) setRetroDialogOpen(false)
+              }}
+              fullWidth
+              maxWidth="xs"
+            >
               <DialogTitle>Marge rétroactive</DialogTitle>
               <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 1 }}>
                 <Typography variant="body2" color="text.secondary">
@@ -1369,7 +1379,7 @@ export default function ProductFormClient({ productId, returnTo = null }: Props)
                   {retroSaving ? 'Enregistrement…' : 'Enregistrer'}
                 </Button>
               </DialogActions>
-            </Dialog>
+            </FormDialog>
           </Box>
         ) : null}
       </div>

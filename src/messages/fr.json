@@ -171,6 +171,7 @@
         "exportImage": "Exporter en image",
         "exportImageSection": "Export image",
         "sendWhatsApp": "Envoyer WhatsApp",
+        "whatsAppAlreadySent": "WhatsApp déjà ouvert pour ce vendeur",
         "whatsAppPhoneMissing": "Numéro non renseigné pour ce vendeur",
         "captureProduct": "Produit",
         "captureSupplierOrder": "Commande Fournisseur : {supplier}",
@@ -310,6 +311,16 @@
             "title": "Conditionnement",
             "hint": "Pré-sélection comme à la saisie magasin ; vous pouvez choisir à l'unité ou un autre conditionnement.",
             "addToLot": "Ajouter au lot"
+          },
+          "consolidationExport": {
+            "exportByCategory": "Exporter en image (par catégorie)",
+            "exportByVendor": "Exporter en image (par vendeur)",
+            "sendWhatsAppDriver": "WhatsApp chauffeur",
+            "driverConfigured": "Chauffeur : {name} ({phone})",
+            "driverNotConfigured": "Aucun chauffeur configuré — choisissez-le dans",
+            "driverSettingsLink": "Paramètres → Commandes",
+            "driverPhoneInvalid": "Le téléphone du chauffeur est invalide — corrigez-le sur la fiche utilisateur.",
+            "lotCommentExportLabel": "Commentaire lot"
           }
         }
       },

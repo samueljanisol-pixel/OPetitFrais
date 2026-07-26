@@ -25,6 +25,7 @@ import { alpha } from "@mui/material/styles";
 import DeleteOutlineOutlinedIcon from "@mui/icons-material/DeleteOutlineOutlined";
 import ProductArabicSubtitle from "@/components/ProductArabicSubtitle";
 import AppLink from "@/components/AppLink";
+import FormDialog from "@/lib/mui/FormDialog";
 import { useSessionPermissions } from "@/lib/auth/useSessionPermissions";
 import { useStatusLabels } from "@/lib/statusLabels/useStatusLabels";
 import { buildLotProductDisplayInfo, buildSoitLine, recapLigneQtyUnitLabel, type PackagingRowForDisplay } from "@/lib/commandes-fournisseur/product-display";
@@ -48,6 +49,7 @@ import type {
 } from "@/lib/commandes-fournisseur/ligne-saisie-comments";
 import { roundQty2 } from "@/lib/commandes-fournisseur/qty-parse";
 import ValidationLotVendeurRecap from "@/features/commandes-fournisseur/ValidationLotVendeurRecap";
+import LotConsolidationExportPanel from "@/features/commandes-fournisseur/LotConsolidationExportPanel";
 import { useVendeurCommentPersistence } from "@/features/commandes-fournisseur/useVendeurCommentPersistence";
 import { lotCommandeDateInfo } from "@/lib/commandes-fournisseur/lot-commande-date";
 import { magasinCodeMx } from "@/lib/commandes-fournisseur/magasin-code-mx";
@@ -269,6 +271,7 @@ export default function ValidationLotDetailClient({ lotId }: { lotId: string }) 
   const tLotDetail = useTranslations("backoffice.commandes.validation.lotDetail");
   const tCommandesCommon = useTranslations("backoffice.commandes.common");
   const tCommandesErrors = useTranslations("backoffice.commandes.errors");
+  const tStatus = useTranslations("backoffice.status");
   const tCommon = useTranslations("common");
   const { formatDate, formatNumber, locale } = useAppFormat();
   const BackChevronIcon = useBackChevronIcon();
@@ -299,6 +302,7 @@ export default function ValidationLotDetailClient({ lotId }: { lotId: string }) 
   const [cmdComments, setCmdComments] = useState<Record<string, string>>({});
   const [lotCommentSaving, setLotCommentSaving] = useState(false);
   const [cmdCommentSavingId, setCmdCommentSavingId] = useState<string | null>(null);
+  const [vendeurWhatsAppSent, setVendeurWhatsAppSent] = useState<Record<string, boolean>>({});
   /** Quantité par cellule au focus : enregistrement seulement si la valeur a changé au blur. */
   const cellFocusBaseline = useRef<Record<string, number>>({});
 
@@ -329,6 +333,7 @@ export default function ValidationLotDetailClient({ lotId }: { lotId: string }) 
         lignes?: LotLigne[];
         vendeurs?: VendeurRef[];
         vendeurCommentaires?: Record<string, string | null>;
+        vendeurWhatsAppSent?: Record<string, boolean>;
         error?: string;
       };
       if (!res.ok) {
@@ -344,6 +349,7 @@ export default function ValidationLotDetailClient({ lotId }: { lotId: string }) 
         vc[key] = typeof value === "string" ? value : "";
       }
       applyVendeurCommentDrafts(vc);
+      setVendeurWhatsAppSent(j.vendeurWhatsAppSent ?? {});
     } catch (e) {
       setErr(e instanceof Error ? e.message : genericError);
     } finally {
@@ -688,6 +694,54 @@ export default function ValidationLotDetailClient({ lotId }: { lotId: string }) 
     [lot, lotId, load, genericError],
   );
 
+  const markVendeurWhatsAppSent = useCallback(
+    async (vendeurKey: string) => {
+      let alreadySent = false;
+      setVendeurWhatsAppSent((prev) => {
+        if (prev[vendeurKey]) {
+          alreadySent = true;
+          return prev;
+        }
+        return { ...prev, [vendeurKey]: true };
+      });
+      if (alreadySent) {
+        return;
+      }
+
+      try {
+        const res = await fetch(`/api/commandes-fournisseur/validation/lots/${lotId}`, {
+          method: "PATCH",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ whatsappSent: { vendeurKey } }),
+        });
+        const j = (await res.json()) as { error?: string };
+        if (!res.ok) {
+          setVendeurWhatsAppSent((prev) => {
+            if (!prev[vendeurKey]) {
+              return prev;
+            }
+            const next = { ...prev };
+            delete next[vendeurKey];
+            return next;
+          });
+          setErr(j.error ?? genericError);
+        }
+      } catch (e) {
+        setVendeurWhatsAppSent((prev) => {
+          if (!prev[vendeurKey]) {
+            return prev;
+          }
+          const next = { ...prev };
+          delete next[vendeurKey];
+          return next;
+        });
+        setErr(e instanceof Error ? e.message : genericError);
+      }
+    },
+    [genericError, lotId],
+  );
+
   const patchCommandeCommentaire = useCallback(
     async (commandeId: string, nextRaw: string) => {
       const lotCur = lot;
@@ -849,17 +903,32 @@ export default function ValidationLotDetailClient({ lotId }: { lotId: string }) 
       </Typography>
 
       {lot.status === "prete" ? (
-        <div className="!mb-4">
-          <Button
-            type="button"
-            variant="outlined"
-            color="warning"
-            disabled={saving}
-            onClick={() => setReopenBrouillonDialogOpen(true)}
-            sx={{ textTransform: "none" }}
-          >
-            {tLotDetail("reopenDraft")}
-          </Button>
+        <div className="!mb-4 flex flex-col gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              type="button"
+              variant="outlined"
+              color="warning"
+              disabled={saving}
+              onClick={() => setReopenBrouillonDialogOpen(true)}
+              sx={{ textTransform: "none" }}
+            >
+              {tLotDetail("reopenDraft")}
+            </Button>
+          </div>
+          {lignes.length > 0 ? (
+            <LotConsolidationExportPanel
+              lignes={recapLignes}
+              vendeurs={vendeurs}
+              magasinColumns={magasinColumns.map((m) => ({ id: m.id, mxCode: m.mxCode }))}
+              supplierLabel={supplierName}
+              commandeDateLabel={commandeDate.label}
+              commandeDateSlug={commandeDate.slug}
+              lotComment={lotCommentDraft}
+              noCategoryLabel={tCommandesCommon("noCategory")}
+              productCountLabel={tStatus("productCount", { count: recapLignes.length })}
+            />
+          ) : null}
         </div>
       ) : null}
 
@@ -1189,6 +1258,8 @@ export default function ValidationLotDetailClient({ lotId }: { lotId: string }) 
           vendeurCommentEditable={vendeurCommentEditable}
           onVendeurCommentDraftChange={onVendeurCommentDraftChange}
           onVendeurCommentSave={onVendeurCommentBlur}
+          vendeurWhatsAppSent={vendeurWhatsAppSent}
+          onVendeurWhatsAppSent={markVendeurWhatsAppSent}
         />
       ) : null}
 
@@ -1486,7 +1557,7 @@ export default function ValidationLotDetailClient({ lotId }: { lotId: string }) 
         onSelect={handleProductChosenFromPicker}
       />
 
-      <Dialog open={condDialogOpen} onClose={handleCondLotDialogClose} fullWidth maxWidth="sm">
+      <FormDialog open={condDialogOpen} onClose={handleCondLotDialogClose} fullWidth maxWidth="sm">
         <DialogTitle sx={{ pb: 0.5 }}>{tLotDetail("condDialog.title")}</DialogTitle>
         <DialogContent>
           {pendingProduct ? (
@@ -1519,7 +1590,7 @@ export default function ValidationLotDetailClient({ lotId }: { lotId: string }) 
             {tLotDetail("addToLot")}
           </Button>
         </DialogActions>
-      </Dialog>
+      </FormDialog>
 
     </main>
   );

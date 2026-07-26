@@ -12,6 +12,7 @@ import {
   TextField,
   Typography,
 } from "@mui/material";
+import FormDialog from "@/lib/mui/FormDialog";
 
 type CaisseRow = {
   id: string;
@@ -291,7 +292,14 @@ export default function MagasinsAdminPanel() {
         ) : null}
       </div>
 
-      <Dialog open={magOpen} onClose={() => !magSaving && setMagOpen(false)} fullWidth maxWidth="sm">
+      <FormDialog
+        open={magOpen}
+        onClose={() => {
+          if (!magSaving) setMagOpen(false)
+        }}
+        fullWidth
+        maxWidth="sm"
+      >
         <DialogTitle>{magEditing ? "Modifier le magasin" : "Nouveau magasin"}</DialogTitle>
         <DialogContent>
           <div className="mt-2 flex flex-col gap-2">
@@ -316,9 +324,16 @@ export default function MagasinsAdminPanel() {
             {magSaving ? "…" : "Enregistrer"}
           </Button>
         </DialogActions>
-      </Dialog>
+      </FormDialog>
 
-      <Dialog open={caisseOpen} onClose={() => !caisseSaving && setCaisseOpen(false)} fullWidth maxWidth="sm">
+      <FormDialog
+        open={caisseOpen}
+        onClose={() => {
+          if (!caisseSaving) setCaisseOpen(false)
+        }}
+        fullWidth
+        maxWidth="sm"
+      >
         <DialogTitle>{caisseEditing ? "Modifier la caisse" : "Nouvelle caisse"}</DialogTitle>
         <DialogContent>
           <div className="mt-2 flex flex-col gap-2">
@@ -348,7 +363,7 @@ export default function MagasinsAdminPanel() {
             {caisseSaving ? "…" : "Enregistrer"}
           </Button>
         </DialogActions>
-      </Dialog>
+      </FormDialog>
     </Box>
   );
 }

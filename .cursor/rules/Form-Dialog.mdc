@@ -1,0 +1,43 @@
+---
+description: Fenêtres MUI avec saisie — pas de fermeture au clic extérieur
+globs: "**/*.{tsx,ts}"
+alwaysApply: true
+---
+
+# Dialogues de formulaire (MUI)
+
+## Règle
+
+Toute fenêtre **avec saisie utilisateur** (TextField, Select, Checkbox, etc.) doit utiliser **`FormDialog`** (`src/lib/mui/FormDialog.tsx`), pas `Dialog` seul.
+
+- **Interdit** : fermeture au clic backdrop ou touche Échap (perte des modifications).
+- **Fermeture** : uniquement via bouton explicite (Annuler, Enregistrer, Fermer).
+
+```tsx
+import FormDialog from '@/lib/mui/FormDialog'
+
+<FormDialog open={open} onClose={() => setOpen(false)} fullWidth maxWidth="sm">
+  <DialogTitle>Modifier</DialogTitle>
+  ...
+</FormDialog>
+```
+
+Si `onClose` doit être conditionnel (ex. pendant un enregistrement) :
+
+```tsx
+<FormDialog
+  open={open}
+  onClose={() => {
+    if (!saving) setOpen(false)
+  }}
+  ...
+/>
+```
+
+## Exceptions — garder `Dialog` standard
+
+- Confirmations destructives (supprimer, annuler commande, archiver…)
+- Affichage lecture seule (historique, détails, résumé)
+- Simple alerte sans champ éditable
+
+Pour ces cas, le clic extérieur et Échap peuvent fermer la fenêtre.

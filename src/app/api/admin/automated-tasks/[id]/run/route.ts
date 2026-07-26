@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { requireApiAdministrator } from '@/lib/auth/require-administrator-api'
 import { executeAutomatedTask, loadTaskById } from '@/lib/automated-tasks'
+import { reconcileStaleTaskRuns } from '@/lib/automated-tasks/staleRuns'
 import { createSupabaseServiceRoleClient } from '@/lib/supabase/server'
 
 export const dynamic = 'force-dynamic'
@@ -24,6 +25,12 @@ export async function POST(_req: Request, ctx: { params: Promise<{ id: string }>
   const task = await loadTaskById(supabase, id)
   if (!task) {
     return NextResponse.json({ error: 'Tâche introuvable' }, { status: 404 })
+  }
+
+  try {
+    await reconcileStaleTaskRuns(supabase)
+  } catch {
+    // ignore — executeAutomatedTask reconcilie aussi pour cette tâche
   }
 
   try {

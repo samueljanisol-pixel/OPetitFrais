@@ -2,15 +2,19 @@
 
 import { useEffect, useState } from "react";
 import AddIcon from "@mui/icons-material/Add";
+import Visibility from "@mui/icons-material/Visibility";
+import VisibilityOff from "@mui/icons-material/VisibilityOff";
+import FormDialog from "@/lib/mui/FormDialog";
 import {
   Box,
   Button,
   Checkbox,
-  Dialog,
   DialogActions,
   DialogContent,
   DialogTitle,
   FormControl,
+  IconButton,
+  InputAdornment,
   InputLabel,
   ListItemText,
   MenuItem,
@@ -35,6 +39,7 @@ type ProfileRow = {
   login: string | null;
   prenom: string;
   nom: string;
+  phone: string | null;
   role_id: string;
   roles: RoleRow | null;
   magasins: MagasinOpt[];
@@ -56,6 +61,7 @@ export default function AdminUsersClient() {
   const [password, setPassword] = useState("");
   const [prenom, setPrenom] = useState("");
   const [nom, setNom] = useState("");
+  const [phone, setPhone] = useState("");
   const [roleId, setRoleId] = useState("");
   const [createMagasinIds, setCreateMagasinIds] = useState<string[]>([]);
 
@@ -63,8 +69,11 @@ export default function AdminUsersClient() {
   const [editUserId, setEditUserId] = useState<string | null>(null);
   const [editPrenom, setEditPrenom] = useState("");
   const [editNom, setEditNom] = useState("");
+  const [editPhone, setEditPhone] = useState("");
   const [editLogin, setEditLogin] = useState("");
   const [editPassword, setEditPassword] = useState("");
+  const [showCreatePassword, setShowCreatePassword] = useState(false);
+  const [showEditPassword, setShowEditPassword] = useState(false);
   const [editSaving, setEditSaving] = useState(false);
   const [editMagasinIds, setEditMagasinIds] = useState<string[]>([]);
 
@@ -129,9 +138,11 @@ export default function AdminUsersClient() {
     setPassword("");
     setPrenom("");
     setNom("");
+    setPhone("");
     setRoleId(roles[0]?.id ?? "");
     setCreateMagasinIds([]);
     setCreateError(null);
+    setShowCreatePassword(false);
   };
 
   const openCreateDialog = () => {
@@ -149,8 +160,10 @@ export default function AdminUsersClient() {
     setEditUserId(p.user_id);
     setEditPrenom(p.prenom ?? "");
     setEditNom(p.nom ?? "");
+    setEditPhone(p.phone ?? "");
     setEditLogin(p.login ?? "");
     setEditPassword("");
+    setShowEditPassword(false);
     setEditMagasinIds((p.magasins ?? []).map((m) => m.id));
     setEditOpen(true);
     setError(null);
@@ -164,6 +177,7 @@ export default function AdminUsersClient() {
       prenom: editPrenom.trim(),
       nom: editNom.trim(),
       login: editLogin.trim() || null,
+      phone: editPhone.trim() || null,
     };
     if (editPassword.trim().length > 0) {
       payload.password = editPassword;
@@ -197,6 +211,7 @@ export default function AdminUsersClient() {
       password,
       prenom: prenom.trim(),
       nom: nom.trim(),
+      phone: phone.trim() || null,
       role_id: roleId,
     };
     if (canAdminMagasins) {
@@ -261,7 +276,7 @@ export default function AdminUsersClient() {
         </Paper>
       ) : null}
 
-      <Dialog open={createOpen} onClose={closeCreateDialog} fullWidth maxWidth="sm">
+      <FormDialog open={createOpen} onClose={closeCreateDialog} fullWidth maxWidth="sm">
         <DialogTitle>Nouvel utilisateur</DialogTitle>
         <DialogContent>
           <Typography variant="caption" className="!mb-2 !mt-1 !block !text-slate-600">
@@ -306,14 +321,42 @@ export default function AdminUsersClient() {
               />
             </div>
             <TextField
+              label="Téléphone WhatsApp"
+              value={phone}
+              onChange={(e) => setPhone(e.target.value)}
+              size="small"
+              fullWidth
+              disabled={createBusy}
+              placeholder="212612345678"
+              helperText="Optionnel — format international sans +"
+            />
+            <TextField
               label="Mot de passe initial"
-              type="password"
+              type={showCreatePassword ? "text" : "password"}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               size="small"
               fullWidth
               disabled={createBusy}
               helperText="Minimum 6 caractères"
+              slotProps={{
+                input: {
+                  endAdornment: (
+                    <InputAdornment position="end">
+                      <IconButton
+                        aria-label={showCreatePassword ? "Masquer le mot de passe" : "Afficher le mot de passe"}
+                        onClick={() => setShowCreatePassword((v) => !v)}
+                        onMouseDown={(e) => e.preventDefault()}
+                        edge="end"
+                        size="small"
+                        disabled={createBusy}
+                      >
+                        {showCreatePassword ? <VisibilityOff fontSize="small" /> : <Visibility fontSize="small" />}
+                      </IconButton>
+                    </InputAdornment>
+                  ),
+                },
+              }}
             />
             <FormControl size="small" fullWidth disabled={createBusy}>
               <InputLabel>Rôle</InputLabel>
@@ -379,13 +422,14 @@ export default function AdminUsersClient() {
             {createBusy ? "Création…" : "Créer"}
           </Button>
         </DialogActions>
-      </Dialog>
+      </FormDialog>
 
       <Paper className="!overflow-x-auto">
         <Table size="small">
           <TableHead>
             <TableRow>
               <TableCell>Nom</TableCell>
+              <TableCell>Téléphone</TableCell>
               <TableCell>E-mail / login</TableCell>
               <TableCell>Rôle</TableCell>
               <TableCell align="right">Actions</TableCell>
@@ -397,6 +441,7 @@ export default function AdminUsersClient() {
                 <TableCell>
                   {p.prenom} {p.nom}
                 </TableCell>
+                <TableCell>{p.phone ?? "—"}</TableCell>
                 <TableCell>
                   <Box className="text-xs">
                     {p.email}
@@ -433,12 +478,21 @@ export default function AdminUsersClient() {
         </Table>
       </Paper>
 
-      <Dialog open={editOpen} onClose={() => !editSaving && setEditOpen(false)} fullWidth maxWidth="sm">
+      <FormDialog open={editOpen} onClose={() => { if (!editSaving) setEditOpen(false) }} fullWidth maxWidth="sm">
         <DialogTitle>Modifier l&apos;utilisateur</DialogTitle>
         <DialogContent>
           <div className="mt-2 flex flex-col gap-2">
             <TextField label="Prénom" value={editPrenom} onChange={(e) => setEditPrenom(e.target.value)} size="small" fullWidth />
             <TextField label="Nom" value={editNom} onChange={(e) => setEditNom(e.target.value)} size="small" fullWidth />
+            <TextField
+              label="Téléphone WhatsApp"
+              value={editPhone}
+              onChange={(e) => setEditPhone(e.target.value)}
+              size="small"
+              fullWidth
+              placeholder="212612345678"
+              helperText="Optionnel — format international sans +"
+            />
             <TextField
               label="Identifiant / login"
               value={editLogin}
@@ -449,12 +503,30 @@ export default function AdminUsersClient() {
             />
             <TextField
               label="Nouveau mot de passe"
-              type="password"
+              type={showEditPassword ? "text" : "password"}
               value={editPassword}
               onChange={(e) => setEditPassword(e.target.value)}
               size="small"
               fullWidth
-              helperText="Laisser vide pour ne pas changer. Minimum 6 caractères si renseigné."
+              helperText="Le mot de passe actuel n'est pas affichable (sécurité). Laissez vide pour ne pas le changer — min. 6 caractères si renseigné."
+              slotProps={{
+                input: {
+                  endAdornment: (
+                    <InputAdornment position="end">
+                      <IconButton
+                        aria-label={showEditPassword ? "Masquer le mot de passe" : "Afficher le mot de passe"}
+                        onClick={() => setShowEditPassword((v) => !v)}
+                        onMouseDown={(e) => e.preventDefault()}
+                        edge="end"
+                        size="small"
+                        disabled={editSaving}
+                      >
+                        {showEditPassword ? <VisibilityOff fontSize="small" /> : <Visibility fontSize="small" />}
+                      </IconButton>
+                    </InputAdornment>
+                  ),
+                },
+              }}
             />
             {canAdminMagasins ? (
               <FormControl size="small" fullWidth>
@@ -500,7 +572,7 @@ export default function AdminUsersClient() {
             {editSaving ? "Enregistrement…" : "Enregistrer"}
           </Button>
         </DialogActions>
-      </Dialog>
+      </FormDialog>
     </div>
   );
 }

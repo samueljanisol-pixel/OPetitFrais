@@ -103,7 +103,6 @@ export default function CommandeSaisieRecapExport({
     <Box ref={captureRef} sx={captureRootSx}>
       <VendeurRecapCaptureHeader
         magasinHeader={magasinHeader}
-        supplierOrderLine={`Commande Fournisseur : ${supplierLabel}`}
         vendeurLabel={group.vendeurLabel}
         showVendeurHeader={false}
         orderOnLine={`Commande du ${commandeDate.label}`}

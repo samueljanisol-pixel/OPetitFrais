@@ -234,7 +234,7 @@ export default function BackofficeHome() {
         <Tooltip title={t('settings')}>
           <Fab
             component={AppLink}
-            href="/referentiel"
+            href="/parametres"
             color="success"
             aria-label={t('settingsAria')}
             sx={{

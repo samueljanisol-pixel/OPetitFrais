@@ -9,6 +9,7 @@ import {
   InputLabel,
   MenuItem,
   Select,
+  Switch,
   TextField,
   Typography,
 } from '@mui/material'
@@ -42,7 +43,7 @@ type Row = ProductWithRefs
 type SortKey = 'code' | 'name' | 'price'
 type SortDir = 'asc' | 'desc'
 
-/** Filtre « Actif » : par défaut uniquement les produits actifs ; « Tous » sans filtre sur ce champ. */
+/** Filtre « Actif » : par défaut « Tous » (sans filtre) ; options Actifs / Inactifs. */
 type ActiveFilter = 'active' | 'inactive' | 'all'
 
 function codeToNum(code: string): number {
@@ -73,13 +74,14 @@ export default function ProduitsListClient() {
   const [qName, setQName] = useState('')
   const [catId, setCatId] = useState<string>('')
   const [suppId, setSuppId] = useState<string>('')
-  const [activeFilter, setActiveFilter] = useState<ActiveFilter>('active')
+  const [activeFilter, setActiveFilter] = useState<ActiveFilter>('all')
   const [editing, setEditing] = useState<Record<string, string>>({})
-  const [sortKey, setSortKey] = useState<SortKey>('code')
+  const [sortKey, setSortKey] = useState<SortKey>('name')
   const [sortDir, setSortDir] = useState<SortDir>('asc')
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set())
   const [bulkBusy, setBulkBusy] = useState(false)
   const [bulkMenuNonce, setBulkMenuNonce] = useState(0)
+  const [activeToggleBusyId, setActiveToggleBusyId] = useState<string | null>(null)
 
   const load = useCallback(async () => {
     setError(null)
@@ -193,6 +195,19 @@ export default function ProduitsListClient() {
     setRows(prev => prev.map(r => (ids.includes(r.id) ? { ...r, active } : r)))
     setSelectedIds(new Set())
     setBulkMenuNonce(n => n + 1)
+  }
+
+  const toggleActive = async (r: Row, active: boolean) => {
+    if (!canWriteProducts || activeToggleBusyId != null || r.active === active) return
+    setActiveToggleBusyId(r.id)
+    setError(null)
+    const { error: e0 } = await supabase.from('product').update({ active }).eq('id', r.id)
+    setActiveToggleBusyId(null)
+    if (e0) {
+      setError(e0.message)
+      return
+    }
+    setRows(prev => prev.map(p => (p.id === r.id ? { ...p, active } : p)))
   }
 
   const toggleSort = (key: SortKey) => {
@@ -383,6 +398,7 @@ export default function ProduitsListClient() {
                     {sortKey === 'code' ? (sortDir === 'asc' ? ' ↑' : ' ↓') : null}
                   </button>
                 </th>
+                <th className="px-3 py-2 w-20">Actif</th>
                 <th className="px-3 py-2">
                   <button
                     type="button"
@@ -424,7 +440,7 @@ export default function ProduitsListClient() {
                     }`}
                     onClick={ev => {
                       const t = ev.target as HTMLElement
-                      if (t.closest('input,button,a,[role="checkbox"]')) return
+                      if (t.closest('input,button,a,[role="checkbox"],[role="switch"]')) return
                       router.push(`/produits/${r.id}`)
                     }}
                   >
@@ -440,6 +456,16 @@ export default function ProduitsListClient() {
                       ) : null}
                     </td>
                     <td className="px-3 py-2 font-mono text-slate-800">{r.code}</td>
+                    <td className="px-3 py-1.5 align-middle" onClick={e => e.stopPropagation()}>
+                      <Switch
+                        size="small"
+                        color="success"
+                        checked={r.active}
+                        disabled={!canWriteProducts || activeToggleBusyId === r.id || bulkBusy}
+                        onChange={(_, checked) => void toggleActive(r, checked)}
+                        slotProps={{ input: { 'aria-label': `Actif — ${productSalesNameFr(r)}` } }}
+                      />
+                    </td>
                     <td className="px-3 py-2 text-slate-900">{productSalesNameFr(r)}</td>
                     <td className="px-3 py-1.5 align-middle" onClick={e => e.stopPropagation()}>
                       <TextField
@@ -563,8 +589,9 @@ export default function ProduitsListClient() {
           <p className="mt-4 text-slate-600 text-sm">Aucun produit. Créez-en un ou ajustez les filtres.</p>
         ) : null}
         <p className="mt-2 text-xs text-slate-500">
-          Astuce : cliquez sur Code, Nom ou Prix pour trier. Modifiez le prix puis validez (Entrée ou clic ailleurs) ; la ligne
-          s’affiche en orange, bouton ↺ pour annuler le changement.
+          Astuce : cliquez sur Code, Nom ou Prix pour trier. Le switch Actif active ou désactive le produit tout de suite.
+          Modifiez le prix puis validez (Entrée ou clic ailleurs) ; la ligne s’affiche en orange, bouton ↺ pour annuler le
+          changement.
         </p>
       </div>
     </div>

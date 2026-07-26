@@ -1,9 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent, type ReactNode } from "react";
-import { Box, Button, Typography } from "@mui/material";
+import { Box, Button, Tooltip, Typography } from "@mui/material";
 import ImageOutlinedIcon from "@mui/icons-material/ImageOutlined";
 import WhatsAppIcon from "@mui/icons-material/WhatsApp";
+import CheckCircleIcon from "@mui/icons-material/CheckCircle";
 import { useTranslations } from "next-intl";
 import {
   captureElementToPngFile,
@@ -44,6 +45,9 @@ type Props = {
   headerMagasinName?: string | null;
   commandeParLabel?: string | null;
   productCountLabel?: string | null;
+  whatsAppSent?: boolean;
+  whatsAppSentLabel?: string;
+  onWhatsAppSent?: () => void | Promise<void>;
 };
 
 type ActionButtonsProps = {
@@ -53,6 +57,8 @@ type ActionButtonsProps = {
   exportLabel: string;
   whatsAppLabel: string;
   whatsAppHref: string | null;
+  whatsAppSent: boolean;
+  whatsAppSentLabel: string;
   onExport: () => void;
   onWhatsAppClick: (e: MouseEvent<HTMLAnchorElement>) => void;
 };
@@ -64,6 +70,8 @@ function ExportActionButtons({
   exportLabel,
   whatsAppLabel,
   whatsAppHref,
+  whatsAppSent,
+  whatsAppSentLabel,
   onExport,
   onWhatsAppClick,
 }: ActionButtonsProps) {
@@ -81,21 +89,28 @@ function ExportActionButtons({
         {exporting ? "…" : exportLabel}
       </Button>
       {whatsAppHref ? (
-        <Button
-          variant="contained"
-          size="small"
-          color="success"
-          component="a"
-          href={whatsAppHref}
-          target="_blank"
-          rel="noopener noreferrer"
-          startIcon={<WhatsAppIcon />}
-          disabled={disabled || exporting || whatsAppBusy}
-          onClick={onWhatsAppClick}
-          sx={{ textTransform: "none" }}
-        >
-          {whatsAppBusy ? "…" : whatsAppLabel}
-        </Button>
+        <>
+          <Button
+            variant="contained"
+            size="small"
+            color="success"
+            component="a"
+            href={whatsAppHref}
+            target="_blank"
+            rel="noopener noreferrer"
+            startIcon={<WhatsAppIcon />}
+            disabled={disabled || exporting || whatsAppBusy}
+            onClick={onWhatsAppClick}
+            sx={{ textTransform: "none" }}
+          >
+            {whatsAppBusy ? "…" : whatsAppLabel}
+          </Button>
+          {whatsAppSent ? (
+            <Tooltip title={whatsAppSentLabel}>
+              <CheckCircleIcon color="success" fontSize="small" aria-label={whatsAppSentLabel} />
+            </Tooltip>
+          ) : null}
+        </>
       ) : null}
     </div>
   );
@@ -118,6 +133,9 @@ export default function VendeurRecapExportBlock({
   headerMagasinName,
   commandeParLabel,
   productCountLabel,
+  whatsAppSent = false,
+  whatsAppSentLabel = "WhatsApp déjà ouvert",
+  onWhatsAppSent,
 }: Props) {
   const tc = useTranslations("backoffice.commandes.common");
   const captureRef = useRef<HTMLDivElement>(null);
@@ -201,8 +219,13 @@ export default function VendeurRecapExportBlock({
         downloadPngFileUnique(file, filename);
       };
 
+      const markSent = () => {
+        void onWhatsAppSent?.();
+      };
+
       if (pngFileRef.current) {
         triggerDownload(pngFileRef.current);
+        markSent();
         return;
       }
 
@@ -215,10 +238,11 @@ export default function VendeurRecapExportBlock({
             triggerDownload(file);
           }
           window.open(href, "_blank", "noopener,noreferrer");
+          markSent();
         })
         .finally(() => setWhatsAppBusy(false));
     },
-    [ensurePngFile, filename, whatsAppHref],
+    [ensurePngFile, filename, onWhatsAppSent, whatsAppHref],
   );
 
   const footer = footerComment?.trim() ?? "";
@@ -246,6 +270,8 @@ export default function VendeurRecapExportBlock({
       exportLabel={tc("exportImage")}
       whatsAppLabel={tc("sendWhatsApp")}
       whatsAppHref={whatsAppPhoneOk ? whatsAppHref : null}
+      whatsAppSent={whatsAppSent}
+      whatsAppSentLabel={tc("whatsAppAlreadySent")}
       onExport={() => void onExport()}
       onWhatsAppClick={onWhatsAppClick}
     />
@@ -255,7 +281,6 @@ export default function VendeurRecapExportBlock({
     <Box ref={captureRef} sx={{ ...captureRootSx, direction: captureLabels.dir }}>
       <VendeurRecapCaptureHeader
         magasinHeader={magasinHeader}
-        supplierOrderLine={captureLabels.supplierOrderLine}
         vendeurLabel={group.vendeurLabel}
         showVendeurHeader={showVendeurHeader}
         orderOnLine={captureLabels.orderOnLine}
@@ -330,9 +355,6 @@ export default function VendeurRecapExportBlock({
                 {magasinHeader}
               </Typography>
             ) : null}
-            <Typography variant="subtitle1" dir={textDir} sx={{ fontWeight: 700, whiteSpace: "nowrap" }}>
-              {captureLabels.supplierOrderLine}
-            </Typography>
             {showVendeurHeader ? (
               <Typography variant="subtitle1" dir={textDir} sx={{ fontWeight: 700, whiteSpace: "nowrap" }}>
                 {group.vendeurLabel}

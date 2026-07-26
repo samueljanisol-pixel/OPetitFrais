@@ -7,7 +7,6 @@ import {
   Checkbox,
   Chip,
   CircularProgress,
-  Dialog,
   DialogActions,
   DialogContent,
   DialogTitle,
@@ -23,6 +22,7 @@ import {
   Typography,
 } from "@mui/material";
 import ProductArabicSubtitle from "@/components/ProductArabicSubtitle";
+import FormDialog from "@/lib/mui/FormDialog";
 
 export type ProductPickRow = {
   id: string;
@@ -216,7 +216,7 @@ export default function CommandeFournisseurProductPicker({
   };
 
   return (
-    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth scroll="paper">
+    <FormDialog open={open} onClose={onClose} maxWidth="sm" fullWidth scroll="paper">
       <DialogTitle sx={{ pb: 0 }}>Rechercher un produit</DialogTitle>
       <DialogContent>
         <FormControlLabel
@@ -322,6 +322,6 @@ export default function CommandeFournisseurProductPicker({
           Annuler
         </Button>
       </DialogActions>
-    </Dialog>
+    </FormDialog>
   );
 }

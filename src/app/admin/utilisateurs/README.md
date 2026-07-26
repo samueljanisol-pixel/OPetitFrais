@@ -30,6 +30,7 @@ profiles ──► roles
 | `user_id` | Clé primaire, FK vers `auth.users` |
 | `login` | Identifiant de connexion alternatif (min. 2 caractères, unique insensible à la casse) |
 | `prenom`, `nom` | Nom affiché |
+| `phone` | Téléphone WhatsApp (format international sans `+`, ex. `212612345678`) — chauffeur commandes, etc. |
 | `role_id` | Rôle RBAC |
 | `ui_locale` | Locale interface (`fr` ou `ar-MA`) |
 
@@ -73,6 +74,7 @@ Champs modifiables :
 | Champ | Notes |
 |-------|-------|
 | `prenom`, `nom` | Sync vers `user_metadata` Auth |
+| `phone` | Nullable ; téléphone WhatsApp |
 | `login` | Nullable ; sync Auth |
 | `role_id` | Interdit en self-service (trigger SQL) |
 | `password` | Min. 6 caractères si fourni |

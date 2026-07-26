@@ -15,6 +15,7 @@ if (supabaseUrl) {
 }
 
 const nextConfig: NextConfig = {
+  serverExternalPackages: ["pdfkit", "@fontsource/noto-sans-arabic"],
   // Dev : autoriser opetitfrais.ma (fichier hosts) à charger JS/HMR depuis next dev.
   allowedDevOrigins: [
     "opetitfrais.ma",
@@ -41,6 +42,20 @@ const nextConfig: NextConfig = {
           { key: "Cross-Origin-Opener-Policy", value: "same-origin" },
           { key: "Cross-Origin-Embedder-Policy", value: "credentialless" },
         ],
+      },
+    ];
+  },
+  async redirects() {
+    return [
+      {
+        source: "/referentiel",
+        destination: "/parametres",
+        permanent: true,
+      },
+      {
+        source: "/referentiel/:path*",
+        destination: "/parametres/:path*",
+        permanent: true,
       },
     ];
   },

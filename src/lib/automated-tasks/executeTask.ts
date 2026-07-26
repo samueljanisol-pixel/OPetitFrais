@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { computeNextRunAtForTask } from './schedule'
 import { getTaskExecutor } from './registry'
+import { reconcileStaleTaskRuns } from './staleRuns'
 import type { AutomatedTaskRow, TaskExecutionResult } from './types'
 
 export type ExecuteTaskOutcome = {
@@ -28,6 +29,8 @@ export async function executeAutomatedTask(
   options?: { force?: boolean },
 ): Promise<ExecuteTaskOutcome> {
   const force = options?.force === true
+
+  await reconcileStaleTaskRuns(supabase, { taskId: task.id })
 
   if (!force && !task.enabled) {
     return {

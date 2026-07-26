@@ -1,11 +1,11 @@
 'use client'
 
 import { useCallback, useState } from 'react'
+import FormDialog from '@/lib/mui/FormDialog'
 import {
   Button,
   Checkbox,
   CircularProgress,
-  Dialog,
   DialogActions,
   DialogContent,
   DialogTitle,
@@ -14,7 +14,7 @@ import {
   LinearProgress,
   Typography,
 } from '@mui/material'
-import { SHEET_IMPORT_ENABLED } from './config'
+import { SHEET_IMPORT_ENABLED, sheetDbExportDateHref, sheetDbExportHref } from './config'
 import { applySheetImport } from './applySheetImport'
 import { parseSheetJsonToRows } from './mapSheetRow'
 import {
@@ -279,6 +279,34 @@ export function SheetImportBar({ onDone, canWriteProducts = false }: Props) {
             {loading ? <CircularProgress size={18} color="inherit" className="mr-1" /> : null}
             Importer depuis Google Sheet
           </Button>
+          <Button
+            type="button"
+            size="small"
+            variant="outlined"
+            color="warning"
+            disabled={loading || ftpLoading || ftpExportLoading}
+            component="a"
+            href={sheetDbExportHref()}
+            target="_blank"
+            rel="noopener noreferrer"
+            sx={{ textTransform: 'none' }}
+          >
+            Export JSON (BDD)
+          </Button>
+          <Button
+            type="button"
+            size="small"
+            variant="outlined"
+            color="warning"
+            disabled={loading || ftpLoading || ftpExportLoading}
+            component="a"
+            href={sheetDbExportDateHref()}
+            target="_blank"
+            rel="noopener noreferrer"
+            sx={{ textTransform: 'none' }}
+          >
+            Date dernière modif
+          </Button>
           {canWriteProducts ? (
             <>
             <Button
@@ -335,7 +363,7 @@ export function SheetImportBar({ onDone, canWriteProducts = false }: Props) {
         ) : null}
       </div>
 
-      <Dialog open={dialogOpen} onClose={() => !loading && setDialogOpen(false)} fullWidth maxWidth="xs">
+      <FormDialog open={dialogOpen} onClose={() => { if (!loading) setDialogOpen(false) }} fullWidth maxWidth="xs">
         <DialogTitle sx={{ pb: 1 }}>Import Google Sheet</DialogTitle>
         <DialogContent dividers>
           <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
@@ -383,7 +411,7 @@ export function SheetImportBar({ onDone, canWriteProducts = false }: Props) {
             Importer
           </Button>
         </DialogActions>
-      </Dialog>
+      </FormDialog>
     </>
   )
 }
