@@ -36,6 +36,8 @@ type Props = {
   layout?: "stack" | "inline";
   /** Contenu affiché à gauche du bouton (ex. champ qté) si `layout="inline"`. */
   leading?: ReactNode;
+  /** Alignement du bloc inline (défaut fin de cellule ; `center` pour matrice lot). */
+  inlineAlign?: "end" | "center";
 };
 
 function targetKey(t: SaisieLigneTarget): string {
@@ -53,6 +55,7 @@ export default function LigneCommentaireSaisieControls({
   onUpdated,
   layout = "stack",
   leading,
+  inlineAlign = "end",
 }: Props) {
   const t = useTranslations("backoffice.commandes.components.ligneCommentaireSaisieControls");
   const tc = useTranslations("backoffice.commandes.common");
@@ -197,7 +200,7 @@ export default function LigneCommentaireSaisieControls({
         sx={{
           display: "flex",
           flexDirection: "column",
-          alignItems: "flex-end",
+          alignItems: inlineAlign === "center" ? "center" : "flex-end",
           gap: hasComment ? 0.5 : 0,
           maxWidth: "100%",
         }}
@@ -206,7 +209,7 @@ export default function LigneCommentaireSaisieControls({
           sx={{
             display: "flex",
             alignItems: "center",
-            justifyContent: "flex-end",
+            justifyContent: inlineAlign === "center" ? "center" : "flex-end",
             gap: 0.25,
             maxWidth: "100%",
           }}

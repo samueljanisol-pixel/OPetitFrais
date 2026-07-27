@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent, type RefObject } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type MouseEvent, type RefObject } from "react";
 import { Box, Button, Typography } from "@mui/material";
 import ImageOutlinedIcon from "@mui/icons-material/ImageOutlined";
 import WhatsAppIcon from "@mui/icons-material/WhatsApp";
@@ -27,9 +27,10 @@ import {
   type VendeurRef,
 } from "@/lib/commandes-fournisseur/validation-lot-vendeur-recap";
 import {
+  a4LandscapeCaptureRootSx,
   arabicTextClassName,
   arabicTextSx,
-  captureRootSx,
+  consolidationA4ColumnCount,
   LotGroupedRecapTable,
   VendeurRecapCaptureHeader,
 } from "@/features/commandes-fournisseur/vendeur-recap-export-parts";
@@ -58,6 +59,7 @@ function CapturePane({
   tableLabels,
   footer,
   lotCommentExportLabel,
+  layout = "sections",
 }: {
   captureRef: RefObject<HTMLDivElement | null>;
   sections: LotExportSection[];
@@ -73,42 +75,130 @@ function CapturePane({
   };
   footer: string;
   lotCommentExportLabel: string;
+  layout?: "sections" | "category-flow";
 }) {
+  const bodyOuterRef = useRef<HTMLDivElement>(null);
+  const bodyInnerRef = useRef<HTMLDivElement>(null);
+
+  const totalRows = useMemo(
+    () => sections.reduce((n, s) => n + s.rows.length + 1, 0),
+    [sections],
+  );
+  /** Plus de colonnes si beaucoup de lignes, pour éviter un scale trop fort. */
+  const columnCount = useMemo(() => {
+    const base = consolidationA4ColumnCount(totalRows);
+    if (totalRows > 22) {
+      return Math.max(base, 3);
+    }
+    if (totalRows > 12) {
+      return Math.max(base, 2);
+    }
+    return base;
+  }, [totalRows]);
+  const isRtl = captureLabels.dir === "rtl";
+
+  useLayoutEffect(() => {
+    const root = captureRef.current;
+    const outer = bodyOuterRef.current;
+    const inner = bodyInnerRef.current;
+    if (!root || !outer || !inner) {
+      return;
+    }
+
+    // Reset avant mesure. `zoom` réduit le layout (capturé correctement en PNG), pas `transform`.
+    inner.style.zoom = "1";
+    inner.style.transform = "";
+    outer.style.height = "auto";
+    outer.style.overflow = "visible";
+
+    const headerEl = root.querySelector<HTMLElement>("[data-a4-header]");
+    const footerEl = root.querySelector<HTMLElement>("[data-a4-footer]");
+    const chrome = (headerEl?.offsetHeight ?? 0) + (footerEl?.offsetHeight ?? 0) + 8;
+    const availableH = Math.max(48, root.clientHeight - chrome);
+    const availableW = Math.max(48, root.clientWidth);
+    const neededH = Math.max(1, inner.scrollHeight);
+    const neededW = Math.max(1, inner.scrollWidth);
+    let zoom = Math.min(1, availableH / neededH, availableW / neededW);
+    zoom = Math.max(0.28, zoom);
+    inner.style.zoom = String(zoom);
+
+    // 2ᵉ passe : si ça dépasse encore (arrondis / polices), resserrer.
+    const rect = inner.getBoundingClientRect();
+    if (rect.height > availableH + 1 || rect.width > availableW + 1) {
+      const z2 = Math.min(availableH / Math.max(1, rect.height), availableW / Math.max(1, rect.width));
+      zoom = Math.max(0.28, zoom * z2);
+      inner.style.zoom = String(zoom);
+    }
+
+    outer.style.height = `${availableH}px`;
+    outer.style.overflow = "hidden";
+  }, [captureRef, sections, magasinColumns, productCount, footer, columnCount, tableLabels, isRtl, layout]);
+
   return (
     <Box
       ref={captureRef}
       dir={captureLabels.dir}
-      lang={captureLabels.dir === "rtl" ? "ar" : undefined}
+      lang={isRtl ? "ar" : undefined}
       style={{ direction: captureLabels.dir }}
-      sx={{ ...captureRootSx, display: "inline-block" }}
+      sx={a4LandscapeCaptureRootSx}
     >
-      <VendeurRecapCaptureHeader
-        magasinHeader=""
-        vendeurLabel=""
-        showVendeurHeader={false}
-        orderOnLine={captureLabels.orderOnLine}
-        orderByLine={captureLabels.orderByLine}
-        productCount={productCount}
-        dir={captureLabels.dir}
-      />
-      <LotGroupedRecapTable
-        sections={sections}
-        magasinColumns={magasinColumns}
-        labels={tableLabels}
-        captureDir={captureLabels.dir}
-      />
+      <Box data-a4-header sx={{ flexShrink: 0, mb: "2mm" }}>
+        <VendeurRecapCaptureHeader
+          magasinHeader=""
+          vendeurLabel=""
+          showVendeurHeader={false}
+          orderOnLine={captureLabels.orderOnLine}
+          orderByLine={captureLabels.orderByLine}
+          productCount={productCount}
+          dir={captureLabels.dir}
+        />
+      </Box>
+      <Box
+        ref={bodyOuterRef}
+        sx={{
+          flex: "1 1 auto",
+          minHeight: 0,
+          width: "100%",
+          position: "relative",
+        }}
+      >
+        <Box
+          ref={bodyInnerRef}
+          sx={{
+            width: "max-content",
+            mx: "auto",
+          }}
+        >
+          <LotGroupedRecapTable
+            sections={sections}
+            magasinColumns={magasinColumns}
+            labels={tableLabels}
+            captureDir={captureLabels.dir}
+            compact
+            columnCount={columnCount}
+            layout={layout}
+          />
+        </Box>
+      </Box>
       {footer ? (
         <Typography
+          data-a4-footer
           variant="caption"
           component="p"
-          className={captureLabels.dir === "rtl" ? `!mt-2 ${arabicTextClassName}` : "!mt-2"}
-          dir={captureLabels.dir === "rtl" ? "rtl" : undefined}
-          lang={captureLabels.dir === "rtl" ? "ar" : undefined}
+          className={isRtl ? arabicTextClassName : undefined}
+          dir={isRtl ? "rtl" : undefined}
+          lang={isRtl ? "ar" : undefined}
           sx={{
-            lineHeight: 1.4,
+            flexShrink: 0,
+            mt: "2mm",
+            mb: 0,
+            lineHeight: 1.3,
+            fontSize: "0.65rem",
             whiteSpace: "nowrap",
-            maxWidth: "none",
-            ...(captureLabels.dir === "rtl" ? arabicTextSx : {}),
+            maxWidth: "100%",
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            ...(isRtl ? arabicTextSx : {}),
           }}
         >
           <Box component="span" sx={{ fontWeight: 700 }}>
@@ -130,8 +220,6 @@ export default function LotConsolidationExportPanel({
   commandeDateLabel,
   commandeDateSlug,
   lotComment,
-  noCategoryLabel,
-  productCountLabel,
 }: Props) {
   const t = useTranslations("backoffice.commandes.validation.lotDetail.consolidationExport");
   const tc = useTranslations("backoffice.commandes.common");
@@ -170,21 +258,16 @@ export default function LotConsolidationExportPanel({
     };
   }, []);
 
-  /** Fournisseur sans marchands (ex. Station) : un seul « vendeur » → pas d’export par vendeur ; image toujours en arabe. */
+  /** Station (sans marchands) : pas d’export « par vendeur ». Images consolidation : toujours arabe (marché + Station). */
   const showVendeurExport = vendeurs.length > 0;
-  const exportLocale: AppLocale = showVendeurExport ? "fr" : stationExportLocale();
+  const exportLocale: AppLocale = stationExportLocale();
 
   const captureLabels = useMemo(
     () => vendorRecapCaptureLabels(exportLocale, supplierLabel, commandeDateLabel, null),
     [exportLocale, supplierLabel, commandeDateLabel],
   );
 
-  const noCategoryForExport = useMemo(() => {
-    if (exportLocale === "ar-MA") {
-      return arMessages.backoffice.commandes.common.noCategory;
-    }
-    return noCategoryLabel;
-  }, [exportLocale, noCategoryLabel]);
+  const noCategoryForExport = arMessages.backoffice.commandes.common.noCategory;
 
   const categorySections = useMemo(() => {
     const raw = buildCategoryExportSections(
@@ -225,30 +308,22 @@ export default function LotConsolidationExportPanel({
   const tableLabels = useMemo(
     () => ({
       product: captureLabels.product,
-      quantity:
-        exportLocale === "ar-MA"
-          ? arMessages.backoffice.commandes.common.quantity
-          : tc("quantity"),
+      quantity: arMessages.backoffice.commandes.common.quantity,
       total: captureLabels.total,
       udvCond: captureLabels.udvCond,
       noLines: captureLabels.noLines,
     }),
-    [captureLabels, exportLocale, tc],
+    [captureLabels],
   );
 
   const footer = lotComment?.trim() ?? "";
   const productCount = useMemo(() => {
-    if (exportLocale === "ar-MA") {
-      const n = lignes.length;
-      return n === 1 ? "1 منتج" : `${n} منتجات`;
-    }
-    return productCountLabel.trim();
-  }, [exportLocale, lignes.length, productCountLabel]);
+    const n = lignes.length;
+    return n === 1 ? "1 منتج" : `${n} منتجات`;
+  }, [lignes.length]);
   const rowsEmpty = lignes.length === 0;
   const lotCommentExportLabel =
-    exportLocale === "ar-MA"
-      ? arMessages.backoffice.commandes.validation.lotDetail.consolidationExport.lotCommentExportLabel
-      : t("lotCommentExportLabel");
+    arMessages.backoffice.commandes.validation.lotDetail.consolidationExport.lotCommentExportLabel;
 
   const chauffeurPhone = chauffeur?.phone?.trim() ?? "";
 
@@ -266,6 +341,13 @@ export default function LotConsolidationExportPanel({
     }
     let cancelled = false;
     void (async () => {
+      // Laisser le zoom A4 s’appliquer (useLayoutEffect) avant capture PNG.
+      await new Promise<void>((resolve) => {
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+      });
+      if (cancelled) {
+        return;
+      }
       const catEl = categoryCaptureRef.current;
       if (catEl) {
         const cat = await captureElementToPngFile(catEl, categoryFilename);
@@ -523,9 +605,19 @@ export default function LotConsolidationExportPanel({
           overflow: "hidden",
         }}
       >
-        <CapturePane captureRef={categoryCaptureRef} sections={categorySections} {...capturePaneProps} />
+        <CapturePane
+          captureRef={categoryCaptureRef}
+          sections={categorySections}
+          layout="category-flow"
+          {...capturePaneProps}
+        />
         {showVendeurExport ? (
-          <CapturePane captureRef={vendeurCaptureRef} sections={vendeurSections} {...capturePaneProps} />
+          <CapturePane
+            captureRef={vendeurCaptureRef}
+            sections={vendeurSections}
+            layout="category-flow"
+            {...capturePaneProps}
+          />
         ) : null}
       </Box>
     </>

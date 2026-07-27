@@ -35,7 +35,7 @@ Lorsque le lot est **prêt pour l’achat**, le commentaire du lot est affiché 
 Sur `/commandes-fournisseur/validation/lots/[id]`, lorsque le statut est **`prete`** :
 
 1. **Matrice consolidation** en haut (lecture seule) : colonnes magasins en **codes MXX** (ex. M01).
-2. **Export consolidation** (sous « Revenir en saisie ») : PNG de toute la commande — **par catégorie** et **par vendeur** (si le fournisseur a des marchands), plus **WhatsApp chauffeur** (télécharge les images puis ouvre `wa.me`). **Fournisseur sans marchands** (ex. **Station**) : **un seul** export image (par catégorie), **toujours en arabe** (en-têtes, noms produit, UdV, catégories `label_ar`, RTL) même si l’UI est en français ; WhatsApp chauffeur n’envoie que cette image. Le chauffeur est choisi dans **Paramètres → Commandes** (utilisateur avec téléphone renseigné sur sa fiche). Migration `20260725230000_profiles_phone_chauffeur_setting.sql`.
+2. **Export consolidation** (sous « Revenir en saisie ») : PNG de toute la commande — **par catégorie** et **par vendeur** (si le fournisseur a des marchands), plus **WhatsApp chauffeur**. Format **A4 paysage** : largeurs au texte, quantités centrées, scale dans un conteneur à **hauteur fixe** (évite le bas coupé), répartition multi-colonnes avec **libellé répété** (catégorie ou vendeur). Images **toujours en arabe**. **Station** : un seul export (par catégorie). Migration `20260725230000_profiles_phone_chauffeur_setting.sql`.
 3. **Récap groupé par vendeur** en dessous (`ValidationLotVendeurRecap`) :
 
 - Colonnes magasins en **codes MXX** (ex. M01, M12) — pas le nom du magasin (`magasinCodeMx`).
@@ -70,9 +70,11 @@ L’écran `/commandes-fournisseur/validation/lots/[id]` utilise `next-intl` pou
 
 Le composant client s’appuie aussi sur `useAppFormat()` (dates/nombres selon locale) et `useBackChevronIcon()` (icône de retour LTR/RTL).
 
+**Matrice consolidation** (locale UI) : en-têtes de **catégorie** (`ref_category.label_ar` si `ar-MA`), **noms produit** (`name_ar`), libellés **UdV / cond.** et « Soit … » suivent la locale ; repli sur le français si le libellé arabe est absent.
+
 ### Colonne UdV / conditionnement (validation)
 
-**En-têtes colonnes magasin** (matrice consolidation, tous statuts lot) : codes **MXX** (`magasinCodeMx`, ex. M01) — le nom complet du magasin reste utilisé pour l’accessibilité et les commentaires.
+**En-têtes colonnes magasin** (matrice consolidation, tous statuts lot) : codes **MXX** (`magasinCodeMx`, ex. M01) — le nom complet du magasin reste utilisé pour l’accessibilité et les commentaires. Largeurs de colonnes **ajustées au texte** (`width: max-content`) ; quantités magasins et total **centrés** dans la cellule.
 
 Comme au **récap saisie** : la colonne affiche l’**UdC** (`ref_order_unit`, repli UdV) à l’unité, ou le **libellé conditionnement** si colis ; **« Soit … »** en dessous si applicable.
 

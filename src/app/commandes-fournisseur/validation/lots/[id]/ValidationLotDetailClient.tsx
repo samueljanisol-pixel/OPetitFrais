@@ -28,7 +28,17 @@ import AppLink from "@/components/AppLink";
 import FormDialog from "@/lib/mui/FormDialog";
 import { useSessionPermissions } from "@/lib/auth/useSessionPermissions";
 import { useStatusLabels } from "@/lib/statusLabels/useStatusLabels";
-import { buildLotProductDisplayInfo, buildSoitLine, recapLigneQtyUnitLabel, type PackagingRowForDisplay } from "@/lib/commandes-fournisseur/product-display";
+import {
+  buildLotProductDisplayInfoForLocale,
+  buildSoitLineForLocale,
+  recapLigneQtyUnitLabel,
+  type PackagingRowForDisplay,
+} from "@/lib/commandes-fournisseur/product-display";
+import {
+  productLogisticDisplayIsArabic,
+  productLogisticDisplayName,
+} from "@/lib/products/product-display-name";
+import { arabicTextClassName, arabicTextSx } from "@/features/commandes-fournisseur/vendeur-recap-export-parts";
 import CommandeFournisseurProductPicker, {
   type ProductPickRow,
 } from "@/features/commandes-fournisseur/CommandeFournisseurProductPicker";
@@ -133,9 +143,10 @@ function one<T>(raw: T | T[] | null | undefined): T | null {
   return (Array.isArray(raw) ? raw[0] : raw) as T;
 }
 
-function productName(p: ProductE): string {
+function productName(p: ProductE, locale: AppLocale): string {
   if (!p) return "—";
-  return p.name ? String(p.name) : "—";
+  const name = p.name ? String(p.name) : "—";
+  return productLogisticDisplayName({ name, name_ar: p.name_ar }, locale);
 }
 
 function magLabel(m: MagE): string {
@@ -868,6 +879,7 @@ export default function ValidationLotDetailClient({ lotId }: { lotId: string }) 
     vendeurs,
     supplierName,
     tCommandesCommon("noCategory"),
+    locale,
   );
   const readyAtText = lot.marque_prete_at
     ? tLotDetail("readyAtSuffix", {
@@ -986,23 +998,35 @@ export default function ValidationLotDetailClient({ lotId }: { lotId: string }) 
               </ToggleButtonGroup>
             </div>
           ) : null}
-          <Table size="small">
+          <Table
+            size="small"
+            sx={{
+              width: "max-content",
+              maxWidth: "none",
+              tableLayout: "auto",
+              "& .MuiTableCell-root": {
+                width: "auto",
+                whiteSpace: "nowrap",
+                verticalAlign: "middle",
+              },
+            }}
+          >
             <TableHead>
               <TableRow>
-                <TableCell sx={{ minWidth: 200 }}>{tCommandesCommon("product")}</TableCell>
+                <TableCell>{tCommandesCommon("product")}</TableCell>
                 {magasinColumns.map((m) => (
-                  <TableCell key={m.id} align="right" sx={{ minWidth: 88, whiteSpace: "nowrap" }}>
+                  <TableCell key={m.id} align="center">
                     {m.mxCode}
                   </TableCell>
                 ))}
-                <TableCell align="right" sx={{ fontWeight: 600, minWidth: 56 }}>
+                <TableCell align="center" sx={{ fontWeight: 600 }}>
                   {tLotDetail("tableTotal")}
                 </TableCell>
-                <TableCell align="left" sx={{ fontWeight: 600, minWidth: 148 }}>
+                <TableCell align="left" sx={{ fontWeight: 600 }}>
                   {tCommandesCommon("udvCond")}
                 </TableCell>
                 {editable ? (
-                  <TableCell align="center" width={48} padding="checkbox">
+                  <TableCell align="center" padding="checkbox">
                     {""}
                   </TableCell>
                 ) : null}
@@ -1012,6 +1036,7 @@ export default function ValidationLotDetailClient({ lotId }: { lotId: string }) 
               {matrixDisplayItems.map((item, itemIdx) => {
                 if (item.type === "header") {
                   if (item.header.kind === "category") {
+                    const catIsAr = locale === "ar-MA";
                     return (
                       <TableRow key={`cat-${item.header.label}-${itemIdx}`}>
                         <TableCell colSpan={matrixCategoryColSpan} sx={LOT_CATEGORY_HEADER_BG_SX}>
@@ -1019,7 +1044,13 @@ export default function ValidationLotDetailClient({ lotId }: { lotId: string }) 
                             variant="subtitle1"
                             color="success"
                             component="div"
-                            sx={LOT_CATEGORY_HEADER_TEXT_SX}
+                            dir={catIsAr ? "rtl" : undefined}
+                            lang={catIsAr ? "ar" : undefined}
+                            className={catIsAr ? arabicTextClassName : undefined}
+                            sx={{
+                              ...LOT_CATEGORY_HEADER_TEXT_SX,
+                              ...(catIsAr ? { ...arabicTextSx, textAlign: "right" } : {}),
+                            }}
                           >
                             {item.header.label}
                           </Typography>
@@ -1081,7 +1112,7 @@ export default function ValidationLotDetailClient({ lotId }: { lotId: string }) 
                   return null;
                 }
                 const p = normalizeProduct(l.product);
-                const display = buildLotProductDisplayInfo(
+                const display = buildLotProductDisplayInfoForLocale(
                   p
                     ? {
                         ref_sales_unit: p.ref_sales_unit,
@@ -1089,32 +1120,48 @@ export default function ValidationLotDetailClient({ lotId }: { lotId: string }) 
                       }
                     : null,
                   l.product_packaging_id ?? null,
+                  locale,
                 );
                 const mags = magasinColumns.map((col) => {
                   const c = l.commande_fournisseur_lot_ligne_magasin?.find((x) => x.magasin_id === col.id);
                   return c?.qte ?? 0;
                 });
                 const tot = mags.reduce((s, n) => s + n, 0);
-                const soitLine = buildSoitLine(display, tot);
+                const pack = packagingForLotLigne(p, l.product_packaging_id);
+                const formatSoit = (qty: string, unit: string) =>
+                  tCommandesCommon("soitLine", { qty, unit });
+                const soitLine = buildSoitLineForLocale(display, tot, locale, pack, formatSoit);
                 const unitLabel = lotLigneQtyUnitLabel(l, p, locale);
+                const displayName = productName(p, locale);
+                const nameIsArabic = p
+                  ? productLogisticDisplayIsArabic(
+                      { name: p.name ? String(p.name) : "—", name_ar: p.name_ar },
+                      locale,
+                    )
+                  : false;
                 return (
                   <TableRow key={l.id}>
                     <TableCell>
-                      <Typography variant="body2" className="!font-medium">
-                        {productName(p)}
+                      <Typography
+                        variant="body2"
+                        className={nameIsArabic ? `!font-medium ${arabicTextClassName}` : "!font-medium"}
+                        dir={nameIsArabic ? "rtl" : undefined}
+                        lang={nameIsArabic ? "ar" : undefined}
+                        sx={nameIsArabic ? { ...arabicTextSx, textAlign: "right" } : undefined}
+                      >
+                        {displayName}
                       </Typography>
                     </TableCell>
                     {magasinColumns.map((col, i) => {
                       const v = mags[i] ?? 0;
                       const cellKey = `${l.id}::${col.id}`;
-                      const soitMag = v > 0 ? buildSoitLine(display, v) : null;
+                      const soitMag = v > 0 ? buildSoitLineForLocale(display, v, locale, pack, formatSoit) : null;
                       const qtyBlock = (
                         <Box
                           sx={{
                             display: "flex",
                             flexDirection: "column",
-                            alignItems: "flex-end",
-                            minWidth: 88,
+                            alignItems: "center",
                           }}
                         >
                           {editable ? (
@@ -1133,7 +1180,14 @@ export default function ValidationLotDetailClient({ lotId }: { lotId: string }) 
                                   void patchMagasinQte(l.id, col.id, after);
                                 }
                               }}
-                              sx={{ width: 88, "& .MuiInputBase-input": { textAlign: "right", py: 0.65 } }}
+                              sx={{
+                                width: 56,
+                                "& .MuiInputBase-input": {
+                                  textAlign: "center",
+                                  py: 0.65,
+                                  px: 0.5,
+                                },
+                              }}
                               slotProps={{
                                 htmlInput: {
                                   "aria-label": tCommandesCommon("quantityForStoreAria", {
@@ -1143,7 +1197,12 @@ export default function ValidationLotDetailClient({ lotId }: { lotId: string }) 
                               }}
                             />
                           ) : (
-                            <Typography variant="body2" component="span">
+                            <Typography
+                              variant="body2"
+                              component="span"
+                              className="tabular-nums"
+                              sx={{ textAlign: "center" }}
+                            >
                               {formatNumber(v, {
                                 minimumFractionDigits: 0,
                                 maximumFractionDigits: 2,
@@ -1160,7 +1219,7 @@ export default function ValidationLotDetailClient({ lotId }: { lotId: string }) 
                                 mt: 0.35,
                                 fontSize: "0.6875rem",
                                 lineHeight: 1.25,
-                                textAlign: "right",
+                                textAlign: "center",
                                 whiteSpace: "nowrap",
                               }}
                             >
@@ -1172,11 +1231,12 @@ export default function ValidationLotDetailClient({ lotId }: { lotId: string }) 
                       const cellTargets = targetsForMagasinCell(l, col.id, col.storeLabel);
 
                       return (
-                        <TableCell key={col.id} align="right">
+                        <TableCell key={col.id} align="center" sx={{ px: 0.75 }}>
                           <LigneCommentaireSaisieControls
                             lotId={lotId}
                             layout="inline"
-                            productLabel={productName(p)}
+                            inlineAlign="center"
+                            productLabel={displayName}
                             productId={l.product_id}
                             productPackagingId={l.product_packaging_id}
                             targets={cellTargets}
@@ -1188,8 +1248,13 @@ export default function ValidationLotDetailClient({ lotId }: { lotId: string }) 
                         </TableCell>
                       );
                     })}
-                    <TableCell align="right" sx={{ verticalAlign: "middle" }}>
-                      <Typography variant="body2" component="span" sx={{ fontWeight: 700 }}>
+                    <TableCell align="center" sx={{ verticalAlign: "middle", px: 0.75 }}>
+                      <Typography
+                        variant="body2"
+                        component="span"
+                        className="tabular-nums"
+                        sx={{ fontWeight: 700, textAlign: "center" }}
+                      >
                         {formatNumber(tot, { minimumFractionDigits: 0, maximumFractionDigits: 2 })}
                       </Typography>
                     </TableCell>
@@ -1232,7 +1297,7 @@ export default function ValidationLotDetailClient({ lotId }: { lotId: string }) 
                           color="error"
                           aria-label={tCommandesCommon("removeLineAria")}
                           disabled={saving || rowSaving === l.id}
-                          onClick={() => openDeleteLigneDialog(l.id, productName(p))}
+                          onClick={() => openDeleteLigneDialog(l.id, displayName)}
                         >
                           <DeleteOutlineOutlinedIcon fontSize="small" />
                         </IconButton>

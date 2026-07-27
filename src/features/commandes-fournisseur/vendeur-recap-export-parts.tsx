@@ -33,6 +33,35 @@ export const exportTableSx = {
   },
 };
 
+/** Table dense A4 — largeur = contenu, nombres centrés. */
+export const compactExportTableSx = {
+  width: "max-content",
+  maxWidth: "none",
+  tableLayout: "auto" as const,
+  "& .MuiTableCell-root": {
+    border: "1px solid #ccc",
+    py: 0.3,
+    px: 0.45,
+    fontSize: "0.7rem",
+    lineHeight: 1.25,
+    whiteSpace: "nowrap" as const,
+    width: "auto",
+    verticalAlign: "middle",
+  },
+  "& .MuiTableHead-root .MuiTableCell-root": {
+    fontWeight: 700,
+    bgcolor: "#f5f5f5",
+    py: 0.35,
+    fontSize: "0.62rem",
+  },
+  "& .MuiTableBody-root .MuiTableRow-root": {
+    height: "auto",
+  },
+};
+
+/** Alias : même style (largeur = texte). */
+export const compactFitExportTableSx = compactExportTableSx;
+
 export const captureRootSx = {
   display: "inline-block",
   width: "max-content",
@@ -43,6 +72,28 @@ export const captureRootSx = {
   boxSizing: "border-box" as const,
 };
 
+/** Canevas A4 paysage (297 × 210 mm) pour export consolidation. */
+export const a4LandscapeCaptureRootSx = {
+  display: "flex",
+  flexDirection: "column" as const,
+  width: "297mm",
+  height: "210mm",
+  maxWidth: "297mm",
+  maxHeight: "210mm",
+  overflow: "hidden",
+  background: "#fff",
+  p: "4mm",
+  fontFamily: "Arial, Helvetica, sans-serif",
+  boxSizing: "border-box" as const,
+};
+
+/** Nombre de colonnes pour tenter de tenir / remplir une page A4 paysage. */
+export function consolidationA4ColumnCount(totalRows: number): number {
+  if (totalRows <= 12) return 1;
+  if (totalRows <= 28) return 2;
+  return 3;
+}
+
 export const arabicTextSx = {
   fontFamily: ARABIC_FONT_FAMILY,
   fontFeatureSettings: '"liga" 1, "calt" 1',
@@ -50,11 +101,11 @@ export const arabicTextSx = {
 
 export const arabicTextClassName = notoSansArabic.className;
 
-const exportProductNameSx = (isArabic: boolean) =>
+const exportProductNameSx = (isArabic: boolean, compact = false) =>
   ({
     fontWeight: 500,
-    fontSize: "0.875rem",
-    lineHeight: 1.55,
+    fontSize: compact ? "0.7rem" : "0.875rem",
+    lineHeight: compact ? 1.25 : 1.55,
     whiteSpace: "nowrap" as const,
     textAlign: isArabic ? ("right" as const) : ("inherit" as const),
     ...(isArabic ? arabicTextSx : {}),
@@ -75,6 +126,9 @@ type VendeurRecapTableProps = {
   magasinColumnHeader?: string;
   labels: TableLabels;
   captureDir?: "rtl" | "ltr";
+  compact?: boolean;
+  /** Largeur colonnes = contenu (pas 100 %). */
+  fitContent?: boolean;
 };
 
 export function VendeurRecapTable({
@@ -84,12 +138,15 @@ export function VendeurRecapTable({
   magasinColumnHeader,
   labels,
   captureDir = "ltr",
+  compact = false,
+  fitContent = false,
 }: VendeurRecapTableProps) {
   const colSpan = 2 + magasinColumns.length + (showTotalColumn ? 1 : 0);
   const headerArabicSx = captureDir === "rtl" ? arabicTextSx : {};
+  const tableSx = compact ? compactExportTableSx : exportTableSx;
 
   return (
-    <Table size="small" sx={exportTableSx} dir={captureDir}>
+    <Table size="small" sx={tableSx} dir={captureDir}>
       <TableHead>
         <TableRow>
           <TableCell
@@ -101,7 +158,7 @@ export function VendeurRecapTable({
             {labels.product}
           </TableCell>
           {magasinColumns.map((m) => (
-            <TableCell key={m.id} align="center">
+            <TableCell key={m.id} align="center" sx={{ px: compact ? 0.45 : undefined }}>
               {magasinColumnHeader ?? m.mxCode}
             </TableCell>
           ))}
@@ -110,7 +167,7 @@ export function VendeurRecapTable({
               align="center"
               dir={captureDir === "rtl" ? "rtl" : undefined}
               lang={captureDir === "rtl" ? "ar" : undefined}
-              sx={headerArabicSx}
+              sx={{ ...headerArabicSx, px: compact ? 0.45 : undefined }}
             >
               {labels.total}
             </TableCell>
@@ -141,7 +198,7 @@ export function VendeurRecapTable({
                     className={row.productDisplayIsArabic ? arabicTextClassName : undefined}
                     dir={row.productDisplayIsArabic ? "rtl" : undefined}
                     lang={row.productDisplayIsArabic ? "ar" : undefined}
-                    sx={exportProductNameSx(row.productDisplayIsArabic === true)}
+                    sx={exportProductNameSx(row.productDisplayIsArabic === true, compact)}
                   >
                     {row.productDisplayName}
                   </Typography>
@@ -162,7 +219,7 @@ export function VendeurRecapTable({
                         dir="rtl"
                         lang="ar"
                         sx={{
-                          ...exportProductNameSx(true),
+                          ...exportProductNameSx(true, compact),
                           fontWeight: 600,
                         }}
                       >
@@ -173,8 +230,8 @@ export function VendeurRecapTable({
                       variant="body2"
                       component="div"
                       sx={{
-                        ...exportProductNameSx(false),
-                        mt: row.nameAr ? 0.5 : 0,
+                        ...exportProductNameSx(false, compact),
+                        mt: row.nameAr ? (compact ? 0.15 : 0.5) : 0,
                       }}
                     >
                       {row.productName}
@@ -190,7 +247,11 @@ export function VendeurRecapTable({
                   <TableCell
                     key={`${row.ligneId}-${i}`}
                     align="center"
-                    sx={{ verticalAlign: hasComment ? "top" : "middle" }}
+                    sx={{
+                      verticalAlign: hasComment ? "top" : "middle",
+                      px: compact ? 0.45 : undefined,
+                      textAlign: "center",
+                    }}
                   >
                     {hasComment ? (
                       <Box
@@ -198,15 +259,22 @@ export function VendeurRecapTable({
                           display: "inline-flex",
                           flexDirection: "column",
                           alignItems: "center",
-                          gap: 0.5,
-                          py: 0.25,
+                          gap: compact ? 0.2 : 0.5,
+                          py: compact ? 0 : 0.25,
+                          width: "100%",
                         }}
                       >
                         {qtyStr ? (
                           <Typography
                             variant="body2"
                             component="span"
-                            sx={{ lineHeight: 1.3, whiteSpace: "nowrap" }}
+                            className="tabular-nums"
+                            sx={{
+                              lineHeight: 1.25,
+                              whiteSpace: "nowrap",
+                              textAlign: "center",
+                              fontSize: compact ? "0.7rem" : undefined,
+                            }}
                           >
                             {qtyStr}
                           </Typography>
@@ -218,8 +286,8 @@ export function VendeurRecapTable({
                           dir="rtl"
                           lang="ar"
                           sx={{
-                            lineHeight: 1.45,
-                            fontSize: "0.6875rem",
+                            lineHeight: 1.2,
+                            fontSize: compact ? "0.65rem" : "0.6875rem",
                             color: "text.secondary",
                             textAlign: "center",
                             whiteSpace: "nowrap",
@@ -233,7 +301,14 @@ export function VendeurRecapTable({
                       <Typography
                         variant="body2"
                         component="span"
-                        sx={{ lineHeight: 1.3, whiteSpace: "nowrap" }}
+                        className="tabular-nums"
+                        sx={{
+                          display: "block",
+                          lineHeight: 1.25,
+                          whiteSpace: "nowrap",
+                          textAlign: "center",
+                          fontSize: compact ? "0.7rem" : undefined,
+                        }}
                       >
                         {qtyStr}
                       </Typography>
@@ -242,13 +317,34 @@ export function VendeurRecapTable({
                 );
               })}
               {showTotalColumn ? (
-                <TableCell align="center" sx={{ fontWeight: 700, verticalAlign: "middle" }}>
+                <TableCell
+                  align="center"
+                  className="tabular-nums"
+                  sx={{
+                    fontWeight: 700,
+                    verticalAlign: "middle",
+                    fontSize: compact ? "0.7rem" : undefined,
+                    px: compact ? 0.45 : undefined,
+                    textAlign: "center",
+                  }}
+                >
                   {formatRecapQtyCell(row.total)}
                 </TableCell>
               ) : null}
               <TableCell align="left">
-                <Box sx={{ display: "inline-flex", flexDirection: "column", whiteSpace: "nowrap", gap: 0.35 }}>
-                  <Typography variant="caption" component="div" sx={{ lineHeight: 1.45 }}>
+                <Box
+                  sx={{
+                    display: "inline-flex",
+                    flexDirection: "column",
+                    whiteSpace: "nowrap",
+                    gap: compact ? 0.15 : 0.35,
+                  }}
+                >
+                  <Typography
+                    variant="caption"
+                    component="div"
+                    sx={{ lineHeight: 1.25, fontSize: compact ? "0.62rem" : undefined }}
+                  >
                     {row.udvCond}
                   </Typography>
                   {row.udvCondSub ? (
@@ -256,7 +352,7 @@ export function VendeurRecapTable({
                       variant="caption"
                       color="text.secondary"
                       component="div"
-                      sx={{ lineHeight: 1.4 }}
+                      sx={{ lineHeight: 1.25, fontSize: compact ? "0.65rem" : undefined }}
                     >
                       {row.udvCondSub}
                     </Typography>
@@ -392,7 +488,127 @@ type LotGroupedRecapTableProps = {
   labels: TableLabels;
   captureDir?: "rtl" | "ltr";
   showTotalColumn?: boolean;
+  compact?: boolean;
+  columnCount?: number;
+  /**
+   * `sections` : un bloc par section (vendeur), sans coupure.
+   * `category-flow` : une catégorie peut s’étaler sur plusieurs colonnes (nom répété) ; largeurs = texte.
+   */
+  layout?: "sections" | "category-flow";
 };
+
+export type CategoryColumnFragment = {
+  label: string;
+  rows: LotExportSection["rows"];
+};
+
+/** Répartit les lignes produit sur N colonnes ; répète le libellé catégorie en tête de chaque fragment. */
+export function packSectionsIntoColumns(
+  sections: LotExportSection[],
+  columnCount: number,
+): CategoryColumnFragment[][] {
+  const cols = Math.max(1, Math.min(3, columnCount));
+  type Unit = { label: string; row: LotExportSection["rows"][number] };
+  const units: Unit[] = [];
+  for (const section of sections) {
+    for (const row of section.rows) {
+      units.push({ label: section.label, row });
+    }
+  }
+
+  if (units.length === 0) {
+    return Array.from({ length: cols }, () => []);
+  }
+
+  if (cols === 1) {
+    return [
+      sections.map((s) => ({
+        label: s.label,
+        rows: s.rows,
+      })),
+    ];
+  }
+
+  const total = units.length;
+  const base = Math.floor(total / cols);
+  const rem = total % cols;
+  const result: CategoryColumnFragment[][] = Array.from({ length: cols }, () => []);
+  let ui = 0;
+  for (let c = 0; c < cols; c++) {
+    const take = base + (c < rem ? 1 : 0);
+    const slice = units.slice(ui, ui + take);
+    ui += take;
+    let current: CategoryColumnFragment | null = null;
+    for (const u of slice) {
+      if (!current || current.label !== u.label) {
+        current = { label: u.label, rows: [u.row] };
+        result[c]!.push(current);
+      } else {
+        current.rows.push(u.row);
+      }
+    }
+  }
+  return result;
+}
+
+/** Répartit des sections entières sur N colonnes (sans couper une section). */
+export function packWholeSectionsIntoColumns(
+  sections: LotExportSection[],
+  columnCount: number,
+): LotExportSection[][] {
+  const cols = Math.max(1, Math.min(3, columnCount));
+  if (cols === 1 || sections.length === 0) {
+    return [sections];
+  }
+  const result: LotExportSection[][] = Array.from({ length: cols }, () => []);
+  const weights = Array.from({ length: cols }, () => 0);
+  for (const section of sections) {
+    let best = 0;
+    for (let i = 1; i < cols; i++) {
+      if ((weights[i] ?? 0) < (weights[best] ?? 0)) {
+        best = i;
+      }
+    }
+    result[best]!.push(section);
+    weights[best] = (weights[best] ?? 0) + section.rows.length + 1;
+  }
+  return result.filter((col) => col.length > 0);
+}
+
+function CategorySectionHeader({
+  label,
+  captureDir,
+  compact,
+}: {
+  label: string;
+  captureDir: "rtl" | "ltr";
+  compact: boolean;
+}) {
+  return (
+    <Typography
+      variant="subtitle1"
+      dir={captureDir === "rtl" ? "rtl" : undefined}
+      lang={captureDir === "rtl" ? "ar" : undefined}
+      className={captureDir === "rtl" ? arabicTextClassName : undefined}
+      sx={{
+        fontWeight: 700,
+        color: "success.main",
+        bgcolor: "#e8f5e9",
+        px: compact ? 0.5 : 1,
+        py: compact ? 0.35 : 0.75,
+        mb: compact ? 0.35 : 0.5,
+        whiteSpace: "nowrap",
+        width: "max-content",
+        maxWidth: "100%",
+        fontSize: compact ? "0.72rem" : undefined,
+        textAlign: captureDir === "rtl" ? "right" : "inherit",
+        ...(captureDir === "rtl" ? arabicTextSx : {}),
+      }}
+    >
+      {label}
+    </Typography>
+  );
+}
 
 export function LotGroupedRecapTable({
   sections,
@@ -400,39 +616,100 @@ export function LotGroupedRecapTable({
   labels,
   captureDir = "ltr",
   showTotalColumn = true,
+  compact = false,
+  columnCount = 1,
+  layout = "sections",
 }: LotGroupedRecapTableProps) {
-  return (
-    <>
-      {sections.map((section) => (
-        <Box key={section.label} sx={{ mb: 1.5 }}>
-          <Typography
-            variant="subtitle1"
-            dir={captureDir === "rtl" ? "rtl" : undefined}
-            lang={captureDir === "rtl" ? "ar" : undefined}
-            className={captureDir === "rtl" ? arabicTextClassName : undefined}
+  const cols = Math.max(1, Math.min(3, columnCount));
+
+  if (layout === "category-flow") {
+    const packed = packSectionsIntoColumns(sections, cols);
+    return (
+      <Box
+        sx={{
+          display: "flex",
+          flexDirection: captureDir === "rtl" ? "row-reverse" : "row",
+          alignItems: "flex-start",
+          gap: "3mm",
+          width: "max-content",
+          maxWidth: "100%",
+        }}
+      >
+        {packed.map((fragments, colIdx) => (
+          <Box
+            key={`col-${colIdx}`}
             sx={{
-              fontWeight: 700,
-              color: "success.main",
-              bgcolor: "#e8f5e9",
-              px: 1,
-              py: 0.75,
-              mb: 0.5,
-              whiteSpace: "nowrap",
-              textAlign: captureDir === "rtl" ? "right" : "inherit",
-              ...(captureDir === "rtl" ? arabicTextSx : {}),
+              display: "flex",
+              flexDirection: "column",
+              alignItems: captureDir === "rtl" ? "flex-end" : "flex-start",
+              gap: compact ? 0.75 : 1.5,
+              flex: "0 0 auto",
             }}
           >
-            {section.label}
-          </Typography>
-          <VendeurRecapTable
-            group={{ vendeurKey: section.label, vendeurLabel: section.label, rows: section.rows }}
-            magasinColumns={magasinColumns}
-            showTotalColumn={showTotalColumn}
-            labels={labels}
-            captureDir={captureDir}
-          />
+            {fragments.map((frag, fragIdx) => (
+              <Box key={`${frag.label}-${colIdx}-${fragIdx}`} sx={{ width: "max-content" }}>
+                <CategorySectionHeader label={frag.label} captureDir={captureDir} compact={compact} />
+                <VendeurRecapTable
+                  group={{
+                    vendeurKey: `${frag.label}-${colIdx}-${fragIdx}`,
+                    vendeurLabel: frag.label,
+                    rows: frag.rows,
+                  }}
+                  magasinColumns={magasinColumns}
+                  showTotalColumn={showTotalColumn}
+                  labels={labels}
+                  captureDir={captureDir}
+                  compact={compact}
+                  fitContent
+                />
+              </Box>
+            ))}
+          </Box>
+        ))}
+      </Box>
+    );
+  }
+
+  const sectionsPacked = packWholeSectionsIntoColumns(sections, cols);
+
+  return (
+    <Box
+      sx={{
+        display: "flex",
+        flexDirection: captureDir === "rtl" ? "row-reverse" : "row",
+        alignItems: "flex-start",
+        gap: "3mm",
+        width: "max-content",
+        maxWidth: "100%",
+      }}
+    >
+      {sectionsPacked.map((colSections, colIdx) => (
+        <Box
+          key={`vend-col-${colIdx}`}
+          sx={{
+            display: "flex",
+            flexDirection: "column",
+            alignItems: captureDir === "rtl" ? "flex-end" : "flex-start",
+            gap: compact ? 0.85 : 1.5,
+            flex: "0 0 auto",
+          }}
+        >
+          {colSections.map((section) => (
+            <Box key={section.label} sx={{ width: "max-content" }}>
+              <CategorySectionHeader label={section.label} captureDir={captureDir} compact={compact} />
+              <VendeurRecapTable
+                group={{ vendeurKey: section.label, vendeurLabel: section.label, rows: section.rows }}
+                magasinColumns={magasinColumns}
+                showTotalColumn={showTotalColumn}
+                labels={labels}
+                captureDir={captureDir}
+                compact={compact}
+                fitContent
+              />
+            </Box>
+          ))}
         </Box>
       ))}
-    </>
+    </Box>
   );
 }

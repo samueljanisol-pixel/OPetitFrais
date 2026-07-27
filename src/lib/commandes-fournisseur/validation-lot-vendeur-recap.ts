@@ -113,14 +113,27 @@ export function buildMatrixDisplayItems<T extends RecapLigneInput>(
   vendeurs: VendeurRef[],
   supplierLabel: string,
   noCategoryLabel: string,
+  locale: AppLocale = "fr",
 ): MatrixDisplayItem<T>[] {
+  const categoryKey = (l: T): string => {
+    const p = one(l.product);
+    if (p?.ref_category != null) {
+      return categoryDisplayLabelForLocale(
+        parseCategoryFromRef(p.ref_category),
+        locale,
+        noCategoryLabel,
+      );
+    }
+    const fromLigne = (l.categoryLabel ?? "").trim();
+    return fromLigne.length > 0 ? fromLigne : noCategoryLabel;
+  };
+
   if (groupBy === "category") {
     const items: MatrixDisplayItem<T>[] = [];
     for (let i = 0; i < lignes.length; i++) {
       const l = lignes[i]!;
-      const catKey = (l.categoryLabel ?? "").trim() || noCategoryLabel;
-      const prevCat =
-        i > 0 ? ((lignes[i - 1]!.categoryLabel ?? "").trim() || noCategoryLabel) : null;
+      const catKey = categoryKey(l);
+      const prevCat = i > 0 ? categoryKey(lignes[i - 1]!) : null;
       if (i === 0 || catKey !== prevCat) {
         items.push({ type: "header", header: { kind: "category", label: catKey } });
       }
