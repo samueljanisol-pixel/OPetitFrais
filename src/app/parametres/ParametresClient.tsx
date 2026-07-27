@@ -23,7 +23,14 @@ import {
 import BackNavButton from '@/components/BackNavButton'
 import FormDialog from '@/lib/mui/FormDialog'
 import { createSupabaseBrowserClient } from '@/lib/supabase/client'
-import type { RefConditionnementRow, RefRow, RefSubcategoryRow, RefSupplierRow, RefVendeurRow } from '@/lib/products/types'
+import type {
+  RefConditionnementRow,
+  RefRow,
+  RefShopOrderUnitRow,
+  RefSubcategoryRow,
+  RefSupplierRow,
+  RefVendeurRow,
+} from '@/lib/products/types'
 import { parseDeviseAchat, type DeviseAchat } from '@/lib/commandes-fournisseur/achat-devise'
 import { muiSlotPropsDecimalKeypad } from '@/lib/mui/numericTextFieldProps'
 import AutomatedTasksAdminPanel from './AutomatedTasksAdminPanel'
@@ -38,6 +45,7 @@ type TabId =
   | 'udv'
   | 'udc'
   | 'uda'
+  | 'ucv'
   | 'cat'
   | 'sup'
   | 'cond'
@@ -53,6 +61,7 @@ const tabLabels: Record<TabId, string> = {
   udv: 'Unités de vente',
   udc: 'Unités de commande',
   uda: "Unités d'achat",
+  ucv: 'Unités commande vitrine',
   cat: 'Catégories',
   sup: 'Fournisseurs',
   cond: 'Conditionnements',
@@ -69,6 +78,7 @@ const deleteConfirmPhrase: Partial<Record<TabId, string>> = {
   udv: 'cette unité de vente',
   udc: 'cette unité de commande',
   uda: "cette unité d'achat",
+  ucv: 'cette unité commande vitrine',
   cat: 'cette catégorie',
   sup: 'ce fournisseur',
   cond: 'ce conditionnement',
@@ -144,6 +154,7 @@ export default function ParametresClient() {
       'udv',
       'udc',
       'uda',
+      'ucv',
       'cat',
       'sup',
       'cond',
@@ -161,6 +172,7 @@ export default function ParametresClient() {
   const [udv, setUdv] = useState<RefRow[]>([])
   const [udc, setUdc] = useState<RefRow[]>([])
   const [uda, setUda] = useState<RefRow[]>([])
+  const [ucv, setUcv] = useState<RefShopOrderUnitRow[]>([])
   const [cat, setCat] = useState<RefRow[]>([])
   const [subcats, setSubcats] = useState<RefSubcategoryRow[]>([])
   const [sup, setSup] = useState<RefSupplierRow[]>([])
@@ -169,7 +181,9 @@ export default function ParametresClient() {
   const [err, setErr] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [open, setOpen] = useState(false)
-  const [editing, setEditing] = useState<RefRow | RefSupplierRow | RefConditionnementRow | RefVendeurRow | null>(null)
+  const [editing, setEditing] = useState<
+    RefRow | RefSupplierRow | RefConditionnementRow | RefVendeurRow | RefShopOrderUnitRow | null
+  >(null)
   const [isNew, setIsNew] = useState(false)
   const [deleteConfirm, setDeleteConfirm] = useState<DeleteConfirmTarget | null>(null)
   const [deleteBusy, setDeleteBusy] = useState(false)
@@ -188,15 +202,17 @@ export default function ParametresClient() {
     phone: '',
     preferred_locale: 'fr' as 'fr' | 'ar-MA',
     devise_achat: 'dirham' as DeviseAchat,
+    piece_qty: '1',
   })
 
   const load = useCallback(async () => {
     setErr(null)
     setLoading(true)
-    const [a, udcRes, udaRes, b, sc, c, d, e] = await Promise.all([
+    const [a, udcRes, udaRes, ucvRes, b, sc, c, d, e] = await Promise.all([
       supabase.from('ref_sales_unit').select('*').order('sort_order'),
       supabase.from('ref_order_unit').select('*').order('sort_order'),
       supabase.from('ref_purchase_unit').select('*').order('sort_order'),
+      supabase.from('ref_shop_order_unit').select('*').order('sort_order'),
       supabase.from('ref_category').select('*').order('sort_order'),
       supabase.from('ref_subcategory').select('*, ref_category(id, label)').order('sort_order').order('label'),
       supabase.from('ref_supplier').select('*').order('sort_order'),
@@ -207,11 +223,21 @@ export default function ParametresClient() {
         .order('sort_order')
         .order('label'),
     ])
-    const firstErr = a.error ?? udcRes.error ?? udaRes.error ?? b.error ?? sc.error ?? c.error ?? d.error ?? e.error
+    const firstErr =
+      a.error ??
+      udcRes.error ??
+      udaRes.error ??
+      ucvRes.error ??
+      b.error ??
+      sc.error ??
+      c.error ??
+      d.error ??
+      e.error
     if (firstErr) setErr(firstErr.message)
     setUdv((a.data as RefRow[]) ?? [])
     setUdc((udcRes.data as RefRow[]) ?? [])
     setUda((udaRes.data as RefRow[]) ?? [])
+    setUcv((ucvRes.data as RefShopOrderUnitRow[]) ?? [])
     setCat((b.data as RefRow[]) ?? [])
     setSubcats((sc.data as RefSubcategoryRow[]) ?? [])
     setSup(
@@ -307,6 +333,7 @@ export default function ParametresClient() {
         phone: '',
         preferred_locale: 'fr',
         devise_achat: 'dirham',
+        piece_qty: '1',
       })
     } else {
       setEditing({ id: '', code: '', label: '', sort_order: 0, created_at: '', commande_active: true } as RefSupplierRow)
@@ -321,12 +348,15 @@ export default function ParametresClient() {
         phone: '',
         preferred_locale: 'fr',
         devise_achat: 'dirham',
+        piece_qty: '1',
       })
     }
     setOpen(true)
   }
 
-  const openRow = (r: RefRow | RefConditionnementRow | RefVendeurRow | RefSupplierRow) => {
+  const openRow = (
+    r: RefRow | RefConditionnementRow | RefVendeurRow | RefSupplierRow | RefShopOrderUnitRow,
+  ) => {
     setIsNew(false)
     setEditing(r)
     setForm({
@@ -346,6 +376,7 @@ export default function ParametresClient() {
         'preferred_locale' in r && r.preferred_locale === 'ar-MA' ? 'ar-MA' : 'fr',
       devise_achat:
         'devise_achat' in r ? parseDeviseAchat(r.devise_achat) : 'dirham',
+      piece_qty: 'piece_qty' in r && r.piece_qty != null ? String(r.piece_qty) : '1',
     })
     setOpen(true)
   }
@@ -364,6 +395,7 @@ export default function ParametresClient() {
     if (t === 'udv') return 'ref_sales_unit'
     if (t === 'udc') return 'ref_order_unit'
     if (t === 'uda') return 'ref_purchase_unit'
+    if (t === 'ucv') return 'ref_shop_order_unit'
     if (t === 'cat') return 'ref_category'
     if (t === 'sup') return 'ref_supplier'
     if (t === 'vend') return 'ref_supplier_vendeur'
@@ -413,6 +445,34 @@ export default function ParametresClient() {
             depth_mm: d,
             supplier_id: supplierId,
           } as never)
+          .eq('id', editing.id)
+        if (e0) {
+          setErr(e0.message)
+          return
+        }
+      }
+    } else if (tab === 'ucv') {
+      const labelArTrim = form.label_ar.trim()
+      const pieceQty = Number(form.piece_qty.replace(',', '.'))
+      if (!(pieceQty > 0)) {
+        setErr('La quantité de pièces doit être un nombre > 0 (ex. 0,25 ou 6).')
+        return
+      }
+      const payload = {
+        label: form.label.trim(),
+        label_ar: labelArTrim.length > 0 ? labelArTrim : null,
+        piece_qty: pieceQty,
+      }
+      if (isNew) {
+        const { error: e0 } = await supabase.from('ref_shop_order_unit').insert(payload as never)
+        if (e0) {
+          setErr(e0.message)
+          return
+        }
+      } else {
+        const { error: e0 } = await supabase
+          .from('ref_shop_order_unit')
+          .update(payload as never)
           .eq('id', editing.id)
         if (e0) {
           setErr(e0.message)
@@ -682,6 +742,33 @@ export default function ParametresClient() {
             ]}
           />
         )}
+        {tab === 'ucv' && (
+          <RefTable
+            title="Unités de commande vitrine (boutique)"
+            rows={ucv}
+            onEdit={openRow}
+            onDelete={requestDelete}
+            extras={[
+              {
+                header: 'Libellé arabe',
+                render: r => {
+                  const ar = (r as RefShopOrderUnitRow).label_ar?.trim()
+                  return ar && ar.length > 0 ? (
+                    <span dir="rtl" className="block text-right">
+                      {ar}
+                    </span>
+                  ) : (
+                    '—'
+                  )
+                },
+              },
+              {
+                header: 'Qté pièces',
+                render: r => String((r as RefShopOrderUnitRow).piece_qty),
+              },
+            ]}
+          />
+        )}
         {tab === 'cat' && (
           <>
             <RefTable
@@ -893,7 +980,7 @@ export default function ParametresClient() {
           <DialogContent>
             <div className="mt-1 flex flex-col gap-4">
               <TextField label="Libellé" value={form.label} onChange={e => setForm(f => ({ ...f, label: e.target.value }))} size="small" fullWidth />
-              {tab === 'cond' || tab === 'cat' || tab === 'udv' || tab === 'udc' || tab === 'uda' ? (
+              {tab === 'cond' || tab === 'cat' || tab === 'udv' || tab === 'udc' || tab === 'uda' || tab === 'ucv' ? (
                 <TextField
                   label="Libellé arabe"
                   value={form.label_ar}
@@ -901,6 +988,17 @@ export default function ParametresClient() {
                   size="small"
                   fullWidth
                   slotProps={{ input: { dir: 'rtl' } }}
+                />
+              ) : null}
+              {tab === 'ucv' ? (
+                <TextField
+                  label="Quantité de pièces"
+                  value={form.piece_qty}
+                  onChange={e => setForm(f => ({ ...f, piece_qty: e.target.value }))}
+                  size="small"
+                  fullWidth
+                  helperText="Ex. 0,25 pour 1/4 pièce, 6 pour un lot de 6"
+                  slotProps={muiSlotPropsDecimalKeypad}
                 />
               ) : null}
               {tab === 'sup' ? (

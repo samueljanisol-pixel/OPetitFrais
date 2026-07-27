@@ -1,8 +1,7 @@
 import type { AppLocale } from "@/i18n/config";
 import { formatNumber } from "@/lib/i18n/format";
 import { productDisplayName } from "@/lib/products/product-display-name";
-import { labelFromRefForLocale } from "@/lib/commandes-fournisseur/product-display";
-import { formatShopPriceDh } from "@/lib/shop/format-price";
+import { formatShopKgEstimate, formatShopPriceDh } from "@/lib/shop/format-price";
 import { groupCartLinesByCategory } from "@/lib/shop/group-cart-by-category";
 import type { ShopCartLine, ShopProduct } from "@/lib/shop/types";
 
@@ -12,18 +11,19 @@ export type OrderTextLine = {
   lineTotal: number;
 };
 
-function formatQtyLabel(qty: number, unitCode: string, locale: AppLocale): string {
-  const formatted = formatNumber(locale, qty, {
-    minimumFractionDigits: unitCode === "kg" ? 1 : 0,
-    maximumFractionDigits: unitCode === "kg" ? 2 : 0,
+function formatQtyLabel(line: ShopCartLine, locale: AppLocale): string {
+  const formatted = formatNumber(locale, line.qty, {
+    minimumFractionDigits: line.unitCode === "kg" ? 1 : 0,
+    maximumFractionDigits: line.unitCode === "kg" ? 2 : 0,
   });
-  if (unitCode === "kg") {
-    return locale === "ar-MA" ? `${formatted} كغ` : `${formatted} kg`;
+  const unit = line.unitLabel.trim() || (line.unitCode === "kg" ? "kg" : "unité");
+  let label = `${formatted} × ${unit}`;
+  if (line.equivKgAtAdd != null && line.equivKgAtAdd > 0 && line.shopOrderUnitId != null) {
+    const totalKg = line.qty * line.equivKgAtAdd;
+    const soit = locale === "ar-MA" ? "أي" : "soit";
+    label += ` (${soit} ${formatShopKgEstimate(locale, totalKg)})`;
   }
-  if (qty <= 1) {
-    return locale === "ar-MA" ? `${formatted} وحدة` : `${formatted} unité`;
-  }
-  return locale === "ar-MA" ? `${formatted} وحدات` : `${formatted} unités`;
+  return label;
 }
 
 export type OrderTextLabels = {
@@ -44,7 +44,7 @@ function toOrderTextLine(
   if (!product) return null;
   return {
     name: productDisplayName(product, locale),
-    qtyLabel: formatQtyLabel(line.qty, line.unitCode, locale),
+    qtyLabel: formatQtyLabel(line, locale),
     lineTotal: line.qty * line.priceAtAdd,
   };
 }
@@ -103,15 +103,11 @@ export function buildOrderText(
   }
 
   rows.push(labels.separator);
-  rows.push(`${labels.total} : ${formatShopPriceDh(locale, total)}`);
+  rows.push(`${labels.total} : ${formatShopPriceDh(locale, total, true)}`);
   return rows.join("\n");
 }
 
 export function buildWhatsAppUrl(phone: string, text: string): string {
   const cleaned = phone.replace(/\D/g, "");
   return `https://wa.me/${cleaned}?text=${encodeURIComponent(text)}`;
-}
-
-export function productUnitLabel(product: ShopProduct, locale: AppLocale): string {
-  return labelFromRefForLocale(product.ref_sales_unit, locale);
 }

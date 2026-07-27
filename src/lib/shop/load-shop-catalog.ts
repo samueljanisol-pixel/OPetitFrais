@@ -2,13 +2,19 @@ import type { AppLocale } from "@/i18n/config";
 import { compareProductDisplayNames } from "@/lib/products/product-display-name";
 import { refDisplayLabel } from "@/lib/products/ref-display-label";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/server";
+import { normalizeShopRefUnits } from "@/lib/shop/shop-order-options";
 import type { ShopCategoryGroup, ShopProduct, ShopSubcategoryGroup } from "@/lib/shop/types";
 
 const SHOP_PRODUCT_SELECT = `
   id, code, name, name_ar, sales_name, sales_name_ar, image_path, price, category_id, subcategory_id,
+  piece_weight_kg, shop_allow_sales_unit, shop_favorite_unit_id,
   ref_category(id, code, label, label_ar, sort_order),
   ref_subcategory(id, label, label_ar, sort_order),
-  ref_sales_unit(code, label, label_ar)
+  ref_sales_unit(code, label, label_ar),
+  product_shop_order_unit(
+    shop_order_unit_id,
+    ref_shop_order_unit(id, label, label_ar, piece_qty, sort_order)
+  )
 `;
 
 const UNCategorized_KEY = "__none__";
@@ -28,14 +34,30 @@ type RefSubcategoryRow = {
   sort_order: number;
 };
 
+type ProductShopUnitLink = {
+  shop_order_unit_id?: string;
+  ref_shop_order_unit?: unknown;
+};
+
 type ProductRow = ShopProduct & {
   ref_category?: RefCategoryRow | RefCategoryRow[] | null;
   ref_subcategory?: RefSubcategoryRow | RefSubcategoryRow[] | null;
+  product_shop_order_unit?: ProductShopUnitLink[] | ProductShopUnitLink | null;
 };
 
 function normalizeRelation<T>(raw: T | T[] | null | undefined): T | null {
   if (raw == null) return null;
   return Array.isArray(raw) ? (raw[0] ?? null) : raw;
+}
+
+function extractShopUnits(raw: ProductRow["product_shop_order_unit"]) {
+  const links = raw == null ? [] : Array.isArray(raw) ? raw : [raw];
+  const units = links.flatMap((link) => {
+    const rel = link.ref_shop_order_unit;
+    if (rel == null) return [];
+    return normalizeShopRefUnits(Array.isArray(rel) ? rel : [rel]);
+  });
+  return units;
 }
 
 export async function loadShopCatalog(
@@ -94,7 +116,11 @@ export async function loadShopCatalog(
       categoryGroup.subgroups.push(subgroup);
     }
 
-    const { ref_category: _c, ref_subcategory: _s, ...product } = p;
+    const { ref_category: _c, ref_subcategory: _s, product_shop_order_unit: links, ...rest } = p;
+    const product: ShopProduct = {
+      ...rest,
+      shop_order_units: extractShopUnits(links),
+    };
     subgroup.products.push(product);
   }
 

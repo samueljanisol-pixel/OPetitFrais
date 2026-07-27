@@ -6,10 +6,12 @@ Page publique de commande pour les clients particuliers. Accessible sur le domai
 
 1. Catalogue produits **actifs** et **visible vitrine** (`active = true`, `visible_vitrine = true`), groupés par catégorie puis sous-catégorie.
 2. Le client ajoute des produits au panier :
-   - **Kg** : pas de 0,5 kg (500 g)
-   - **Unité** : pas de 1
-3. Panier stocké **uniquement en cache navigateur** (`localStorage`, clé `opf-shop-cart-v1`) — aucune base de données, aucune identification.
-4. Export : copier la liste texte ou ouvrir WhatsApp avec le message pré-rempli.
+   - Options = **UdV** (si autorisée) + **unités de commande vitrine** cochées sur le produit (si poids pièce renseigné).
+   - Favori produit pré-sélectionné sur la carte.
+   - **Kg** (UdV) : pas de 0,5 kg ; autres unités : pas de 1.
+   - Prix / poids pièce affichés avec `~` quand estimés (conversion `piece_qty × poids pièce × prix/kg`).
+3. Panier stocké **uniquement en cache navigateur** (`localStorage`, clé `opf-shop-cart-v2`) — lignes clés `(produit, unité vitrine|UdV)`.
+4. Export : copier la liste texte ou ouvrir WhatsApp avec le message pré-rempli (libellé + `soit ~X kg` pour les unités vitrine).
 5. **Statistiques anonymes** : heartbeat vers `POST /api/shop/analytics/heartbeat` (visiteur UUID en localStorage). Consultation backoffice : [`/boutique/stats`](../boutique/stats/README.md) (permission `shop.read`).
 
 ## Fichiers
@@ -66,4 +68,4 @@ Namespace `shop.*` dans `src/messages/fr.json` et `ar-MA.json`. Noms produits et
 
 ## Contrôle catalogue (backoffice)
 
-Dans **Produits → fiche produit**, cocher **Visible vitrine** pour afficher le produit sur `opetitfrais.ma`. Voir aussi [`../produits/README.md`](../produits/README.md).
+Dans **Produits → fiche produit**, cocher **Visible vitrine** pour afficher le produit sur `opetitfrais.ma`. Configurer les **unités de commande boutique** (poids pièce, UdV / unités vitrine, favori). Voir aussi [`../produits/README.md`](../produits/README.md) et Paramètres → **Unités commande vitrine**.

@@ -3,7 +3,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
-import { Box, Paper, Stack, Typography } from "@mui/material";
+import { Box, Button, Paper, Stack, Typography } from "@mui/material";
+import OpenInNewIcon from "@mui/icons-material/OpenInNew";
 import BackNavButton from "@/components/BackNavButton";
 import CaJourHistogram from "@/components/CaJourHistogram";
 import { useSessionPermissions } from "@/lib/auth/useSessionPermissions";
@@ -12,6 +13,7 @@ import {
   SHOP_ACTIVE_VISITOR_MINUTES,
 } from "@/lib/shop/analytics-constants";
 import type { ShopAnalyticsDashboard } from "@/lib/shop/analytics-server";
+import { shopPublicUrl } from "@/lib/shop/hosts";
 import { useAppFormat } from "@/lib/i18n/useAppFormat";
 
 const REFRESH_MS = 60_000;
@@ -88,12 +90,36 @@ export default function BoutiqueStatsClient() {
       <Stack spacing={2.5} sx={{ maxWidth: 960, mx: "auto" }}>
         <BackNavButton href="/">{t("backHome")}</BackNavButton>
 
-        <Typography variant="h5" sx={{ fontWeight: 700 }}>
-          {t("title")}
-        </Typography>
-        <Typography variant="body2" color="text.secondary">
-          {t("subtitle")}
-        </Typography>
+        <Box
+          sx={{
+            display: "flex",
+            flexDirection: { xs: "column", sm: "row" },
+            gap: 1.5,
+            alignItems: { xs: "stretch", sm: "center" },
+            justifyContent: "space-between",
+          }}
+        >
+          <Box>
+            <Typography variant="h5" sx={{ fontWeight: 700 }}>
+              {t("title")}
+            </Typography>
+            <Typography variant="body2" color="text.secondary">
+              {t("subtitle")}
+            </Typography>
+          </Box>
+          <Button
+            component="a"
+            href={shopPublicUrl("/")}
+            target="_blank"
+            rel="noopener noreferrer"
+            variant="outlined"
+            color="success"
+            startIcon={<OpenInNewIcon />}
+            sx={{ textTransform: "none", alignSelf: { xs: "stretch", sm: "center" } }}
+          >
+            {t("openSite")}
+          </Button>
+        </Box>
 
         {err ? (
           <Paper elevation={0} sx={{ p: 2, borderRadius: 2, border: 1, borderColor: "error.light" }}>

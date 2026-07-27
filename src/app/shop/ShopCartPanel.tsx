@@ -18,13 +18,19 @@ import { useTranslations } from "next-intl";
 import { useMemo, useState } from "react";
 import { buildOrderText, buildWhatsAppUrl } from "@/lib/shop/format-order-text";
 import { getShopWhatsAppPhone, isShopWhatsAppConfigured } from "@/lib/shop/whatsapp-phone";
-import { addQty, salesUnitCode, subtractQty } from "@/lib/shop/cart-qty";
+import { addQtyByStep, subtractQtyByStep } from "@/lib/shop/cart-qty";
 import { productDisplayName } from "@/lib/products/product-display-name";
-import { formatShopPriceDh, formatShopQty } from "@/lib/shop/format-price";
-import { labelFromRefForLocale } from "@/lib/commandes-fournisseur/product-display";
+import {
+  formatShopKgEstimate,
+  formatShopPriceDh,
+  formatShopQty,
+} from "@/lib/shop/format-price";
+import { findShopOption, shopOptionLabel } from "@/lib/shop/shop-order-options";
 import { useAppLocale } from "@/lib/i18n/useAppFormat";
+import type { AppLocale } from "@/i18n/config";
 import type { ShopCartLine, ShopCategoryGroup, ShopProduct } from "@/lib/shop/types";
 import { buildCategoryMeta, groupCartLinesByCategory } from "@/lib/shop/group-cart-by-category";
+import { cartLineKey } from "@/lib/shop/cart-storage";
 
 type Props = {
   open: boolean;
@@ -32,7 +38,7 @@ type Props = {
   lines: ShopCartLine[];
   productById: Map<string, ShopProduct>;
   categoryGroups: ShopCategoryGroup[];
-  onUpdateLine: (productId: string, qty: number) => void;
+  onUpdateLine: (productId: string, shopOrderUnitId: string | null, qty: number) => void;
   onClear: () => void;
 };
 
@@ -63,12 +69,18 @@ export default function ShopCartPanel({
 
   const orderText = useMemo(
     () =>
-      buildOrderText(lines, productById, locale, {
-        title: t("orderTitle"),
-        total: t("estimatedTotal"),
-        separator: "──────────────────────",
-        uncategorized: t("uncategorized"),
-      }, categoryMeta),
+      buildOrderText(
+        lines,
+        productById,
+        locale,
+        {
+          title: t("orderTitle"),
+          total: t("estimatedTotal"),
+          separator: "──────────────────────",
+          uncategorized: t("uncategorized"),
+        },
+        categoryMeta,
+      ),
     [lines, productById, locale, t, categoryMeta],
   );
 
@@ -125,29 +137,55 @@ export default function ShopCartPanel({
                       {group.lines.map((line) => {
                         const product = productById.get(line.productId);
                         if (!product) return null;
-                        const unitCode = line.unitCode;
-                        const unitLabel = labelFromRefForLocale(product.ref_sales_unit, locale);
+                        const option = findShopOption(product, line.shopOrderUnitId);
+                        const step = option?.qtyStep ?? 1;
+                        const secondaryParts = [
+                          `${formatLineQty(line)} ${line.unitLabel}`,
+                          formatShopPriceDh(locale, line.qty * line.priceAtAdd, line.equivKgAtAdd != null),
+                        ];
+                        if (
+                          line.equivKgAtAdd != null &&
+                          line.equivKgAtAdd > 0 &&
+                          line.shopOrderUnitId != null
+                        ) {
+                          secondaryParts.push(
+                            `soit ${formatShopKgEstimate(locale, line.qty * line.equivKgAtAdd)}`,
+                          );
+                        }
                         return (
                           <ListItem
-                            key={line.productId}
+                            key={cartLineKey(line)}
                             secondaryAction={
                               <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
                                 <IconButton
                                   size="small"
                                   aria-label="-"
                                   onClick={() =>
-                                    onUpdateLine(line.productId, subtractQty(line.qty, unitCode))
+                                    onUpdateLine(
+                                      line.productId,
+                                      line.shopOrderUnitId,
+                                      subtractQtyByStep(line.qty, step),
+                                    )
                                   }
                                 >
                                   −
                                 </IconButton>
-                                <Typography variant="body2" sx={{ minWidth: "2rem", textAlign: "center", fontWeight: 700 }}>
+                                <Typography
+                                  variant="body2"
+                                  sx={{ minWidth: "2rem", textAlign: "center", fontWeight: 700 }}
+                                >
                                   {formatLineQty(line)}
                                 </Typography>
                                 <IconButton
                                   size="small"
                                   aria-label="+"
-                                  onClick={() => onUpdateLine(line.productId, addQty(line.qty, unitCode))}
+                                  onClick={() =>
+                                    onUpdateLine(
+                                      line.productId,
+                                      line.shopOrderUnitId,
+                                      addQtyByStep(line.qty, step),
+                                    )
+                                  }
                                 >
                                   +
                                 </IconButton>
@@ -157,7 +195,7 @@ export default function ShopCartPanel({
                           >
                             <ListItemText
                               primary={productDisplayName(product, locale)}
-                              secondary={`${formatLineQty(line)} ${unitLabel} — ${formatShopPriceDh(locale, line.qty * line.priceAtAdd)}`}
+                              secondary={secondaryParts.join(" — ")}
                             />
                           </ListItem>
                         );
@@ -168,7 +206,7 @@ export default function ShopCartPanel({
               </Box>
 
               <Typography variant="subtitle1" sx={{ mt: 2, mb: 1.5, fontWeight: 700 }}>
-                {t("estimatedTotal")} : {formatShopPriceDh(locale, total)}
+                {t("estimatedTotal")} : {formatShopPriceDh(locale, total, true)}
               </Typography>
 
               <Box sx={{ display: "flex", flexDirection: "column", gap: 1 }}>
@@ -215,12 +253,22 @@ export default function ShopCartPanel({
   );
 }
 
-export function buildCartLineFromProduct(product: ShopProduct, qty: number): ShopCartLine {
-  const unitCode = salesUnitCode(product.ref_sales_unit);
+export function buildCartLineFromProduct(
+  product: ShopProduct,
+  shopOrderUnitId: string | null,
+  qty: number,
+  locale: AppLocale,
+): ShopCartLine {
+  const option = findShopOption(product, shopOrderUnitId);
+  const unitLabel = option ? shopOptionLabel(option, locale) : "";
   return {
     productId: product.id,
+    shopOrderUnitId,
     qty,
-    unitCode,
-    priceAtAdd: product.price,
+    unitCode: option?.unitCode ?? "unite",
+    unitLabel,
+    priceAtAdd: option?.unitPrice ?? product.price,
+    equivKgAtAdd:
+      shopOrderUnitId != null && option?.equivKg != null ? option.equivKg : null,
   };
 }

@@ -55,3 +55,11 @@ export function backofficeUrl(pathname: string, search = ""): string {
   const host = getBackofficeHost();
   return `https://${host}${pathname}${search}`;
 }
+
+/** URL publique de la boutique (nouvel onglet depuis le backoffice). */
+export function shopPublicUrl(pathname = "/"): string {
+  const hosts = getShopHosts().filter((h) => h !== "localhost" && !h.endsWith(".local"));
+  const host = hosts[0] ?? "opetitfrais.ma";
+  const path = pathname.startsWith("/") ? pathname : `/${pathname}`;
+  return `https://${host}${path}`;
+}

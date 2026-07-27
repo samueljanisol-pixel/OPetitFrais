@@ -1,31 +1,54 @@
 "use client";
 
 import Image from "next/image";
+import { useMemo } from "react";
 import AddIcon from "@mui/icons-material/Add";
 import RemoveIcon from "@mui/icons-material/Remove";
-import { Box, IconButton, Typography } from "@mui/material";
-import { labelFromRefForLocale } from "@/lib/commandes-fournisseur/product-display";
-import { productDisplayName } from "@/lib/products/product-display-name";
-import { salesUnitCode } from "@/lib/shop/cart-qty";
-import { formatShopPriceWithUnit, formatShopQty } from "@/lib/shop/format-price";
+import { Box, Chip, IconButton, Typography } from "@mui/material";
+import {
+  findShopOption,
+  resolveShopOrderOptions,
+  shopOptionLabel,
+} from "@/lib/shop/shop-order-options";
+import {
+  formatShopPieceWeightHint,
+  formatShopPriceWithUnit,
+  formatShopQty,
+} from "@/lib/shop/format-price";
 import { useAppLocale } from "@/lib/i18n/useAppFormat";
+import { productDisplayName } from "@/lib/products/product-display-name";
 import type { ShopProduct } from "@/lib/shop/types";
 
 type Props = {
   product: ShopProduct;
   photoUrl: string | null;
   qty: number;
+  selectedShopOrderUnitId: string | null;
+  onSelectUnit: (shopOrderUnitId: string | null) => void;
   onAdd: () => void;
   onRemove: () => void;
 };
 
-export default function ShopProductCard({ product, photoUrl, qty, onAdd, onRemove }: Props) {
+export default function ShopProductCard({
+  product,
+  photoUrl,
+  qty,
+  selectedShopOrderUnitId,
+  onSelectUnit,
+  onAdd,
+  onRemove,
+}: Props) {
   const locale = useAppLocale();
   const label = productDisplayName(product, locale);
-  const unitCode = salesUnitCode(product.ref_sales_unit);
-  const unitLabel = labelFromRefForLocale(product.ref_sales_unit, locale);
+  const options = useMemo(() => resolveShopOrderOptions(product), [product]);
+  const option = findShopOption(product, selectedShopOrderUnitId) ?? options[0] ?? null;
+  const unitLabel = option ? shopOptionLabel(option, locale) : "";
   const inCart = qty > 0;
-  const qtyLabel = formatShopQty(locale, qty, unitCode);
+  const qtyLabel = option ? formatShopQty(locale, qty, option.unitCode) : "0";
+  const pieceWeight =
+    product.piece_weight_kg != null && Number(product.piece_weight_kg) > 0
+      ? Number(product.piece_weight_kg)
+      : null;
 
   return (
     <Box
@@ -81,13 +104,39 @@ export default function ShopProductCard({ product, photoUrl, qty, onAdd, onRemov
         >
           {label}
         </Typography>
-        <Typography
-          variant="caption"
-          color="success.dark"
-          sx={{ fontWeight: 700, fontSize: "0.68rem", lineHeight: 1.2 }}
-        >
-          {formatShopPriceWithUnit(locale, product.price, unitLabel)}
-        </Typography>
+        {option ? (
+          <Typography
+            variant="caption"
+            color="success.dark"
+            sx={{ fontWeight: 700, fontSize: "0.68rem", lineHeight: 1.2 }}
+          >
+            {formatShopPriceWithUnit(locale, option.unitPrice, unitLabel, option.isEstimated)}
+          </Typography>
+        ) : null}
+        {pieceWeight != null && options.some((o) => o.shopOrderUnitId != null) ? (
+          <Typography variant="caption" color="text.secondary" sx={{ fontSize: "0.6rem", lineHeight: 1.2 }}>
+            {formatShopPieceWeightHint(locale, pieceWeight)}
+          </Typography>
+        ) : null}
+
+        {options.length > 1 ? (
+          <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.25, mt: 0.25 }}>
+            {options.map((o) => {
+              const selected = o.shopOrderUnitId === selectedShopOrderUnitId;
+              return (
+                <Chip
+                  key={o.shopOrderUnitId ?? "__udv__"}
+                  label={shopOptionLabel(o, locale)}
+                  size="small"
+                  color={selected ? "success" : "default"}
+                  variant={selected ? "filled" : "outlined"}
+                  onClick={() => onSelectUnit(o.shopOrderUnitId)}
+                  sx={{ height: 18, fontSize: "0.58rem", "& .MuiChip-label": { px: 0.5 } }}
+                />
+              );
+            })}
+          </Box>
+        ) : null}
 
         <Box
           sx={{
@@ -103,7 +152,7 @@ export default function ShopProductCard({ product, photoUrl, qty, onAdd, onRemov
             size="small"
             color="inherit"
             aria-label="-"
-            disabled={qty <= 0}
+            disabled={qty <= 0 || !option}
             onClick={onRemove}
             sx={{
               width: 26,
@@ -117,7 +166,13 @@ export default function ShopProductCard({ product, photoUrl, qty, onAdd, onRemov
           </IconButton>
           <Typography
             variant="caption"
-            sx={{ fontVariantNumeric: "tabular-nums", fontWeight: 700, fontSize: "0.75rem", minWidth: "1.5rem", textAlign: "center" }}
+            sx={{
+              fontVariantNumeric: "tabular-nums",
+              fontWeight: 700,
+              fontSize: "0.75rem",
+              minWidth: "1.5rem",
+              textAlign: "center",
+            }}
           >
             {qtyLabel}
           </Typography>
@@ -125,6 +180,7 @@ export default function ShopProductCard({ product, photoUrl, qty, onAdd, onRemov
             size="small"
             color="success"
             aria-label="+"
+            disabled={!option}
             onClick={onAdd}
             sx={{
               width: 26,

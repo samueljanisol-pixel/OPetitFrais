@@ -5,6 +5,17 @@ export function stepForUnit(unitCode: string): number {
   return unitCode === "kg" ? KG_STEP : UNIT_STEP;
 }
 
+export function addQtyByStep(current: number, step: number): number {
+  const rounded = Math.round((current + step) / step) * step;
+  return Math.round(rounded * 100) / 100;
+}
+
+export function subtractQtyByStep(current: number, step: number): number {
+  const next = Math.round((current - step) / step) * step;
+  const rounded = Math.round(next * 100) / 100;
+  return rounded < step ? 0 : rounded;
+}
+
 export function minQtyForUnit(unitCode: string): number {
   return stepForUnit(unitCode);
 }

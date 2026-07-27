@@ -18,7 +18,11 @@ import {
   upsertCartLine,
   writeCartToStorage,
 } from "@/lib/shop/cart-storage";
-import { addQty, minQtyForUnit, salesUnitCode, subtractQty } from "@/lib/shop/cart-qty";
+import { addQtyByStep, subtractQtyByStep } from "@/lib/shop/cart-qty";
+import {
+  favoriteShopOrderUnitId,
+  findShopOption,
+} from "@/lib/shop/shop-order-options";
 import type { ShopCartLine, ShopCategoryGroup, ShopProduct } from "@/lib/shop/types";
 import ShopShell from "@/app/shop/ShopShell";
 import ShopProductCard from "@/app/shop/ShopProductCard";
@@ -50,6 +54,9 @@ export default function ShopOrderClient({ initialGroups, catalogError }: Props) 
     initialGroups[0]?.categoryId ?? null,
   );
   const [hydrated, setHydrated] = useState(false);
+  const [selectedUnitByProduct, setSelectedUnitByProduct] = useState<Record<string, string | null>>(
+    {},
+  );
   const skipNextWriteRef = useRef(true);
 
   const supabase = useMemo(() => createSupabaseBrowserClient(), []);
@@ -61,7 +68,6 @@ export default function ShopOrderClient({ initialGroups, catalogError }: Props) 
     return map;
   }, [groups]);
 
-  // useLayoutEffect : charger le panier avant le 1er paint (évite qu'un clic + soit écrasé en dev).
   useLayoutEffect(() => {
     setLines(readCartFromStorage().lines);
     setHydrated(true);
@@ -79,12 +85,22 @@ export default function ShopOrderClient({ initialGroups, catalogError }: Props) 
 
   useShopAnalytics({ lines, hydrated });
 
+  const getSelectedUnitId = useCallback(
+    (product: ShopProduct): string | null => {
+      if (Object.prototype.hasOwnProperty.call(selectedUnitByProduct, product.id)) {
+        return selectedUnitByProduct[product.id] ?? null;
+      }
+      return favoriteShopOrderUnitId(product);
+    },
+    [selectedUnitByProduct],
+  );
+
   const updateLine = useCallback(
-    (productId: string, qty: number) => {
+    (productId: string, shopOrderUnitId: string | null, qty: number) => {
       const product = productById.get(productId);
       if (!product) return;
       setLines((prev) => {
-        const line = buildCartLineFromProduct(product, qty);
+        const line = buildCartLineFromProduct(product, shopOrderUnitId, qty, locale);
         const next = upsertCartLine(prev, line);
         if (qty <= 0 && next.length === 0) {
           setCartOpen(false);
@@ -92,29 +108,33 @@ export default function ShopOrderClient({ initialGroups, catalogError }: Props) 
         return next;
       });
     },
-    [productById],
+    [productById, locale],
   );
 
   const addProduct = useCallback(
     (product: ShopProduct) => {
-      const unitCode = salesUnitCode(product.ref_sales_unit);
+      const unitId = getSelectedUnitId(product);
+      const option = findShopOption(product, unitId);
+      if (!option) return;
       setLines((prev) => {
-        const current = getCartLineQty(prev, product.id);
-        const nextQty = current > 0 ? addQty(current, unitCode) : minQtyForUnit(unitCode);
-        const line = buildCartLineFromProduct(product, nextQty);
+        const current = getCartLineQty(prev, product.id, unitId);
+        const nextQty = current > 0 ? addQtyByStep(current, option.qtyStep) : option.qtyStep;
+        const line = buildCartLineFromProduct(product, unitId, nextQty, locale);
         return upsertCartLine(prev, line);
       });
     },
-    [],
+    [getSelectedUnitId, locale],
   );
 
   const removeProduct = useCallback(
     (product: ShopProduct) => {
-      const unitCode = salesUnitCode(product.ref_sales_unit);
+      const unitId = getSelectedUnitId(product);
+      const option = findShopOption(product, unitId);
+      if (!option) return;
       setLines((prev) => {
-        const current = getCartLineQty(prev, product.id);
-        const nextQty = subtractQty(current, unitCode);
-        const line = buildCartLineFromProduct(product, nextQty);
+        const current = getCartLineQty(prev, product.id, unitId);
+        const nextQty = subtractQtyByStep(current, option.qtyStep);
+        const line = buildCartLineFromProduct(product, unitId, nextQty, locale);
         const next = upsertCartLine(prev, line);
         if (next.length === 0) {
           setCartOpen(false);
@@ -122,7 +142,7 @@ export default function ShopOrderClient({ initialGroups, catalogError }: Props) 
         return next;
       });
     },
-    [],
+    [getSelectedUnitId, locale],
   );
 
   const cartCount = lines.length;
@@ -132,12 +152,18 @@ export default function ShopOrderClient({ initialGroups, catalogError }: Props) 
 
   const orderText = useMemo(
     () =>
-      buildOrderText(lines, productById, locale, {
-        title: t("orderTitle"),
-        total: t("estimatedTotal"),
-        separator: "──────────────────────",
-        uncategorized: t("uncategorized"),
-      }, categoryMeta),
+      buildOrderText(
+        lines,
+        productById,
+        locale,
+        {
+          title: t("orderTitle"),
+          total: t("estimatedTotal"),
+          separator: "──────────────────────",
+          uncategorized: t("uncategorized"),
+        },
+        categoryMeta,
+      ),
     [lines, productById, locale, t, categoryMeta],
   );
 
@@ -223,7 +249,8 @@ export default function ShopOrderClient({ initialGroups, catalogError }: Props) 
                       }}
                     >
                       {subgroup.products.map((product) => {
-                        const qty = getCartLineQty(lines, product.id);
+                        const unitId = getSelectedUnitId(product);
+                        const qty = getCartLineQty(lines, product.id, unitId);
                         const photoUrl = productPhotoPublicUrl(supabase, product.image_path);
                         return (
                           <ShopProductCard
@@ -231,6 +258,10 @@ export default function ShopOrderClient({ initialGroups, catalogError }: Props) 
                             product={product}
                             photoUrl={photoUrl}
                             qty={qty}
+                            selectedShopOrderUnitId={unitId}
+                            onSelectUnit={(id) =>
+                              setSelectedUnitByProduct((prev) => ({ ...prev, [product.id]: id }))
+                            }
                             onAdd={() => addProduct(product)}
                             onRemove={() => removeProduct(product)}
                           />
@@ -272,7 +303,7 @@ export default function ShopOrderClient({ initialGroups, catalogError }: Props) 
               whiteSpace: "nowrap",
             }}
           >
-            {formatShopPriceDh(locale, cartTotal)}
+            {formatShopPriceDh(locale, cartTotal, true)}
           </Button>
           {whatsAppHref ? (
             <Button

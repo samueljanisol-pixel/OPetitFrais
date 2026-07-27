@@ -2,6 +2,8 @@
 
 Page backoffice : `/boutique/stats` (permission `shop.read`).
 
+Lien **Ouvrir le site** dans l’en-tête : ouvre la boutique publique (`shopPublicUrl()` → `https://opetitfrais.ma/`) dans un nouvel onglet.
+
 ## Métriques
 
 | Indicateur | Définition |

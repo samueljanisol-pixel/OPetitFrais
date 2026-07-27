@@ -23,6 +23,13 @@ Les fenêtres **Ajouter / Modifier** (référentiels, magasins, champs import pl
 - Onglet **Unités d'achat** dans Paramètres (libellé + libellé arabe optionnel).
 - Champ **`product.purchase_unit_id`** (optionnel) sur la fiche produit. Import Google Sheet : colonne **UdA**. Migration `20260722190000_ref_purchase_unit.sql`.
 
+## Unités de commande vitrine
+
+- Table **`ref_shop_order_unit`** : unités proposées sur la boutique (`opetitfrais.ma`), distinctes de l’UdV / UdC / colis fournisseur.
+- Chaque entrée = **libellé** (+ arabe) + **quantité de pièces** (`piece_qty`, ex. `0.25` = 1/4, `6` = lot de 6).
+- Onglet **Unités commande vitrine** dans Paramètres (seul endroit pour créer / modifier).
+- Sur la fiche produit : poids d’une pièce + cases (UdV en 1re ligne + unités du référentiel) + favori. Migration `20260727160000_shop_order_unit.sql`.
+
 ## Fournisseurs
 
 - Colonne **`commande_active`** sur `ref_supplier` : interrupteur **Commande** dans l’onglet **Fournisseurs** (liste + dialogue Modifier).

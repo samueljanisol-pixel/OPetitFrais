@@ -76,8 +76,25 @@ export type ProductRow = {
   visible_vitrine: boolean
   /** Commande fournisseur : autoriser la saisie à l’unité (sans colis). Défaut true si absent (legacy). */
   allow_unit_in_commande?: boolean
+  /** Poids moyen d’une pièce (kg) pour les unités de commande vitrine. */
+  piece_weight_kg?: number | null
+  /** Si true, l’UdV est proposée sur la boutique. */
+  shop_allow_sales_unit?: boolean
+  /** Favori boutique : id `ref_shop_order_unit` ; null = favori = UdV. */
+  shop_favorite_unit_id?: string | null
   created_at: string
   updated_at: string
+}
+
+/** Unité de commande vitrine (référentiel Paramètres). */
+export type RefShopOrderUnitRow = {
+  id: string
+  code: string
+  label: string
+  label_ar?: string | null
+  piece_qty: number
+  sort_order: number
+  created_at?: string
 }
 
 export type ProductPackagingMagasinRow = {

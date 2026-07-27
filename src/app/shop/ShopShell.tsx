@@ -63,7 +63,7 @@ export default function ShopShell({ cartCount, cartTotal, onOpenCart, children }
                 onClick={onOpenCart}
                 aria-label={t("cartSummary", {
                   count: cartCount,
-                  total: formatShopPriceDh(locale, cartTotal),
+                  total: formatShopPriceDh(locale, cartTotal, true),
                 })}
                 sx={{
                   display: "flex",
@@ -95,7 +95,7 @@ export default function ShopShell({ cartCount, cartTotal, onOpenCart, children }
                   {" · "}
                 </Box>
                 <Box component="span" sx={{ whiteSpace: "nowrap" }}>
-                  {formatShopPriceDh(locale, cartTotal)}
+                  {formatShopPriceDh(locale, cartTotal, true)}
                 </Box>
               </Box>
             ) : null}

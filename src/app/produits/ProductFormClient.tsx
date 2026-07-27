@@ -13,6 +13,7 @@ import {
   FormControlLabel,
   InputLabel,
   MenuItem,
+  Radio,
   Select,
   TextField,
   Typography,
@@ -28,6 +29,7 @@ import type {
   ProductPriceHistoryRow,
   ProductRow,
   RefConditionnementRow,
+  RefShopOrderUnitRow,
   RefSubcategoryRow,
   RefVendeurRow,
   RefRow,
@@ -39,6 +41,11 @@ import { HISTORIQUE_FROM_ISO } from '@/lib/ca/constants'
 import { useSessionPermissions } from '@/lib/auth/useSessionPermissions'
 import { ProductPackagingSettingsDialog, type MagasinMini } from '@/app/produits/ProductPackagingSettingsDialog'
 import { packagingConditionnementLabel } from '@/lib/commandes-fournisseur/product-display'
+import {
+  formatQtyDisplayWhenBlurred,
+  parseQtyInputToNumber,
+  sanitizeQtyTypingFrac2,
+} from '@/lib/commandes-fournisseur/qty-parse'
 import { hasPackagingCombo, packagingDbErrorMessage } from '@/lib/products/packaging-errors'
 import { productPackagingArchiveUpdate } from '@/lib/products/packaging-archive'
 import {
@@ -46,6 +53,10 @@ import {
   primarySupplierIdFromSelection,
   syncProductSuppliers,
 } from '@/lib/products/product-supplier'
+import {
+  loadProductShopOrderUnitIds,
+  syncProductShopOrderUnits,
+} from '@/lib/products/product-shop-order-unit'
 import { productSalesNameFr } from '@/lib/products/product-display-name'
 import { PRODUCT_FORM_SELECT } from '@/lib/products/product-supabase-select'
 
@@ -88,6 +99,9 @@ export default function ProductFormClient({ productId, returnTo = null }: Props)
   const [units, setUnits] = useState<RefRow[]>([])
   const [orderUnits, setOrderUnits] = useState<RefRow[]>([])
   const [purchaseUnits, setPurchaseUnits] = useState<RefRow[]>([])
+  const [shopOrderUnits, setShopOrderUnits] = useState<RefShopOrderUnitRow[]>([])
+  const [shopUnitIds, setShopUnitIds] = useState<Set<string>>(() => new Set())
+  const [pieceWeightText, setPieceWeightText] = useState('')
   const [cats, setCats] = useState<RefRow[]>([])
   const [subcats, setSubcats] = useState<RefSubcategoryRow[]>([])
   const [sups, setSups] = useState<RefRow[]>([])
@@ -106,6 +120,9 @@ export default function ProductFormClient({ productId, returnTo = null }: Props)
     active: true,
     visible_vitrine: true,
     allow_unit_in_commande: true,
+    piece_weight_kg: null,
+    shop_allow_sales_unit: true,
+    shop_favorite_unit_id: null,
   })
   const [imageUrl, setImageUrl] = useState<string | null>(null)
   const [packs, setPacks] = useState<PackagingLine[]>([])
@@ -168,10 +185,11 @@ export default function ProductFormClient({ productId, returnTo = null }: Props)
   }, [subcats, p.category_id])
 
   const loadRefs = useCallback(async () => {
-    const [u, ou, pu, c, sc, s, co, ma, mg] = await Promise.all([
+    const [u, ou, pu, ucv, c, sc, s, co, ma, mg] = await Promise.all([
       supabase.from('ref_sales_unit').select('*').order('sort_order'),
       supabase.from('ref_order_unit').select('*').order('sort_order'),
       supabase.from('ref_purchase_unit').select('*').order('sort_order'),
+      supabase.from('ref_shop_order_unit').select('*').order('sort_order'),
       supabase.from('ref_category').select('*').order('sort_order'),
       supabase.from('ref_subcategory').select('*, ref_category(id, label)').order('sort_order').order('label'),
       supabase.from('ref_supplier').select('*').order('sort_order'),
@@ -185,6 +203,7 @@ export default function ProductFormClient({ productId, returnTo = null }: Props)
     }
     if (ou.data) setOrderUnits(ou.data as RefRow[])
     if (pu.data) setPurchaseUnits(pu.data as RefRow[])
+    if (ucv.data) setShopOrderUnits(ucv.data as RefShopOrderUnitRow[])
     if (c.data) {
       setCats(c.data as RefRow[])
       if (c.data[0] && isNew) setP(x => ({ ...x, category_id: (c.data[0] as RefRow).id }))
@@ -233,13 +252,30 @@ export default function ProductFormClient({ productId, returnTo = null }: Props)
       return
     }
     const row = data as ProductRow
-    setP(row)
+    setP({
+      ...row,
+      shop_allow_sales_unit: row.shop_allow_sales_unit !== false,
+      shop_favorite_unit_id: row.shop_favorite_unit_id ?? null,
+      piece_weight_kg: row.piece_weight_kg ?? null,
+    })
+    setPieceWeightText(
+      row.piece_weight_kg != null && Number(row.piece_weight_kg) > 0
+        ? formatQtyDisplayWhenBlurred(Number(row.piece_weight_kg))
+        : '',
+    )
     try {
       const supplierIds = await loadProductSupplierIds(supabase, productId, row.supplier_id)
       setProductSupplierIds(new Set(supplierIds))
     } catch (e) {
       setErr(e instanceof Error ? e.message : 'Erreur chargement fournisseurs produit')
       setProductSupplierIds(row.supplier_id ? new Set([row.supplier_id]) : new Set())
+    }
+    try {
+      const unitIds = await loadProductShopOrderUnitIds(supabase, productId)
+      setShopUnitIds(new Set(unitIds))
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : 'Erreur chargement unités vitrine')
+      setShopUnitIds(new Set())
     }
     lastPricingDbRef.current = {
       price: Number(row.price),
@@ -408,8 +444,32 @@ export default function ProductFormClient({ productId, returnTo = null }: Props)
         return
       }
     }
+    const allowUdv = p.shop_allow_sales_unit !== false
+    if (!allowUdv && shopUnitIds.size === 0) {
+      setErr('Choisissez au moins l’unité de vente ou une unité de commande vitrine.')
+      return
+    }
+    if (shopUnitIds.size > 0) {
+      const pw = p.piece_weight_kg != null ? Number(p.piece_weight_kg) : null
+      if (pw == null || !(pw > 0)) {
+        setErr('Le poids d’une pièce (kg) est obligatoire si des unités vitrine sont cochées.')
+        return
+      }
+    }
+    const favId = p.shop_favorite_unit_id?.trim() ? p.shop_favorite_unit_id : null
+    if (favId == null) {
+      if (!allowUdv) {
+        setErr('Le favori boutique doit être une option cochée.')
+        return
+      }
+    } else if (!shopUnitIds.has(favId)) {
+      setErr('Le favori boutique doit être une unité cochée.')
+      return
+    }
     setSaving(true)
     setErr(null)
+    const pieceWeight =
+      p.piece_weight_kg != null && Number(p.piece_weight_kg) > 0 ? Number(p.piece_weight_kg) : null
     const payload = {
       name: p.name.trim(),
       sales_name: p.sales_name?.trim() ? p.sales_name.trim() : null,
@@ -431,6 +491,9 @@ export default function ProductFormClient({ productId, returnTo = null }: Props)
       active: p.active ?? true,
       visible_vitrine: p.visible_vitrine ?? true,
       allow_unit_in_commande: p.allow_unit_in_commande ?? true,
+      piece_weight_kg: pieceWeight,
+      shop_allow_sales_unit: allowUdv,
+      shop_favorite_unit_id: favId,
     }
     if (isNew) {
       const { data, error: e1 } = await supabase
@@ -448,8 +511,9 @@ export default function ProductFormClient({ productId, returnTo = null }: Props)
       const newId = (data as { id: string }).id
       try {
         await syncProductSuppliers(supabase, newId, [...productSupplierIds], sups)
+        await syncProductShopOrderUnits(supabase, newId, [...shopUnitIds])
       } catch (e) {
-        setErr(e instanceof Error ? e.message : 'Erreur enregistrement fournisseurs')
+        setErr(e instanceof Error ? e.message : 'Erreur enregistrement fournisseurs / unités vitrine')
         setSaving(false)
         return
       }
@@ -478,8 +542,9 @@ export default function ProductFormClient({ productId, returnTo = null }: Props)
     }
     try {
       await syncProductSuppliers(supabase, productId!, [...productSupplierIds], sups)
+      await syncProductShopOrderUnits(supabase, productId!, [...shopUnitIds])
     } catch (e) {
-      setErr(e instanceof Error ? e.message : 'Erreur enregistrement fournisseurs')
+      setErr(e instanceof Error ? e.message : 'Erreur enregistrement fournisseurs / unités vitrine')
       setSaving(false)
       return
     }
@@ -958,7 +1023,7 @@ export default function ProductFormClient({ productId, returnTo = null }: Props)
                   onChange={e => setP(x => ({ ...x, visible_vitrine: e.target.checked }))}
                 />
               }
-              label="Visible vitrine (futur)"
+              label="Visible vitrine (boutique)"
             />
             <FormControlLabel
               control={
@@ -971,6 +1036,134 @@ export default function ProductFormClient({ productId, returnTo = null }: Props)
               label="Commande fournisseur : autoriser la saisie à l’unité"
             />
           </div>
+
+          <Box sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 1, p: 1.5 }}>
+            <Typography variant="subtitle2" sx={{ mb: 1, fontWeight: 700 }}>
+              Unités de commande boutique
+            </Typography>
+            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1.5 }}>
+              Ces unités s’ajoutent (ou remplacent) l’UdV sur opetitfrais.ma. Définir les libellés dans
+              Paramètres → Unités commande vitrine.
+            </Typography>
+            <TextField
+              size="small"
+              type="text"
+              label="Poids d’une pièce (kg)"
+              value={pieceWeightText}
+              onChange={e => {
+                const next = sanitizeQtyTypingFrac2(e.target.value)
+                setPieceWeightText(next)
+                const parsed = parseQtyInputToNumber(next)
+                setP(x => ({
+                  ...x,
+                  piece_weight_kg: parsed != null && parsed > 0 ? parsed : null,
+                }))
+              }}
+              onBlur={() => {
+                const parsed = parseQtyInputToNumber(pieceWeightText)
+                const n = parsed != null && parsed > 0 ? parsed : null
+                setP(x => ({ ...x, piece_weight_kg: n }))
+                setPieceWeightText(n != null ? formatQtyDisplayWhenBlurred(n) : '')
+              }}
+              fullWidth
+              sx={{ mb: 1.5 }}
+              helperText="Obligatoire si une unité vitrine est cochée (max. 2 décimales)"
+              slotProps={muiSlotPropsDecimalKeypad}
+            />
+            <table className="w-full text-sm border border-slate-200 rounded">
+              <thead>
+                <tr className="bg-slate-50 text-left text-xs text-slate-600">
+                  <th className="p-2">Unité</th>
+                  <th className="p-2 w-20">Actif</th>
+                  <th className="p-2 w-24">Favori</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr className="border-t border-slate-100">
+                  <td className="p-2 font-medium">
+                    UdV — {units.find(u => u.id === p.sales_unit_id)?.label ?? '—'}
+                  </td>
+                  <td className="p-2">
+                    <Checkbox
+                      size="small"
+                      checked={p.shop_allow_sales_unit !== false}
+                      disabled={readOnly}
+                      onChange={e => {
+                        const checked = e.target.checked
+                        setP(x => {
+                          const favWasUdv = !x.shop_favorite_unit_id
+                          let nextFav = x.shop_favorite_unit_id ?? null
+                          if (!checked && favWasUdv) {
+                            nextFav = [...shopUnitIds][0] ?? null
+                          }
+                          return {
+                            ...x,
+                            shop_allow_sales_unit: checked,
+                            shop_favorite_unit_id: checked && favWasUdv ? null : nextFav,
+                          }
+                        })
+                      }}
+                    />
+                  </td>
+                  <td className="p-2">
+                    <Radio
+                      size="small"
+                      checked={!p.shop_favorite_unit_id}
+                      disabled={readOnly || p.shop_allow_sales_unit === false}
+                      onChange={() => setP(x => ({ ...x, shop_favorite_unit_id: null }))}
+                    />
+                  </td>
+                </tr>
+                {shopOrderUnits.map(u => {
+                  const checked = shopUnitIds.has(u.id)
+                  return (
+                    <tr key={u.id} className="border-t border-slate-100">
+                      <td className="p-2">
+                        {u.label}
+                        <span className="ml-1 text-xs text-slate-500">({u.piece_qty} p.)</span>
+                      </td>
+                      <td className="p-2">
+                        <Checkbox
+                          size="small"
+                          checked={checked}
+                          disabled={readOnly}
+                          onChange={e => {
+                            const on = e.target.checked
+                            setShopUnitIds(prev => {
+                              const next = new Set(prev)
+                              if (on) next.add(u.id)
+                              else next.delete(u.id)
+                              if (!on) {
+                                setP(x => {
+                                  if (x.shop_favorite_unit_id !== u.id) return x
+                                  const allowUdv = x.shop_allow_sales_unit !== false
+                                  return {
+                                    ...x,
+                                    shop_favorite_unit_id: allowUdv
+                                      ? null
+                                      : [...next][0] ?? null,
+                                  }
+                                })
+                              }
+                              return next
+                            })
+                          }}
+                        />
+                      </td>
+                      <td className="p-2">
+                        <Radio
+                          size="small"
+                          checked={p.shop_favorite_unit_id === u.id}
+                          disabled={readOnly || !checked}
+                          onChange={() => setP(x => ({ ...x, shop_favorite_unit_id: u.id }))}
+                        />
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </Box>
 
           {!isNew && (
             <Box>
