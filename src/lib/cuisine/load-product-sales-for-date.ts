@@ -1,6 +1,9 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { dedupeProductLinesByMagasin } from "@/lib/ca/benefitFromSales";
+import { canonicalMagasinCode } from "@/lib/ca/magasinCode";
 import type { CuisineSubcategoryTotalsGroup } from "./types";
+
+export { canonicalMagasinCode } from "@/lib/ca/magasinCode";
 
 type CaProductDayRow = {
   product_id: string | null;
@@ -13,14 +16,6 @@ export type CuisineProductSalesForDate = {
   byProductIdAndMagasin: Map<string, Map<string, number>>;
   magasinsInData: string[];
 };
-
-/** Code magasin canonique pour jointure (`M01` → `M1`, aligné sur `ca_product_day`). */
-export function canonicalMagasinCode(code: string): string {
-  const raw = code.trim().toUpperCase();
-  const m = raw.match(/^M0*(\d+)$/);
-  if (m) return `M${m[1]}`;
-  return raw;
-}
 
 function compareMagasinCodes(a: string, b: string): number {
   const na = Number(a.replace(/^M/i, ""));

@@ -143,7 +143,7 @@ async function fetchCaProductBenefitRows(
       const total = typeof r.total === 'number' ? r.total : Number(r.total)
       allRows.push({
         date: normalizeDateCell(r.date),
-        magasin: String(r.magasin ?? '__all__'),
+        magasin: String(r.magasin ?? '__all__').trim() || '__all__',
         product_id:
           typeof r.product_id === 'string' && r.product_id.length > 0 ? r.product_id : null,
         article: String(r.article ?? '').trim(),

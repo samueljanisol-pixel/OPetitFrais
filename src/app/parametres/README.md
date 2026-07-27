@@ -33,12 +33,13 @@ Les fenêtres **Ajouter / Modifier** (référentiels, magasins, champs import pl
 Les **vendeurs** (`ref_supplier_vendeur`) sont rattachés à un **fournisseur**. Chaque vendeur peut avoir :
 
 - un **téléphone WhatsApp** (`phone`) — utilisé sur le récap commande lot prêt pour envoyer l’image + commentaire ;
-- une **langue d’export commande** (`preferred_locale` : `fr` ou `ar-MA`) — l’image exportée (noms produit, en-têtes, UdV) est entièrement dans cette langue.
+- une **langue d’export commande** (`preferred_locale` : `fr` ou `ar-MA`) — l’image exportée (noms produit, en-têtes, UdV) est entièrement dans cette langue ;
+- une **devise achat** (`devise_achat` : `dirham` ou `rial`, défaut `dirham`) — saisie des prix/totaux en Rial à l’achat si besoin (**1 DH = 20 Rial**) ; les montants lot restent stockés en **DH**. Migration `20260727140000_ref_supplier_vendeur_devise_achat.sql`.
 
 Ils servent à la fois :
 
 - à la configuration des **conditionnements produit** (cases « Vendeurs » dans les paramètres du colis) ;
-- à l’**achat** (attribution des lignes de lot, frais, renommage selon les droits).
+- à l’**achat** (attribution des lignes de lot, frais, création / modification vendeur selon les droits).
 
 Un même libellé peut exister chez plusieurs fournisseurs (enregistrements distincts).
 
@@ -56,6 +57,19 @@ Migration : `20260619120000_unify_marchand_vendeur.sql` (fusion de l’ancien `r
 - **`ref_subcategory`** : sous-catégories rattachées à une catégorie (libellé unique par catégorie). Gestion dans le même onglet, tableau **Sous-catégories**.
 - **`product.subcategory_id`** : optionnel ; doit correspondre à la catégorie du produit.
 - Import Google Sheet : colonne **Sous-Catégorie** (création auto si absente). Migration `20260701160000_ref_subcategory.sql`.
+
+## Charges Magasins
+
+Onglet **Charges Magasins** : charges fixes par magasin et charges **générales** (sans magasin), utilisées pour le **bénéfice net estimé** dans `/ca` et `/historique-ca`.
+
+- Composant : [`ChargesMagasinsAdminPanel.tsx`](ChargesMagasinsAdminPanel.tsx)
+- Table `magasin_charge` (`magasin_id` null = générale, `label`, `quantite`, `prix`, `periodicite` `jour`|`mois`) — migration `20260727150000_magasin_charge.sql`
+- API : `GET/POST /api/ref/magasin-charges`, `PATCH/DELETE /api/ref/magasin-charges/[id]`
+- Total ligne = quantité × prix
+- **Vue jour** : charge journalière = forfait ; charge mensuelle = forfait ÷ jours du mois
+- **Vue mois** : charge mensuelle = 1 × forfait (même si mois incomplet) ; charge journalière × jours de la période
+- Charges générales : soustraites uniquement des totaux globaux (pas réparties par magasin)
+- Écriture : `parametres.write` ; lecture : `parametres.read` ou `ventes.read`
 
 ## Commandes fournisseur
 

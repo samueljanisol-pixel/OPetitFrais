@@ -30,7 +30,8 @@ GET /api/caisse/commande-ticket?magasin=M02&token=…&lang=FR&format=json
 ### Contenu métier (identique pour json / txt / pdf)
 
 - Dernière commande **non vide** par fournisseur
-- Statuts : `en_saisie`, `validee`, `integree`
+- Date / tri : **`marque_prete_at`** du lot (validation « prête »), sinon `validated_at`, sinon `created_at`
+- Statuts commande : `en_saisie`, `validee`, `integree`
 - Groupé par catégorie ; lignes produit + qté + unité
 
 ---

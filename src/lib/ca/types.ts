@@ -35,6 +35,18 @@ export type CaResponse = {
   totalBenefitJour?: number
   /** CA du jour sur les produits avec marge connue (même périmètre que totalBenefitJour). */
   caWithMarginJour?: number
+  /** Charges du jour (magasins + générales). */
+  totalChargesJour?: number
+  /** Part générale des charges du jour. */
+  chargesGeneralJour?: number
+  /** Charges du jour par code magasin (sans générales). */
+  magasinsChargesJour?: Record<string, number>
+  /** Bénéfice estimé du jour par code magasin (avant charges). */
+  magasinsBenefitJour?: Record<string, number>
+  /** Bénéfice net estimé du jour (= bénéfice − charges). */
+  totalBenefitNetJour?: number
+  /** Bénéfice net estimé du jour par code magasin (sans charges générales). */
+  magasinsBenefitNetJour?: Record<string, number>
   /** Vrai si le CA du jour sélectionné atteint ou dépasse le record sur la période historique. */
   isRecordDay?: boolean
   /** Record battu (date + montant) lorsque `isRecordDay` et qu'un record antérieur existait. */
@@ -53,6 +65,15 @@ export type CaResponse = {
     totalBenefit?: number
     /** CA du mois sur les produits avec marge connue (même périmètre que totalBenefit). */
     caWithMargin?: number
+    /** Charges du mois (forfait mensuel ×1 + journalières × jours période). */
+    totalCharges?: number
+    chargesGeneral?: number
+    magasinsCharges?: Record<string, number>
+    /** Bénéfice estimé du mois par code magasin (avant charges). */
+    magasinsBenefit?: Record<string, number>
+    /** Bénéfice net estimé du mois (= bénéfice − charges). */
+    totalBenefitNet?: number
+    magasinsBenefitNet?: Record<string, number>
     magasins: Record<string, number>
     panierMois?: Record<string, PanierMag>
     panierMoisGlobal?: PanierMag
@@ -80,6 +101,19 @@ export type HistoriqueDayRow = {
   magasinsBenefit: Record<string, number>
   /** CA avec marge connue par code magasin (même périmètre que magasinsBenefit). */
   magasinsCaWithMargin: Record<string, number>
+  /** Charges du jour (magasins + générales). */
+  totalCharges: number
+  chargesGeneral: number
+  magasinsCharges: Record<string, number>
+  /** Bénéfice net estimé du jour (= bénéfice − charges). */
+  totalBenefitNet: number
+  magasinsBenefitNet: Record<string, number>
+}
+
+export type HistoriqueMonthCharges = {
+  total: number
+  general: number
+  byMag: Record<string, number>
 }
 
 export type HistoriquePayload =
@@ -88,6 +122,8 @@ export type HistoriquePayload =
       from: string
       to: string
       days: HistoriqueDayRow[]
+      /** Charges recalculées en formule mois (forfait ×1) par YM. */
+      chargesByYm?: Record<string, HistoriqueMonthCharges>
     }
 
 export type VentesAnalyseFilters = {

@@ -1,7 +1,16 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { HISTORIQUE_FROM_ISO } from "./constants";
 import { catalogEntryForProductId, fetchProductCatalogIndex } from "./productCatalogMatch";
-import type { CaResponse, CaRecordRef, CaTopProduitLine, CaTopProduitsPayload, HistoriqueDayRow, HistoriquePayload, PanierMag } from "./types";
+import type {
+  CaResponse,
+  CaRecordRef,
+  CaTopProduitLine,
+  CaTopProduitsPayload,
+  HistoriqueDayRow,
+  HistoriqueMonthCharges,
+  HistoriquePayload,
+  PanierMag,
+} from "./types";
 import { buildTopProduitRankings, filterTopProduitLines } from "./topProduits";
 import { fetchTotalKgQtyForDateRange, monthDateBounds, sumKgQtyFromTopProduitLines } from "./totalKg";
 import {
@@ -9,6 +18,19 @@ import {
   fetchBenefitByDayMagasinForDateRange,
   fetchBenefitTotalsForDateRange,
 } from "./benefitFromSales";
+import {
+  aggregateChargesByYmInRange,
+  aggregateChargesForDay,
+  aggregateChargesForMonth,
+  benefitNet,
+  daysInPeriodForMonthYm,
+  fetchMagasinChargeLines,
+} from "./magasinCharges";
+import {
+  canonicalMagasinCode,
+  expandMagasinCodeAliases,
+  lookupByCanonicalMagasin,
+} from "./magasinCode";
 
 function isoDateMinusDays(iso: string, days: number) {
   const [yy, mm, dd] = iso.split("-").map((x) => Number(x));
@@ -258,7 +280,16 @@ export async function fetchCaDashboardFromSupabase(
   opts?: { magasinCodes?: string[] },
 ): Promise<{ data: CaResponse } | { error: string }> {
   const codes = opts?.magasinCodes;
-  const magIn = codes === undefined ? undefined : codes.length === 0 ? ["__none__"] : codes;
+  /** Filtre CA (`ca_day`…) : codes session tels quels (évite double comptage M01+M1). */
+  const magInCa =
+    codes === undefined ? undefined : codes.length === 0 ? ["__none__"] : codes;
+  /** Filtre bénéfice produit : aliases M01/M1 pour joindre `ca_product_day`. */
+  const magInBenefit =
+    codes === undefined
+      ? undefined
+      : codes.length === 0
+        ? ["__none__"]
+        : expandMagasinCodeAliases(codes);
 
   const ym = date.slice(0, 7);
   const dateJ1 = isoDateMinusDays(date, 1);
@@ -270,31 +301,47 @@ export async function fetchCaDashboardFromSupabase(
   let j7Qb = supabase.from("ca_day").select("magasin,total").eq("date", dateJ7);
   let monthQb = supabase.from("ca_month").select("magasin,total,nb_paniers").eq("ym", ym);
   let hourQb = supabase.from("ca_panier_hour").select("magasin,hour,nb").eq("date", date);
-  if (magIn) {
-    dayQb = dayQb.in("magasin", magIn);
-    j1Qb = j1Qb.in("magasin", magIn);
-    j7Qb = j7Qb.in("magasin", magIn);
-    monthQb = monthQb.in("magasin", magIn);
-    hourQb = hourQb.in("magasin", magIn);
+  if (magInCa) {
+    dayQb = dayQb.in("magasin", magInCa);
+    j1Qb = j1Qb.in("magasin", magInCa);
+    j7Qb = j7Qb.in("magasin", magInCa);
+    monthQb = monthQb.in("magasin", magInCa);
+    hourQb = hourQb.in("magasin", magInCa);
   }
 
   const monthBounds = monthDateBounds(ym);
-  const [dayQ, j1Q, j7Q, monthQ, hourQ, maxDayRecords, topProduitsRaw, totalKgMois, monthBenefitTotals, dayBenefitTotals] =
-    await Promise.all([
+  const [
+    dayQ,
+    j1Q,
+    j7Q,
+    monthQ,
+    hourQ,
+    maxDayRecords,
+    topProduitsRaw,
+    totalKgMois,
+    monthBenefitTotals,
+    dayBenefitByMagRes,
+    monthBenefitByMagRes,
+    chargeLinesRes,
+  ] = await Promise.all([
     dayQb,
     j1Qb,
     j7Qb,
     monthQb,
     hourQb,
-    fetchMaxDailyCaRecords(supabase, HISTORIQUE_FROM_ISO, todayIso, magIn),
-    buildTopProduitsForDate(supabase, date, magIn),
-    fetchTotalKgQtyForDateRange(supabase, monthBounds.from, monthBounds.to, magIn),
-    fetchBenefitTotalsForDateRange(supabase, monthBounds.from, monthBounds.to, magIn),
-    fetchBenefitTotalsForDateRange(supabase, date, date, magIn),
+    fetchMaxDailyCaRecords(supabase, HISTORIQUE_FROM_ISO, todayIso, magInCa),
+    buildTopProduitsForDate(supabase, date, magInBenefit),
+    fetchTotalKgQtyForDateRange(supabase, monthBounds.from, monthBounds.to, magInBenefit),
+    fetchBenefitTotalsForDateRange(supabase, monthBounds.from, monthBounds.to, magInBenefit),
+    // Jour seul : évite l’échec « trop de lignes » du fetch mois entier (qui laissait le bénéfice magasin à 0).
+    fetchBenefitByDayMagasinForDateRange(supabase, date, date, magInBenefit),
+    fetchBenefitByDayMagasinForDateRange(supabase, monthBounds.from, monthBounds.to, magInBenefit),
+    fetchMagasinChargeLines(supabase),
   ]);
 
   const firstErr = dayQ.error || j1Q.error || j7Q.error || monthQ.error || hourQ.error;
   if (firstErr) return { error: firstErr.message };
+  if ("error" in chargeLinesRes) return { error: chargeLinesRes.error };
 
   const dayAgg = sumDayRows(dayQ.data);
   const j1Agg = sumDayRows(j1Q.data);
@@ -389,16 +436,23 @@ export async function fetchCaDashboardFromSupabase(
 
   const totalKgJour = topProduits.available ? sumKgQtyFromTopProduitLines(topProduits.lines) : 0;
 
-  // Totaux bénéfice : même agrégat que le mois et l'historique (`fetchBenefitTotalsForDateRange`).
-  // Les lignes TOP restent enrichies pour l'affichage, mais ne servent plus au total carte.
-  const totalBenefitJour =
-    typeof dayBenefitTotals === "object" && "benefit" in dayBenefitTotals
-      ? dayBenefitTotals.benefit
-      : undefined;
-  const caWithMarginJour =
-    typeof dayBenefitTotals === "object" && "caWithMargin" in dayBenefitTotals
-      ? dayBenefitTotals.caWithMargin
-      : undefined;
+  // Totaux bénéfice jour : même moteur que le détail par magasin (fetch jour seul).
+  let dayBenefitEntry =
+    !("error" in dayBenefitByMagRes) ? dayBenefitByMagRes.get(date) ?? null : null;
+  if (!dayBenefitEntry && !("error" in dayBenefitByMagRes) && dayBenefitByMagRes.size > 0) {
+    // Repli si la clé date du Map ne matche pas exactement (format / timezone).
+    for (const [k, v] of dayBenefitByMagRes) {
+      if (k.slice(0, 10) === date.slice(0, 10)) {
+        dayBenefitEntry = v;
+        break;
+      }
+    }
+    if (!dayBenefitEntry && dayBenefitByMagRes.size === 1) {
+      dayBenefitEntry = dayBenefitByMagRes.values().next().value ?? null;
+    }
+  }
+  let totalBenefitJour = dayBenefitEntry?.benefit;
+  let caWithMarginJour = dayBenefitEntry?.caWithMargin;
 
   if (topProduits.available && topProduits.lines.length > 0) {
     const enriched = await enrichCaTopProduitLines(supabase, topProduits.lines, date);
@@ -425,11 +479,107 @@ export async function fetchCaDashboardFromSupabase(
       ? monthBenefitTotals.caWithMargin
       : undefined;
 
+  const dayCharges = aggregateChargesForDay(chargeLinesRes.lines, date, codes);
+  const monthDaysInPeriod = daysInPeriodForMonthYm(ym, todayIso);
+  const monthCharges = aggregateChargesForMonth(chargeLinesRes.lines, monthDaysInPeriod, codes);
+
+  /** Clés d’affichage = codes `ca_day` (cartes magasin) ; jointure tolérante M01/M1. */
+  const displayMagKeys = [
+    ...new Set([
+      ...Object.keys(magasins),
+      ...Object.keys(dayCharges.byMag),
+      ...Object.keys(monthCharges.byMag),
+    ]),
+  ];
+
+  const magasinsBenefitJour: Record<string, number> = {};
+  const magasinsChargesJour: Record<string, number> = {};
+  const magasinsBenefitNetJour: Record<string, number> = {};
+  const magasinsBenefitMonthRaw: Record<string, number> = {};
+  const magasinsChargesMonth: Record<string, number> = {};
+  const magasinsBenefitNetMonth: Record<string, number> = {};
+
+  const benefitByMagRaw: Record<string, number> = {};
+  for (const [mag, t] of Object.entries(dayBenefitEntry?.byMag ?? {})) {
+    if (mag === "__all__") continue;
+    benefitByMagRaw[mag.trim()] = t.benefit;
+  }
+  // Repli TOP enrichi si le ventilé par magasin est vide mais les lignes TOP ont un bénéfice.
+  if (Object.keys(benefitByMagRaw).length === 0) {
+    for (const line of topProduits.lines) {
+      if (line.benefit == null || !Number.isFinite(line.benefit)) continue;
+      const mag = String(line.magasin ?? "").trim();
+      if (!mag || mag === "__all__") continue;
+      benefitByMagRaw[mag] = (benefitByMagRaw[mag] ?? 0) + line.benefit;
+    }
+    if (totalBenefitJour == null && Object.keys(benefitByMagRaw).length > 0) {
+      totalBenefitJour = Object.values(benefitByMagRaw).reduce((a, b) => a + b, 0);
+    }
+  }
+  // Repli : si seules des lignes legacy `__all__` existent, rattacher au magasin unique du jour.
+  const allLegacy = dayBenefitEntry?.byMag?.["__all__"]?.benefit;
+  if (
+    Object.keys(benefitByMagRaw).length === 0 &&
+    allLegacy != null &&
+    Number.isFinite(allLegacy) &&
+    Object.keys(magasins).length === 1
+  ) {
+    benefitByMagRaw[Object.keys(magasins)[0]!] = allLegacy;
+    if (totalBenefitJour == null) totalBenefitJour = allLegacy;
+  }
+
+  if (!("error" in monthBenefitByMagRes)) {
+    for (const day of monthBenefitByMagRes.values()) {
+      for (const [mag, t] of Object.entries(day.byMag)) {
+        if (mag === "__all__") continue;
+        const key = mag.trim();
+        magasinsBenefitMonthRaw[key] = (magasinsBenefitMonthRaw[key] ?? 0) + t.benefit;
+      }
+    }
+  }
+
+  // Replier les clés bénéfice (souvent M1) sur les clés d’affichage (souvent M01).
+  const monthBenefitRemapped: Record<string, number> = {};
+  for (const mag of displayMagKeys) {
+    const benJour = lookupByCanonicalMagasin(benefitByMagRaw, mag) ?? 0;
+    const chJour = lookupByCanonicalMagasin(dayCharges.byMag, mag) ?? 0;
+    magasinsBenefitJour[mag] = benJour;
+    magasinsChargesJour[mag] = chJour;
+    magasinsBenefitNetJour[mag] = benJour - chJour;
+
+    const benMois = lookupByCanonicalMagasin(magasinsBenefitMonthRaw, mag) ?? 0;
+    const chMois = lookupByCanonicalMagasin(monthCharges.byMag, mag) ?? 0;
+    monthBenefitRemapped[mag] = benMois;
+    magasinsChargesMonth[mag] = chMois;
+    magasinsBenefitNetMonth[mag] = benMois - chMois;
+  }
+
+  for (const [mag, ben] of Object.entries(benefitByMagRaw)) {
+    const already = displayMagKeys.some((k) => canonicalMagasinCode(k) === canonicalMagasinCode(mag));
+    if (already) continue;
+    magasinsBenefitJour[mag] = ben;
+    magasinsChargesJour[mag] = lookupByCanonicalMagasin(dayCharges.byMag, mag) ?? 0;
+    magasinsBenefitNetJour[mag] = ben - magasinsChargesJour[mag];
+  }
+  for (const [mag, ben] of Object.entries(magasinsBenefitMonthRaw)) {
+    const already = displayMagKeys.some((k) => canonicalMagasinCode(k) === canonicalMagasinCode(mag));
+    if (already) continue;
+    monthBenefitRemapped[mag] = ben;
+    magasinsChargesMonth[mag] = lookupByCanonicalMagasin(monthCharges.byMag, mag) ?? 0;
+    magasinsBenefitNetMonth[mag] = ben - magasinsChargesMonth[mag];
+  }
+
   const data: CaResponse = {
     totalGlobal: dayAgg.totalGlobal,
     totalKgJour,
     totalBenefitJour,
     caWithMarginJour,
+    totalChargesJour: dayCharges.total,
+    chargesGeneralJour: dayCharges.general,
+    magasinsChargesJour,
+    magasinsBenefitJour,
+    totalBenefitNetJour: benefitNet(totalBenefitJour, dayCharges.total),
+    magasinsBenefitNetJour,
     isRecordDay,
     previousRecordDay,
     isRecordDayByMag,
@@ -441,6 +591,12 @@ export async function fetchCaDashboardFromSupabase(
       totalKg: totalKgMois,
       totalBenefit: monthTotalBenefit,
       caWithMargin: monthCaWithMargin,
+      totalCharges: monthCharges.total,
+      chargesGeneral: monthCharges.general,
+      magasinsCharges: magasinsChargesMonth,
+      magasinsBenefit: monthBenefitRemapped,
+      totalBenefitNet: benefitNet(monthTotalBenefit, monthCharges.total),
+      magasinsBenefitNet: magasinsBenefitNetMonth,
       magasins: monthByMag,
       panierMois,
       panierMoisGlobal,
@@ -466,18 +622,27 @@ export async function fetchHistoriqueFromSupabase(
   opts?: { magasinCodes?: string[] },
 ): Promise<{ data: HistoriquePayload } | { error: string }> {
   const codes = opts?.magasinCodes;
-  const magIn = codes === undefined ? undefined : codes.length === 0 ? ["__none__"] : codes;
+  const magInCa =
+    codes === undefined ? undefined : codes.length === 0 ? ["__none__"] : codes;
+  const magInBenefit =
+    codes === undefined
+      ? undefined
+      : codes.length === 0
+        ? ["__none__"]
+        : expandMagasinCodeAliases(codes);
   let hq = supabase.from("ca_day").select("date,magasin,total,nb_paniers").gte("date", from).lte("date", to);
-  if (codes !== undefined) {
-    hq = codes.length === 0 ? hq.in("magasin", ["__none__"]) : hq.in("magasin", codes);
+  if (magInCa !== undefined) {
+    hq = hq.in("magasin", magInCa);
   }
-  const [dayRes, benefitBreakdown] = await Promise.all([
+  const [dayRes, benefitBreakdown, chargeLinesRes] = await Promise.all([
     hq.order("date", { ascending: true }),
-    fetchBenefitByDayMagasinForDateRange(supabase, from, to, magIn),
+    fetchBenefitByDayMagasinForDateRange(supabase, from, to, magInBenefit),
+    fetchMagasinChargeLines(supabase),
   ]);
 
   if (dayRes.error) return { error: dayRes.error.message };
   if ("error" in benefitBreakdown) return { error: benefitBreakdown.error };
+  if ("error" in chargeLinesRes) return { error: chargeLinesRes.error };
 
   const byDate = new Map<
     string,
@@ -541,18 +706,80 @@ export async function fetchHistoriqueFromSupabase(
 
   const days: HistoriqueDayRow[] = Array.from(byDate.entries())
     .sort(([a], [b]) => a.localeCompare(b))
-    .map(([date, v]) => ({
-      date,
-      totalGlobal: v.totalGlobal,
-      nbPaniersGlobal: v.nbPaniersGlobal,
-      magasins: v.magasins,
-      magasinsNbPaniers: v.magasinsNbPaniers,
-      totalBenefit: v.totalBenefit,
-      caWithMargin: v.caWithMargin,
-      magasinsBenefit: v.magasinsBenefit,
-      magasinsCaWithMargin: v.magasinsCaWithMargin,
-    }));
+    .map(([date, v]) => {
+      const dayCharges = aggregateChargesForDay(chargeLinesRes.lines, date, codes);
+      const displayKeys = [
+        ...new Set([
+          ...Object.keys(v.magasins),
+          ...Object.keys(v.magasinsBenefit),
+          ...Object.keys(dayCharges.byMag),
+        ]),
+      ];
+      const magasinsBenefit: Record<string, number> = {};
+      const magasinsCaWithMargin: Record<string, number> = {};
+      const magasinsCharges: Record<string, number> = {};
+      const magasinsBenefitNet: Record<string, number> = {};
+      for (const mag of displayKeys) {
+        const ben = lookupByCanonicalMagasin(v.magasinsBenefit, mag) ?? 0;
+        const caM = lookupByCanonicalMagasin(v.magasinsCaWithMargin, mag) ?? 0;
+        const ch = lookupByCanonicalMagasin(dayCharges.byMag, mag) ?? 0;
+        magasinsBenefit[mag] = ben;
+        magasinsCaWithMargin[mag] = caM;
+        magasinsCharges[mag] = ch;
+        magasinsBenefitNet[mag] = ben - ch;
+      }
+      return {
+        date,
+        totalGlobal: v.totalGlobal,
+        nbPaniersGlobal: v.nbPaniersGlobal,
+        magasins: v.magasins,
+        magasinsNbPaniers: v.magasinsNbPaniers,
+        totalBenefit: v.totalBenefit,
+        caWithMargin: v.caWithMargin,
+        magasinsBenefit,
+        magasinsCaWithMargin,
+        totalCharges: dayCharges.total,
+        chargesGeneral: dayCharges.general,
+        magasinsCharges,
+        totalBenefitNet: v.totalBenefit - dayCharges.total,
+        magasinsBenefitNet,
+      };
+    });
 
-  const payload: HistoriquePayload = { from, to, days };
+  const daysInPeriodByYm: Record<string, number> = {};
+  for (const d of days) {
+    const ym = d.date.slice(0, 7);
+    daysInPeriodByYm[ym] = (daysInPeriodByYm[ym] ?? 0) + 1;
+  }
+  const chargesByYmRaw = aggregateChargesByYmInRange(
+    chargeLinesRes.lines,
+    from,
+    to,
+    codes,
+    daysInPeriodByYm,
+  );
+  const displayMagsAll = [
+    ...new Set(days.flatMap((d) => [...Object.keys(d.magasins), ...Object.keys(d.magasinsBenefit)])),
+  ];
+  const chargesByYm: Record<string, HistoriqueMonthCharges> = {};
+  for (const [ymKey, totals] of Object.entries(chargesByYmRaw)) {
+    const byMag: Record<string, number> = {};
+    for (const mag of displayMagsAll) {
+      byMag[mag] = lookupByCanonicalMagasin(totals.byMag, mag) ?? 0;
+    }
+    for (const [mag, amount] of Object.entries(totals.byMag)) {
+      const already = displayMagsAll.some(
+        (k) => canonicalMagasinCode(k) === canonicalMagasinCode(mag),
+      );
+      if (!already) byMag[mag] = amount;
+    }
+    chargesByYm[ymKey] = {
+      total: totals.total,
+      general: totals.general,
+      byMag,
+    };
+  }
+
+  const payload: HistoriquePayload = { from, to, days, chargesByYm };
   return { data: payload };
 }

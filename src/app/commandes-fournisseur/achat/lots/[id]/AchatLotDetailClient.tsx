@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type FocusEvent } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
   Box,
@@ -26,6 +26,7 @@ import { alpha, useTheme } from "@mui/material/styles";
 import useMediaQuery from "@mui/material/useMediaQuery";
 import DeleteOutlineOutlinedIcon from "@mui/icons-material/DeleteOutlineOutlined";
 import EditOutlinedIcon from "@mui/icons-material/EditOutlined";
+import PictureAsPdfOutlinedIcon from "@mui/icons-material/PictureAsPdfOutlined";
 import { useTranslations } from "next-intl";
 import AppLink from "@/components/AppLink";
 import FormDialog from "@/lib/mui/FormDialog";
@@ -33,27 +34,40 @@ import ProductArabicSubtitle from "@/components/ProductArabicSubtitle";
 import CommandeFournisseurProductPicker, {
   type ProductPickRow,
 } from "@/features/commandes-fournisseur/CommandeFournisseurProductPicker";
+import AchatFraisDialog from "@/features/commandes-fournisseur/AchatFraisDialog";
+import AchatLignePricingFields, {
+  type AchatPricingChanged,
+  type AchatPricingCommit,
+} from "@/features/commandes-fournisseur/AchatLignePricingFields";
+import AchatVendeurFormDialog, {
+  type AchatVendeurFormValues,
+} from "@/features/commandes-fournisseur/AchatVendeurFormDialog";
+import {
+  dhToRial,
+  parseDeviseAchat,
+  type DeviseAchat,
+} from "@/lib/commandes-fournisseur/achat-devise";
 import {
   ParcoursProductQuantityPanel,
   packArray,
   parcoursShapeFromPickRow,
   useSingleProductParcoursQuantity,
 } from "@/features/commandes-fournisseur/parcours-product-quantity";
-import { DecimalQtyTextField } from "@/components/commandes-fournisseur/DecimalQtyTextField";
-import {
-  clampQtyToApiRange,
-  roundQty2,
-  sanitizeMontantDhTypingFrac2,
-} from "@/lib/commandes-fournisseur/qty-parse";
+import { clampQtyToApiRange } from "@/lib/commandes-fournisseur/qty-parse";
 import { useRouter } from "next/navigation";
 import { useSessionPermissions } from "@/lib/auth/useSessionPermissions";
 import { useStatusLabels } from "@/lib/statusLabels/useStatusLabels";
 import {
   buildLotProductDisplayInfo,
   buildSoitLine,
+  labelFromRef,
   type ProductDisplayInfo,
 } from "@/lib/commandes-fournisseur/product-display";
-import { montantLigneFromPu, qtyBaseFromLotLine } from "@/lib/commandes-fournisseur/achat-pricing";
+import {
+  montantLigneFromPu,
+  puFromMontantLigne,
+  qtyBaseFromLotLine,
+} from "@/lib/commandes-fournisseur/achat-pricing";
 import {
   categoryDisplayLabel,
   compareByCategoryThenProductName,
@@ -61,9 +75,7 @@ import {
   type CategoryParsed,
 } from "@/lib/commandes-fournisseur/ligne-category-order";
 
-import LigneCommentairesMxDisplay from "@/components/commandes-fournisseur/LigneCommentairesMxDisplay";
 import type { SaisieLigneTarget } from "@/lib/commandes-fournisseur/ligne-saisie-comments";
-import { buildMagasinMxByIdFromLotLignes } from "@/lib/commandes-fournisseur/validation-lot-vendeur-recap";
 import { useAppFormat } from "@/lib/i18n/useAppFormat";
 import { useBackChevronIcon } from "@/lib/i18n/useBackChevronIcon";
 
@@ -74,6 +86,7 @@ type NestedProduct = {
   code?: string | null;
   vendeur_id?: string | null;
   ref_sales_unit?: unknown;
+  ref_purchase_unit?: unknown;
   ref_category?: unknown;
   product_packaging?: unknown;
 } | null;
@@ -109,7 +122,13 @@ type LotApi = {
   ref_supplier: { label?: string; code?: string } | { label?: string; code?: string }[] | null;
 };
 
-type VendeurApi = { id: string; label: string };
+type VendeurApi = {
+  id: string;
+  label: string;
+  phone?: string | null;
+  preferred_locale?: string | null;
+  devise_achat?: string | null;
+};
 
 type FraisApi = {
   id: string;
@@ -170,21 +189,28 @@ function serialiserEtatFrais(rows: FraisUiLine[], suppressionIds: string[]): str
   });
 }
 
-/** Fusionne la réponse API avec l’UI locale (suppressions rapides encore en file). */
-function reconcileFraisFromServer(
+/** Applique la liste serveur ; ignore les ids encore en suppression locale. */
+function fraisDepuisServeur(
   apiFrais: FraisApi[],
-  localRows: FraisUiLine[],
   pendingDeleteIds: string[],
 ): FraisUiLine[] {
   const pending = new Set(pendingDeleteIds);
-  const fromServer = fraisGlobauxVersUi(apiFrais).filter((r) => !r.id || !pending.has(r.id));
-  const localOnly = localRows.filter(
-    (r) => !r.id && (r.label.trim().length > 0 || montantNombreDepuisTxt(r.montantText) > 0),
-  );
-  return [...fromServer, ...localOnly];
+  return fraisGlobauxVersUi(apiFrais).filter((r) => !r.id || !pending.has(r.id));
 }
 
+type DraftRow = {
+  vendeur_id: string | null;
+  marque_achete: boolean;
+  qte_achat: number;
+  puText: string;
+  /** Total ligne (DH), saisi ou dérivé — hors snapshot autosave jusqu’à sync PU/qté. */
+  totalText: string;
+  product_packaging_id: string | null;
+};
+
 function montantLigneDh(L: LotLineApi, d: DraftRow | undefined): number {
+  const totalNum = parsePuText(d?.totalText ?? "");
+  if (totalNum != null) return totalNum;
   const pr = one(L.product);
   const pkgId = (d?.product_packaging_id ?? L.product_packaging_id) ?? null;
   const display = buildLotProductDisplayInfo(pr ?? null, pkgId);
@@ -194,14 +220,6 @@ function montantLigneDh(L: LotLineApi, d: DraftRow | undefined): number {
   const m = montantLigneFromPu(puNum, qtyBase);
   return m === null ? 0 : m;
 }
-
-type DraftRow = {
-  vendeur_id: string | null;
-  marque_achete: boolean;
-  qte_achat: number;
-  puText: string;
-  product_packaging_id: string | null;
-};
 
 type LignePatch = {
   lotLigneId: string;
@@ -221,7 +239,16 @@ function puToText(raw: unknown): string {
   if (raw === null || raw === undefined) return "";
   const n = Number(raw);
   if (!Number.isFinite(n)) return "";
-  return String(n).replace(".", ",");
+  const r = Math.round(n * 100) / 100;
+  return String(r).replace(".", ",");
+}
+
+function montantToText(raw: unknown): string {
+  if (raw === null || raw === undefined) return "";
+  const n = Number(raw);
+  if (!Number.isFinite(n)) return "";
+  const r = Math.round(n * 100) / 100;
+  return String(r).replace(".", ",");
 }
 
 function parsePuText(txt: string): number | null {
@@ -229,6 +256,51 @@ function parsePuText(txt: string): number | null {
   if (trimmed === "") return null;
   const n = Number(trimmed);
   return Number.isFinite(n) ? n : null;
+}
+
+function displayForDraftLine(L: LotLineApi, d: DraftRow): ProductDisplayInfo {
+  const pr = one(L.product);
+  const pkgId = (d.product_packaging_id ?? L.product_packaging_id) ?? null;
+  return buildLotProductDisplayInfo(pr ?? null, pkgId);
+}
+
+/**
+ * - saisie total (+ qté) → prix d’achat
+ * - saisie prix d’achat (+ qté) → total
+ * - changement qté : si prix d’achat présent (y compris les trois remplis) → total ;
+ *   sinon si total présent → prix d’achat
+ */
+function syncPricingDraft(
+  row: DraftRow,
+  display: ProductDisplayInfo,
+  changed: AchatPricingChanged,
+): DraftRow {
+  const qa = coerceQty(row.qte_achat, 0);
+  if (qa <= 0) return row;
+  const qtyBase = qtyBaseFromLotLine(qa, display);
+  if (qtyBase <= 0) return row;
+
+  const total = parsePuText(row.totalText);
+  const pu = parsePuText(row.puText);
+
+  if (changed === "total") {
+    if (total == null) return row;
+    return { ...row, puText: puToText(puFromMontantLigne(total, qtyBase)) };
+  }
+
+  if (changed === "pu") {
+    if (pu == null) return row;
+    return { ...row, totalText: montantToText(montantLigneFromPu(pu, qtyBase)) };
+  }
+
+  // changed === "qte"
+  if (pu != null) {
+    return { ...row, totalText: montantToText(montantLigneFromPu(pu, qtyBase)) };
+  }
+  if (total != null) {
+    return { ...row, puText: puToText(puFromMontantLigne(total, qtyBase)) };
+  }
+  return row;
 }
 
 function supplierHeading(raw: LotApi["ref_supplier"]): string {
@@ -304,6 +376,9 @@ function hasVendeurDraft(d: DraftRow | undefined): boolean {
   return d.vendeur_id != null && String(d.vendeur_id).length > 0;
 }
 
+/** Clé UI : fournisseur sans marchands (ex. Station) = vendeur unique. */
+const SUPPLIER_SOLE_VENDEUR_KEY = "__supplier_sole__";
+
 /** Retrait du vendeur : remise à zéro des saisies achat (qté, prix, marque). */
 function draftAfterVendeurRemoved(): Partial<DraftRow> {
   return {
@@ -311,6 +386,7 @@ function draftAfterVendeurRemoved(): Partial<DraftRow> {
     marque_achete: false,
     qte_achat: 0,
     puText: "",
+    totalText: "",
   };
 }
 
@@ -336,11 +412,24 @@ function draftsFromLines(lignesRows: LotLineApi[]): {
 
   for (const L of lignesRows) {
     const id = String(L.id);
+    const qte = coerceQty(L.qte_achat, 0);
+    const puText = puToText(L.prix_achat_unitaire ?? null);
+    const pr = one(L.product);
+    const display = buildLotProductDisplayInfo(pr ?? null, L.product_packaging_id ?? null);
+    const qtyBase = qtyBaseFromLotLine(qte, display);
+    const puNum = parsePuText(puText);
+    const computed = qte > 0 ? montantLigneFromPu(puNum, qtyBase) : null;
+    const stored =
+      L.montant_ligne_achat != null && Number.isFinite(Number(L.montant_ligne_achat))
+        ? Number(L.montant_ligne_achat)
+        : null;
+    const totalSource = stored != null ? stored : computed;
     const row: DraftRow = {
       vendeur_id: effectiveVendeurId(L),
       marque_achete: Boolean(L.marque_achete),
-      qte_achat: coerceQty(L.qte_achat, 0),
-      puText: puToText(L.prix_achat_unitaire ?? null),
+      qte_achat: qte,
+      puText,
+      totalText: totalSource != null && (qte > 0 || (stored != null && stored !== 0)) ? montantToText(totalSource) : "",
       product_packaging_id: L.product_packaging_id ?? null,
     };
     drafts[id] = row;
@@ -532,21 +621,33 @@ export default function AchatLotDetailClient({ lotId }: { lotId: string }) {
   const [vendeurs, setVendeurs] = useState<VendeurApi[]>([]);
 
   const [draftByLine, setDraftByLine] = useState<Record<string, DraftRow>>({});
+  const lignesRef = useRef(lignes);
+  lignesRef.current = lignes;
+  const draftByLineRef = useRef(draftByLine);
+  draftByLineRef.current = draftByLine;
   const baselineRef = useRef<Record<string, string>>({});
 
   const [saving, setSaving] = useState(false);
   const [closing, setClosing] = useState(false);
+  const [reopening, setReopening] = useState(false);
+  const [confirmReopenOpen, setConfirmReopenOpen] = useState(false);
+  const [pdfBusy, setPdfBusy] = useState(false);
   const [info, setInfo] = useState<string | null>(null);
 
-  const [newVendeurDlg, setNewVendeurDlg] = useState(false);
-  const [newVendeurLabel, setNewVendeurLabel] = useState("");
-  const [newVendeurBusy, setNewVendeurBusy] = useState(false);
-
-  const [renameVendeurId, setRenameVendeurId] = useState<string | null>(null);
-  const [renameVendeurLabel, setRenameVendeurLabel] = useState("");
-  const [renameVendeurBusy, setRenameVendeurBusy] = useState(false);
+  const [vendeurDlg, setVendeurDlg] = useState<null | { mode: "create" } | { mode: "edit"; id: string }>(
+    null,
+  );
+  const [vendeurDlgBusy, setVendeurDlgBusy] = useState(false);
 
   const [confirmZeroOpen, setConfirmZeroOpen] = useState(false);
+
+  const [fraisDlg, setFraisDlg] = useState<null | {
+    mode: "add" | "edit";
+    sid?: string;
+    initialLabel: string;
+    initialMontantText: string;
+  }>(null);
+  const [fraisDlgBusy, setFraisDlgBusy] = useState(false);
 
   const [selectedSansVendeur, setSelectedSansVendeur] = useState<Set<string>>(() => new Set());
   const [bulkVendeurId, setBulkVendeurId] = useState("");
@@ -583,8 +684,38 @@ export default function AchatLotDetailClient({ lotId }: { lotId: string }) {
       }),
     [formatNumber, t],
   );
+  const formatRial = useCallback(
+    (value: number) =>
+      t("amountRial", {
+        amount: formatNumber(value, {
+          minimumFractionDigits: 2,
+          maximumFractionDigits: 2,
+        }),
+      }),
+    [formatNumber, t],
+  );
+  const formatSoitDh = useCallback(
+    (amountDh: number) => t("soitDh", { amount: formatDh(amountDh) }),
+    [formatDh, t],
+  );
 
-  const mxByMagasinId = useMemo(() => buildMagasinMxByIdFromLotLignes(lignes), [lignes]);
+  const vendeurDlgInitial = useMemo((): AchatVendeurFormValues => {
+    if (vendeurDlg?.mode === "edit") {
+      const v = vendeurs.find((x) => x.id === vendeurDlg.id);
+      return {
+        label: v?.label ?? "",
+        phone: typeof v?.phone === "string" ? v.phone : "",
+        preferred_locale: v?.preferred_locale === "ar-MA" ? "ar-MA" : "fr",
+        devise_achat: parseDeviseAchat(v?.devise_achat),
+      };
+    }
+    return {
+      label: "",
+      phone: "",
+      preferred_locale: "fr",
+      devise_achat: "dirham",
+    };
+  }, [vendeurDlg, vendeurs]);
 
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const saveSeq = useRef(0);
@@ -709,14 +840,12 @@ export default function AchatLotDetailClient({ lotId }: { lotId: string }) {
     };
   }, [permLoading, can, lotId, applyPayload, tErrors]);
 
-  /** Recalcul chaque rendu avec la baseline réelle ( évite staleness après autosave sans setState draft ). */
-  const ligneUpdatesDirty = computeDirtyPatches(lignes, draftByLine, baselineRef.current);
-
   /** Met à jour la baseline après sauvegarde sans recharger tout le lot. */
   function commitBaselineForPatches(patches: LignePatch[]) {
     const base = { ...baselineRef.current };
+    const drafts = draftByLineRef.current;
     for (const p of patches) {
-      const row = draftByLine[p.lotLigneId];
+      const row = drafts[p.lotLigneId];
       if (!row) continue;
       base[p.lotLigneId] = draftSnapshot(row);
     }
@@ -731,7 +860,7 @@ export default function AchatLotDetailClient({ lotId }: { lotId: string }) {
       return false;
     }
     const fr = json.frais ?? [];
-    const fl = reconcileFraisFromServer(fr, fraisLinesRef.current, fraisDeletesPending.current);
+    const fl = fraisDepuisServeur(fr, fraisDeletesPending.current);
     setFraisLines(fl);
     fraisLinesRef.current = fl;
     fraisBaselineSnap.current = serialiserEtatFrais(fl, fraisDeletesPending.current);
@@ -741,7 +870,11 @@ export default function AchatLotDetailClient({ lotId }: { lotId: string }) {
   const persistAll = useCallback(
     (opts?: { silent?: boolean; lignesOnly?: boolean }) => {
       const runOne = async (): Promise<boolean> => {
-        const patches = computeDirtyPatches(lignes, draftByLine, baselineRef.current);
+        const patches = computeDirtyPatches(
+          lignesRef.current,
+          draftByLineRef.current,
+          baselineRef.current,
+        );
         const delIds = [...fraisDeletesPending.current];
         const flNow = fraisLinesRef.current;
         const statutFrais = serialiserEtatFrais(flNow, delIds);
@@ -812,11 +945,7 @@ export default function AchatLotDetailClient({ lotId }: { lotId: string }) {
             const sentDel = new Set(delIds);
             fraisDeletesPending.current = fraisDeletesPending.current.filter((id) => !sentDel.has(id));
             if (Array.isArray(json.frais)) {
-              const fl = reconcileFraisFromServer(
-                json.frais,
-                fraisLinesRef.current,
-                fraisDeletesPending.current,
-              );
+              const fl = fraisDepuisServeur(json.frais, fraisDeletesPending.current);
               setFraisLines(fl);
               fraisLinesRef.current = fl;
               fraisBaselineSnap.current = serialiserEtatFrais(fl, fraisDeletesPending.current);
@@ -843,14 +972,18 @@ export default function AchatLotDetailClient({ lotId }: { lotId: string }) {
       persistTailRef.current = chained;
       return chained;
     },
-    [draftByLine, lignes, lotId, rechargerFraisDepuisApi, t, tErrors],
+    [lotId, rechargerFraisDepuisApi, t, tErrors],
   );
 
-  /** Sauvegarde automatique des lignes après chaque modification (debounced). Les frais sont enregistrés au blur ou avec les actions explicites (suppression, clôture). */
+  /** Sauvegarde automatique des lignes produit (debounced, `lignesOnly`). */
   useEffect(() => {
     if (!editable || loading) return;
 
-    const dirtyLignes = computeDirtyPatches(lignes, draftByLine, baselineRef.current);
+    const dirtyLignes = computeDirtyPatches(
+      lignesRef.current,
+      draftByLine,
+      baselineRef.current,
+    );
     if (dirtyLignes.length === 0) return;
 
     if (debounceRef.current) clearTimeout(debounceRef.current);
@@ -862,7 +995,7 @@ export default function AchatLotDetailClient({ lotId }: { lotId: string }) {
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
     };
-  }, [draftByLine, editable, lignes, loading, persistAll]);
+  }, [draftByLine, editable, loading, persistAll]);
 
   const changeDraft = useCallback((lineId: string, patch: Partial<DraftRow>) => {
     setDraftByLine((prev) => {
@@ -878,12 +1011,38 @@ export default function AchatLotDetailClient({ lotId }: { lotId: string }) {
     });
   }, []);
 
+  const applyPricingEdit = useCallback(
+    (lineId: string, changed: AchatPricingChanged, patch: AchatPricingCommit) => {
+      setDraftByLine((prev) => {
+        const row = prev[lineId];
+        if (!row) return prev;
+        const L = lignesRef.current.find((x) => String(x.id) === lineId);
+        const next: DraftRow = {
+          ...row,
+          ...(patch.qte_achat !== undefined ? { qte_achat: coerceQty(patch.qte_achat, 0) } : {}),
+          ...(patch.puText !== undefined ? { puText: patch.puText } : {}),
+          ...(patch.totalText !== undefined ? { totalText: patch.totalText } : {}),
+        };
+        if (!L) return { ...prev, [lineId]: next };
+        const display = displayForDraftLine(L, next);
+        return { ...prev, [lineId]: syncPricingDraft(next, display, changed) };
+      });
+    },
+    [],
+  );
+
+  /** Fournisseur sans marchands (ex. Station) : saisie achat directe, sans attribution. */
+  const supplierAsSoleVendor = vendeurs.length === 0;
+
   const lignesSansVendeurSorted = useMemo(() => {
     const rows = lignes.filter((L) => !hasVendeurDraft(draftByLine[String(L.id)]));
     return sortLinesAchat(rows);
   }, [draftByLine, lignes]);
 
   const vendeurIdsSorted = useMemo(() => {
+    if (supplierAsSoleVendor) {
+      return [SUPPLIER_SOLE_VENDEUR_KEY];
+    }
     const ids = new Set<string>();
     for (const L of lignes) {
       const d = draftByLine[String(L.id)];
@@ -896,9 +1055,12 @@ export default function AchatLotDetailClient({ lotId }: { lotId: string }) {
       return compareStrings(la, lb);
     });
     return list;
-  }, [compareStrings, draftByLine, lignes, vendeurs]);
+  }, [compareStrings, draftByLine, lignes, supplierAsSoleVendor, vendeurs]);
 
   function lignesPourVendeur(vendeurKey: string): LotLineApi[] {
+    if (vendeurKey === SUPPLIER_SOLE_VENDEUR_KEY) {
+      return sortLinesAchat(lignes);
+    }
     const rows = lignes.filter((L) => {
       const d = draftByLine[String(L.id)];
       return hasVendeurDraft(d) && String(d!.vendeur_id) === vendeurKey;
@@ -962,17 +1124,58 @@ export default function AchatLotDetailClient({ lotId }: { lotId: string }) {
     };
   }, [draftByLine, lignes, fraisLines]);
 
-  function ajouterLigneFraisGlobaux() {
-    if (!editable) return;
-    const sid =
-      typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
-        ? crypto.randomUUID()
-        : `tmp-${Date.now()}-${Math.random().toString(16).slice(2)}`;
-    setFraisLines((prev) => [...prev, { sid, label: "", montantText: "" }]);
+  function openAddFraisDlg() {
+    if (!editable || fraisDlgBusy) return;
+    setFraisDlg({ mode: "add", initialLabel: "", initialMontantText: "" });
   }
 
-  function changerFrais(sid: string, patch: Partial<Pick<FraisUiLine, "label" | "montantText">>) {
-    setFraisLines((prev) => prev.map((r) => (r.sid === sid ? { ...r, ...patch } : r)));
+  function openEditFraisDlg(sid: string) {
+    if (!editable || fraisDlgBusy) return;
+    const row = fraisLinesRef.current.find((r) => r.sid === sid);
+    if (!row) return;
+    setFraisDlg({
+      mode: "edit",
+      sid,
+      initialLabel: row.label,
+      initialMontantText: row.montantText,
+    });
+  }
+
+  function closeFraisDlg() {
+    if (fraisDlgBusy) return;
+    setFraisDlg(null);
+  }
+
+  async function saveFraisDlg(payload: { label: string; montantText: string }) {
+    if (!fraisDlg || !editable || fraisDlgBusy) return;
+    const label = payload.label.trim();
+    if (label.length === 0) return;
+    setFraisDlgBusy(true);
+    setErr(null);
+    try {
+      let next: FraisUiLine[];
+      if (fraisDlg.mode === "add") {
+        const sid =
+          typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+            ? crypto.randomUUID()
+            : `tmp-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+        next = [...fraisLinesRef.current, { sid, label, montantText: payload.montantText }];
+      } else {
+        const editSid = fraisDlg.sid;
+        if (!editSid) return;
+        next = fraisLinesRef.current.map((r) =>
+          r.sid === editSid ? { ...r, label, montantText: payload.montantText } : r,
+        );
+      }
+      fraisLinesRef.current = next;
+      setFraisLines(next);
+      const ok = await persistAll({ silent: true });
+      if (!ok) return;
+      setFraisDlg(null);
+      setInfo(t("savedSuccess"));
+    } finally {
+      setFraisDlgBusy(false);
+    }
   }
 
   function supprimerLigneFraisGlobaux(sid: string) {
@@ -1041,107 +1244,155 @@ export default function AchatLotDetailClient({ lotId }: { lotId: string }) {
     }
   }
 
-  async function ajouterVendeur() {
-    if (!lot?.supplier_id) return;
-    const lbl = newVendeurLabel.trim();
-    if (!lbl.length) return;
-
-    setNewVendeurBusy(true);
+  async function rouvrirLot(): Promise<void> {
+    setReopening(true);
     setErr(null);
     try {
-      const res = await fetch(
-        `/api/commandes-fournisseur/achat/suppliers/${encodeURIComponent(lot.supplier_id)}/vendeurs`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ label: lbl }),
-        },
-      );
-
-      type PostJson =
-        | { id?: unknown; label?: unknown; supplier_id?: unknown; sort_order?: unknown; created_at?: unknown; error?: string }
-        | undefined;
-
-      const json = ((await res.json().catch(() => undefined)) ?? undefined) as PostJson;
-
+      const res = await fetch(`/api/commandes-fournisseur/achat/lots/${encodeURIComponent(lotId)}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: "prete" as const }),
+      });
+      const json = (await res.json()) as { ok?: boolean; error?: string };
       if (!res.ok) {
-        setErr(typeof json?.error === "string" ? json.error : tErrors("createVendorFailed"));
+        setErr(typeof json.error === "string" ? json.error : tErrors("reopenFailed"));
         return;
       }
-
-      const body = json;
-
-      if (!body) {
-        setErr(tErrors("invalidVendorResponse"));
-        return;
-      }
-
-      const newId = body.id;
-
-      if (typeof newId !== "string" || newId.length === 0) {
-        setErr(tErrors("invalidVendorResponse"));
-        return;
-      }
-
-      const labelOut = typeof body.label === "string" ? body.label : lbl;
-
-      setVendeurs((prev) =>
-        [...prev, { id: newId, label: labelOut }].sort((a, b) =>
-          compareStrings(a.label, b.label),
-        ),
-      );
-
-      setNewVendeurLabel("");
-      setNewVendeurDlg(false);
+      setConfirmReopenOpen(false);
+      setInfo(t("lotReopenedSuccess"));
+      await reloadFromServer();
     } catch {
-      setErr(tErrors("networkUnavailableDot"));
+      setErr(tErrors("networkReopenFailed"));
     } finally {
-      setNewVendeurBusy(false);
+      setReopening(false);
     }
   }
 
-  async function renommerVendeur() {
-    if (!lot?.supplier_id || renameVendeurId == null) return;
-    const lbl = renameVendeurLabel.trim();
-    if (!lbl.length) return;
-
-    setRenameVendeurBusy(true);
+  async function imprimerRapportPdf(): Promise<void> {
+    setPdfBusy(true);
     setErr(null);
     try {
       const res = await fetch(
-        `/api/commandes-fournisseur/achat/suppliers/${encodeURIComponent(lot.supplier_id)}/vendeurs/${encodeURIComponent(renameVendeurId)}`,
-        {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ label: lbl }),
-        },
+        `/api/commandes-fournisseur/achat/lots/${encodeURIComponent(lotId)}/pdf`,
       );
-      type PatchJson =
-        | { id?: unknown; label?: unknown; error?: unknown }
-        | undefined;
-      const json = ((await res.json().catch(() => undefined)) ?? undefined) as PatchJson;
-
       if (!res.ok) {
-        const msg =
-          json && typeof json.error === "string" ? json.error : tErrors("updateVendorFailed");
-        setErr(msg);
+        const json = (await res.json().catch(() => undefined)) as { error?: string } | undefined;
+        setErr(typeof json?.error === "string" ? json.error : tErrors("pdfFailed"));
+        return;
+      }
+      const blob = await res.blob();
+      const cd = res.headers.get("Content-Disposition") ?? "";
+      const match = /filename="([^"]+)"/i.exec(cd);
+      const filename =
+        match?.[1] && match[1].trim().length > 0
+          ? match[1].trim()
+          : `rapport-achat-${lotId.slice(0, 8)}.pdf`;
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      a.rel = "noopener";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    } catch {
+      setErr(tErrors("networkPdfFailed"));
+    } finally {
+      setPdfBusy(false);
+    }
+  }
+
+  function normalizeVendeurApi(raw: Record<string, unknown>, fallbackLabel: string): VendeurApi | null {
+    const id = raw.id;
+    if (typeof id !== "string" || id.length === 0) return null;
+    return {
+      id,
+      label: typeof raw.label === "string" ? raw.label : fallbackLabel,
+      phone: typeof raw.phone === "string" ? raw.phone : null,
+      preferred_locale: raw.preferred_locale === "ar-MA" ? "ar-MA" : "fr",
+      devise_achat: parseDeviseAchat(raw.devise_achat),
+    };
+  }
+
+  async function saveVendeurDlg(values: AchatVendeurFormValues): Promise<void> {
+    if (!lot?.supplier_id || vendeurDlg == null) return;
+    setVendeurDlgBusy(true);
+    setErr(null);
+    try {
+      const body = {
+        label: values.label,
+        phone: values.phone,
+        preferred_locale: values.preferred_locale,
+        devise_achat: values.devise_achat,
+      };
+
+      if (vendeurDlg.mode === "create") {
+        const res = await fetch(
+          `/api/commandes-fournisseur/achat/suppliers/${encodeURIComponent(lot.supplier_id)}/vendeurs`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(body),
+          },
+        );
+        const json = ((await res.json().catch(() => undefined)) ?? undefined) as
+          | Record<string, unknown>
+          | undefined;
+        if (!res.ok) {
+          setErr(typeof json?.error === "string" ? json.error : tErrors("createVendorFailed"));
+          return;
+        }
+        if (!json) {
+          setErr(tErrors("invalidVendorResponse"));
+          return;
+        }
+        const created = normalizeVendeurApi(json, values.label);
+        if (!created) {
+          setErr(tErrors("invalidVendorResponse"));
+          return;
+        }
+        setVendeurs((prev) =>
+          [...prev, created].sort((a, b) => compareStrings(a.label, b.label)),
+        );
+        setVendeurDlg(null);
         return;
       }
 
-      const outLabel = json && typeof json.label === "string" ? json.label : lbl;
-
+      const res = await fetch(
+        `/api/commandes-fournisseur/achat/suppliers/${encodeURIComponent(lot.supplier_id)}/vendeurs/${encodeURIComponent(vendeurDlg.id)}`,
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        },
+      );
+      const json = ((await res.json().catch(() => undefined)) ?? undefined) as
+        | Record<string, unknown>
+        | undefined;
+      if (!res.ok) {
+        setErr(typeof json?.error === "string" ? json.error : tErrors("updateVendorFailed"));
+        return;
+      }
+      if (!json) {
+        setErr(tErrors("invalidVendorResponse"));
+        return;
+      }
+      const updated = normalizeVendeurApi(json, values.label);
+      if (!updated) {
+        setErr(tErrors("invalidVendorResponse"));
+        return;
+      }
       setVendeurs((prev) =>
         prev
-          .map((x) => (x.id === renameVendeurId ? { ...x, label: outLabel } : x))
+          .map((x) => (x.id === vendeurDlg.id ? updated : x))
           .sort((a, b) => compareStrings(a.label, b.label)),
       );
-
-      setRenameVendeurId(null);
-      setRenameVendeurLabel("");
+      setVendeurDlg(null);
     } catch {
       setErr(tErrors("networkUnavailableDot"));
     } finally {
-      setRenameVendeurBusy(false);
+      setVendeurDlgBusy(false);
     }
   }
 
@@ -1215,292 +1466,346 @@ export default function AchatLotDetailClient({ lotId }: { lotId: string }) {
           ) : null}
 
           <Box className="!mb-3 flex flex-wrap items-center gap-2">
+            {editable ? (
+              <Button
+                variant="outlined"
+                size="small"
+                disabled={closing || saving || reopening || pdfBusy}
+                onClick={() => void cloturer(false)}
+                sx={{ textTransform: "none" }}
+              >
+                {closing ? t("closing") : t("close")}
+              </Button>
+            ) : null}
+            {lot.status === "terminee" ? (
+              <Button
+                variant="outlined"
+                size="small"
+                color="primary"
+                startIcon={<EditOutlinedIcon fontSize="small" />}
+                disabled={reopening || closing || pdfBusy}
+                onClick={() => setConfirmReopenOpen(true)}
+                sx={{ textTransform: "none" }}
+              >
+                {reopening ? t("reopening") : t("edit")}
+              </Button>
+            ) : null}
             <Button
-              variant="outlined"
+              variant="contained"
               size="small"
-              disabled={!editable || closing || saving}
-              onClick={() => void cloturer(false)}
+              color="primary"
+              startIcon={
+                pdfBusy ? (
+                  <CircularProgress size={14} color="inherit" />
+                ) : (
+                  <PictureAsPdfOutlinedIcon fontSize="small" />
+                )
+              }
+              disabled={pdfBusy || closing || reopening}
+              onClick={() => void imprimerRapportPdf()}
               sx={{ textTransform: "none" }}
             >
-              {closing ? t("closing") : t("close")}
+              {pdfBusy ? t("printingPdf") : t("printPdf")}
             </Button>
           </Box>
 
-          <Box className="!mb-2 flex flex-row flex-wrap items-center justify-between gap-2">
-            <Typography variant="h6" sx={{ fontWeight: 700, mb: 0 }}>
-              {vendeurs.length === 0 ? supplierHeading(lot.ref_supplier) : t("productsWithoutVendor")}
-            </Typography>
-            {editable ? (
-              <Button
-                type="button"
-                variant="outlined"
-                size="small"
-                disabled={saving || closing || productPickerBusy}
-                onClick={() => setPickerOpen(true)}
-                sx={{ textTransform: "none" }}
-              >
-                {tCommonOrder("addProduct")}
-              </Button>
-            ) : null}
-          </Box>
-
-          <div className="mb-6 min-w-0 w-full">
-            <Table
-              size="small"
-              sx={{
-                width: "100%",
-                minWidth: 0,
-                tableLayout: "fixed",
-              }}
-            >
-              <TableHead>
-                <TableRow>
-                  <TableCell
-                    padding="checkbox"
-                    sx={{ width: "8%", py: { xs: 0.75, sm: 1 }, px: { xs: 0.5, sm: 1 }, minWidth: 40, maxWidth: 48 }}
+          {!supplierAsSoleVendor ? (
+            <>
+              <Box className="!mb-2 flex flex-row flex-wrap items-center justify-between gap-2">
+                <Typography variant="h6" sx={{ fontWeight: 700, mb: 0 }}>
+                  {t("productsWithoutVendor")}
+                </Typography>
+                {editable ? (
+                  <Button
+                    type="button"
+                    variant="outlined"
+                    size="small"
+                    disabled={saving || closing || productPickerBusy}
+                    onClick={() => setPickerOpen(true)}
+                    sx={{ textTransform: "none" }}
                   >
-                    <Checkbox
-                      size="small"
-                      disabled={!editable || lignesSansVendeurSorted.length === 0}
-                      checked={
-                        lignesSansVendeurSorted.length > 0 &&
-                        lignesSansVendeurSorted.every((L) => selectedSansVendeur.has(String(L.id)))
-                      }
-                      indeterminate={
-                        lignesSansVendeurSorted.some((L) => selectedSansVendeur.has(String(L.id))) &&
-                        !lignesSansVendeurSorted.every((L) => selectedSansVendeur.has(String(L.id)))
-                      }
-                      onChange={() => {
-                        const allIds = lignesSansVendeurSorted.map((L) => String(L.id));
-                        const allOn = allIds.length > 0 && allIds.every((id) => selectedSansVendeur.has(id));
-                        setSelectedSansVendeur(allOn ? new Set() : new Set(allIds));
-                      }}
-                    />
-                  </TableCell>
-                  <TableCell
-                    sx={{
-                      py: { xs: 0.75, sm: 1 },
-                      fontSize: { xs: "0.8rem", sm: "inherit" },
-                      width: "56%",
-                      minWidth: 0,
-                      overflow: "hidden",
-                    }}
-                  >
-                    {tCommonOrder("product")}
-                  </TableCell>
-                  <TableCell align="center" sx={{ py: { xs: 0.75, sm: 1 }, whiteSpace: "nowrap", width: "18%" }}>
-                    {tCommonOrder("quantityShort")}
-                  </TableCell>
-                  <TableCell align="center" sx={{ py: { xs: 0.75, sm: 1 }, whiteSpace: "nowrap", width: "18%" }}>
-                    {tCommonOrder("udv")}
-                  </TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {lignesSansVendeurSorted.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={4}>
-                      <Typography variant="body2" color="text.secondary">
-                        {t("allProductsHaveVendor")}
-                      </Typography>
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  lignesSansVendeurSorted.map((L, i) => {
-                    const lid = String(L.id);
-                    const pr = one(L.product);
-                    const dRow = draftByLine[lid];
-                    const pkgId = (dRow?.product_packaging_id ?? L.product_packaging_id) ?? null;
-                    const display = buildLotProductDisplayInfo(pr ?? null, pkgId);
-                    const besoinN = coerceQty(L.qte_besoin_fige ?? null, 0);
+                    {tCommonOrder("addProduct")}
+                  </Button>
+                ) : null}
+              </Box>
 
-                    const pa = pr ? parseCategoryFromRef(pr.ref_category) : { label: "", sort_order: null };
-                    const catKey = categoryDisplayLabel(pa);
-                    const prev = i > 0 ? lignesSansVendeurSorted[i - 1] : null;
-                    const pp = prev ? one(prev.product) : null;
-                    const prevCat =
-                      prev &&
-                      categoryDisplayLabel(
-                        pp ? parseCategoryFromRef(pp.ref_category) : { label: "", sort_order: null },
-                      );
-                    const showCat = i === 0 || catKey !== prevCat;
-
-                    return (
-                      <Fragment key={lid}>
-                        {showCat ? (
-                          <TableRow>
-                            <TableCell
-                              colSpan={4}
-                              sx={{
-                                py: 0.85,
-                                px: 1.25,
-                                bgcolor: (t) =>
-                                  t.palette.mode === "dark"
-                                    ? alpha(t.palette.success.main, 0.18)
-                                    : alpha(t.palette.success.main, 0.1),
-                              }}
-                            >
-                              <Typography
-                                variant="subtitle2"
-                                color="success"
-                                sx={{ fontWeight: 700, letterSpacing: "0.02em" }}
-                              >
-                                {catKey}
-                              </Typography>
-                            </TableCell>
-                          </TableRow>
-                        ) : null}
-                        <TableRow>
-                          <TableCell
-                            padding="checkbox"
-                            sx={{ py: { xs: 0.5, sm: 1 }, px: { xs: 0.5, sm: 1 } }}
-                          >
-                            <Checkbox
-                              size="small"
-                              disabled={!editable}
-                              checked={selectedSansVendeur.has(lid)}
-                              onChange={() => toggleSelectSans(lid)}
-                            />
-                          </TableCell>
-                          <TableCell sx={{ py: { xs: 0.5, sm: 1 }, minWidth: 0, overflow: "hidden" }}>
-                            <ProductNameCell p={pr} />
-                          </TableCell>
-                          <TableCell align="center" sx={{ py: { xs: 0.5, sm: 1 }, verticalAlign: "top" }}>
-                            <Typography variant="body2" component="div" sx={{ fontWeight: 500 }}>
-                              {formatQty(besoinN)}
-                            </Typography>
-                          </TableCell>
-                          <TableCell align="center" sx={{ py: { xs: 0.5, sm: 1 }, verticalAlign: "top" }}>
-                            <Box
-                              sx={{
-                                display: "flex",
-                                flexDirection: "column",
-                                alignItems: "center",
-                                gap: 0.5,
-                              }}
-                            >
-                              <CelluleUdV display={display} qtePourSoit={besoinN} />
-                              <LigneCommentairesMxDisplay
-                                targets={L.saisieLigneTargets ?? []}
-                                mxByMagasinId={mxByMagasinId}
-                                align="center"
-                              />
-                            </Box>
-                          </TableCell>
-                        </TableRow>
-                      </Fragment>
-                    );
-                  })
-                )}
-              </TableBody>
-            </Table>
-          </div>
-
-          {editable && lignesSansVendeurSorted.length > 0 ? (
-            <Box
-              className="!mb-8"
-              sx={{
-                display: "flex",
-                flexWrap: "wrap",
-                alignItems: "flex-end",
-                justifyContent: "space-between",
-                gap: 2,
-              }}
-            >
-              <Box sx={{ display: "flex", flexWrap: "wrap", alignItems: "flex-end", gap: 2, flex: "1 1 auto" }}>
-                <Select
+              <div className="mb-6 min-w-0 w-full">
+                <Table
                   size="small"
-                  displayEmpty
-                  value={bulkVendeurId}
-                  onChange={(e) => setBulkVendeurId(String(e.target.value))}
                   sx={{
                     width: "100%",
-                    minWidth: { xs: "100%", sm: 220 },
-                    maxWidth: { sm: "min(440px, 100%)" },
+                    minWidth: 0,
+                    tableLayout: "fixed",
                   }}
                 >
-                  <MenuItem value="">
-                    <em>{t("chooseVendor")}</em>
-                  </MenuItem>
-                  {vendeurs.map((v) => (
-                    <MenuItem key={v.id} value={v.id}>
-                      {v.label}
-                    </MenuItem>
-                  ))}
-                </Select>
-                <Button
-                  variant="contained"
-                  size="small"
-                  disabled={
-                    bulkVendeurId.length === 0 || selectedSansVendeur.size === 0 || saving || closing
-                  }
-                  onClick={() => attribuerVendeurSelection()}
-                  sx={{ textTransform: "none" }}
+                  <TableHead>
+                    <TableRow>
+                      <TableCell
+                        padding="checkbox"
+                        sx={{ width: "8%", py: { xs: 0.75, sm: 1 }, px: { xs: 0.5, sm: 1 }, minWidth: 40, maxWidth: 48 }}
+                      >
+                        <Checkbox
+                          size="small"
+                          disabled={!editable || lignesSansVendeurSorted.length === 0}
+                          checked={
+                            lignesSansVendeurSorted.length > 0 &&
+                            lignesSansVendeurSorted.every((L) => selectedSansVendeur.has(String(L.id)))
+                          }
+                          indeterminate={
+                            lignesSansVendeurSorted.some((L) => selectedSansVendeur.has(String(L.id))) &&
+                            !lignesSansVendeurSorted.every((L) => selectedSansVendeur.has(String(L.id)))
+                          }
+                          onChange={() => {
+                            const allIds = lignesSansVendeurSorted.map((L) => String(L.id));
+                            const allOn = allIds.length > 0 && allIds.every((id) => selectedSansVendeur.has(id));
+                            setSelectedSansVendeur(allOn ? new Set() : new Set(allIds));
+                          }}
+                        />
+                      </TableCell>
+                      <TableCell
+                        sx={{
+                          py: { xs: 0.75, sm: 1 },
+                          fontSize: { xs: "0.8rem", sm: "inherit" },
+                          width: "56%",
+                          minWidth: 0,
+                          overflow: "hidden",
+                        }}
+                      >
+                        {tCommonOrder("product")}
+                      </TableCell>
+                      <TableCell align="center" sx={{ py: { xs: 0.75, sm: 1 }, whiteSpace: "nowrap", width: "18%" }}>
+                        {tCommonOrder("quantityShort")}
+                      </TableCell>
+                      <TableCell align="center" sx={{ py: { xs: 0.75, sm: 1 }, whiteSpace: "nowrap", width: "18%" }}>
+                        {t("columnUdc")}
+                      </TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {lignesSansVendeurSorted.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={4}>
+                          <Typography variant="body2" color="text.secondary">
+                            {t("allProductsHaveVendor")}
+                          </Typography>
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      lignesSansVendeurSorted.map((L, i) => {
+                        const lid = String(L.id);
+                        const pr = one(L.product);
+                        const dRow = draftByLine[lid];
+                        const pkgId = (dRow?.product_packaging_id ?? L.product_packaging_id) ?? null;
+                        const display = buildLotProductDisplayInfo(pr ?? null, pkgId);
+                        const besoinN = coerceQty(L.qte_besoin_fige ?? null, 0);
+
+                        const pa = pr ? parseCategoryFromRef(pr.ref_category) : { label: "", sort_order: null };
+                        const catKey = categoryDisplayLabel(pa);
+                        const prev = i > 0 ? lignesSansVendeurSorted[i - 1] : null;
+                        const pp = prev ? one(prev.product) : null;
+                        const prevCat =
+                          prev &&
+                          categoryDisplayLabel(
+                            pp ? parseCategoryFromRef(pp.ref_category) : { label: "", sort_order: null },
+                          );
+                        const showCat = i === 0 || catKey !== prevCat;
+
+                        return (
+                          <Fragment key={lid}>
+                            {showCat ? (
+                              <TableRow>
+                                <TableCell
+                                  colSpan={4}
+                                  sx={{
+                                    py: 0.85,
+                                    px: 1.25,
+                                    bgcolor: (t) =>
+                                      t.palette.mode === "dark"
+                                        ? alpha(t.palette.success.main, 0.18)
+                                        : alpha(t.palette.success.main, 0.1),
+                                  }}
+                                >
+                                  <Typography
+                                    variant="subtitle2"
+                                    color="success"
+                                    sx={{ fontWeight: 700, letterSpacing: "0.02em" }}
+                                  >
+                                    {catKey}
+                                  </Typography>
+                                </TableCell>
+                              </TableRow>
+                            ) : null}
+                            <TableRow>
+                              <TableCell
+                                padding="checkbox"
+                                sx={{ py: { xs: 0.5, sm: 1 }, px: { xs: 0.5, sm: 1 } }}
+                              >
+                                <Checkbox
+                                  size="small"
+                                  disabled={!editable}
+                                  checked={selectedSansVendeur.has(lid)}
+                                  onChange={() => toggleSelectSans(lid)}
+                                />
+                              </TableCell>
+                              <TableCell sx={{ py: { xs: 0.5, sm: 1 }, minWidth: 0, overflow: "hidden" }}>
+                                <ProductNameCell p={pr} />
+                              </TableCell>
+                              <TableCell align="center" sx={{ py: { xs: 0.5, sm: 1 }, verticalAlign: "top" }}>
+                                <Typography variant="body2" component="div" sx={{ fontWeight: 500 }}>
+                                  {formatQty(besoinN)}
+                                </Typography>
+                              </TableCell>
+                              <TableCell align="center" sx={{ py: { xs: 0.5, sm: 1 }, verticalAlign: "top" }}>
+                                <CelluleUdV display={display} qtePourSoit={besoinN} />
+                              </TableCell>
+                            </TableRow>
+                          </Fragment>
+                        );
+                      })
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
+
+              {editable && lignesSansVendeurSorted.length > 0 ? (
+                <Box
+                  className="!mb-8"
+                  sx={{
+                    display: "flex",
+                    flexWrap: "wrap",
+                    alignItems: "flex-end",
+                    justifyContent: "space-between",
+                    gap: 2,
+                  }}
                 >
-                  {t("assignVendorToSelection", { count: selectedSansVendeur.size })}
-                </Button>
-              </Box>
-              <Button
-                variant="text"
-                size="small"
-                disabled={!editable}
-                onClick={() => setNewVendeurDlg(true)}
-                sx={{ textTransform: "none", alignSelf: "center" }}
-              >
-                {t("newVendor")}
-              </Button>
-            </Box>
-          ) : editable ? (
-            <Box className="!mb-6 flex justify-end">
-              <Button
-                variant="text"
-                size="small"
-                disabled={!editable}
-                onClick={() => setNewVendeurDlg(true)}
-                sx={{ textTransform: "none" }}
-              >
-                {t("newVendor")}
-              </Button>
-            </Box>
+                  <Box sx={{ display: "flex", flexWrap: "wrap", alignItems: "flex-end", gap: 2, flex: "1 1 auto" }}>
+                    <Select
+                      size="small"
+                      displayEmpty
+                      value={bulkVendeurId}
+                      onChange={(e) => setBulkVendeurId(String(e.target.value))}
+                      sx={{
+                        width: "100%",
+                        minWidth: { xs: "100%", sm: 220 },
+                        maxWidth: { sm: "min(440px, 100%)" },
+                      }}
+                    >
+                      <MenuItem value="">
+                        <em>{t("chooseVendor")}</em>
+                      </MenuItem>
+                      {vendeurs.map((v) => (
+                        <MenuItem key={v.id} value={v.id}>
+                          {v.label}
+                        </MenuItem>
+                      ))}
+                    </Select>
+                    <Button
+                      variant="contained"
+                      size="small"
+                      disabled={
+                        bulkVendeurId.length === 0 || selectedSansVendeur.size === 0 || saving || closing
+                      }
+                      onClick={() => attribuerVendeurSelection()}
+                      sx={{ textTransform: "none" }}
+                    >
+                      {t("assignVendorToSelection", { count: selectedSansVendeur.size })}
+                    </Button>
+                  </Box>
+                  <Button
+                    variant="text"
+                    size="small"
+                    disabled={!editable}
+                    onClick={() => setVendeurDlg({ mode: "create" })}
+                    sx={{ textTransform: "none", alignSelf: "center" }}
+                  >
+                    {t("newVendor")}
+                  </Button>
+                </Box>
+              ) : editable ? (
+                <Box className="!mb-6 flex justify-end">
+                  <Button
+                    variant="text"
+                    size="small"
+                    disabled={!editable}
+                    onClick={() => setVendeurDlg({ mode: "create" })}
+                    sx={{ textTransform: "none" }}
+                  >
+                    {t("newVendor")}
+                  </Button>
+                </Box>
+              ) : null}
+            </>
           ) : null}
 
           {vendeurIdsSorted.map((vid) => {
-            const vLabel = vendeurs.find((v) => v.id === vid)?.label ?? vid;
+            const isSoleSupplierVendor = vid === SUPPLIER_SOLE_VENDEUR_KEY;
+            const vLabel = isSoleSupplierVendor
+              ? supplierHeading(lot.ref_supplier)
+              : (vendeurs.find((v) => v.id === vid)?.label ?? vid);
             const rows = lignesPourVendeur(vid);
+            const vendorTotalDh = isSoleSupplierVendor
+              ? totauxAchat.lignesSansVendeurDh
+              : (totauxAchat.parVendeur[vid] ?? 0);
+            const vendorDevise: DeviseAchat = isSoleSupplierVendor
+              ? "dirham"
+              : parseDeviseAchat(vendeurs.find((v) => v.id === vid)?.devise_achat);
+            const colCount = isSoleSupplierVendor ? 7 : 8;
             return (
               <Fragment key={vid}>
                 <Box
-                  className="!mt-4 !mb-0"
+                  className={isSoleSupplierVendor ? "!mb-0" : "!mt-4 !mb-0"}
                   sx={{
                     display: "flex",
+                    flexWrap: "wrap",
                     alignItems: "center",
-                    gap: 0.5,
+                    justifyContent: "space-between",
+                    gap: 1,
                   }}
                 >
-                  <Typography variant="h6" sx={{ fontWeight: 700, m: 0 }}>
-                    {vLabel}
-                  </Typography>
-                  {editable &&
-                  canCommandesFournisseurVendeursRenommer &&
-                  !renameVendeurBusy &&
-                  !newVendeurBusy ? (
-                    <IconButton
-                      aria-label={t("renameVendorAria", { label: vLabel })}
+                  <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
+                    <Typography variant="h6" sx={{ fontWeight: 700, m: 0 }}>
+                      {vLabel}
+                    </Typography>
+                    {editable &&
+                    !isSoleSupplierVendor &&
+                    canCommandesFournisseurVendeursRenommer &&
+                    !vendeurDlgBusy ? (
+                      <IconButton
+                        aria-label={t("editVendorAria", { label: vLabel })}
+                        size="small"
+                        onClick={() => setVendeurDlg({ mode: "edit", id: vid })}
+                      >
+                        <EditOutlinedIcon fontSize="small" />
+                      </IconButton>
+                    ) : null}
+                  </Box>
+                  {isSoleSupplierVendor && editable ? (
+                    <Button
+                      type="button"
+                      variant="outlined"
                       size="small"
-                      onClick={() => {
-                        setRenameVendeurId(vid);
-                        setRenameVendeurLabel(
-                          vendeurs.find((v) => v.id === vid)?.label ?? vLabel,
-                        );
-                      }}
+                      disabled={saving || closing || productPickerBusy}
+                      onClick={() => setPickerOpen(true)}
+                      sx={{ textTransform: "none" }}
                     >
-                      <EditOutlinedIcon fontSize="small" />
-                    </IconButton>
+                      {tCommonOrder("addProduct")}
+                    </Button>
                   ) : null}
                 </Box>
-                <Typography variant="body2" color="text.secondary" className="!mb-2">
-                  {t("vendorTotal", { amount: formatDh(totauxAchat.parVendeur[vid] ?? 0) })}
-                </Typography>
+                {vendorDevise === "rial" ? (
+                  <Box className="!mb-2">
+                    <Typography variant="body2" color="text.secondary">
+                      {t("vendorTotal", { amount: formatRial(dhToRial(vendorTotalDh)) })}
+                    </Typography>
+                    <Typography variant="caption" color="text.secondary" sx={{ display: "block" }}>
+                      {formatSoitDh(vendorTotalDh)}
+                    </Typography>
+                  </Box>
+                ) : (
+                  <Typography variant="body2" color="text.secondary" className="!mb-2">
+                    {t("vendorTotal", { amount: formatDh(vendorTotalDh) })}
+                  </Typography>
+                )}
                 <div className="mb-6 min-w-0 w-full">
                   <Table
                     size="small"
@@ -1542,234 +1847,194 @@ export default function AchatLotDetailClient({ lotId }: { lotId: string }) {
                             overflow: "hidden",
                           }}
                         >
-                          {tCommonOrder("udv")}
+                          {t("columnUdc")}
+                        </TableCell>
+                        <TableCell sx={{ whiteSpace: "nowrap", width: { xs: "16%", sm: "11%" } }}>
+                          {t("quantityPurchased")}
+                        </TableCell>
+                        <TableCell
+                          align="center"
+                          sx={{ whiteSpace: "nowrap", width: { xs: "10%", sm: "8%" } }}
+                        >
+                          {t("columnUda")}
                         </TableCell>
                         <TableCell sx={{ whiteSpace: "nowrap", width: { xs: "18%", sm: "12%" } }}>
-                          {tCommonOrder("quantityPurchase")}
-                        </TableCell>
-                        <TableCell sx={{ whiteSpace: "nowrap", width: { xs: "20%", sm: "14%" } }}>
                           {t("purchasePrice")}
                         </TableCell>
                         <TableCell align="center" sx={{ whiteSpace: "nowrap", width: { xs: "13%", sm: "14%" } }}>
                           {tCommonOrder("total")}
                         </TableCell>
-                        <TableCell
-                          align="center"
-                          sx={{
-                            whiteSpace: "nowrap",
-                            px: { xs: 0.35, sm: 1 },
-                            width: { xs: "13%", sm: "13%" },
-                          }}
-                        >
-                          {tCommonOrder("remove")}
-                        </TableCell>
+                        {!isSoleSupplierVendor ? (
+                          <TableCell
+                            align="center"
+                            sx={{
+                              whiteSpace: "nowrap",
+                              px: { xs: 0.35, sm: 1 },
+                              width: { xs: "13%", sm: "13%" },
+                            }}
+                          >
+                            {tCommonOrder("remove")}
+                          </TableCell>
+                        ) : null}
                       </TableRow>
                     </TableHead>
                     <TableBody>
-                      {rows.map((L, i) => {
-                        const lid = String(L.id);
-                        const pr = one(L.product);
-                        const dRow = draftByLine[lid];
+                      {rows.length === 0 ? (
+                        <TableRow>
+                          <TableCell colSpan={colCount}>
+                            <Typography variant="body2" color="text.secondary">
+                              {tCommonOrder("noLines")}
+                            </Typography>
+                          </TableCell>
+                        </TableRow>
+                      ) : (
+                        rows.map((L, i) => {
+                          const lid = String(L.id);
+                          const pr = one(L.product);
+                          const dRow = draftByLine[lid];
 
-                        const pkgId = (dRow?.product_packaging_id ?? L.product_packaging_id) ?? null;
-                        const display = buildLotProductDisplayInfo(pr ?? null, pkgId);
-                        const qa = coerceQty(dRow?.qte_achat ?? L.qte_achat, 0);
+                          const pkgId = (dRow?.product_packaging_id ?? L.product_packaging_id) ?? null;
+                          const display = buildLotProductDisplayInfo(pr ?? null, pkgId);
+                          const qa = coerceQty(dRow?.qte_achat ?? L.qte_achat, 0);
 
-                        const pa = pr ? parseCategoryFromRef(pr.ref_category) : { label: "", sort_order: null };
-                        const catKey = categoryDisplayLabel(pa);
-                        const prev = rows[i - 1];
-                        const pb = prev ? one(prev.product) : null;
-                        const prevCat =
-                          prev &&
-                          categoryDisplayLabel(
-                            pb ? parseCategoryFromRef(pb.ref_category) : { label: "", sort_order: null },
-                          );
-                        const showCat = i === 0 || catKey !== prevCat;
+                          const pa = pr ? parseCategoryFromRef(pr.ref_category) : { label: "", sort_order: null };
+                          const catKey = categoryDisplayLabel(pa);
+                          const prev = rows[i - 1];
+                          const pb = prev ? one(prev.product) : null;
+                          const prevCat =
+                            prev &&
+                            categoryDisplayLabel(
+                              pb ? parseCategoryFromRef(pb.ref_category) : { label: "", sort_order: null },
+                            );
+                          const showCat = i === 0 || catKey !== prevCat;
 
-                        const besoinN = coerceQty(L.qte_besoin_fige ?? null, 0);
+                          const besoinN = coerceQty(L.qte_besoin_fige ?? null, 0);
 
-                        const puNum = parsePuText(dRow?.puText ?? "");
-                        const qtyBaseGuess = qtyBaseFromLotLine(qa, display);
-                        const montantGuess = montantLigneFromPu(puNum, qtyBaseGuess);
-                        const soitCaptionAchat = qa > 0 ? buildSoitLine(display, qa) : null;
-                        const afficherSoitSsQteAchat = Boolean(
-                          soitCaptionAchat &&
-                            (!compactTable || roundQty2(qa) !== roundQty2(besoinN)),
-                        );
-
-                        return (
-                          <Fragment key={lid}>
-                            {showCat ? (
-                              <TableRow>
-                                <TableCell
-                                  colSpan={7}
-                                  sx={{
-                                    py: 0.85,
-                                    px: 1.25,
-                                    bgcolor: (t) =>
-                                      t.palette.mode === "dark"
-                                        ? alpha(t.palette.success.main, 0.18)
-                                        : alpha(t.palette.success.main, 0.1),
-                                  }}
-                                >
-                                  <Typography
-                                    variant="subtitle2"
-                                    color="success"
-                                    sx={{ fontWeight: 700, letterSpacing: "0.02em" }}
-                                  >
-                                    {catKey}
-                                  </Typography>
-                                </TableCell>
-                              </TableRow>
-                            ) : null}
-                            <TableRow
-                              sx={
-                                compactTable
-                                  ? {
-                                      "& > .MuiTableCell-root": { borderBottom: "none" },
-                                    }
-                                  : undefined
-                              }
-                            >
-                              <TableCell
-                                sx={{
-                                  verticalAlign: "middle",
-                                  textAlign: "left",
-                                  minWidth: 0,
-                                  overflow: "hidden",
-                                }}
-                              >
-                                <ProductNameCell p={pr} />
-                              </TableCell>
-                              <TableCell
-                                align="right"
-                                sx={{
-                                  display: { xs: "none", sm: "table-cell" },
-                                  verticalAlign: "top",
-                                  whiteSpace: "nowrap",
-                                }}
-                              >
-                                {formatQty(besoinN)}
-                              </TableCell>
-                              <TableCell
-                                sx={{
-                                  display: { xs: "none", sm: "table-cell" },
-                                  verticalAlign: "top",
-                                }}
-                              >
-                                <CelluleUdV
-                                  display={display}
-                                  qtePourSoit={qa}
-                                  showConversionSoit={compactTable}
-                                />
-                              </TableCell>
-                              <TableCell sx={{ minWidth: 0, verticalAlign: "top" }}>
-                                <Box sx={{ display: "flex", flexDirection: "column", alignItems: "stretch", gap: 0 }}>
-                                  <DecimalQtyTextField
-                                    size="small"
-                                    fullWidth
-                                    disabled={!editable}
-                                    value={qa}
-                                    onQtyChange={(n) =>
-                                      changeDraft(lid, { qte_achat: coerceQty(n, 0) })
-                                    }
+                          return (
+                            <Fragment key={lid}>
+                              {showCat ? (
+                                <TableRow>
+                                  <TableCell
+                                    colSpan={colCount}
                                     sx={{
-                                      "& .MuiInputBase-input": {
-                                        py: 0.65,
-                                        px: 0.85,
-                                        fontSize: "0.85rem",
-                                      },
+                                      py: 0.85,
+                                      px: 1.25,
+                                      bgcolor: (t) =>
+                                        t.palette.mode === "dark"
+                                          ? alpha(t.palette.success.main, 0.18)
+                                          : alpha(t.palette.success.main, 0.1),
                                     }}
-                                    slotProps={{ htmlInput: { "aria-label": tCommonOrder("quantityPurchaseAria") } }}
-                                  />
-                                  {afficherSoitSsQteAchat && soitCaptionAchat ? (
+                                  >
                                     <Typography
-                                      variant="caption"
-                                      color="text.secondary"
-                                      component="div"
-                                      sx={{ mt: 0.5, fontSize: "0.65rem", lineHeight: 1.25 }}
+                                      variant="subtitle2"
+                                      color="success"
+                                      sx={{ fontWeight: 700, letterSpacing: "0.02em" }}
                                     >
-                                      {soitCaptionAchat}
+                                      {catKey}
                                     </Typography>
-                                  ) : null}
-                                  <LigneCommentairesMxDisplay
-                                    targets={L.saisieLigneTargets ?? []}
-                                    mxByMagasinId={mxByMagasinId}
-                                    align="right"
-                                  />
-                                </Box>
-                              </TableCell>
-                              <TableCell sx={{ minWidth: 0, verticalAlign: "top" }}>
-                                <TextField
-                                  size="small"
-                                  fullWidth
-                                  disabled={!editable}
-                                  value={dRow?.puText ?? ""}
-                                  placeholder={tCommonOrder("price")}
-                                  slotProps={{
-                                    htmlInput: {
-                                      inputMode: "decimal",
-                                      onFocus: (ev: FocusEvent<HTMLInputElement>) => {
-                                        const el = ev.target as HTMLInputElement;
-                                        queueMicrotask(() => el.select());
-                                      },
-                                    },
-                                  }}
-                                  onChange={(e) => changeDraft(lid, { puText: e.target.value })}
-                                  sx={{ "& .MuiInputBase-input": { py: 0.65, px: 0.85, fontSize: "0.85rem" } }}
-                                />
-                              </TableCell>
-                              <TableCell
-                                align="center"
-                                sx={{
-                                  whiteSpace: "nowrap",
-                                  verticalAlign: "middle",
-                                  fontSize: { xs: "0.8rem", sm: "inherit" },
-                                }}
+                                  </TableCell>
+                                </TableRow>
+                              ) : null}
+                              <TableRow
+                                sx={
+                                  compactTable
+                                    ? {
+                                        "& > .MuiTableCell-root": { borderBottom: "none" },
+                                      }
+                                    : undefined
+                                }
                               >
-                                {montantGuess === null ? emDash : formatDh(montantGuess)}
-                              </TableCell>
-                              <TableCell align="center" sx={{ whiteSpace: "nowrap", verticalAlign: "middle" }}>
-                                <Button
-                                  type="button"
-                                  size="small"
-                                  variant="text"
-                                  color="error"
-                                  disabled={!editable || saving || closing}
-                                  onClick={() => changeDraft(lid, draftAfterVendeurRemoved())}
-                                  sx={{
-                                    textTransform: "none",
-                                    minWidth: 0,
-                                    px: { xs: 0.35, sm: 1 },
-                                    fontSize: { xs: "0.72rem", sm: "inherit" },
-                                  }}
-                                >
-                                  {tCommonOrder("remove")}
-                                </Button>
-                              </TableCell>
-                            </TableRow>
-                            {compactTable ? (
-                              <TableRow>
                                 <TableCell
-                                  colSpan={7}
                                   sx={{
-                                    py: 0.5,
-                                    pt: 0.25,
-                                    borderTop: 0,
+                                    verticalAlign: "middle",
+                                    textAlign: "left",
+                                    minWidth: 0,
+                                    overflow: "hidden",
                                   }}
                                 >
-                                  <BesoinEtUdVCoteACote
+                                  <ProductNameCell p={pr} />
+                                </TableCell>
+                                <TableCell
+                                  align="right"
+                                  sx={{
+                                    display: { xs: "none", sm: "table-cell" },
+                                    verticalAlign: "top",
+                                    whiteSpace: "nowrap",
+                                  }}
+                                >
+                                  {formatQty(besoinN)}
+                                </TableCell>
+                                <TableCell
+                                  sx={{
+                                    display: { xs: "none", sm: "table-cell" },
+                                    verticalAlign: "top",
+                                  }}
+                                >
+                                  <CelluleUdV
                                     display={display}
-                                    qtePourSoit={besoinN}
-                                    needLabel={tCommonOrder("quantityNeed")}
-                                    formattedNeed={formatQty(besoinN)}
+                                    qtePourSoit={qa}
+                                    showConversionSoit={compactTable}
                                   />
                                 </TableCell>
+                                <AchatLignePricingFields
+                                  lineId={lid}
+                                  qte={qa}
+                                  puText={dRow?.puText ?? ""}
+                                  totalText={dRow?.totalText ?? ""}
+                                  editable={editable}
+                                  udaLabel={labelFromRef(pr?.ref_purchase_unit)}
+                                  qtyAria={tCommonOrder("quantityPurchaseAria")}
+                                  pricePlaceholder={tCommonOrder("price")}
+                                  totalPlaceholder={tCommonOrder("pricePlaceholder")}
+                                  totalAria={tCommonOrder("total")}
+                                  deviseAchat={vendorDevise}
+                                  formatSoitDh={formatSoitDh}
+                                  onCommit={applyPricingEdit}
+                                />
+                                {!isSoleSupplierVendor ? (
+                                  <TableCell align="center" sx={{ whiteSpace: "nowrap", verticalAlign: "middle" }}>
+                                    <Button
+                                      type="button"
+                                      size="small"
+                                      variant="text"
+                                      color="error"
+                                      disabled={!editable || saving || closing}
+                                      onClick={() => changeDraft(lid, draftAfterVendeurRemoved())}
+                                      sx={{
+                                        textTransform: "none",
+                                        minWidth: 0,
+                                        px: { xs: 0.35, sm: 1 },
+                                        fontSize: { xs: "0.72rem", sm: "inherit" },
+                                      }}
+                                    >
+                                      {tCommonOrder("remove")}
+                                    </Button>
+                                  </TableCell>
+                                ) : null}
                               </TableRow>
-                            ) : null}
-                          </Fragment>
-                        );
-                      })}
+                              {compactTable ? (
+                                <TableRow>
+                                  <TableCell
+                                    colSpan={colCount}
+                                    sx={{
+                                      py: 0.5,
+                                      pt: 0.25,
+                                      borderTop: 0,
+                                    }}
+                                  >
+                                    <BesoinEtUdVCoteACote
+                                      display={display}
+                                      qtePourSoit={besoinN}
+                                      needLabel={tCommonOrder("quantityNeed")}
+                                      formattedNeed={formatQty(besoinN)}
+                                    />
+                                  </TableCell>
+                                </TableRow>
+                              ) : null}
+                            </Fragment>
+                          );
+                        })
+                      )}
                     </TableBody>
                   </Table>
                 </div>
@@ -1795,80 +2060,62 @@ export default function AchatLotDetailClient({ lotId }: { lotId: string }) {
             >
               <TableHead>
                 <TableRow>
-                  <TableCell sx={{ width: { xs: "58%", sm: "auto" } }}>{tCommonOrder("label")}</TableCell>
-                  <TableCell align="right" sx={{ width: { xs: "34%", sm: "auto" } }}>
+                  <TableCell sx={{ width: { xs: "50%", sm: "auto" } }}>{tCommonOrder("label")}</TableCell>
+                  <TableCell align="right" sx={{ width: { xs: "28%", sm: "auto" } }}>
                     {tCommonOrder("amount")}
                   </TableCell>
-                  <TableCell width={48} sx={{ px: { xs: 0.25, sm: 1 } }}>
-                    {""}
-                  </TableCell>
+                  {editable ? (
+                    <TableCell align="right" sx={{ width: { xs: "22%", sm: "auto" }, whiteSpace: "nowrap" }}>
+                      {""}
+                    </TableCell>
+                  ) : null}
                 </TableRow>
               </TableHead>
               <TableBody>
                 {fraisLines.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={3}>
+                    <TableCell colSpan={editable ? 3 : 2}>
                       <Typography variant="body2" color="text.secondary">
                         {t("noFees")}
                       </Typography>
                     </TableCell>
                   </TableRow>
                 ) : (
-                  fraisLines.map((lf) => (
-                    <TableRow key={lf.sid}>
-                      <TableCell>
-                        <TextField
-                          size="small"
-                          fullWidth
-                          disabled={!editable}
-                          placeholder={tCommonOrder("label")}
-                          value={lf.label}
-                          onChange={(e) => changerFrais(lf.sid, { label: e.target.value })}
-                          onBlur={() => {
-                            void persistAll({ silent: true });
-                          }}
-                          sx={{ "& .MuiInputBase-input": { py: 0.75 } }}
-                        />
-                      </TableCell>
-                      <TableCell align="right" sx={{ minWidth: { xs: 88, sm: 120 }, verticalAlign: "top" }}>
-                        <TextField
-                          size="small"
-                          disabled={!editable}
-                          placeholder={tCommonOrder("pricePlaceholder")}
-                          value={lf.montantText}
-                          onChange={(e) =>
-                            changerFrais(lf.sid, {
-                              montantText: sanitizeMontantDhTypingFrac2(e.target.value),
-                            })
-                          }
-                          onBlur={() => {
-                            void persistAll({ silent: true });
-                          }}
-                          slotProps={{
-                            htmlInput: {
-                              inputMode: "decimal",
-                              onFocus: (ev: FocusEvent<HTMLInputElement>) => {
-                                const el = ev.target as HTMLInputElement;
-                                queueMicrotask(() => el.select());
-                              },
-                            },
-                          }}
-                          sx={{ "& .MuiInputBase-input": { py: 0.75, textAlign: "right" } }}
-                        />
-                      </TableCell>
-                      <TableCell align="center" padding="checkbox">
-                        <IconButton
-                          aria-label={tCommonOrder("removeFeeLineAria")}
-                          size="small"
-                          disabled={!editable}
-                          onClick={() => supprimerLigneFraisGlobaux(lf.sid)}
-                          color="error"
-                        >
-                          <DeleteOutlineOutlinedIcon fontSize="small" />
-                        </IconButton>
-                      </TableCell>
-                    </TableRow>
-                  ))
+                  fraisLines.map((lf) => {
+                    const montantN = montantNombreDepuisTxt(lf.montantText);
+                    const labelAffiche = lf.label.trim().length > 0 ? lf.label.trim() : emDash;
+                    return (
+                      <TableRow key={lf.sid}>
+                        <TableCell>
+                          <Typography variant="body2">{labelAffiche}</Typography>
+                        </TableCell>
+                        <TableCell align="right" sx={{ fontVariantNumeric: "tabular-nums" }}>
+                          <Typography variant="body2">{formatDh(montantN)}</Typography>
+                        </TableCell>
+                        {editable ? (
+                          <TableCell align="right" sx={{ whiteSpace: "nowrap" }}>
+                            <IconButton
+                              aria-label={t("editFeeLineAria", { label: labelAffiche })}
+                              size="small"
+                              disabled={fraisDlgBusy || saving || closing}
+                              onClick={() => openEditFraisDlg(lf.sid)}
+                            >
+                              <EditOutlinedIcon fontSize="small" />
+                            </IconButton>
+                            <IconButton
+                              aria-label={tCommonOrder("removeFeeLineAria")}
+                              size="small"
+                              disabled={fraisDlgBusy || saving || closing}
+                              onClick={() => supprimerLigneFraisGlobaux(lf.sid)}
+                              color="error"
+                            >
+                              <DeleteOutlineOutlinedIcon fontSize="small" />
+                            </IconButton>
+                          </TableCell>
+                        ) : null}
+                      </TableRow>
+                    );
+                  })
                 )}
               </TableBody>
             </Table>
@@ -1878,7 +2125,8 @@ export default function AchatLotDetailClient({ lotId }: { lotId: string }) {
                 size="small"
                 variant="outlined"
                 className="!mt-2"
-                onClick={ajouterLigneFraisGlobaux}
+                disabled={fraisDlgBusy || saving || closing}
+                onClick={openAddFraisDlg}
                 sx={{ textTransform: "none" }}
               >
                 {t("addFeeLine")}
@@ -2049,71 +2297,62 @@ export default function AchatLotDetailClient({ lotId }: { lotId: string }) {
         </DialogActions>
       </Dialog>
 
-      <FormDialog
-        open={renameVendeurId != null}
+      <Dialog
+        open={confirmReopenOpen}
         onClose={() => {
-          if (renameVendeurBusy) return;
-          setRenameVendeurId(null);
-          setRenameVendeurLabel("");
+          if (!reopening) setConfirmReopenOpen(false);
         }}
       >
-        <DialogTitle>{t("renameVendorDialog.title")}</DialogTitle>
+        <DialogTitle>{t("confirmReopenDialog.title")}</DialogTitle>
         <DialogContent>
-          <TextField
-            margin="dense"
-            autoFocus
-            fullWidth
-            label={t("renameVendorDialog.displayNameLabel")}
-            value={renameVendeurLabel}
-            onChange={(e) => setRenameVendeurLabel(e.target.value)}
-          />
+          <Typography variant="body2">{t("confirmReopenDialog.body")}</Typography>
         </DialogContent>
         <DialogActions>
           <Button
-            onClick={() => {
-              if (renameVendeurBusy) return;
-              setRenameVendeurId(null);
-              setRenameVendeurLabel("");
-            }}
+            onClick={() => setConfirmReopenOpen(false)}
+            disabled={reopening}
             sx={{ textTransform: "none" }}
           >
             {tCommon("cancel")}
           </Button>
           <Button
             variant="contained"
-            disabled={renameVendeurBusy || renameVendeurLabel.trim().length === 0}
-            onClick={() => void renommerVendeur()}
+            disabled={reopening}
+            onClick={() => void rouvrirLot()}
+            sx={{ textTransform: "none" }}
           >
-            {renameVendeurBusy ? <CircularProgress size={18} /> : tCommon("save")}
+            {reopening ? t("reopening") : t("confirmReopenDialog.confirm")}
           </Button>
         </DialogActions>
-      </FormDialog>
+      </Dialog>
 
-      <FormDialog open={newVendeurDlg} onClose={() => setNewVendeurDlg(false)}>
-        <DialogTitle>{t("newVendorDialog.title")}</DialogTitle>
-        <DialogContent>
-          <TextField
-            margin="dense"
-            autoFocus
-            fullWidth
-            label={t("newVendorDialog.displayNameLabel")}
-            value={newVendeurLabel}
-            onChange={(e) => setNewVendeurLabel(e.target.value)}
-          />
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setNewVendeurDlg(false)} sx={{ textTransform: "none" }}>
-            {tCommon("close")}
-          </Button>
-          <Button
-            variant="contained"
-            disabled={newVendeurBusy || newVendeurLabel.trim().length === 0}
-            onClick={() => void ajouterVendeur()}
-          >
-            {newVendeurBusy ? <CircularProgress size={18} /> : t("newVendorDialog.add")}
-          </Button>
-        </DialogActions>
-      </FormDialog>
+      <AchatFraisDialog
+        open={fraisDlg != null}
+        mode={fraisDlg?.mode === "edit" ? "edit" : "add"}
+        initialLabel={fraisDlg?.initialLabel ?? ""}
+        initialMontantText={fraisDlg?.initialMontantText ?? ""}
+        busy={fraisDlgBusy}
+        onClose={closeFraisDlg}
+        onSave={(payload) => void saveFraisDlg(payload)}
+      />
+
+      <AchatVendeurFormDialog
+        key={
+          vendeurDlg == null
+            ? "closed"
+            : vendeurDlg.mode === "edit"
+              ? `edit-${vendeurDlg.id}`
+              : "create"
+        }
+        open={vendeurDlg != null}
+        mode={vendeurDlg?.mode === "edit" ? "edit" : "create"}
+        busy={vendeurDlgBusy}
+        initial={vendeurDlgInitial}
+        onClose={() => {
+          if (!vendeurDlgBusy) setVendeurDlg(null);
+        }}
+        onSave={(values) => void saveVendeurDlg(values)}
+      />
     </main>
   );
 }

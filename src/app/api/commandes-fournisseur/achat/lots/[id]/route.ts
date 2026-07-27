@@ -8,6 +8,7 @@ import {
 } from "@/lib/commandes-fournisseur/ligne-category-order";
 import {
   montantLigneFromPu,
+  puFromMontantLigne,
   qtyBaseFromLotLine,
 } from "@/lib/commandes-fournisseur/achat-pricing";
 import { clampQtyToApiRange } from "@/lib/commandes-fournisseur/qty-parse";
@@ -32,7 +33,8 @@ type LignePatch = {
 
 type PatchBody = {
   ligneUpdates?: LignePatch[];
-  status?: "terminee";
+  /** `terminee` = clôturer (depuis prete) ; `prete` = rouvrir (depuis terminee). */
+  status?: "terminee" | "prete";
   confirmZeroQtyLines?: boolean;
   /** Frais lot : lignes générales (vendeur_id null dans la table). **/
   fraisDeleteIds?: string[];
@@ -82,7 +84,7 @@ export async function GET(_req: NextRequest, ctx: Ctx) {
     supabase
       .from("commande_fournisseur_lot_ligne")
       .select(
-        "id, product_id, product_packaging_id, qte_achat, qte_besoin_fige, vendeur_id, marque_achete, prix_achat_unitaire, montant_ligne_achat, product(id, name, name_ar, code, ref_sales_unit(label), ref_category(label, sort_order), product_packaging(id, quantity, nom, nom_ar, ref_conditionnement(label, label_ar), ref_sales_unit(label))), commande_fournisseur_lot_ligne_magasin(magasin_id, qte, magasins(id, code, nom))",
+        "id, product_id, product_packaging_id, qte_achat, qte_besoin_fige, vendeur_id, marque_achete, prix_achat_unitaire, montant_ligne_achat, product(id, name, name_ar, code, ref_sales_unit(label), ref_purchase_unit(label, label_ar, code), ref_category(label, sort_order), product_packaging(id, quantity, nom, nom_ar, ref_conditionnement(label, label_ar), ref_sales_unit(label))), commande_fournisseur_lot_ligne_magasin(magasin_id, qte, magasins(id, code, nom))",
       )
       .eq("lot_id", id),
     supabase
@@ -92,7 +94,9 @@ export async function GET(_req: NextRequest, ctx: Ctx) {
       .order("created_at", { ascending: true }),
     supabase
       .from("ref_supplier_vendeur")
-      .select("id, supplier_id, label, sort_order, created_at")
+      .select(
+        "id, supplier_id, label, sort_order, created_at, phone, preferred_locale, devise_achat",
+      )
       .eq("supplier_id", supplierId)
       .order("sort_order", { ascending: true })
       .order("label", { ascending: true }),
@@ -206,40 +210,53 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
   const lotStatus = (lotCur as { status: string }).status;
   const supplierId = (lotCur as { supplier_id: string }).supplier_id;
 
-  if (lotStatus === "terminee") {
-    if (body.ligneUpdates && body.ligneUpdates.length > 0) {
-      return NextResponse.json({ error: "Lot terminé : modification des lignes impossible" }, { status: 403 });
-    }
-    if (
-      (body.fraisDeleteIds && body.fraisDeleteIds.length > 0) ||
-      (body.fraisUpserts && body.fraisUpserts.length > 0)
-    ) {
-      return NextResponse.json({ error: "Lot terminé : modification des frais impossible" }, { status: 403 });
-    }
-  }
-
   const hasFraisDeletes = Boolean(body.fraisDeleteIds && body.fraisDeleteIds.length > 0);
   const hasFraisUpserts = Boolean(body.fraisUpserts && body.fraisUpserts.length > 0);
-
-  if (lotStatus !== "prete") {
-    if (body.status === "terminee") {
-      return NextResponse.json({ error: "Seul un lot « prêt » peut être clôturé" }, { status: 409 });
-    }
-    if (body.ligneUpdates && body.ligneUpdates.length > 0) {
-      return NextResponse.json({ error: "Modifications impossibles pour ce statut" }, { status: 409 });
-    }
-    if (
-      hasFraisDeletes ||
-      hasFraisUpserts
-    ) {
-      return NextResponse.json({ error: "Modifications des frais impossibles pour ce statut" }, { status: 409 });
-    }
-    return NextResponse.json({ error: "Aucune action applicable" }, { status: 400 });
-  }
-
+  const hasReopen = body.status === "prete";
   const hasClose = body.status === "terminee";
   const hasLines = Boolean(body.ligneUpdates && body.ligneUpdates.length > 0);
   const hasFrais = hasFraisDeletes || hasFraisUpserts;
+
+  if (hasReopen) {
+    if (lotStatus !== "terminee") {
+      return NextResponse.json(
+        { error: "Seul un lot « terminé » peut être rouvert pour modification" },
+        { status: 409 },
+      );
+    }
+    if (hasClose || hasLines || hasFrais) {
+      return NextResponse.json(
+        { error: "La réouverture ne peut pas être combinée à d'autres modifications" },
+        { status: 400 },
+      );
+    }
+    const { error: ue } = await supabase
+      .from("commande_fournisseur_lot")
+      .update({
+        status: "prete",
+        marque_terminee_at: null,
+      })
+      .eq("id", id)
+      .eq("status", "terminee");
+    if (ue) {
+      return NextResponse.json({ error: ue.message }, { status: 500 });
+    }
+    return NextResponse.json({ ok: true, reouverte: true });
+  }
+
+  if (lotStatus === "terminee") {
+    return NextResponse.json(
+      { error: "Lot terminé : rouvrez-le pour modifier, ou imprimez le rapport PDF" },
+      { status: 403 },
+    );
+  }
+
+  if (lotStatus !== "prete") {
+    if (hasClose) {
+      return NextResponse.json({ error: "Seul un lot « prêt » peut être clôturé" }, { status: 409 });
+    }
+    return NextResponse.json({ error: "Modifications impossibles pour ce statut" }, { status: 409 });
+  }
 
   if (!hasClose && !hasLines && !hasFrais) {
     return NextResponse.json({ error: "Corps de requête vide" }, { status: 400 });
@@ -490,9 +507,11 @@ async function applyLineUpdates(
     if (u.montant_ligne_achat !== undefined && u.prix_achat_unitaire === undefined) {
       const m = u.montant_ligne_achat;
       if (m != null && Number.isFinite(m) && qtyBase > 0) {
-        const derived = Math.round((Number(m) / qtyBase) * 10000) / 10000;
-        pu = derived >= 0 ? derived : null;
+        const derived = puFromMontantLigne(Number(m), qtyBase);
+        pu = derived != null && derived >= 0 ? derived : null;
       }
+    } else if (typeof pu === "number" && Number.isFinite(pu) && pu >= 0) {
+      pu = Math.round(pu * 100) / 100;
     }
 
     let montant = montantLigneFromPu(pu, qtyBase);
@@ -546,7 +565,19 @@ async function cloturerLotAchat(opts: {
       needConfirmLines?: Array<{ lotLigneId: string; productName: string | null }>;
     }
 > {
-  const { supabase, lotId, confirmZeroQtyLines } = opts;
+  const { supabase, lotId, supplierId, confirmZeroQtyLines } = opts;
+
+  const { count: vendeurCount, error: vendeursCountErr } = await supabase
+    .from("ref_supplier_vendeur")
+    .select("id", { count: "exact", head: true })
+    .eq("supplier_id", supplierId);
+
+  if (vendeursCountErr) {
+    return { error: vendeursCountErr.message, status: 500 };
+  }
+
+  /** Fournisseur sans marchands (ex. Station) : le fournisseur est le vendeur unique. */
+  const requireVendeurOnLines = (vendeurCount ?? 0) > 0;
 
   const { data: lignes, error } = await supabase
     .from("commande_fournisseur_lot_ligne")
@@ -585,7 +616,7 @@ async function cloturerLotAchat(opts: {
     }
   }
 
-  if (listeSansVendeur.length > 0) {
+  if (requireVendeurOnLines && listeSansVendeur.length > 0) {
     return { error: "Chaque ligne doit avoir un vendeur avant clôture", status: 400 };
   }
 

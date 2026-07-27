@@ -32,6 +32,15 @@ Dans les cartes **Total global** (jour) et **Total du mois** :
 - Agrégat unique : `fetchBenefitTotalsForDateRange` (même moteur que `/historique-ca` et Analyse Stats sans filtres) — résolution produit = id DB, sinon code article catalogue, sinon UUID brut.
 - Affichage : montant + **% du CA total** + **% du CA avec marge** (CA des seuls produits avec marge connue) ; colonne TOP 10 **Bénéfice** avec % du CA produit (enrichissement ligne à ligne, hors total carte).
 
+## Charges & bénéfice net
+
+Charges configurées dans **Paramètres → Charges Magasins** (`magasin_charge`, lib `src/lib/ca/magasinCharges.ts`) :
+
+- **Jour** : charge `jour` = qté × prix ; charge `mois` = (qté × prix) ÷ jours du mois.
+- **Mois** : charge `mois` = 1 × forfait (même mois incomplet) ; charge `jour` × jours de la période affichée.
+- Charges **générales** (`magasin_id` null) : uniquement sur les totaux globaux.
+- Affichage : **Charges** puis **Bénéfice net estimé** (= bénéfice − charges), global et par magasin (sans générales).
+
 ## TOP 10 catégories
 
 Sous les tableaux produits : agrégation par **catégorie catalogue** (`ref_category` via `product`), avec le même filtre **Magasin** (pas le filtre catégorie produit).

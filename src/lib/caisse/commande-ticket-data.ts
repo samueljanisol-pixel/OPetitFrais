@@ -59,8 +59,11 @@ type MagasinRow = { id: string; code: string; nom: string };
 type CommandeRow = {
   id: string;
   supplier_id: string;
+  lot_id: string | null;
   validated_at: string | null;
   created_at: string;
+  /** Date « lot marqué prêt » — critère métier pour le ticket caisse. */
+  marque_prete_at: string | null;
   ref_supplier:
     | { label?: string | null; code?: string | null }
     | { label?: string | null; code?: string | null }[]
@@ -90,11 +93,92 @@ function one<T>(raw: T | T[] | null | undefined): T | null {
   return (Array.isArray(raw) ? raw[0] : raw) as T;
 }
 
+/**
+ * Horodatage métier ticket : date de validation « prête » du lot,
+ * sinon validation magasin, sinon création.
+ */
 function refTimestamp(cmd: CommandeRow): string {
+  if (typeof cmd.marque_prete_at === "string" && cmd.marque_prete_at.length > 0) {
+    return cmd.marque_prete_at;
+  }
   if (typeof cmd.validated_at === "string" && cmd.validated_at.length > 0) {
     return cmd.validated_at;
   }
   return cmd.created_at;
+}
+
+async function attachMarquePreteAt(
+  supabase: SupabaseClient,
+  rows: Array<Omit<CommandeRow, "marque_prete_at"> & { marque_prete_at?: string | null }>,
+): Promise<CommandeRow[]> {
+  if (rows.length === 0) return [];
+
+  const preteByLotId = new Map<string, string | null>();
+  const lotIds = [
+    ...new Set(rows.map((r) => r.lot_id).filter((id): id is string => typeof id === "string" && id.length > 0)),
+  ];
+  if (lotIds.length > 0) {
+    const { data: lots, error } = await supabase
+      .from("commande_fournisseur_lot")
+      .select("id, marque_prete_at")
+      .in("id", lotIds);
+    if (error) {
+      throw new Error(error.message);
+    }
+    for (const lot of lots ?? []) {
+      const id = lot.id as string;
+      const at =
+        typeof lot.marque_prete_at === "string" && lot.marque_prete_at.length > 0
+          ? lot.marque_prete_at
+          : null;
+      preteByLotId.set(id, at);
+    }
+  }
+
+  const preteByCommandeId = new Map<string, string | null>();
+  const withoutLot = rows.filter((r) => !r.lot_id).map((r) => r.id);
+  if (withoutLot.length > 0) {
+    const { data: incs, error } = await supabase
+      .from("commande_fournisseur_lot_inclusion")
+      .select("commande_id, commande_fournisseur_lot(marque_prete_at)")
+      .in("commande_id", withoutLot);
+    if (error) {
+      throw new Error(error.message);
+    }
+    for (const inc of incs ?? []) {
+      const cmdId = inc.commande_id as string;
+      const lotRaw = inc.commande_fournisseur_lot as
+        | { marque_prete_at?: string | null }
+        | { marque_prete_at?: string | null }[]
+        | null;
+      const lot = one(lotRaw);
+      const at =
+        typeof lot?.marque_prete_at === "string" && lot.marque_prete_at.length > 0
+          ? lot.marque_prete_at
+          : null;
+      if (!preteByCommandeId.has(cmdId) || (at && !preteByCommandeId.get(cmdId))) {
+        preteByCommandeId.set(cmdId, at);
+      }
+    }
+  }
+
+  return rows.map((r) => {
+    let marque_prete_at: string | null = null;
+    if (r.lot_id && preteByLotId.has(r.lot_id)) {
+      marque_prete_at = preteByLotId.get(r.lot_id) ?? null;
+    } else if (preteByCommandeId.has(r.id)) {
+      marque_prete_at = preteByCommandeId.get(r.id) ?? null;
+    }
+    return {
+      id: r.id,
+      supplier_id: r.supplier_id,
+      lot_id: r.lot_id,
+      validated_at: r.validated_at,
+      created_at: r.created_at,
+      marque_prete_at,
+      ref_supplier: r.ref_supplier,
+    };
+  });
 }
 
 function supplierLabelFrom(raw: CommandeRow["ref_supplier"], supplierId: string): string {
@@ -258,6 +342,8 @@ function buildCategoryGroups(
 
 /**
  * Dernière commande non vide par fournisseur pour le magasin.
+ * Tri / date affichée : `marque_prete_at` du lot (validation « prête »),
+ * puis `validated_at`, puis `created_at`.
  */
 export async function loadCommandeTicketPayload(
   supabase: SupabaseClient,
@@ -289,7 +375,7 @@ export async function loadCommandeTicketPayload(
 
   const { data: commandesRaw, error: cmdErr } = await supabase
     .from("commande_fournisseur")
-    .select("id, supplier_id, validated_at, created_at, ref_supplier(code, label)")
+    .select("id, supplier_id, lot_id, validated_at, created_at, ref_supplier(code, label)")
     .eq("magasin_id", magasin.id)
     .in("status", ["en_saisie", "validee", "integree"]);
 
@@ -297,7 +383,16 @@ export async function loadCommandeTicketPayload(
     return { ok: false, status: 500, error: cmdErr.message };
   }
 
-  let candidates = (commandesRaw ?? []) as CommandeRow[];
+  let candidates: CommandeRow[];
+  try {
+    candidates = await attachMarquePreteAt(
+      supabase,
+      (commandesRaw ?? []) as Array<Omit<CommandeRow, "marque_prete_at">>,
+    );
+  } catch (e) {
+    const message = e instanceof Error ? e.message : String(e);
+    return { ok: false, status: 500, error: message };
+  }
 
   const emptyPayload = (resolvedDate: string): CommandeTicketPayload => ({
     magasin: { id: magasin.id, code: magasin.code, nom: magasin.nom },
@@ -311,6 +406,7 @@ export async function loadCommandeTicketPayload(
     return { ok: true, payload: emptyPayload(dateIso ?? "") };
   }
 
+  // Filtre jour = jour de « prête » (sinon validation / création)
   if (dateIso) {
     candidates = candidates.filter((c) => timestampOnTicketDay(refTimestamp(c), dateIso));
   }

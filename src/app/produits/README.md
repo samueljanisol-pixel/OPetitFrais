@@ -24,7 +24,7 @@
 - **Archivage** d’un conditionnement : dialogue MUI de confirmation (pas `window.confirm`). La ligne `product_packaging` est conservée (`archived_at` renseigné) pour l’historique commandes/lots ; elle disparaît du catalogue et de la saisie. Migration `20260627120000_product_packaging_archived.sql`.
 - **Fournisseur** puis **Vendeur** (liste filtrée sur le fournisseur du produit, option « Aucun »).
 - **Unité de commande (UdC)** : optionnelle, distincte de l’UdV ; référentiel **Paramètres → Unités de commande**. Import en masse depuis un Excel « Unité de commande » : `npx tsx scripts/apply-order-units-from-excel.ts [fichier.xlsx]` (colonne **Unité d'Achat** → `product.order_unit_id`).
-- **Unité d'achat (UdA)** : optionnelle, distincte de l’UdV et de l’UdC ; référentiel **Paramètres → Unités d'achat**.
+- **Unité d'achat (UdA)** : optionnelle, distincte de l’UdV et de l’UdC ; référentiel **Paramètres → Unités d'achat**. Backfill des UdA manquantes : **Kg** si UdV = Kg, **Pièce** si UdV = Unité / Unité(s) (`20260727120000_backfill_product_purchase_unit.sql`).
 - Le vendeur est enregistré sur `product.vendeur_id` (migration `20260621120000_product_vendeur_id.sql`).
 - Changer de fournisseur réinitialise le vendeur s’il n’appartient plus au nouveau fournisseur.
 - **Historique prix et marges** (`product_price_history`) : une ligne est ajoutée à chaque enregistrement qui modifie le prix de vente, un coût (achat, fabrication, emballage) ou la marge. La **marge n’est stockée que si elle est saisie** (fiche, import Sheet, marge rétroactive) — jamais calculée automatiquement à partir du prix de vente. Migration nettoyage : `20260701140000_clear_auto_price_history_margin.sql`.

@@ -24,6 +24,7 @@ import BackNavButton from '@/components/BackNavButton'
 import FormDialog from '@/lib/mui/FormDialog'
 import { createSupabaseBrowserClient } from '@/lib/supabase/client'
 import type { RefConditionnementRow, RefRow, RefSubcategoryRow, RefSupplierRow, RefVendeurRow } from '@/lib/products/types'
+import { parseDeviseAchat, type DeviseAchat } from '@/lib/commandes-fournisseur/achat-devise'
 import { muiSlotPropsDecimalKeypad } from '@/lib/mui/numericTextFieldProps'
 import AutomatedTasksAdminPanel from './AutomatedTasksAdminPanel'
 import MagasinsAdminPanel from './MagasinsAdminPanel'
@@ -31,8 +32,22 @@ import StatusLabelsAdminPanel from './StatusLabelsAdminPanel'
 import StockAdminPanel from './StockAdminPanel'
 import TranslationsAdminPanel from './TranslationsAdminPanel'
 import ChauffeurAdminPanel from './ChauffeurAdminPanel'
+import ChargesMagasinsAdminPanel from './ChargesMagasinsAdminPanel'
 
-type TabId = 'udv' | 'udc' | 'uda' | 'cat' | 'sup' | 'cond' | 'vend' | 'commandes' | 'stock' | 'traductions' | 'taches' | 'comptes'
+type TabId =
+  | 'udv'
+  | 'udc'
+  | 'uda'
+  | 'cat'
+  | 'sup'
+  | 'cond'
+  | 'vend'
+  | 'commandes'
+  | 'charges'
+  | 'stock'
+  | 'traductions'
+  | 'taches'
+  | 'comptes'
 
 const tabLabels: Record<TabId, string> = {
   udv: 'Unités de vente',
@@ -43,6 +58,7 @@ const tabLabels: Record<TabId, string> = {
   cond: 'Conditionnements',
   vend: 'Vendeurs',
   commandes: 'Commandes',
+  charges: 'Charges Magasins',
   stock: 'Stock',
   traductions: 'Traductions',
   taches: 'Tâches automatisées',
@@ -124,7 +140,19 @@ export default function ParametresClient() {
   const showComptesTab = isAdministrator
   const showTachesTab = isAdministrator
   const tabOrder = useMemo(() => {
-    const base: TabId[] = ['udv', 'udc', 'uda', 'cat', 'sup', 'cond', 'vend', 'commandes', 'stock', 'traductions']
+    const base: TabId[] = [
+      'udv',
+      'udc',
+      'uda',
+      'cat',
+      'sup',
+      'cond',
+      'vend',
+      'commandes',
+      'charges',
+      'stock',
+      'traductions',
+    ]
     if (showTachesTab) base.push('taches')
     if (showComptesTab) base.push('comptes')
     return base
@@ -159,6 +187,7 @@ export default function ParametresClient() {
     commande_active: true,
     phone: '',
     preferred_locale: 'fr' as 'fr' | 'ar-MA',
+    devise_achat: 'dirham' as DeviseAchat,
   })
 
   const load = useCallback(async () => {
@@ -277,10 +306,22 @@ export default function ParametresClient() {
         commande_active: true,
         phone: '',
         preferred_locale: 'fr',
+        devise_achat: 'dirham',
       })
     } else {
       setEditing({ id: '', code: '', label: '', sort_order: 0, created_at: '', commande_active: true } as RefSupplierRow)
-      setForm({ label: '', label_ar: '', h: '', w: '', d: '', supplier_id: '', commande_active: true, phone: '', preferred_locale: 'fr' })
+      setForm({
+        label: '',
+        label_ar: '',
+        h: '',
+        w: '',
+        d: '',
+        supplier_id: '',
+        commande_active: true,
+        phone: '',
+        preferred_locale: 'fr',
+        devise_achat: 'dirham',
+      })
     }
     setOpen(true)
   }
@@ -303,6 +344,8 @@ export default function ParametresClient() {
       phone: 'phone' in r && typeof r.phone === 'string' ? r.phone : '',
       preferred_locale:
         'preferred_locale' in r && r.preferred_locale === 'ar-MA' ? 'ar-MA' : 'fr',
+      devise_achat:
+        'devise_achat' in r ? parseDeviseAchat(r.devise_achat) : 'dirham',
     })
     setOpen(true)
   }
@@ -329,7 +372,16 @@ export default function ParametresClient() {
   }
 
   const save = async () => {
-    if (!editing || tab === 'comptes' || tab === 'taches' || tab === 'stock' || tab === 'traductions' || tab === 'commandes') return
+    if (
+      !editing ||
+      tab === 'comptes' ||
+      tab === 'taches' ||
+      tab === 'stock' ||
+      tab === 'traductions' ||
+      tab === 'commandes' ||
+      tab === 'charges'
+    )
+      return
     setErr(null)
     if (tab === 'cond') {
       const h = form.h ? Number(form.h) : null
@@ -401,6 +453,7 @@ export default function ParametresClient() {
         label: form.label.trim(),
         phone: phoneTrim.length > 0 ? phoneTrim : null,
         preferred_locale: form.preferred_locale,
+        devise_achat: form.devise_achat,
       }
       if (isNew) {
         const { error: e0 } = await supabase.from('ref_supplier_vendeur').insert(payload as never)
@@ -445,7 +498,15 @@ export default function ParametresClient() {
   }
 
   const requestDelete = (row: { id: string; label: string }) => {
-    if (tab === 'comptes' || tab === 'taches' || tab === 'stock' || tab === 'traductions' || tab === 'commandes') return
+    if (
+      tab === 'comptes' ||
+      tab === 'taches' ||
+      tab === 'stock' ||
+      tab === 'traductions' ||
+      tab === 'commandes' ||
+      tab === 'charges'
+    )
+      return
     setDeleteConfirm({ tab, id: row.id, label: row.label })
   }
 
@@ -508,13 +569,19 @@ export default function ParametresClient() {
             <Tab key={k} value={k} label={tabLabels[k]} />
           ))}
         </Tabs>
-        {tab !== 'comptes' && tab !== 'taches' && tab !== 'stock' && tab !== 'traductions' && tab !== 'commandes' ? (
+        {tab !== 'comptes' &&
+        tab !== 'taches' &&
+        tab !== 'stock' &&
+        tab !== 'traductions' &&
+        tab !== 'commandes' &&
+        tab !== 'charges' ? (
           <Button variant="contained" color="success" onClick={openNew} sx={{ mb: 2, textTransform: 'none' }}>
             Ajouter — {tabLabels[tab]}
           </Button>
         ) : null}
         {tab === 'traductions' ? <TranslationsAdminPanel /> : null}
         {tab === 'commandes' ? <ChauffeurAdminPanel /> : null}
+        {tab === 'charges' ? <ChargesMagasinsAdminPanel /> : null}
         {tab === 'taches' ? <AutomatedTasksAdminPanel /> : null}
         {tab === 'comptes' ? (
           <>
@@ -740,6 +807,13 @@ export default function ParametresClient() {
                   return loc === 'ar-MA' ? 'Arabe' : 'Français'
                 },
               },
+              {
+                header: 'Devise achat',
+                render: r => {
+                  const d = parseDeviseAchat((r as RefVendeurRow).devise_achat)
+                  return d === 'rial' ? 'Rial' : 'Dirham'
+                },
+              },
             ]}
           />
         )}
@@ -913,6 +987,23 @@ export default function ParametresClient() {
                         >
                           <MenuItem value="fr">Français</MenuItem>
                           <MenuItem value="ar-MA">Arabe</MenuItem>
+                        </Select>
+                      </FormControl>
+                      <FormControl size="small" fullWidth>
+                        <InputLabel id="vendeur-devise-label">Devise achat</InputLabel>
+                        <Select
+                          labelId="vendeur-devise-label"
+                          label="Devise achat"
+                          value={form.devise_achat}
+                          onChange={e =>
+                            setForm(f => ({
+                              ...f,
+                              devise_achat: parseDeviseAchat(e.target.value),
+                            }))
+                          }
+                        >
+                          <MenuItem value="dirham">Dirham</MenuItem>
+                          <MenuItem value="rial">Rial (1 DH = 20 Rial)</MenuItem>
                         </Select>
                       </FormControl>
                     </>

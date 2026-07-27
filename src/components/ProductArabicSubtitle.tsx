@@ -1,5 +1,8 @@
+"use client";
+
 import { Typography } from "@mui/material";
 import type { TypographyProps } from "@mui/material/Typography";
+import { useLocale } from "next-intl";
 
 type Props = {
   nameAr: string | null | undefined;
@@ -69,7 +72,7 @@ function resolveArabicTypography(
 /** Hauteur d’une ligne arabe parcours (subtitle1 centré). */
 const PARCOURS_ARABIC_SLOT_MIN_HEIGHT = "1.6875rem";
 
-/** Ligne de nom en arabe sous le nom français ; masquée si vide (sauf `reserveSpace`). */
+/** Ligne de nom en arabe sous le nom français ; masquée hors UI arabe. */
 export default function ProductArabicSubtitle({
   nameAr,
   centered,
@@ -78,6 +81,12 @@ export default function ProductArabicSubtitle({
   variant = "body2",
   className,
 }: Props) {
+  const locale = useLocale();
+  /** Affiché uniquement quand l’interface est en arabe. */
+  if (!locale.toLowerCase().startsWith("ar")) {
+    return null;
+  }
+
   const t = typeof nameAr === "string" ? nameAr.trim() : "";
   const resolved = resolveArabicTypography(centered, matchNameLine, variant);
 

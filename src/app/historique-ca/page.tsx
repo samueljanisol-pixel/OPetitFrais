@@ -134,6 +134,7 @@ export default function HistoriqueCA() {
   const computed = useMemo(() => {
     if (!data || 'error' in data) return null
 
+    const chargesByYm = data.chargesByYm ?? {}
     const days = filteredDays
     const totalGlobal = days.reduce((acc, d) => acc + (Number.isFinite(d.totalGlobal) ? d.totalGlobal : 0), 0)
     const totalPaniers = days.reduce(
@@ -161,6 +162,9 @@ export default function HistoriqueCA() {
         totalPaniers: number
         totalBenefit: number
         caWithMargin: number
+        totalCharges: number
+        chargesGeneral: number
+        totalBenefitNet: number
         avg: number
         avgPaniers: number
         avgBenefit: number
@@ -168,6 +172,8 @@ export default function HistoriqueCA() {
         paniersByMag: Record<string, number>
         benefitByMag: Record<string, number>
         caWithMarginByMag: Record<string, number>
+        chargesByMag: Record<string, number>
+        benefitNetByMag: Record<string, number>
         maxDay?: string
         minDay?: string
       }
@@ -183,6 +189,9 @@ export default function HistoriqueCA() {
           totalPaniers: 0,
           totalBenefit: 0,
           caWithMargin: 0,
+          totalCharges: 0,
+          chargesGeneral: 0,
+          totalBenefitNet: 0,
           avg: 0,
           avgPaniers: 0,
           avgBenefit: 0,
@@ -190,6 +199,8 @@ export default function HistoriqueCA() {
           paniersByMag: {},
           benefitByMag: {},
           caWithMarginByMag: {},
+          chargesByMag: {},
+          benefitNetByMag: {},
         })
       }
       const m = months.get(ym)!
@@ -225,6 +236,14 @@ export default function HistoriqueCA() {
       m.avg = m.days.length ? m.total / m.days.length : 0
       m.avgPaniers = m.days.length ? m.totalPaniers / m.days.length : 0
       m.avgBenefit = m.days.length ? m.totalBenefit / m.days.length : 0
+      const monthCharges = chargesByYm[m.ym]
+      m.totalCharges = monthCharges?.total ?? 0
+      m.chargesGeneral = monthCharges?.general ?? 0
+      m.chargesByMag = monthCharges?.byMag ?? {}
+      m.totalBenefitNet = m.totalBenefit - m.totalCharges
+      for (const mag of new Set([...Object.keys(m.benefitByMag), ...Object.keys(m.chargesByMag)])) {
+        m.benefitNetByMag[mag] = (m.benefitByMag[mag] ?? 0) - (m.chargesByMag[mag] ?? 0)
+      }
       if (m.days.length) {
         let max = m.days[0]
         let min = m.days[0]
@@ -242,6 +261,10 @@ export default function HistoriqueCA() {
     const avgPerMonth = monthCount > 0 ? totalGlobal / monthCount : 0
     const avgPaniersPerMonth = monthCount > 0 ? totalPaniers / monthCount : 0
     const avgBenefitPerMonth = monthCount > 0 ? totalBenefit / monthCount : 0
+    const totalCharges = monthList.reduce((acc, m) => acc + m.totalCharges, 0)
+    const totalBenefitNet = totalBenefit - totalCharges
+    const avgBenefitNetPerDay = days.length ? totalBenefitNet / days.length : 0
+    const avgBenefitNetPerMonth = monthCount > 0 ? totalBenefitNet / monthCount : 0
 
     const sortedDates = [...days].sort((a, b) => a.date.localeCompare(b.date))
     const from = sortedDates[0]?.date ?? null
@@ -276,12 +299,16 @@ export default function HistoriqueCA() {
       totalPaniers,
       totalBenefit,
       totalCaWithMargin,
+      totalCharges,
+      totalBenefitNet,
       avgPerDay,
       avgPaniersPerDay,
       avgBenefitPerDay,
+      avgBenefitNetPerDay,
       avgPerMonth,
       avgPaniersPerMonth,
       avgBenefitPerMonth,
+      avgBenefitNetPerMonth,
       monthList,
       recordDay,
       recordDaysByMagasin,
@@ -512,12 +539,42 @@ export default function HistoriqueCA() {
                 )
               })()}
             </div>
+            <div className="min-w-0 rounded-2xl border border-amber-200 bg-amber-50/70 px-3 py-4 shadow-sm backdrop-blur sm:px-5">
+              <div className="text-[10px] font-medium uppercase tracking-wide text-amber-800/80 sm:text-xs">
+                Charges
+              </div>
+              <div className="mt-1 break-words text-lg font-semibold text-slate-900 sm:text-2xl">
+                {formatMAD(computed.totalCharges)}
+              </div>
+              <div className="mt-1 text-[10px] leading-tight text-slate-500 sm:text-[11px]">
+                forfait mensuel ×1 par mois
+              </div>
+            </div>
+            <div className="min-w-0 rounded-2xl border border-teal-300 bg-teal-100/70 px-3 py-4 shadow-sm backdrop-blur sm:px-5">
+              <div className="text-[10px] font-medium uppercase tracking-wide text-teal-900/80 sm:text-xs">
+                Bénéfice net estimé
+              </div>
+              <div className="mt-1 break-words text-lg font-semibold text-slate-900 sm:text-2xl">
+                {formatMAD(computed.totalBenefitNet)}
+              </div>
+              <div className="mt-1 text-[10px] leading-tight text-slate-500 sm:text-[11px]">
+                bénéfice − charges
+              </div>
+            </div>
             <div className="min-w-0 rounded-2xl border border-teal-200 bg-white/80 px-3 py-4 shadow-sm backdrop-blur sm:px-5">
               <div className="text-[10px] font-medium uppercase tracking-wide text-teal-700/80 sm:text-xs">
                 Moy. bénéfice / jour
               </div>
               <div className="mt-1 break-words text-lg font-semibold text-slate-900 sm:text-2xl">
                 {formatMAD(computed.avgBenefitPerDay)}
+              </div>
+            </div>
+            <div className="min-w-0 rounded-2xl border border-teal-200 bg-white/80 px-3 py-4 shadow-sm backdrop-blur sm:px-5">
+              <div className="text-[10px] font-medium uppercase tracking-wide text-teal-700/80 sm:text-xs">
+                Moy. bénéfice net / jour
+              </div>
+              <div className="mt-1 break-words text-lg font-semibold text-slate-900 sm:text-2xl">
+                {formatMAD(computed.avgBenefitNetPerDay)}
               </div>
             </div>
             <div className="min-w-0 rounded-2xl border border-teal-200 bg-white/80 px-3 py-4 shadow-sm backdrop-blur sm:px-5">
@@ -613,6 +670,23 @@ export default function HistoriqueCA() {
                           )
                         })()}
                       </div>
+                      <div className="rounded-xl border border-amber-200 bg-amber-50/80 px-4 py-2 shadow-sm">
+                        <div className="text-[11px] font-medium uppercase tracking-wide text-amber-800/80">
+                          Charges
+                        </div>
+                        <div className="text-lg font-semibold text-slate-900">{formatMAD(m.totalCharges)}</div>
+                        {m.chargesGeneral > 0 ? (
+                          <div className="mt-0.5 text-[10px] text-amber-900/70">
+                            dont générales {formatMAD(m.chargesGeneral)}
+                          </div>
+                        ) : null}
+                      </div>
+                      <div className="rounded-xl border border-teal-300 bg-teal-100/80 px-4 py-2 shadow-sm">
+                        <div className="text-[11px] font-medium uppercase tracking-wide text-teal-900/80">
+                          Bénéfice net
+                        </div>
+                        <div className="text-lg font-semibold text-slate-900">{formatMAD(m.totalBenefitNet)}</div>
+                      </div>
                       <div className="rounded-xl border border-violet-200 bg-violet-50/80 px-4 py-2 shadow-sm">
                         <div className="text-[11px] font-medium uppercase tracking-wide text-violet-800/80">
                           Paniers (mois)
@@ -679,6 +753,16 @@ export default function HistoriqueCA() {
                                     <div className="truncate text-[10px] text-teal-800/80">
                                       {formatMAD(avgBenefit)} <span className="text-teal-700/70">moy./jour</span>
                                     </div>
+                                    {(m.chargesByMag[mag] ?? 0) > 0 || m.benefitNetByMag[mag] != null ? (
+                                      <div className="mt-1 border-t border-slate-200/60 pt-1">
+                                        <div className="truncate text-[10px] text-amber-900/80">
+                                          Charges : {formatMAD(m.chargesByMag[mag] ?? 0)}
+                                        </div>
+                                        <div className="truncate text-[10px] font-medium text-teal-950">
+                                          Net : {formatMAD(m.benefitNetByMag[mag] ?? magBenefit)}
+                                        </div>
+                                      </div>
+                                    ) : null}
                                   </div>
                                 </div>
                               )
@@ -730,10 +814,15 @@ export default function HistoriqueCA() {
                     ...Object.keys(d.magasins),
                     ...Object.keys(d.magasinsNbPaniers),
                     ...Object.keys(d.magasinsBenefit ?? {}),
+                    ...Object.keys(d.magasinsCharges ?? {}),
                   ])
                   const magasinsSorted = [...magKeys].sort((a, b) => a.localeCompare(b))
                   const dayNbPaniers = Number.isFinite(d.nbPaniersGlobal) ? d.nbPaniersGlobal : 0
                   const dayBenefit = Number.isFinite(d.totalBenefit) ? d.totalBenefit : 0
+                  const dayCharges = Number.isFinite(d.totalCharges) ? d.totalCharges : 0
+                  const dayBenefitNet = Number.isFinite(d.totalBenefitNet)
+                    ? d.totalBenefitNet
+                    : dayBenefit - dayCharges
                   return (
                     <div key={d.date} className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
                       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
@@ -756,6 +845,16 @@ export default function HistoriqueCA() {
                               })()}
                             </div>
                           ) : null}
+                          {dayCharges > 0 ? (
+                            <div className="text-sm font-medium text-amber-800">
+                              Charges : {formatMAD(dayCharges)}
+                            </div>
+                          ) : null}
+                          {dayBenefit > 0 || dayCharges > 0 ? (
+                            <div className="text-sm font-medium text-teal-900">
+                              Net : {formatMAD(dayBenefitNet)}
+                            </div>
+                          ) : null}
                           {dayNbPaniers > 0 ? (
                             <div className="text-sm font-medium text-violet-800">
                               {formatCount(dayNbPaniers)} panier{dayNbPaniers > 1 ? 's' : ''}
@@ -773,10 +872,17 @@ export default function HistoriqueCA() {
                           const rawBen = d.magasinsBenefit?.[mag]
                           const ben =
                             typeof rawBen === 'number' ? rawBen : rawBen != null ? Number(rawBen) : undefined
+                          const rawCh = d.magasinsCharges?.[mag]
+                          const ch =
+                            typeof rawCh === 'number' ? rawCh : rawCh != null ? Number(rawCh) : undefined
+                          const rawNet = d.magasinsBenefitNet?.[mag]
+                          const net =
+                            typeof rawNet === 'number' ? rawNet : rawNet != null ? Number(rawNet) : undefined
                           const hasCa = ca != null && Number.isFinite(ca)
                           const hasNb = nb != null && Number.isFinite(nb) && nb > 0
                           const hasBen = ben != null && Number.isFinite(ben) && ben > 0
-                          if (!hasCa && !hasNb && !hasBen) return null
+                          const hasCh = ch != null && Number.isFinite(ch) && ch > 0
+                          if (!hasCa && !hasNb && !hasBen && !hasCh) return null
                           return (
                             <div
                               key={`${d.date}-${mag}`}
@@ -801,6 +907,16 @@ export default function HistoriqueCA() {
                                         ) : null
                                       })()
                                     : null}
+                                </div>
+                              ) : null}
+                              {hasCh ? (
+                                <div className="mt-0.5 text-xs font-medium text-amber-800">
+                                  Charges : {formatMAD(ch)}
+                                </div>
+                              ) : null}
+                              {hasBen || hasCh ? (
+                                <div className="mt-0.5 text-xs font-medium text-teal-900">
+                                  Net : {formatMAD(net ?? (ben ?? 0) - (ch ?? 0))}
                                 </div>
                               ) : null}
                               {hasNb ? (

@@ -522,6 +522,23 @@ export default function CaDashboardPage() {
                   <span className="ml-1 text-xs text-slate-500">· produits avec marge renseignée uniquement</span>
                 </div>
               ) : null}
+              {data.totalChargesJour != null ? (
+                <div className="mt-2 text-sm text-slate-600">
+                  Charges :{' '}
+                  <span className="font-semibold text-slate-800">{formatMAD(data.totalChargesJour)}</span>
+                  {data.chargesGeneralJour != null && data.chargesGeneralJour > 0 ? (
+                    <span className="ml-1 text-xs text-slate-500">
+                      (dont générales {formatMAD(data.chargesGeneralJour)})
+                    </span>
+                  ) : null}
+                </div>
+              ) : null}
+              {data.totalBenefitNetJour != null ? (
+                <div className="mt-2 text-sm text-slate-600">
+                  Bénéfice net estimé :{' '}
+                  <span className="font-semibold text-slate-800">{formatMAD(data.totalBenefitNetJour)}</span>
+                </div>
+              ) : null}
             </div>
 
             <div className="rounded-2xl border border-slate-200 bg-white/80 px-5 py-4 shadow-sm backdrop-blur">
@@ -572,6 +589,23 @@ export default function CaDashboardPage() {
                     'text-slate-700',
                   )}
                   <span className="ml-1 text-xs text-slate-500">· produits avec marge renseignée uniquement</span>
+                </div>
+              ) : null}
+              {month?.totalCharges != null ? (
+                <div className="mt-2 text-sm text-slate-600">
+                  Charges :{' '}
+                  <span className="font-semibold text-slate-800">{formatMAD(month.totalCharges)}</span>
+                  {month.chargesGeneral != null && month.chargesGeneral > 0 ? (
+                    <span className="ml-1 text-xs text-slate-500">
+                      (dont générales {formatMAD(month.chargesGeneral)})
+                    </span>
+                  ) : null}
+                </div>
+              ) : null}
+              {month?.totalBenefitNet != null ? (
+                <div className="mt-2 text-sm text-slate-600">
+                  Bénéfice net estimé :{' '}
+                  <span className="font-semibold text-slate-800">{formatMAD(month.totalBenefitNet)}</span>
                 </div>
               ) : null}
             </div>
@@ -658,6 +692,37 @@ export default function CaDashboardPage() {
                 <span>{formatPercent(percentOfGlobal(magTotals.total))} du global</span>
                 <span className="font-medium text-slate-700">Part du CA global (jour)</span>
               </div>
+
+              {data.magasinsBenefitJour?.[mag] != null ||
+              data.magasinsChargesJour?.[mag] != null ||
+              data.magasinsBenefitNetJour?.[mag] != null ? (
+                <div className="mt-3 space-y-1 border-t border-emerald-100 pt-3 text-sm text-slate-600">
+                  {data.magasinsBenefitJour?.[mag] != null ? (
+                    <div>
+                      Bénéfice estimé :{' '}
+                      <span className="font-semibold text-slate-800">
+                        {formatMAD(data.magasinsBenefitJour[mag])}
+                      </span>
+                    </div>
+                  ) : null}
+                  {data.magasinsChargesJour?.[mag] != null ? (
+                    <div>
+                      Charges :{' '}
+                      <span className="font-semibold text-slate-800">
+                        {formatMAD(data.magasinsChargesJour[mag])}
+                      </span>
+                    </div>
+                  ) : null}
+                  {data.magasinsBenefitNetJour?.[mag] != null ? (
+                    <div>
+                      Bénéfice net estimé :{' '}
+                      <span className="font-semibold text-slate-800">
+                        {formatMAD(data.magasinsBenefitNetJour[mag])}
+                      </span>
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
 
               {data.isRecordDayByMag?.[mag] ? (
                 <RecordCaBanner
@@ -751,6 +816,36 @@ export default function CaDashboardPage() {
                     <span>{formatPercent(percentOfMonthGlobal(month?.magasins?.[mag]))}</span>
                     <span>du mois global</span>
                   </div>
+                  {month?.magasinsBenefit?.[mag] != null ||
+                  month?.magasinsCharges?.[mag] != null ||
+                  month?.magasinsBenefitNet?.[mag] != null ? (
+                    <div className="mt-2 space-y-0.5 border-t border-slate-100 pt-2 text-xs text-slate-600">
+                      {month?.magasinsBenefit?.[mag] != null ? (
+                        <div>
+                          Bénéfice estimé :{' '}
+                          <span className="font-semibold text-slate-800">
+                            {formatMAD(month.magasinsBenefit[mag])}
+                          </span>
+                        </div>
+                      ) : null}
+                      {month?.magasinsCharges?.[mag] != null ? (
+                        <div>
+                          Charges :{' '}
+                          <span className="font-semibold text-slate-800">
+                            {formatMAD(month.magasinsCharges[mag])}
+                          </span>
+                        </div>
+                      ) : null}
+                      {month?.magasinsBenefitNet?.[mag] != null ? (
+                        <div>
+                          Bénéfice net :{' '}
+                          <span className="font-semibold text-slate-800">
+                            {formatMAD(month.magasinsBenefitNet[mag])}
+                          </span>
+                        </div>
+                      ) : null}
+                    </div>
+                  ) : null}
                 </div>
                 {(() => {
                   const pm = month?.panierMois?.[mag]

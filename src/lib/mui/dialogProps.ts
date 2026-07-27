@@ -7,7 +7,3 @@ export function preventBackdropDialogClose(onClose: () => void): NonNullable<Dia
     onClose()
   }
 }
-
-export const formDialogProps = {
-  disableEscapeKeyDown: true,
-} as const

@@ -19,8 +19,8 @@ export function montantLigneFromPu(pu: number | null, qtyBase: number): number |
   return Math.round(pu * qtyBase * 100) / 100;
 }
 
-/** Dérive PU depuis montant et qtyBase. */
+/** Dérive PU depuis montant et qtyBase (arrondi 2 décimales). */
 export function puFromMontantLigne(montant: number, qtyBase: number): number | null {
   if (qtyBase <= 0 || !Number.isFinite(montant)) return null;
-  return Math.round((montant / qtyBase) * 10000) / 10000;
+  return Math.round((montant / qtyBase) * 100) / 100;
 }

@@ -40,6 +40,8 @@ export type RefVendeurRow = {
   sort_order: number
   phone?: string | null
   preferred_locale?: string | null
+  /** Devise de saisie achat : `dirham` (défaut) ou `rial` (1 DH = 20 Rial). */
+  devise_achat?: string | null
   created_at?: string
   ref_supplier?: RefRow | RefRow[] | null
 }
