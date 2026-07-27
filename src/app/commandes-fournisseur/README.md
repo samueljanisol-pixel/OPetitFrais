@@ -35,7 +35,7 @@ Lorsque le lot est **prêt pour l’achat**, le commentaire du lot est affiché 
 Sur `/commandes-fournisseur/validation/lots/[id]`, lorsque le statut est **`prete`** :
 
 1. **Matrice consolidation** en haut (lecture seule) : colonnes magasins en **codes MXX** (ex. M01).
-2. **Export consolidation** (sous « Revenir en saisie ») : PNG de toute la commande — **par catégorie** et **par vendeur** (si le fournisseur a des marchands), plus **WhatsApp chauffeur**. Format **A4 paysage** : largeurs au texte, quantités centrées, scale dans un conteneur à **hauteur fixe** (évite le bas coupé), répartition multi-colonnes avec **libellé répété** (catégorie ou vendeur). Images **toujours en arabe**. **Station** : un seul export (par catégorie). Migration `20260725230000_profiles_phone_chauffeur_setting.sql`.
+2. **Export consolidation** (sous « Revenir en saisie ») : PNG de toute la commande — **par catégorie** et **par vendeur** (si le fournisseur a des marchands), plus **WhatsApp chauffeur**. Format **A4 paysage** : largeurs au texte, quantités centrées, zoom pour tenir sur la page. **Par catégorie** : une catégorie peut **s’étaler sur plusieurs colonnes** (libellé **répété**). **Par vendeur** : **un tableau vendeur n’est jamais coupé** (blocs entiers répartis sur les colonnes). Images **toujours en arabe**. **Station** : un seul export (par catégorie). Migration `20260725230000_profiles_phone_chauffeur_setting.sql`.
 3. **Récap groupé par vendeur** en dessous (`ValidationLotVendeurRecap`) :
 
 - Colonnes magasins en **codes MXX** (ex. M01, M12) — pas le nom du magasin (`magasinCodeMx`).

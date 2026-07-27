@@ -615,7 +615,7 @@ export default function LotConsolidationExportPanel({
           <CapturePane
             captureRef={vendeurCaptureRef}
             sections={vendeurSections}
-            layout="category-flow"
+            layout="sections"
             {...capturePaneProps}
           />
         ) : null}
