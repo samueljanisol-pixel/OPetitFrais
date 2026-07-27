@@ -89,7 +89,7 @@ export function VendeurRecapTable({
   const headerArabicSx = captureDir === "rtl" ? arabicTextSx : {};
 
   return (
-    <Table size="small" sx={exportTableSx}>
+    <Table size="small" sx={exportTableSx} dir={captureDir}>
       <TableHead>
         <TableRow>
           <TableCell
@@ -407,6 +407,9 @@ export function LotGroupedRecapTable({
         <Box key={section.label} sx={{ mb: 1.5 }}>
           <Typography
             variant="subtitle1"
+            dir={captureDir === "rtl" ? "rtl" : undefined}
+            lang={captureDir === "rtl" ? "ar" : undefined}
+            className={captureDir === "rtl" ? arabicTextClassName : undefined}
             sx={{
               fontWeight: 700,
               color: "success.main",
@@ -415,6 +418,8 @@ export function LotGroupedRecapTable({
               py: 0.75,
               mb: 0.5,
               whiteSpace: "nowrap",
+              textAlign: captureDir === "rtl" ? "right" : "inherit",
+              ...(captureDir === "rtl" ? arabicTextSx : {}),
             }}
           >
             {section.label}

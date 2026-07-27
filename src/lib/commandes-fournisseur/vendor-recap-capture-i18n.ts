@@ -45,6 +45,11 @@ export function vendorExportLocale(raw: string | null | undefined): AppLocale {
   return raw === "ar-MA" ? "ar-MA" : "fr";
 }
 
+/** Fournisseur sans marchands (ex. Station) : export toujours en arabe. */
+export function stationExportLocale(): AppLocale {
+  return "ar-MA";
+}
+
 export function vendorRecapCaptureLabels(
   locale: AppLocale,
   _supplierLabel: string,

@@ -15,6 +15,7 @@ import { magasinCodeMx } from "@/lib/commandes-fournisseur/magasin-code-mx";
 import { buildLotProductDisplayInfo, buildSoitLine } from "@/lib/commandes-fournisseur/product-display";
 import {
   categoryDisplayLabel,
+  categoryDisplayLabelForLocale,
   compareByCategoryThenProductName,
   parseCategoryFromRef,
 } from "@/lib/commandes-fournisseur/ligne-category-order";
@@ -361,11 +362,25 @@ export function buildCategoryExportSections(
   lignes: RecapLigneInput[],
   magasinColumns: MagasinMxColumn[],
   noCategoryLabel: string,
+  locale: AppLocale = "fr",
 ): LotExportSection[] {
   const sorted = sortRecapLignesByCategory(lignes);
   const sections: LotExportSection[] = [];
   let currentLabel: string | null = null;
   let bucket: RecapLigneInput[] = [];
+
+  const categoryKey = (l: RecapLigneInput): string => {
+    const p = one(l.product);
+    if (p?.ref_category != null) {
+      return categoryDisplayLabelForLocale(
+        parseCategoryFromRef(p.ref_category),
+        locale,
+        noCategoryLabel,
+      );
+    }
+    const fromLigne = (l.categoryLabel ?? "").trim();
+    return fromLigne.length > 0 ? fromLigne : noCategoryLabel;
+  };
 
   const flush = () => {
     if (currentLabel != null && bucket.length > 0) {
@@ -377,7 +392,7 @@ export function buildCategoryExportSections(
   };
 
   for (const l of sorted) {
-    const catKey = (l.categoryLabel ?? "").trim() || noCategoryLabel;
+    const catKey = categoryKey(l);
     if (catKey !== currentLabel) {
       flush();
       currentLabel = catKey;
@@ -470,4 +485,18 @@ export function applyLocaleToVendeurRecapRows(
       );
     }
   }
+}
+
+/** Clone les sections export et applique la locale (noms produit, UdV, « Soit … »). */
+export function localizeLotExportSections(
+  sections: LotExportSection[],
+  lignes: RecapLigneInput[],
+  locale: AppLocale,
+  formatSoitLine: (qty: string, unit: string) => string,
+): LotExportSection[] {
+  return sections.map((section) => {
+    const rows = section.rows.map((row) => ({ ...row }));
+    applyLocaleToVendeurRecapRows(rows, lignes, locale, formatSoitLine);
+    return { label: section.label, rows };
+  });
 }

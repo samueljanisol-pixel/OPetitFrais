@@ -13,21 +13,29 @@ import {
   vendorWhatsAppHref,
 } from "@/lib/commandes-fournisseur/export-element-png";
 import type { ChauffeurProfile } from "@/lib/ref/chauffeur-setting";
-import { vendorRecapCaptureLabels } from "@/lib/commandes-fournisseur/vendor-recap-capture-i18n";
+import {
+  stationExportLocale,
+  vendorRecapCaptureLabels,
+} from "@/lib/commandes-fournisseur/vendor-recap-capture-i18n";
 import {
   buildCategoryExportSections,
   buildVendeurExportSections,
+  localizeLotExportSections,
   type LotExportSection,
   type MagasinMxColumn,
   type RecapLigneInput,
   type VendeurRef,
 } from "@/lib/commandes-fournisseur/validation-lot-vendeur-recap";
 import {
+  arabicTextClassName,
+  arabicTextSx,
   captureRootSx,
   LotGroupedRecapTable,
   VendeurRecapCaptureHeader,
 } from "@/features/commandes-fournisseur/vendeur-recap-export-parts";
 import { normalizeWhatsAppPhone } from "@/lib/whatsapp/url";
+import arMessages from "@/messages/ar-MA.json";
+import type { AppLocale } from "@/i18n/config";
 
 type Props = {
   lignes: RecapLigneInput[];
@@ -67,7 +75,13 @@ function CapturePane({
   lotCommentExportLabel: string;
 }) {
   return (
-    <Box ref={captureRef} sx={{ ...captureRootSx, display: "inline-block" }}>
+    <Box
+      ref={captureRef}
+      dir={captureLabels.dir}
+      lang={captureLabels.dir === "rtl" ? "ar" : undefined}
+      style={{ direction: captureLabels.dir }}
+      sx={{ ...captureRootSx, display: "inline-block" }}
+    >
       <VendeurRecapCaptureHeader
         magasinHeader=""
         vendeurLabel=""
@@ -87,8 +101,15 @@ function CapturePane({
         <Typography
           variant="caption"
           component="p"
-          className="!mt-2"
-          sx={{ lineHeight: 1.4, whiteSpace: "nowrap", maxWidth: "none" }}
+          className={captureLabels.dir === "rtl" ? `!mt-2 ${arabicTextClassName}` : "!mt-2"}
+          dir={captureLabels.dir === "rtl" ? "rtl" : undefined}
+          lang={captureLabels.dir === "rtl" ? "ar" : undefined}
+          sx={{
+            lineHeight: 1.4,
+            whiteSpace: "nowrap",
+            maxWidth: "none",
+            ...(captureLabels.dir === "rtl" ? arabicTextSx : {}),
+          }}
         >
           <Box component="span" sx={{ fontWeight: 700 }}>
             {lotCommentExportLabel}
@@ -149,20 +170,47 @@ export default function LotConsolidationExportPanel({
     };
   }, []);
 
+  /** Fournisseur sans marchands (ex. Station) : un seul « vendeur » → pas d’export par vendeur ; image toujours en arabe. */
+  const showVendeurExport = vendeurs.length > 0;
+  const exportLocale: AppLocale = showVendeurExport ? "fr" : stationExportLocale();
+
   const captureLabels = useMemo(
-    () => vendorRecapCaptureLabels("fr", supplierLabel, commandeDateLabel, null),
-    [supplierLabel, commandeDateLabel],
+    () => vendorRecapCaptureLabels(exportLocale, supplierLabel, commandeDateLabel, null),
+    [exportLocale, supplierLabel, commandeDateLabel],
   );
 
-  const categorySections = useMemo(
-    () => buildCategoryExportSections(lignes, magasinColumns, noCategoryLabel),
-    [lignes, magasinColumns, noCategoryLabel],
-  );
+  const noCategoryForExport = useMemo(() => {
+    if (exportLocale === "ar-MA") {
+      return arMessages.backoffice.commandes.common.noCategory;
+    }
+    return noCategoryLabel;
+  }, [exportLocale, noCategoryLabel]);
 
-  const vendeurSections = useMemo(
-    () => buildVendeurExportSections(lignes, vendeurs, magasinColumns, supplierLabel),
-    [lignes, vendeurs, magasinColumns, supplierLabel],
-  );
+  const categorySections = useMemo(() => {
+    const raw = buildCategoryExportSections(
+      lignes,
+      magasinColumns,
+      noCategoryForExport,
+      exportLocale,
+    );
+    return localizeLotExportSections(raw, lignes, exportLocale, captureLabels.formatSoitLine);
+  }, [lignes, magasinColumns, noCategoryForExport, exportLocale, captureLabels.formatSoitLine]);
+
+  const vendeurSections = useMemo(() => {
+    if (!showVendeurExport) {
+      return [] as LotExportSection[];
+    }
+    const raw = buildVendeurExportSections(lignes, vendeurs, magasinColumns, supplierLabel);
+    return localizeLotExportSections(raw, lignes, exportLocale, captureLabels.formatSoitLine);
+  }, [
+    lignes,
+    vendeurs,
+    magasinColumns,
+    supplierLabel,
+    showVendeurExport,
+    exportLocale,
+    captureLabels.formatSoitLine,
+  ]);
 
   const categoryFilename = useMemo(
     () => `commande-${commandeDateSlug}-${supplierLabel}-par-categorie.png`,
@@ -177,18 +225,30 @@ export default function LotConsolidationExportPanel({
   const tableLabels = useMemo(
     () => ({
       product: captureLabels.product,
-      quantity: tc("quantity"),
+      quantity:
+        exportLocale === "ar-MA"
+          ? arMessages.backoffice.commandes.common.quantity
+          : tc("quantity"),
       total: captureLabels.total,
       udvCond: captureLabels.udvCond,
       noLines: captureLabels.noLines,
     }),
-    [captureLabels, tc],
+    [captureLabels, exportLocale, tc],
   );
 
   const footer = lotComment?.trim() ?? "";
-  const productCount = productCountLabel.trim();
+  const productCount = useMemo(() => {
+    if (exportLocale === "ar-MA") {
+      const n = lignes.length;
+      return n === 1 ? "1 منتج" : `${n} منتجات`;
+    }
+    return productCountLabel.trim();
+  }, [exportLocale, lignes.length, productCountLabel]);
   const rowsEmpty = lignes.length === 0;
-  const lotCommentExportLabel = t("lotCommentExportLabel");
+  const lotCommentExportLabel =
+    exportLocale === "ar-MA"
+      ? arMessages.backoffice.commandes.validation.lotDetail.consolidationExport.lotCommentExportLabel
+      : t("lotCommentExportLabel");
 
   const chauffeurPhone = chauffeur?.phone?.trim() ?? "";
 
@@ -213,6 +273,9 @@ export default function LotConsolidationExportPanel({
           categoryPngRef.current = cat.file;
         }
       }
+      if (!showVendeurExport) {
+        return;
+      }
       const vendEl = vendeurCaptureRef.current;
       if (vendEl) {
         const vend = await captureElementToPngFile(vendEl, vendeurFilename);
@@ -224,7 +287,16 @@ export default function LotConsolidationExportPanel({
     return () => {
       cancelled = true;
     };
-  }, [categoryFilename, vendeurFilename, categorySections, vendeurSections, footer, productCount, rowsEmpty]);
+  }, [
+    categoryFilename,
+    vendeurFilename,
+    categorySections,
+    vendeurSections,
+    footer,
+    productCount,
+    rowsEmpty,
+    showVendeurExport,
+  ]);
 
   const ensureCategoryPng = useCallback(async (): Promise<File | null> => {
     if (categoryPngRef.current) {
@@ -295,22 +367,30 @@ export default function LotConsolidationExportPanel({
         return;
       }
 
-      const downloadBoth = async () => {
-        const [catFile, vendFile] = await Promise.all([ensureCategoryPng(), ensureVendeurPng()]);
+      const downloadImages = async () => {
+        const catFile = await ensureCategoryPng();
         if (catFile) {
           downloadPngFileUnique(catFile, categoryFilename);
         }
-        if (vendFile) {
-          downloadPngFileUnique(vendFile, vendeurFilename);
+        let vendFile: File | null = null;
+        if (showVendeurExport) {
+          vendFile = await ensureVendeurPng();
+          if (vendFile) {
+            downloadPngFileUnique(vendFile, vendeurFilename);
+          }
         }
         if (!catFile && !vendFile) {
           setExportErr(tc("error"));
         }
       };
 
-      if (categoryPngRef.current && vendeurPngRef.current) {
-        downloadPngFileUnique(categoryPngRef.current, categoryFilename);
-        downloadPngFileUnique(vendeurPngRef.current, vendeurFilename);
+      const ready =
+        categoryPngRef.current && (!showVendeurExport || vendeurPngRef.current);
+      if (ready) {
+        downloadPngFileUnique(categoryPngRef.current!, categoryFilename);
+        if (showVendeurExport && vendeurPngRef.current) {
+          downloadPngFileUnique(vendeurPngRef.current, vendeurFilename);
+        }
         return;
       }
 
@@ -318,13 +398,21 @@ export default function LotConsolidationExportPanel({
       setWhatsAppBusy(true);
       setExportErr(null);
       try {
-        await downloadBoth();
+        await downloadImages();
         window.open(href, "_blank", "noopener,noreferrer");
       } finally {
         setWhatsAppBusy(false);
       }
     },
-    [categoryFilename, ensureCategoryPng, ensureVendeurPng, tc, vendeurFilename, whatsAppHref],
+    [
+      categoryFilename,
+      ensureCategoryPng,
+      ensureVendeurPng,
+      showVendeurExport,
+      tc,
+      vendeurFilename,
+      whatsAppHref,
+    ],
   );
 
   if (rowsEmpty) {
@@ -352,19 +440,25 @@ export default function LotConsolidationExportPanel({
           onClick={() => void onExportCategory()}
           sx={{ textTransform: "none" }}
         >
-          {exportingCategory ? tc("loadingEllipsis") : t("exportByCategory")}
+          {exportingCategory
+            ? tc("loadingEllipsis")
+            : showVendeurExport
+              ? t("exportByCategory")
+              : tc("exportImage")}
         </Button>
-        <Button
-          type="button"
-          variant="outlined"
-          size="small"
-          startIcon={<ImageOutlinedIcon />}
-          disabled={exportingCategory || exportingVendeur || whatsAppBusy}
-          onClick={() => void onExportVendeur()}
-          sx={{ textTransform: "none" }}
-        >
-          {exportingVendeur ? tc("loadingEllipsis") : t("exportByVendor")}
-        </Button>
+        {showVendeurExport ? (
+          <Button
+            type="button"
+            variant="outlined"
+            size="small"
+            startIcon={<ImageOutlinedIcon />}
+            disabled={exportingCategory || exportingVendeur || whatsAppBusy}
+            onClick={() => void onExportVendeur()}
+            sx={{ textTransform: "none" }}
+          >
+            {exportingVendeur ? tc("loadingEllipsis") : t("exportByVendor")}
+          </Button>
+        ) : null}
         {whatsAppHref ? (
           <Button
             variant="contained"
@@ -430,7 +524,9 @@ export default function LotConsolidationExportPanel({
         }}
       >
         <CapturePane captureRef={categoryCaptureRef} sections={categorySections} {...capturePaneProps} />
-        <CapturePane captureRef={vendeurCaptureRef} sections={vendeurSections} {...capturePaneProps} />
+        {showVendeurExport ? (
+          <CapturePane captureRef={vendeurCaptureRef} sections={vendeurSections} {...capturePaneProps} />
+        ) : null}
       </Box>
     </>
   );

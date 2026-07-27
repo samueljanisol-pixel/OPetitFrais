@@ -139,7 +139,7 @@ export async function GET(_req: Request, ctx: Ctx) {
     supabase
       .from("commande_fournisseur_lot_ligne")
       .select(
-        "id, product_id, product_packaging_id, qte_achat, qte_besoin_fige, vendeur_id, marque_achete, prix_achat_unitaire, montant_ligne_achat, product(id, name, name_ar, code, ref_sales_unit(label, label_ar, code), ref_order_unit(label, label_ar, code), ref_category(label, sort_order), product_packaging(id, quantity, nom, nom_ar, ref_conditionnement(label, label_ar), ref_sales_unit(label, label_ar, code))), commande_fournisseur_lot_ligne_magasin(magasin_id, qte, magasins(id, code, nom))",
+        "id, product_id, product_packaging_id, qte_achat, qte_besoin_fige, vendeur_id, marque_achete, prix_achat_unitaire, montant_ligne_achat, product(id, name, name_ar, code, ref_sales_unit(label, label_ar, code), ref_order_unit(label, label_ar, code), ref_category(label, label_ar, sort_order), product_packaging(id, quantity, nom, nom_ar, ref_conditionnement(label, label_ar), ref_sales_unit(label, label_ar, code))), commande_fournisseur_lot_ligne_magasin(magasin_id, qte, magasins(id, code, nom))",
       )
       .eq("lot_id", id),
     supabase

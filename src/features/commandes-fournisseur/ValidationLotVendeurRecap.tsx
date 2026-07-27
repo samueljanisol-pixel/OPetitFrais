@@ -5,6 +5,7 @@ import { TextField, Typography } from "@mui/material";
 import { useTranslations } from "next-intl";
 import VendeurRecapExportBlock from "@/features/commandes-fournisseur/VendeurRecapExportBlock";
 import {
+  stationExportLocale,
   vendorExportLocale,
   vendorRecapCaptureLabels,
 } from "@/lib/commandes-fournisseur/vendor-recap-capture-i18n";
@@ -18,7 +19,7 @@ import {
   type VendeurRef,
 } from "@/lib/commandes-fournisseur/validation-lot-vendeur-recap";
 import type { AppLocale } from "@/i18n/config";
-import { useAppLocale } from "@/lib/i18n/useAppFormat";
+import arMessages from "@/messages/ar-MA.json";
 
 type LotForRecap = {
   commentaire?: string | null;
@@ -52,13 +53,13 @@ function vendeurForGroup(vendeurs: VendeurRef[], vendeurKey: string): VendeurRef
   return vendeurs.find((v) => v.id === vendeurKey);
 }
 
-/** Locale d’export : `preferred_locale` du vendeur ; sinon locale UI (ex. Station sans marchands). */
+/** Locale d’export : `preferred_locale` du vendeur ; Station (aucun marchand) → toujours arabe. */
 function exportLocaleForVendeur(
   vendeur: VendeurRef | undefined,
-  uiLocale: AppLocale,
+  vendeursCount: number,
 ): AppLocale {
   if (!vendeur) {
-    return uiLocale;
+    return vendeursCount === 0 ? stationExportLocale() : "fr";
   }
   return vendorExportLocale(vendeur.preferred_locale);
 }
@@ -67,9 +68,9 @@ function localizeGroup(
   group: VendeurRecapGroup,
   lignes: RecapLigneInput[],
   vendeur: VendeurRef | undefined,
-  uiLocale: AppLocale,
+  vendeursCount: number,
 ): VendeurRecapGroup {
-  const locale = exportLocaleForVendeur(vendeur, uiLocale);
+  const locale = exportLocaleForVendeur(vendeur, vendeursCount);
   const labels = vendorRecapCaptureLabels(locale, "", "");
   const rows = group.rows.map((row) => ({ ...row }));
   applyLocaleToVendeurRecapRows(rows, lignes, locale, labels.formatSoitLine);
@@ -91,7 +92,6 @@ export default function ValidationLotVendeurRecap({
   onVendeurWhatsAppSent,
 }: Props) {
   const t = useTranslations("backoffice.commandes.validation.lotDetail");
-  const uiLocale = useAppLocale();
   const magasinColumns = useMemo(() => buildMagasinMxColumnsFromLot(lot), [lot]);
   const groups = useMemo(
     () => buildVendeurRecapGroups(lignes, vendeurs, magasinColumns, supplierLabel, vendeurCommentDrafts),
@@ -101,9 +101,9 @@ export default function ValidationLotVendeurRecap({
   const localizedGroups = useMemo(
     () =>
       groups.map((g) =>
-        localizeGroup(g, lignes, vendeurForGroup(vendeurs, g.vendeurKey), uiLocale),
+        localizeGroup(g, lignes, vendeurForGroup(vendeurs, g.vendeurKey), vendeurs.length),
       ),
-    [groups, lignes, vendeurs, uiLocale],
+    [groups, lignes, vendeurs],
   );
 
   if (groups.length === 0) {
@@ -122,8 +122,12 @@ export default function ValidationLotVendeurRecap({
       {groups.map((g, index) => {
         const draft = vendeurCommentDrafts[g.vendeurKey] ?? "";
         const vendeur = vendeurForGroup(vendeurs, g.vendeurKey);
-        const exportLocale = exportLocaleForVendeur(vendeur, uiLocale);
+        const exportLocale = exportLocaleForVendeur(vendeur, vendeurs.length);
         const localized = localizedGroups[index] ?? g;
+        const footerCommentLabel =
+          exportLocale === "ar-MA"
+            ? arMessages.backoffice.commandes.validation.lotDetail.vendorCommentExportLabel
+            : t("vendorCommentExportLabel");
         const commentField =
           vendeurCommentEditable ? (
             <TextField
@@ -155,7 +159,7 @@ export default function ValidationLotVendeurRecap({
               exportLocale={exportLocale}
               vendeurPhone={vendeur?.phone}
               footerComment={g.commentaire?.trim() ? g.commentaire : null}
-              footerCommentLabel={t("vendorCommentExportLabel")}
+              footerCommentLabel={footerCommentLabel}
               commentField={commentField}
               whatsAppSent={vendeurWhatsAppSent[g.vendeurKey] === true}
               onWhatsAppSent={

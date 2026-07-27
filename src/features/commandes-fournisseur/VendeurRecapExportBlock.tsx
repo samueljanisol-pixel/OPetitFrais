@@ -277,8 +277,15 @@ export default function VendeurRecapExportBlock({
     />
   );
 
+  /** `dir` + `style.direction` (pas `sx.direction`) : stylis-plugin-rtl inverse sinon et décale les colonnes à l’export. */
   const captureContent = (
-    <Box ref={captureRef} sx={{ ...captureRootSx, direction: captureLabels.dir }}>
+    <Box
+      ref={captureRef}
+      dir={captureLabels.dir}
+      lang={captureLabels.dir === "rtl" ? "ar" : undefined}
+      style={{ direction: captureLabels.dir }}
+      sx={captureRootSx}
+    >
       <VendeurRecapCaptureHeader
         magasinHeader={magasinHeader}
         vendeurLabel={group.vendeurLabel}
@@ -347,7 +354,13 @@ export default function VendeurRecapExportBlock({
 
   return (
     <Box className="!mb-8">
-      <Box className="max-w-full overflow-x-auto" sx={{ ...captureRootSx, display: "block" }}>
+      <Box
+        className="max-w-full overflow-x-auto"
+        dir={captureLabels.dir}
+        lang={captureLabels.dir === "rtl" ? "ar" : undefined}
+        style={{ direction: captureLabels.dir }}
+        sx={{ ...captureRootSx, display: "block" }}
+      >
         <div className="mb-1 flex flex-wrap items-start justify-between gap-2">
           <Box sx={{ minWidth: 0, flex: 1, textAlign: captureLabels.dir === "rtl" ? "right" : "left" }}>
             {magasinHeader.length > 0 ? (

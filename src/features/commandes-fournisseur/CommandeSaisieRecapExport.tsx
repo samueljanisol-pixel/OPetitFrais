@@ -104,8 +104,15 @@ export default function CommandeSaisieRecapExport({
     noLines: captureLabels.noLines,
   };
 
+  /** `dir` + `style.direction` (pas `sx.direction`) : stylis-plugin-rtl inverse sinon et décale les colonnes à l’export. */
   const captureContent = (
-    <Box ref={captureRef} sx={{ ...captureRootSx, direction: captureLabels.dir }}>
+    <Box
+      ref={captureRef}
+      dir={captureLabels.dir}
+      lang={isRtl ? "ar" : undefined}
+      style={{ direction: captureLabels.dir }}
+      sx={captureRootSx}
+    >
       <VendeurRecapCaptureHeader
         magasinHeader={magasinHeader}
         vendeurLabel={group.vendeurLabel}
