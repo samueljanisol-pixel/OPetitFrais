@@ -17,6 +17,8 @@ import {
   type VendeurRecapGroup,
   type VendeurRef,
 } from "@/lib/commandes-fournisseur/validation-lot-vendeur-recap";
+import type { AppLocale } from "@/i18n/config";
+import { useAppLocale } from "@/lib/i18n/useAppFormat";
 
 type LotForRecap = {
   commentaire?: string | null;
@@ -50,12 +52,24 @@ function vendeurForGroup(vendeurs: VendeurRef[], vendeurKey: string): VendeurRef
   return vendeurs.find((v) => v.id === vendeurKey);
 }
 
+/** Locale d’export : `preferred_locale` du vendeur ; sinon locale UI (ex. Station sans marchands). */
+function exportLocaleForVendeur(
+  vendeur: VendeurRef | undefined,
+  uiLocale: AppLocale,
+): AppLocale {
+  if (!vendeur) {
+    return uiLocale;
+  }
+  return vendorExportLocale(vendeur.preferred_locale);
+}
+
 function localizeGroup(
   group: VendeurRecapGroup,
   lignes: RecapLigneInput[],
   vendeur: VendeurRef | undefined,
+  uiLocale: AppLocale,
 ): VendeurRecapGroup {
-  const locale = vendorExportLocale(vendeur?.preferred_locale);
+  const locale = exportLocaleForVendeur(vendeur, uiLocale);
   const labels = vendorRecapCaptureLabels(locale, "", "");
   const rows = group.rows.map((row) => ({ ...row }));
   applyLocaleToVendeurRecapRows(rows, lignes, locale, labels.formatSoitLine);
@@ -77,6 +91,7 @@ export default function ValidationLotVendeurRecap({
   onVendeurWhatsAppSent,
 }: Props) {
   const t = useTranslations("backoffice.commandes.validation.lotDetail");
+  const uiLocale = useAppLocale();
   const magasinColumns = useMemo(() => buildMagasinMxColumnsFromLot(lot), [lot]);
   const groups = useMemo(
     () => buildVendeurRecapGroups(lignes, vendeurs, magasinColumns, supplierLabel, vendeurCommentDrafts),
@@ -85,8 +100,10 @@ export default function ValidationLotVendeurRecap({
 
   const localizedGroups = useMemo(
     () =>
-      groups.map((g) => localizeGroup(g, lignes, vendeurForGroup(vendeurs, g.vendeurKey))),
-    [groups, lignes, vendeurs],
+      groups.map((g) =>
+        localizeGroup(g, lignes, vendeurForGroup(vendeurs, g.vendeurKey), uiLocale),
+      ),
+    [groups, lignes, vendeurs, uiLocale],
   );
 
   if (groups.length === 0) {
@@ -105,7 +122,7 @@ export default function ValidationLotVendeurRecap({
       {groups.map((g, index) => {
         const draft = vendeurCommentDrafts[g.vendeurKey] ?? "";
         const vendeur = vendeurForGroup(vendeurs, g.vendeurKey);
-        const exportLocale = vendorExportLocale(vendeur?.preferred_locale);
+        const exportLocale = exportLocaleForVendeur(vendeur, uiLocale);
         const localized = localizedGroups[index] ?? g;
         const commentField =
           vendeurCommentEditable ? (

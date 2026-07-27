@@ -11,6 +11,7 @@ import {
   DialogTitle,
   FormControl,
   FormControlLabel,
+  IconButton,
   InputLabel,
   MenuItem,
   Select,
@@ -20,6 +21,8 @@ import {
   TextField,
   Typography,
 } from '@mui/material'
+import ArrowDownwardIcon from '@mui/icons-material/ArrowDownward'
+import ArrowUpwardIcon from '@mui/icons-material/ArrowUpward'
 import BackNavButton from '@/components/BackNavButton'
 import FormDialog from '@/lib/mui/FormDialog'
 import { createSupabaseBrowserClient } from '@/lib/supabase/client'
@@ -395,6 +398,35 @@ export default function ParametresClient() {
     setSup(prev => prev.map(s => (s.id === row.id ? { ...s, commande_active: active } : s)))
   }
 
+  const moveCategory = async (id: string, direction: -1 | 1) => {
+    setErr(null)
+    const sorted = [...cat].sort(
+      (a, b) =>
+        (a.sort_order ?? 0) - (b.sort_order ?? 0) || a.label.localeCompare(b.label, 'fr'),
+    )
+    const idx = sorted.findIndex(c => c.id === id)
+    const swapIdx = idx + direction
+    if (idx < 0 || swapIdx < 0 || swapIdx >= sorted.length) return
+
+    const next = [...sorted]
+    const tmp = next[idx]!
+    next[idx] = next[swapIdx]!
+    next[swapIdx] = tmp
+
+    const updates = next.map((c, i) => ({ id: c.id, sort_order: i + 1 }))
+    const results = await Promise.all(
+      updates.map(u =>
+        supabase.from('ref_category').update({ sort_order: u.sort_order } as never).eq('id', u.id),
+      ),
+    )
+    const firstErr = results.find(r => r.error)?.error
+    if (firstErr) {
+      setErr(firstErr.message)
+      return
+    }
+    setCat(next.map((c, i) => ({ ...c, sort_order: i + 1 })))
+  }
+
   const tableName = (t: TabId) => {
     if (t === 'udv') return 'ref_sales_unit'
     if (t === 'udc') return 'ref_order_unit'
@@ -486,9 +518,13 @@ export default function ParametresClient() {
       }
     } else if (tab === 'cat' || tab === 'udv' || tab === 'udc' || tab === 'uda') {
       const labelArTrim = form.label_ar.trim()
-      const payload = {
+      const payload: { label: string; label_ar: string | null; sort_order?: number } = {
         label: form.label.trim(),
         label_ar: labelArTrim.length > 0 ? labelArTrim : null,
+      }
+      if (isNew && tab === 'cat') {
+        const maxOrder = cat.reduce((m, c) => Math.max(m, c.sort_order ?? 0), 0)
+        payload.sort_order = maxOrder + 1
       }
       if (isNew) {
         const { error: e0 } = await supabase.from(tableName(tab)).insert(payload as never)
@@ -795,6 +831,37 @@ export default function ParametresClient() {
                       </span>
                     ) : (
                       '—'
+                    )
+                  },
+                },
+                {
+                  header: 'Ordre',
+                  render: r => {
+                    const sorted = [...cat].sort(
+                      (a, b) =>
+                        (a.sort_order ?? 0) - (b.sort_order ?? 0) ||
+                        a.label.localeCompare(b.label, 'fr'),
+                    )
+                    const idx = sorted.findIndex(c => c.id === r.id)
+                    return (
+                      <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.25 }}>
+                        <IconButton
+                          size="small"
+                          aria-label="Monter"
+                          disabled={idx <= 0}
+                          onClick={() => void moveCategory(r.id, -1)}
+                        >
+                          <ArrowUpwardIcon fontSize="small" />
+                        </IconButton>
+                        <IconButton
+                          size="small"
+                          aria-label="Descendre"
+                          disabled={idx < 0 || idx >= sorted.length - 1}
+                          onClick={() => void moveCategory(r.id, 1)}
+                        >
+                          <ArrowDownwardIcon fontSize="small" />
+                        </IconButton>
+                      </Box>
                     )
                   },
                 },

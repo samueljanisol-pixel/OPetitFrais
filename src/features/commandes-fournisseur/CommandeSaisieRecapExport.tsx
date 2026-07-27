@@ -5,6 +5,8 @@ import { Box, Button, Typography } from "@mui/material";
 import ImageOutlinedIcon from "@mui/icons-material/ImageOutlined";
 import { useTranslations } from "next-intl";
 import {
+  arabicTextClassName,
+  arabicTextSx,
   captureRootSx,
   VendeurRecapCaptureHeader,
   VendeurRecapTable,
@@ -17,6 +19,7 @@ import {
   magasinMxColumnFromCommande,
   type CommandeSaisieExportLigne,
 } from "@/lib/commandes-fournisseur/commande-saisie-recap-export";
+import { vendorRecapCaptureLabels } from "@/lib/commandes-fournisseur/vendor-recap-capture-i18n";
 import { useAppLocale } from "@/lib/i18n/useAppFormat";
 
 type Props = {
@@ -40,6 +43,7 @@ export default function CommandeSaisieRecapExport({
 }: Props) {
   const locale = useAppLocale();
   const tc = useTranslations("backoffice.commandes.common");
+  const tRecap = useTranslations("backoffice.commandes.saisie.recap");
   const tStatus = useTranslations("backoffice.status");
   const captureRef = useRef<HTMLDivElement>(null);
   const [exporting, setExporting] = useState(false);
@@ -52,9 +56,9 @@ export default function CommandeSaisieRecapExport({
   const magasinColumn = useMemo(() => magasinMxColumnFromCommande(commande), [commande]);
   const magasinName = useMemo(() => magasinLabelFromCommande(commande), [commande]);
   const commandeDate = useMemo(() => commandeSaisieDateInfo(commande), [commande]);
-  const formatSoitLine = useCallback(
-    (qty: string, unit: string) => tc("soitLine", { qty, unit }),
-    [tc],
+  const captureLabels = useMemo(
+    () => vendorRecapCaptureLabels(locale, supplierLabel, commandeDate.label, saisieParLabel),
+    [locale, supplierLabel, commandeDate.label, saisieParLabel],
   );
   const group = useMemo(() => {
     const groups = buildCommandeSaisieRecapGroups(
@@ -62,10 +66,10 @@ export default function CommandeSaisieRecapExport({
       magasinColumn,
       supplierLabel,
       locale,
-      formatSoitLine,
+      captureLabels.formatSoitLine,
     );
     return groups[0] ?? null;
-  }, [lignes, magasinColumn, supplierLabel, locale, formatSoitLine]);
+  }, [lignes, magasinColumn, supplierLabel, locale, captureLabels.formatSoitLine]);
 
   const onExport = useCallback(async () => {
     const el = captureRef.current;
@@ -87,27 +91,29 @@ export default function CommandeSaisieRecapExport({
   }
 
   const magasinHeader = magasinName.trim();
-  const parLabel = saisieParLabel?.trim() ?? "";
   const productCount = productCountLabel?.trim() ?? "";
   const footer = commande.commentaire?.trim() ?? "";
+  const isRtl = captureLabels.dir === "rtl";
+  const orderCommentLabel = tRecap("orderCommentLabel");
 
   const tableLabels = {
-    product: "Produit",
+    product: captureLabels.product,
     quantity: tc("quantity"),
-    total: tc("total"),
-    udvCond: tc("udvCond"),
-    noLines: tc("noLines"),
+    total: captureLabels.total,
+    udvCond: captureLabels.udvCond,
+    noLines: captureLabels.noLines,
   };
 
   const captureContent = (
-    <Box ref={captureRef} sx={captureRootSx}>
+    <Box ref={captureRef} sx={{ ...captureRootSx, direction: captureLabels.dir }}>
       <VendeurRecapCaptureHeader
         magasinHeader={magasinHeader}
         vendeurLabel={group.vendeurLabel}
         showVendeurHeader={false}
-        orderOnLine={`Commande du ${commandeDate.label}`}
-        orderByLine={parLabel.length > 0 ? `par ${parLabel}` : null}
+        orderOnLine={captureLabels.orderOnLine}
+        orderByLine={captureLabels.orderByLine}
         productCount={productCount}
+        dir={captureLabels.dir}
       />
       <VendeurRecapTable
         group={group}
@@ -115,16 +121,24 @@ export default function CommandeSaisieRecapExport({
         showTotalColumn={false}
         magasinColumnHeader={tc("quantity")}
         labels={tableLabels}
+        captureDir={captureLabels.dir}
       />
       {footer ? (
         <Typography
           variant="caption"
           component="p"
-          className="!mt-2"
-          sx={{ lineHeight: 1.4, whiteSpace: "nowrap", maxWidth: "none" }}
+          className={isRtl ? `!mt-2 ${arabicTextClassName}` : "!mt-2"}
+          dir={isRtl ? "rtl" : undefined}
+          lang={isRtl ? "ar" : undefined}
+          sx={{
+            lineHeight: 1.4,
+            whiteSpace: "nowrap",
+            maxWidth: "none",
+            ...(isRtl ? arabicTextSx : {}),
+          }}
         >
           <Box component="span" sx={{ fontWeight: 700 }}>
-            Commentaire commande
+            {orderCommentLabel}
           </Box>
           {" : "}
           {footer}

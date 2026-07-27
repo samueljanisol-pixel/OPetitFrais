@@ -11,9 +11,10 @@
 
 Lorsque le statut n’est plus **en saisie** (`validee`, `integree`), un bloc **Export image** apparaît au-dessus de la liste :
 
-- Un bouton **Exporter en image** : en-tête **nom du magasin** + **Commande Fournisseur : {fournisseur}**, date puis **par {utilisateur}** (créateur de la commande), **un seul tableau** avec tous les produits (pas de découpage par vendeur marché), colonnes produit / **Quantité** / UdV/cond.
+- Un bouton **Exporter en image** : en-tête **nom du magasin**, date puis **par {utilisateur}** (créateur de la commande), **un seul tableau** avec tous les produits (pas de découpage par vendeur marché), colonnes produit / **Quantité** / UdV/cond.
+- Toute l’image suit la **locale UI** (`fr` / `ar-MA`) : en-têtes, date, « par … », commentaire, RTL si arabe.
 - Les libellés **conditionnement** et **unité de vente** dans l’image suivent la locale UI (arabe si `ar-MA` et `label_ar` renseigné).
-- **Noms produits** dans l’image : même logique que le récap (un seul nom selon locale, police Arial/Helvetica, `body2` medium).
+- **Noms produits** dans l’image : même logique que le récap (un seul nom selon locale, police Arial/Helvetica ou Noto Sans Arabic, `body2` medium).
 - Le tableau d’export est **hors écran** ; la page affiche le même format colonnes en lecture seule.
 - L’image inclut le **nombre de lignes produit** (ex. « 12 produits ») au-dessus du tableau, comme sur la page.
 - Partage natif mobile ou téléchargement (`html-to-image`, `export-element-png.ts`).

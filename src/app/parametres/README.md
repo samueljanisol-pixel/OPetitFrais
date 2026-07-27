@@ -73,6 +73,7 @@ Migration : `20260619120000_unify_marchand_vendeur.sql` (fusion de l’ancien `r
 
 - **`ref_category`** : catégories produit (onglet **Catégories**).
 - Colonne **`label_ar`** (libellé arabe optionnel) sur `ref_category` et `ref_subcategory`. Saisie dans l’onglet **Catégories** (dialogues catégorie et sous-catégorie). Migration `20260702130000_ref_category_subcategory_label_ar.sql`.
+- **Ordre d’affichage** : boutons monter / descendre sur chaque catégorie (`sort_order`). Cet ordre est repris sur la boutique publique (chips + sections) et ailleurs où les catégories sont triées par `sort_order`.
 - **`ref_subcategory`** : sous-catégories rattachées à une catégorie (libellé unique par catégorie). Gestion dans le même onglet, tableau **Sous-catégories**.
 - **`product.subcategory_id`** : optionnel ; doit correspondre à la catégorie du produit.
 - Import Google Sheet : colonne **Sous-Catégorie** (création auto si absente). Migration `20260701160000_ref_subcategory.sql`.
