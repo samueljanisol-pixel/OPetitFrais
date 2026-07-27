@@ -38,6 +38,7 @@ type Props = {
   lines: ShopCartLine[];
   productById: Map<string, ShopProduct>;
   categoryGroups: ShopCategoryGroup[];
+  fulfillmentLabel?: string | null;
   onUpdateLine: (productId: string, shopOrderUnitId: string | null, qty: number) => void;
   onClear: () => void;
 };
@@ -48,6 +49,7 @@ export default function ShopCartPanel({
   lines,
   productById,
   categoryGroups,
+  fulfillmentLabel = null,
   onUpdateLine,
   onClear,
 }: Props) {
@@ -78,10 +80,11 @@ export default function ShopCartPanel({
           total: t("estimatedTotal"),
           separator: "──────────────────────",
           uncategorized: t("uncategorized"),
+          fulfillment: fulfillmentLabel,
         },
         categoryMeta,
       ),
-    [lines, productById, locale, t, categoryMeta],
+    [lines, productById, locale, t, categoryMeta, fulfillmentLabel],
   );
 
   const whatsAppPhone = getShopWhatsAppPhone();
@@ -117,6 +120,32 @@ export default function ShopCartPanel({
               <CloseIcon />
             </IconButton>
           </Box>
+
+          {fulfillmentLabel ? (
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+              {fulfillmentLabel}{" "}
+              <Box
+                component="a"
+                href="/#fulfillment"
+                onClick={onClose}
+                sx={{ color: "success.dark", fontWeight: 700, textDecoration: "underline" }}
+              >
+                {t("fulfillment.change")}
+              </Box>
+            </Typography>
+          ) : (
+            <Typography variant="body2" color="warning.dark" sx={{ mb: 1 }}>
+              {t("fulfillment.missingInCart")}{" "}
+              <Box
+                component="a"
+                href="/#fulfillment"
+                onClick={onClose}
+                sx={{ fontWeight: 700, textDecoration: "underline" }}
+              >
+                {t("fulfillment.choose")}
+              </Box>
+            </Typography>
+          )}
 
           {lines.length === 0 ? (
             <Typography color="text.secondary" sx={{ py: 4, textAlign: "center" }}>

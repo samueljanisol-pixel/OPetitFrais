@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 import { canAccessPath } from "@/lib/auth/route-permissions";
-import { backofficeUrl, isBackofficeOnlyPath, isShopHost } from "@/lib/shop/hosts";
+import { backofficeUrl, isBackofficeOnlyPath, isShopHost, isShopOnlyPath, shopPublicUrl } from "@/lib/shop/hosts";
 
 const PUBLIC_PATHS = ["/login", "/api", "/_next", "/favicon.ico", "/manifest.webmanifest", "/sw.js", "/icons", "/icon.png"];
 
@@ -20,6 +20,10 @@ export async function proxy(req: NextRequest) {
       return NextResponse.redirect(target);
     }
     return NextResponse.next();
+  }
+
+  if (isShopOnlyPath(pathname)) {
+    return NextResponse.redirect(shopPublicUrl(pathname));
   }
 
   if (isPublic(pathname)) return NextResponse.next();

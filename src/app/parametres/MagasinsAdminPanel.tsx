@@ -4,10 +4,11 @@ import { useCallback, useEffect, useState } from "react";
 import {
   Box,
   Button,
-  Dialog,
+  Checkbox,
   DialogActions,
   DialogContent,
   DialogTitle,
+  FormControlLabel,
   Paper,
   TextField,
   Typography,
@@ -27,6 +28,12 @@ type MagasinRow = {
   code: string;
   nom: string;
   sort_order: number;
+  adresse: string | null;
+  ville: string | null;
+  lat: number | null;
+  lng: number | null;
+  google_maps_url: string | null;
+  visible_vitrine: boolean;
   caisses: CaisseRow[];
 };
 
@@ -40,6 +47,12 @@ export default function MagasinsAdminPanel() {
   const [magCode, setMagCode] = useState("");
   const [magNom, setMagNom] = useState("");
   const [magSort, setMagSort] = useState("0");
+  const [magAdresse, setMagAdresse] = useState("");
+  const [magVille, setMagVille] = useState("");
+  const [magLat, setMagLat] = useState("");
+  const [magLng, setMagLng] = useState("");
+  const [magMapsUrl, setMagMapsUrl] = useState("");
+  const [magVisibleVitrine, setMagVisibleVitrine] = useState(false);
   const [magSaving, setMagSaving] = useState(false);
 
   const [caisseOpen, setCaisseOpen] = useState(false);
@@ -76,6 +89,12 @@ export default function MagasinsAdminPanel() {
     setMagCode("");
     setMagNom("");
     setMagSort("0");
+    setMagAdresse("");
+    setMagVille("");
+    setMagLat("");
+    setMagLng("");
+    setMagMapsUrl("");
+    setMagVisibleVitrine(false);
     setMagOpen(true);
     setErr(null);
   };
@@ -85,6 +104,12 @@ export default function MagasinsAdminPanel() {
     setMagCode(m.code);
     setMagNom(m.nom);
     setMagSort(String(m.sort_order ?? 0));
+    setMagAdresse(m.adresse ?? "");
+    setMagVille(m.ville ?? "");
+    setMagLat(m.lat != null ? String(m.lat) : "");
+    setMagLng(m.lng != null ? String(m.lng) : "");
+    setMagMapsUrl(m.google_maps_url ?? "");
+    setMagVisibleVitrine(!!m.visible_vitrine);
     setMagOpen(true);
     setErr(null);
   };
@@ -100,12 +125,31 @@ export default function MagasinsAdminPanel() {
     setErr(null);
     try {
       const sort_order = parseInt(magSort, 10) || 0;
+      const latTrim = magLat.trim();
+      const lngTrim = magLng.trim();
+      let lat: number | null = null;
+      let lng: number | null = null;
+      if (latTrim || lngTrim) {
+        lat = Number(latTrim);
+        lng = Number(lngTrim);
+        if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+          throw new Error("Latitude / longitude invalides");
+        }
+      }
+      const publicFields = {
+        adresse: magAdresse.trim() || null,
+        ville: magVille.trim() || null,
+        lat,
+        lng,
+        google_maps_url: magMapsUrl.trim() || null,
+        visible_vitrine: magVisibleVitrine,
+      };
       if (magEditing) {
         const res = await fetch(`/api/admin/magasins/${magEditing.id}`, {
           method: "PATCH",
           credentials: "include",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ code, nom, sort_order }),
+          body: JSON.stringify({ code, nom, sort_order, ...publicFields }),
         });
         const j = await res.json().catch(() => ({}));
         if (!res.ok) throw new Error((j as { error?: string }).error ?? "Erreur");
@@ -116,8 +160,22 @@ export default function MagasinsAdminPanel() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ code, nom, sort_order }),
         });
-        const j = await res.json().catch(() => ({}));
-        if (!res.ok) throw new Error((j as { error?: string }).error ?? "Erreur");
+        const j = (await res.json().catch(() => ({}))) as {
+          error?: string;
+          magasin?: { id?: string };
+        };
+        if (!res.ok) throw new Error(j.error ?? "Erreur");
+        const newId = j.magasin?.id;
+        if (newId && (publicFields.adresse || publicFields.lat != null || publicFields.visible_vitrine)) {
+          const res2 = await fetch(`/api/admin/magasins/${newId}`, {
+            method: "PATCH",
+            credentials: "include",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(publicFields),
+          });
+          const j2 = await res2.json().catch(() => ({}));
+          if (!res2.ok) throw new Error((j2 as { error?: string }).error ?? "Erreur adresse");
+        }
       }
       setMagOpen(false);
       await load();
@@ -240,6 +298,8 @@ export default function MagasinsAdminPanel() {
                 </Typography>
                 <Typography variant="caption" className="!text-slate-500">
                   Tri {m.sort_order}
+                  {m.visible_vitrine ? " · Visible vitrine" : ""}
+                  {m.ville ? ` · ${m.ville}` : ""}
                 </Typography>
               </div>
               <div className="flex flex-wrap gap-1">
@@ -314,6 +374,53 @@ export default function MagasinsAdminPanel() {
             />
             <TextField label="Nom affiché" value={magNom} onChange={(e) => setMagNom(e.target.value)} size="small" fullWidth />
             <TextField label="Ordre d’affichage" value={magSort} onChange={(e) => setMagSort(e.target.value)} size="small" type="number" fullWidth />
+            <TextField
+              label="Adresse (vitrine)"
+              value={magAdresse}
+              onChange={(e) => setMagAdresse(e.target.value)}
+              size="small"
+              fullWidth
+            />
+            <TextField
+              label="Ville"
+              value={magVille}
+              onChange={(e) => setMagVille(e.target.value)}
+              size="small"
+              fullWidth
+            />
+            <div className="grid grid-cols-2 gap-2">
+              <TextField
+                label="Latitude"
+                value={magLat}
+                onChange={(e) => setMagLat(e.target.value)}
+                size="small"
+                fullWidth
+              />
+              <TextField
+                label="Longitude"
+                value={magLng}
+                onChange={(e) => setMagLng(e.target.value)}
+                size="small"
+                fullWidth
+              />
+            </div>
+            <TextField
+              label="Lien Google Maps"
+              value={magMapsUrl}
+              onChange={(e) => setMagMapsUrl(e.target.value)}
+              size="small"
+              fullWidth
+              helperText="Coller le lien de la fiche Google Maps du magasin"
+            />
+            <FormControlLabel
+              control={
+                <Checkbox
+                  checked={magVisibleVitrine}
+                  onChange={(e) => setMagVisibleVitrine(e.target.checked)}
+                />
+              }
+              label="Visible sur la carte boutique (/livraison)"
+            />
           </div>
         </DialogContent>
         <DialogActions>

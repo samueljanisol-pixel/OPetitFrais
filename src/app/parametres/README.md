@@ -30,6 +30,18 @@ Les fenêtres **Ajouter / Modifier** (référentiels, magasins, champs import pl
 - Onglet **Unités commande vitrine** dans Paramètres (seul endroit pour créer / modifier).
 - Sur la fiche produit : poids d’une pièce + cases (UdV en 1re ligne + unités du référentiel) + favori. Migration `20260727160000_shop_order_unit.sql`.
 
+## Zone de livraison (boutique)
+
+Onglet **Zone livraison** :
+
+- Dessin du polygone sur carte (clics) → table `shop_delivery_zone`
+- **Numéro boutique** (`ref_app_setting.shop_contact_phone`) pour Appeler / WhatsApp sur `/livraison`
+- **Magasin retrait** (`ref_app_setting.shop_pickup_magasin_id`) — ex. Magasin 2
+
+Adresses / GPS / lien Google Maps / **Visible vitrine** : fiches magasins (onglet Administration → Magasins & caisses).
+
+Migration `20260727170000_shop_delivery_zone.sql`. API admin : `/api/admin/shop-delivery-zone`. Voir [`../shop/README.md`](../shop/README.md) et [`../livraison/README.md`](../livraison/README.md).
+
 ## Fournisseurs
 
 - Colonne **`commande_active`** sur `ref_supplier` : interrupteur **Commande** dans l’onglet **Fournisseurs** (liste + dialogue Modifier).

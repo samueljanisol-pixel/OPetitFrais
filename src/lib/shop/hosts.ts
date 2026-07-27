@@ -47,8 +47,15 @@ const BACKOFFICE_PATH_PREFIXES = [
   "/access-refuse",
 ] as const;
 
+/** Chemins boutique : sur host backoffice, rediriger vers le domaine shop. */
+const SHOP_ONLY_PATHS = ["/livraison"] as const;
+
 export function isBackofficeOnlyPath(pathname: string): boolean {
   return BACKOFFICE_PATH_PREFIXES.some((p) => pathname === p || pathname.startsWith(`${p}/`));
+}
+
+export function isShopOnlyPath(pathname: string): boolean {
+  return SHOP_ONLY_PATHS.some((p) => pathname === p || pathname.startsWith(`${p}/`));
 }
 
 export function backofficeUrl(pathname: string, search = ""): string {

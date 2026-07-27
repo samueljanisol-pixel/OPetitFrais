@@ -17,7 +17,9 @@ export async function GET() {
 
   const { data: magasins, error } = await service
     .from("magasins")
-    .select("id, code, nom, sort_order, created_at, updated_at")
+    .select(
+      "id, code, nom, sort_order, adresse, ville, lat, lng, google_maps_url, visible_vitrine, created_at, updated_at",
+    )
     .order("sort_order", { ascending: true })
     .order("nom", { ascending: true });
 

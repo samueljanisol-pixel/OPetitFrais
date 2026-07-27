@@ -5,27 +5,31 @@ Page publique de commande pour les clients particuliers. Accessible sur le domai
 ## Fonctionnement
 
 1. Catalogue produits **actifs** et **visible vitrine** (`active = true`, `visible_vitrine = true`), groupés par catégorie puis sous-catégorie.
-2. Le client ajoute des produits au panier :
+2. En-tête boutique : slogan **« Fraîcheur et Qualité au quotidien »** + choix **retrait magasin** / **livraison à domicile** (localStorage `opf-shop-fulfillment-v1`, repris dans le message WhatsApp).
+3. Le client ajoute des produits au panier :
    - Options = **UdV** (si autorisée) + **unités de commande vitrine** cochées sur le produit (si poids pièce renseigné).
    - Favori produit pré-sélectionné sur la carte.
    - **Kg** (UdV) : pas de 0,5 kg ; autres unités : pas de 1.
-   - Prix / poids pièce affichés avec `~` quand estimés (conversion `piece_qty × poids pièce × prix/kg`).
-3. Panier stocké **uniquement en cache navigateur** (`localStorage`, clé `opf-shop-cart-v2`) — lignes clés `(produit, unité vitrine|UdV)`.
-4. Export : copier la liste texte ou ouvrir WhatsApp avec le message pré-rempli (libellé + `soit ~X kg` pour les unités vitrine).
-5. **Statistiques anonymes** : heartbeat vers `POST /api/shop/analytics/heartbeat` (visiteur UUID en localStorage). Consultation backoffice : [`/boutique/stats`](../boutique/stats/README.md) (permission `shop.read`).
+   - Prix catalogue affiché **au kg** (UdV) sur la carte ; poids pièce avec `~` ; total panier / WhatsApp estimés (`piece_qty × poids × prix/kg`).
+4. Panier stocké **uniquement en cache navigateur** (`localStorage`, clé `opf-shop-cart-v2`) — lignes clés `(produit, unité vitrine|UdV)`.
+5. Export : copier la liste texte ou ouvrir WhatsApp avec le message pré-rempli (libellé + `soit ~X kg` pour les unités vitrine + mode retrait/livraison).
+6. Page **`/livraison`** : carte (zone + magasins), vérif GPS / pin, contact boutique (appel / WhatsApp). API `GET /api/shop/livraison`.
+7. **Statistiques anonymes** : heartbeat vers `POST /api/shop/analytics/heartbeat` (visiteur UUID en localStorage). Consultation backoffice : [`/boutique/stats`](../boutique/stats/README.md) (permission `shop.read`).
 
 ## Fichiers
 
 | Fichier | Rôle |
 |---------|------|
-| `ShopOrderPage.tsx` | Server : charge le catalogue (service role) |
-| `ShopOrderClient.tsx` | Client : grille, panier, catégories |
-| `ShopShell.tsx` | Header boutique (logo, langue, panier) |
+| `ShopOrderPage.tsx` | Server : catalogue + nom magasin retrait |
+| `ShopOrderClient.tsx` | Client : slogan, mode livraison, grille, panier |
+| `ShopFulfillmentSelector.tsx` | Choix retrait / livraison domicile |
+| `ShopShell.tsx` | Header boutique (logo, lien Livraison, langue, panier) |
 | `ShopProductCard.tsx` | Carte produit avec +/- |
 | `ShopCartPanel.tsx` | Drawer panier + export |
-| `src/lib/shop/*` | Hosts, catalogue, panier, format export, analytics |
+| `../livraison/` | Page carte zone / magasins / contact |
+| `src/lib/shop/*` | Hosts, catalogue, panier, livraison, format export, analytics |
 | `src/app/page.tsx` | Route `/` selon le domaine (shop vs backoffice) |
-| `src/proxy.ts` | Host boutique public ; redirect chemins backoffice |
+| `src/proxy.ts` | Host boutique ; redirect `/livraison` hors shop → domaine boutique |
 
 ## Variables d'environnement
 

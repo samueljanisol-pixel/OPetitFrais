@@ -17,6 +17,7 @@ import {
 } from "@/lib/shop/format-price";
 import { useAppLocale } from "@/lib/i18n/useAppFormat";
 import { productDisplayName } from "@/lib/products/product-display-name";
+import { labelFromRefForLocale } from "@/lib/commandes-fournisseur/product-display";
 import type { ShopProduct } from "@/lib/shop/types";
 
 type Props = {
@@ -42,9 +43,9 @@ export default function ShopProductCard({
   const label = productDisplayName(product, locale);
   const options = useMemo(() => resolveShopOrderOptions(product), [product]);
   const option = findShopOption(product, selectedShopOrderUnitId) ?? options[0] ?? null;
-  const unitLabel = option ? shopOptionLabel(option, locale) : "";
   const inCart = qty > 0;
   const qtyLabel = option ? formatShopQty(locale, qty, option.unitCode) : "0";
+  const priceUnitLabel = labelFromRefForLocale(product.ref_sales_unit, locale);
   const pieceWeight =
     product.piece_weight_kg != null && Number(product.piece_weight_kg) > 0
       ? Number(product.piece_weight_kg)
@@ -104,15 +105,13 @@ export default function ShopProductCard({
         >
           {label}
         </Typography>
-        {option ? (
-          <Typography
-            variant="caption"
-            color="success.dark"
-            sx={{ fontWeight: 700, fontSize: "0.68rem", lineHeight: 1.2 }}
-          >
-            {formatShopPriceWithUnit(locale, option.unitPrice, unitLabel, option.isEstimated)}
-          </Typography>
-        ) : null}
+        <Typography
+          variant="caption"
+          color="success.dark"
+          sx={{ fontWeight: 700, fontSize: "0.68rem", lineHeight: 1.2 }}
+        >
+          {formatShopPriceWithUnit(locale, product.price, priceUnitLabel)}
+        </Typography>
         {pieceWeight != null && options.some((o) => o.shopOrderUnitId != null) ? (
           <Typography variant="caption" color="text.secondary" sx={{ fontSize: "0.6rem", lineHeight: 1.2 }}>
             {formatShopPieceWeightHint(locale, pieceWeight)}

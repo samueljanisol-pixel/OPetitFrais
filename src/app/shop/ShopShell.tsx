@@ -14,9 +14,16 @@ type Props = {
   cartTotal: number;
   onOpenCart: () => void;
   children: React.ReactNode;
+  hideCart?: boolean;
 };
 
-export default function ShopShell({ cartCount, cartTotal, onOpenCart, children }: Props) {
+export default function ShopShell({
+  cartCount,
+  cartTotal,
+  onOpenCart,
+  children,
+  hideCart = false,
+}: Props) {
   const t = useTranslations("shop");
   const locale = useAppLocale();
 
@@ -43,7 +50,14 @@ export default function ShopShell({ cartCount, cartTotal, onOpenCart, children }
         </Link>
 
         <Box sx={{ ms: "auto", display: "flex", alignItems: "center", gap: 0.5, minWidth: 0 }}>
+          <Link
+            href="/livraison"
+            className="text-sm font-semibold text-emerald-800 hover:underline"
+          >
+            {t("navLivraison")}
+          </Link>
           <LocaleSwitcher variant="login" />
+          {!hideCart ? (
           <Box sx={{ ml: 0.5, display: "flex", alignItems: "center", gap: 0.75, minWidth: 0 }}>
             <IconButton
               color="success"
@@ -100,6 +114,7 @@ export default function ShopShell({ cartCount, cartTotal, onOpenCart, children }
               </Box>
             ) : null}
           </Box>
+          ) : null}
         </Box>
       </header>
       <div className="flex min-h-0 flex-1 flex-col">{children}</div>

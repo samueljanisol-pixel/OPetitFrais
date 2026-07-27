@@ -18,20 +18,27 @@ import {
   upsertCartLine,
   writeCartToStorage,
 } from "@/lib/shop/cart-storage";
+import {
+  readFulfillmentFromStorage,
+  writeFulfillmentToStorage,
+} from "@/lib/shop/fulfillment-storage";
 import { addQtyByStep, subtractQtyByStep } from "@/lib/shop/cart-qty";
 import {
   favoriteShopOrderUnitId,
   findShopOption,
 } from "@/lib/shop/shop-order-options";
+import type { ShopFulfillmentMode } from "@/lib/shop/livraison-types";
 import type { ShopCartLine, ShopCategoryGroup, ShopProduct } from "@/lib/shop/types";
 import ShopShell from "@/app/shop/ShopShell";
 import ShopProductCard from "@/app/shop/ShopProductCard";
 import ShopCartPanel, { buildCartLineFromProduct } from "@/app/shop/ShopCartPanel";
+import ShopFulfillmentSelector from "@/app/shop/ShopFulfillmentSelector";
 import { useShopAnalytics } from "@/lib/shop/useShopAnalytics";
 
 type Props = {
   initialGroups: ShopCategoryGroup[];
   catalogError: string | null;
+  pickupMagasinName: string | null;
 };
 
 function flattenProducts(groups: ShopCategoryGroup[]): ShopProduct[] {
@@ -44,12 +51,17 @@ function flattenProducts(groups: ShopCategoryGroup[]): ShopProduct[] {
   return products;
 }
 
-export default function ShopOrderClient({ initialGroups, catalogError }: Props) {
+export default function ShopOrderClient({
+  initialGroups,
+  catalogError,
+  pickupMagasinName,
+}: Props) {
   const t = useTranslations("shop");
   const locale = useAppLocale();
   const [groups] = useState(initialGroups);
   const [lines, setLines] = useState<ShopCartLine[]>([]);
   const [cartOpen, setCartOpen] = useState(false);
+  const [fulfillmentMode, setFulfillmentMode] = useState<ShopFulfillmentMode | null>(null);
   const [activeCategoryId, setActiveCategoryId] = useState<string | null>(
     initialGroups[0]?.categoryId ?? null,
   );
@@ -70,6 +82,7 @@ export default function ShopOrderClient({ initialGroups, catalogError }: Props) 
 
   useLayoutEffect(() => {
     setLines(readCartFromStorage().lines);
+    setFulfillmentMode(readFulfillmentFromStorage().mode);
     setHydrated(true);
     skipNextWriteRef.current = true;
   }, []);
@@ -83,7 +96,22 @@ export default function ShopOrderClient({ initialGroups, catalogError }: Props) 
     writeCartToStorage({ lines });
   }, [lines, hydrated]);
 
+  const setMode = useCallback((mode: ShopFulfillmentMode) => {
+    setFulfillmentMode(mode);
+    writeFulfillmentToStorage({ mode });
+  }, []);
+
   useShopAnalytics({ lines, hydrated });
+
+  const fulfillmentLabel = useMemo(() => {
+    if (fulfillmentMode === "pickup") {
+      return pickupMagasinName?.trim()
+        ? t("fulfillment.orderPickupNamed", { name: pickupMagasinName.trim() })
+        : t("fulfillment.orderPickup");
+    }
+    if (fulfillmentMode === "home") return t("fulfillment.orderHome");
+    return null;
+  }, [fulfillmentMode, pickupMagasinName, t]);
 
   const getSelectedUnitId = useCallback(
     (product: ShopProduct): string | null => {
@@ -161,10 +189,11 @@ export default function ShopOrderClient({ initialGroups, catalogError }: Props) 
           total: t("estimatedTotal"),
           separator: "──────────────────────",
           uncategorized: t("uncategorized"),
+          fulfillment: fulfillmentLabel,
         },
         categoryMeta,
       ),
-    [lines, productById, locale, t, categoryMeta],
+    [lines, productById, locale, t, categoryMeta, fulfillmentLabel],
   );
 
   const whatsAppHref = useMemo(() => {
@@ -189,12 +218,29 @@ export default function ShopOrderClient({ initialGroups, catalogError }: Props) 
       <ShopShell cartCount={cartCount} cartTotal={cartTotal} onOpenCart={() => setCartOpen(true)}>
         <main className="flex min-h-0 flex-1 flex-col bg-gradient-to-b from-emerald-50/80 to-white pb-28">
           <Box sx={{ px: 2, pt: 2, pb: 1 }}>
-            <Typography variant="h5" color="success.dark" sx={{ fontWeight: 800 }}>
+            <Typography
+              variant="overline"
+              sx={{
+                display: "block",
+                color: "success.dark",
+                fontWeight: 700,
+                letterSpacing: 0.6,
+                lineHeight: 1.3,
+              }}
+            >
+              {t("slogan")}
+            </Typography>
+            <Typography variant="h5" color="success.dark" sx={{ fontWeight: 800, mt: 0.5 }}>
               {t("title")}
             </Typography>
             <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
               {t("subtitle")}
             </Typography>
+            <ShopFulfillmentSelector
+              mode={fulfillmentMode}
+              onChange={setMode}
+              pickupMagasinName={pickupMagasinName}
+            />
           </Box>
 
           {groups.length === 0 ? (
@@ -328,6 +374,7 @@ export default function ShopOrderClient({ initialGroups, catalogError }: Props) 
         lines={lines}
         productById={productById}
         categoryGroups={groups}
+        fulfillmentLabel={fulfillmentLabel}
         onUpdateLine={updateLine}
         onClear={() => {
           setLines([]);

@@ -624,6 +624,8 @@
   "shop": {
     "title": "Commander",
     "subtitle": "Composez votre panier et envoyez-nous votre liste par WhatsApp.",
+    "slogan": "Fraîcheur et Qualité au quotidien",
+    "navLivraison": "Livraison",
     "homeTitle": "O' Petit Frais — Commander",
     "cartSummary": "{count, plural, one {# produit · {total}} other {# produits · {total}}}",
     "cartProductCount": "{count, plural, one {# produit} other {# produits}}",
@@ -641,6 +643,42 @@
     "clearCart": "Vider le panier",
     "close": "Fermer",
     "orderTitle": "Commande O' Petit Frais",
-    "estimatedTotal": "Total estimé"
+    "estimatedTotal": "Total estimé",
+    "fulfillment": {
+      "title": "Comment souhaitez-vous être servi ?",
+      "pickup": "Retrait en boutique",
+      "pickupNamed": "Retrait — {name}",
+      "home": "Livraison à domicile",
+      "chooseHint": "Choisissez un mode pour votre commande.",
+      "pickupHint": "Récupérez votre commande en magasin.",
+      "homeHint": "Nous livrons dans notre zone.",
+      "seeStore": "Voir le magasin",
+      "checkZone": "Vérifier si on livre chez vous",
+      "change": "Modifier",
+      "choose": "Choisir",
+      "missingInCart": "Mode de livraison non choisi.",
+      "orderPickup": "Mode : Retrait en boutique",
+      "orderPickupNamed": "Mode : Retrait — {name}",
+      "orderHome": "Mode : Livraison à domicile"
+    },
+    "livraison": {
+      "title": "Livraison & magasins",
+      "subtitle": "Zone de livraison, adresses des magasins et vérification de votre position.",
+      "backCatalog": "← Retour au catalogue",
+      "checkPosition": "Vérifier ma position",
+      "clickMapHint": "Ou cliquez sur la carte pour placer un point.",
+      "geoUnsupported": "Géolocalisation non disponible sur cet appareil.",
+      "geoDenied": "Position refusée — placez un point sur la carte.",
+      "inside": "Oui, nous livrons à cet endroit.",
+      "outside": "Désolé, cet endroit est hors de notre zone de livraison.",
+      "pickupStore": "Retrait boutique",
+      "stores": "Nos magasins",
+      "openMaps": "Ouvrir dans Google Maps",
+      "contactTitle": "Commander ou plus d’informations",
+      "contactHint": "Appelez-nous ou écrivez-nous sur WhatsApp.",
+      "call": "Appeler",
+      "whatsapp": "WhatsApp",
+      "whatsappPrefill": "Bonjour O' Petit Frais, j’aimerais commander / avoir plus d’informations."
+    }
   }
 }

@@ -31,6 +31,7 @@ export type OrderTextLabels = {
   total: string;
   separator: string;
   uncategorized?: string;
+  fulfillment?: string | null;
 };
 
 export type OrderTextCategoryMeta = Map<string, { label: string; sortOrder: number }>;
@@ -67,7 +68,11 @@ export function buildOrderText(
   labels: OrderTextLabels,
   categoryMeta?: OrderTextCategoryMeta,
 ): string {
-  const rows: string[] = [labels.title, labels.separator];
+  const rows: string[] = [labels.title];
+  if (labels.fulfillment?.trim()) {
+    rows.push(labels.fulfillment.trim());
+  }
+  rows.push(labels.separator);
   let total = 0;
 
   if (categoryMeta && categoryMeta.size > 0) {

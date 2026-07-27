@@ -40,6 +40,7 @@ import StockAdminPanel from './StockAdminPanel'
 import TranslationsAdminPanel from './TranslationsAdminPanel'
 import ChauffeurAdminPanel from './ChauffeurAdminPanel'
 import ChargesMagasinsAdminPanel from './ChargesMagasinsAdminPanel'
+import ShopDeliveryZoneAdminPanel from './ShopDeliveryZoneAdminPanel'
 
 type TabId =
   | 'udv'
@@ -52,6 +53,7 @@ type TabId =
   | 'vend'
   | 'commandes'
   | 'charges'
+  | 'livraison'
   | 'stock'
   | 'traductions'
   | 'taches'
@@ -68,6 +70,7 @@ const tabLabels: Record<TabId, string> = {
   vend: 'Vendeurs',
   commandes: 'Commandes',
   charges: 'Charges Magasins',
+  livraison: 'Zone livraison',
   stock: 'Stock',
   traductions: 'Traductions',
   taches: 'Tâches automatisées',
@@ -161,6 +164,7 @@ export default function ParametresClient() {
       'vend',
       'commandes',
       'charges',
+      'livraison',
       'stock',
       'traductions',
     ]
@@ -411,7 +415,8 @@ export default function ParametresClient() {
       tab === 'stock' ||
       tab === 'traductions' ||
       tab === 'commandes' ||
-      tab === 'charges'
+      tab === 'charges' ||
+      tab === 'livraison'
     )
       return
     setErr(null)
@@ -564,7 +569,8 @@ export default function ParametresClient() {
       tab === 'stock' ||
       tab === 'traductions' ||
       tab === 'commandes' ||
-      tab === 'charges'
+      tab === 'charges' ||
+      tab === 'livraison'
     )
       return
     setDeleteConfirm({ tab, id: row.id, label: row.label })
@@ -634,7 +640,8 @@ export default function ParametresClient() {
         tab !== 'stock' &&
         tab !== 'traductions' &&
         tab !== 'commandes' &&
-        tab !== 'charges' ? (
+        tab !== 'charges' &&
+        tab !== 'livraison' ? (
           <Button variant="contained" color="success" onClick={openNew} sx={{ mb: 2, textTransform: 'none' }}>
             Ajouter — {tabLabels[tab]}
           </Button>
@@ -642,6 +649,7 @@ export default function ParametresClient() {
         {tab === 'traductions' ? <TranslationsAdminPanel /> : null}
         {tab === 'commandes' ? <ChauffeurAdminPanel /> : null}
         {tab === 'charges' ? <ChargesMagasinsAdminPanel /> : null}
+        {tab === 'livraison' ? <ShopDeliveryZoneAdminPanel /> : null}
         {tab === 'taches' ? <AutomatedTasksAdminPanel /> : null}
         {tab === 'comptes' ? (
           <>

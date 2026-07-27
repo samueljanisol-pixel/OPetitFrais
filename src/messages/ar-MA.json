@@ -624,6 +624,8 @@
   "shop": {
     "title": "كوموندي",
     "subtitle": "كوّن السّلة ديالك وصيفط لينا اللائحة عبر WhatsApp.",
+    "slogan": "الانتعاش والجودة كل يوم",
+    "navLivraison": "التوصيل",
     "homeTitle": "O' Petit Frais — كوموندي",
     "cartSummary": "{count, plural, one {# منتج · {total}} other {# منتجات · {total}}}",
     "cartProductCount": "{count, plural, one {# منتج} other {# منتجات}}",
@@ -641,6 +643,42 @@
     "clearCart": "خوّي السّلة",
     "close": "سد",
     "orderTitle": "كوموند O' Petit Frais",
-    "estimatedTotal": "المجموع التقريبي"
+    "estimatedTotal": "المجموع التقريبي",
+    "fulfillment": {
+      "title": "كيفاش بغيتي تتخدم؟",
+      "pickup": "سْحاب من المحل",
+      "pickupNamed": "سْحاب — {name}",
+      "home": "توصيل للدار",
+      "chooseHint": "اختار طريقة الاستلام ديال الكوموند.",
+      "pickupHint": "جي خد الكوموند ديالك من المحل.",
+      "homeHint": "كنوصلو ف المنطقة ديالنا.",
+      "seeStore": "شوف المحل",
+      "checkZone": "تأكد واش كنوصلو عندك",
+      "change": "بدّل",
+      "choose": "اختار",
+      "missingInCart": "ما اختاريتش طريقة الاستلام.",
+      "orderPickup": "الطريقة: سْحاب من المحل",
+      "orderPickupNamed": "الطريقة: سْحاب — {name}",
+      "orderHome": "الطريقة: توصيل للدار"
+    },
+    "livraison": {
+      "title": "التوصيل والمحلات",
+      "subtitle": "منطقة التوصيل، عناوين المحلات وتحقق من موقعك.",
+      "backCatalog": "← رجوع للكاتالوغ",
+      "checkPosition": "تحقق من موقعي",
+      "clickMapHint": "ولا كليكي على الخريطة باش تحط نقطة.",
+      "geoUnsupported": "الموقع ما متاحش على هاد الجهاز.",
+      "geoDenied": "الموقع مرفوض — حط نقطة على الخريطة.",
+      "inside": "آه، كنوصلو لهاد البلاصة.",
+      "outside": "سمح لينا، هاد البلاصة برا منطقة التوصيل.",
+      "pickupStore": "سْحاب من المحل",
+      "stores": "محلاتنا",
+      "openMaps": "فتح ف Google Maps",
+      "contactTitle": "كوموندي ولا معلومات أكثر",
+      "contactHint": "عيّط لينا ولا كتب لينا على WhatsApp.",
+      "call": "عيّط",
+      "whatsapp": "WhatsApp",
+      "whatsappPrefill": "سلام O' Petit Frais، بغيت نكوموندي / معلومات أكثر."
+    }
   }
 }
