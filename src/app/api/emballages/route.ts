@@ -4,6 +4,7 @@ import { requireAnyApiPermission, requireApiPermission } from "@/lib/auth/requir
 import { isEmballageCategorieCode } from "@/lib/emballages/constants";
 import { EMBALLAGE_SELECT, parseEmballageRow } from "@/lib/emballages/emballage-api";
 import { loadEmballageCategorieIdByCode } from "@/lib/emballages/supplier-api";
+import { upsertProductMirrorFromEmballage } from "@/lib/emballages/sync-product-mirror";
 
 export async function GET(req: Request) {
   const gate = await requireAnyApiPermission(["emballages.read", "emballages.write"]);
@@ -112,6 +113,15 @@ export async function POST(req: Request) {
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+
+  const emballageId = (data as { id?: string }).id;
+  if (emballageId) {
+    const mirror = await upsertProductMirrorFromEmballage(service, emballageId);
+    if (mirror.error) {
+      await service.from("ref_emballage").delete().eq("id", emballageId);
+      return NextResponse.json({ error: mirror.error }, { status: 500 });
+    }
   }
 
   return NextResponse.json({ emballage: parseEmballageRow(data as Record<string, unknown>) });

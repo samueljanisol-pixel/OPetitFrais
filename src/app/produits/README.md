@@ -51,6 +51,10 @@ File d’attente après achat fournisseur (menu accueil + badge) :
 - **Emballage utilisé** : liste déroulante optionnelle (`product.emballage_id` → article catégorie **emballages**). Distinct du **Prix emballage** (`cost_packaging`) et des conditionnements colis.
 - **Étiquette** : liste déroulante optionnelle (`product.etiquette_id` → article catégorie **étiquettes**, défaut aucune). Géré dans **Emballages et Consommables** (`/emballages`). Migrations `20260728160000_gestion_emballages.sql`, `20260728240000_emballages_consommables_extension.sql`.
 
+### Produits miroir emballages (sync auto)
+
+Les articles du référentiel `/emballages` génèrent automatiquement un **produit commandable** (`ref_emballage.product_id` → `product`) : catégorie **Emballages et consommables**, commande à l’unité, non visible vitrine. Ces produits ne se créent pas manuellement sur la fiche produit — ils sont synchronisés à chaque création/modification d’article emballage (`src/lib/emballages/sync-product-mirror.ts`). Distinct des liens BOM `product.emballage_id` / `product.etiquette_id` sur les produits alimentaires.
+
 Les vendeurs se créent dans **Paramètres → Vendeurs**. Les liaisons par conditionnement restent dans **Paramètres du conditionnement** (`product_packaging_vendeur`).
 
 ## Photos terrain (`/produits/photo`)

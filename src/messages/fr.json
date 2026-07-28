@@ -95,14 +95,15 @@
     },
     "emballages": {
       "title": "Emballages et Consommables",
-      "subtitle": "Référentiel emballages, étiquettes et consommables, journal des achats.",
+      "subtitle": "Référentiel emballages, étiquettes et consommables — commandes via Commandes fournisseur.",
       "backHome": "Accueil",
       "tabs": {
         "catalog": "Articles",
         "types": "Types",
         "achats": "Achats"
       },
-      "catalogHint": "Articles du référentiel (catégorie, référence, libellé, type optionnel).",
+      "catalogHint": "Articles du référentiel (catégorie, référence, libellé, type optionnel). Chaque article génère un produit commandable.",
+      "commandOrder": "Commander",
       "typesHint": "Types de matériaux (sachet, barquette, bouteille, sac de vente…).",
       "typesEmpty": "Aucun type pour le moment.",
       "newType": "Nouveau type",
@@ -110,7 +111,7 @@
       "deleteTypeTitle": "Supprimer le type",
       "deleteTypeBody": "Supprimer « {label} » ?",
       "catalogEmpty": "Aucun article pour le moment.",
-      "achatsHint": "Ouvrez un achat, ajoutez des lignes, puis clôturez-le. Les vendeurs se gèrent dans Paramètres.",
+      "achatsHint": "Nouvel achat : choisissez le vendeur, ajoutez les lignes, puis clôturez. Vendeurs dans Paramètres → Vendeurs (fournisseur Emballages et Consommables).",
       "achatsEmpty": "Aucun achat enregistré.",
       "achatLinesEmpty": "Aucune ligne — ajoutez des articles achetés.",
       "newArticle": "Nouvel article",
@@ -139,6 +140,8 @@
       "deleteLineTitle": "Supprimer la ligne",
       "deleteLineBody": "Supprimer cette ligne ?",
       "vendeurOptional": "Aucun vendeur",
+      "noVendeursConfigured": "Aucun vendeur configuré",
+      "noVendeursHint": "Créez des vendeurs dans Paramètres, rattachés au fournisseur « Emballages et Consommables ».",
       "statut": {
         "ouvert": "En cours",
         "cloture": "Clôturé"
@@ -182,6 +185,7 @@
         "labelRequired": "Libellé requis",
         "typeRequired": "Type requis",
         "categorieRequired": "Catégorie requise",
+        "vendeurRequired": "Vendeur requis",
         "emballageRequired": "Article requis",
         "closeFailed": "Clôture impossible"
       }

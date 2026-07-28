@@ -22,6 +22,9 @@ import {
 import ArrowDownwardIcon from '@mui/icons-material/ArrowDownward'
 import ArrowUpwardIcon from '@mui/icons-material/ArrowUpward'
 import FormDialog from '@/lib/mui/FormDialog'
+import AppLink from '@/components/AppLink'
+import { useSessionPermissions } from '@/lib/auth/useSessionPermissions'
+import { EMBALLAGES_CONSOMMABLES_SUPPLIER_CODE } from '@/lib/emballages/constants'
 import { useTranslations } from 'next-intl'
 import type { EmballageCategorieRow, EmballageRow, EmballageTypeRow } from '@/lib/emballages/types'
 
@@ -33,6 +36,8 @@ type Props = {
 export default function EmballagesCatalogPanel({ canWrite, onError }: Props) {
   const t = useTranslations('backoffice.emballages')
   const tCommon = useTranslations('common')
+  const { can } = useSessionPermissions()
+  const canCommandeSaisie = can('commandes_fournisseur.saisie')
 
   const [rows, setRows] = useState<EmballageRow[]>([])
   const [types, setTypes] = useState<EmballageTypeRow[]>([])
@@ -234,17 +239,30 @@ export default function EmballagesCatalogPanel({ canWrite, onError }: Props) {
         <Typography variant="body2" className="!text-slate-600">
           {t('catalogHint')}
         </Typography>
-        {canWrite ? (
-          <Button
-            variant="contained"
-            color="success"
-            onClick={openNew}
-            disabled={categories.length === 0}
-            sx={{ textTransform: 'none' }}
-          >
-            {tCommon('add')}
-          </Button>
-        ) : null}
+        <div className="flex flex-wrap gap-2">
+          {canCommandeSaisie ? (
+            <Button
+              component={AppLink}
+              href={`/commandes-fournisseur/saisie/nouvelle?supplier=${EMBALLAGES_CONSOMMABLES_SUPPLIER_CODE}`}
+              variant="outlined"
+              color="primary"
+              sx={{ textTransform: 'none' }}
+            >
+              {t('commandOrder')}
+            </Button>
+          ) : null}
+          {canWrite ? (
+            <Button
+              variant="contained"
+              color="success"
+              onClick={openNew}
+              disabled={categories.length === 0}
+              sx={{ textTransform: 'none' }}
+            >
+              {tCommon('add')}
+            </Button>
+          ) : null}
+        </div>
       </div>
 
       <Paper className="!p-3">

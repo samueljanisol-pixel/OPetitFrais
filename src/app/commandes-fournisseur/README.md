@@ -136,6 +136,14 @@ Pour une commande du fournisseur **F**, les colis affichés (parcours, récap, r
 
 Le **parcours** et la **recherche produit** incluent aussi les produits liés via **`product_supplier`** (fournisseurs secondaires). Migration `20260702160000_product_supplier.sql`.
 
+### Fournisseur Emballages et Consommables
+
+Fournisseur seed `ref_supplier.code = emballages_consommables` (`commande_active = true`, migration `20260728250000_emballages_commandes_fournisseur.sql`).
+
+- Articles gérés dans `/emballages` ; chaque `ref_emballage` a un **produit miroir** synchronisé (`allow_unit_in_commande = true`, pas de colis obligatoire).
+- Parcours, validation, achat et comptes vendeur : **même flux** que les autres fournisseurs (pattern Marché — vendeurs en Paramètres).
+- Pré-sélection du fournisseur : `/commandes-fournisseur/saisie/nouvelle?supplier=emballages_consommables` (lien **Commander** depuis le catalogue emballages).
+
 ### Commentaire par ligne (`line_comment`)
 
 - Champ **`commande_fournisseur_ligne.line_comment`** (texte libre).

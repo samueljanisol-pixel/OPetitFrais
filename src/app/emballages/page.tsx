@@ -7,9 +7,8 @@ import { useSessionPermissions } from '@/lib/auth/useSessionPermissions'
 import { useTranslations } from 'next-intl'
 import EmballagesCatalogPanel from './EmballagesCatalogPanel'
 import EmballagesTypesPanel from './EmballagesTypesPanel'
-import EmballagesAchatsPanel from './EmballagesAchatsPanel'
 
-type TabId = 'catalog' | 'types' | 'achats'
+type TabId = 'catalog' | 'types'
 
 export default function EmballagesPage() {
   const t = useTranslations('backoffice.emballages')
@@ -50,7 +49,6 @@ export default function EmballagesPage() {
         >
           <Tab value="catalog" label={t('tabs.catalog')} />
           <Tab value="types" label={t('tabs.types')} />
-          <Tab value="achats" label={t('tabs.achats')} />
         </Tabs>
 
         {tab === 'catalog' ? (
@@ -62,12 +60,6 @@ export default function EmballagesPage() {
         {tab === 'types' ? (
           <Box>
             <EmballagesTypesPanel canWrite={canWriteEmballages} onError={setErr} />
-          </Box>
-        ) : null}
-
-        {tab === 'achats' ? (
-          <Box>
-            <EmballagesAchatsPanel canWrite={canWriteEmballages} onError={setErr} />
           </Box>
         ) : null}
       </div>

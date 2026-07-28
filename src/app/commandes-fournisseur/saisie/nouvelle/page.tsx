@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { Button, FormControl, InputLabel, MenuItem, Select, Typography } from "@mui/material";
 import AppLink from "@/components/AppLink";
@@ -13,6 +13,7 @@ type Supplier = { id: string; code: string; label: string };
 
 export default function NouvelleCommandePage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { loading: sLoading, can } = useSessionPermissions();
   const { magasinId, currentMagasin } = useMagasinSaisie();
   const t = useTranslations("backoffice.commandes.saisie.nouvelle");
@@ -37,6 +38,16 @@ export default function NouvelleCommandePage() {
       setSuppliers(j.suppliers ?? []);
     })();
   }, [sLoading, can, te]);
+
+  useEffect(() => {
+    if (suppliers.length === 0) return;
+    const supplierCode = searchParams.get("supplier")?.trim();
+    if (!supplierCode) return;
+    const match = suppliers.find((s) => s.code === supplierCode);
+    if (match) {
+      setSupplierId(match.id);
+    }
+  }, [suppliers, searchParams]);
 
   const create = async () => {
     if (!magasinId || !supplierId) {

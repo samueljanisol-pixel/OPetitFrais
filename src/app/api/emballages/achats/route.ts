@@ -1,16 +1,13 @@
 import { NextResponse } from "next/server";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/server";
-import { requireAnyApiPermission, requireApiPermission } from "@/lib/auth/require-permission-api";
+import { requireAnyApiPermission } from "@/lib/auth/require-permission-api";
 import {
   FICHE_SELECT,
   isIsoDate,
-  LIGNE_SELECT,
   parseFicheRow,
-  parseLigneRow,
-  sumLignesMontant,
 } from "@/lib/emballages/achat-api";
 import type { EmballageAchatFicheRow } from "@/lib/emballages/types";
-import { validateEmballagesVendeurId } from "@/lib/emballages/supplier-api";
+import { achatsMutationsDisabledResponse } from "@/lib/emballages/achats-disabled";
 
 export async function GET(req: Request) {
   const gate = await requireAnyApiPermission(["emballages.read", "emballages.write"]);
@@ -87,64 +84,6 @@ export async function GET(req: Request) {
   return NextResponse.json({ achats });
 }
 
-export async function POST(req: Request) {
-  const gate = await requireApiPermission("emballages.write");
-  if (!gate.ok) {
-    return NextResponse.json({ error: gate.error }, { status: gate.status });
-  }
-
-  let body: { date_achat?: string; note?: string | null; vendeur_id?: string | null };
-  try {
-    body = (await req.json()) as typeof body;
-  } catch {
-    return NextResponse.json({ error: "JSON invalide" }, { status: 400 });
-  }
-
-  const date_achat =
-    typeof body.date_achat === "string" && body.date_achat.trim()
-      ? body.date_achat.trim()
-      : new Date().toISOString().slice(0, 10);
-  if (!isIsoDate(date_achat)) {
-    return NextResponse.json({ error: "Date invalide (YYYY-MM-DD)" }, { status: 400 });
-  }
-
-  const note =
-    body.note == null || body.note === ""
-      ? null
-      : typeof body.note === "string"
-        ? body.note.trim() || null
-        : null;
-
-  let service;
-  try {
-    service = createSupabaseServiceRoleClient();
-  } catch {
-    return NextResponse.json({ error: "Service role non configurée" }, { status: 500 });
-  }
-
-  let vendeur_id: string | null = null;
-  if ("vendeur_id" in body) {
-    if (body.vendeur_id == null || body.vendeur_id === "") {
-      vendeur_id = null;
-    } else if (typeof body.vendeur_id === "string" && body.vendeur_id.trim()) {
-      const check = await validateEmballagesVendeurId(service, body.vendeur_id.trim());
-      if (!check.ok) {
-        return NextResponse.json({ error: check.error }, { status: 400 });
-      }
-      vendeur_id = body.vendeur_id.trim();
-    }
-  }
-
-  const { data, error } = await service
-    .from("emballage_achat_fiche")
-    .insert({ date_achat, statut: "ouvert", note, vendeur_id })
-    .select(FICHE_SELECT)
-    .single();
-
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
-  }
-
-  const fiche = parseFicheRow(data as Record<string, unknown>);
-  return NextResponse.json({ achat: { ...fiche, total: 0, ligne_count: 0 } });
+export async function POST() {
+  return achatsMutationsDisabledResponse();
 }
