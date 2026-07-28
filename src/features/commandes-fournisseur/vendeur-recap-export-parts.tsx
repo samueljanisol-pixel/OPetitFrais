@@ -122,6 +122,7 @@ type TableLabels = {
 type VendeurRecapTableProps = {
   group: VendeurRecapGroup;
   magasinColumns: MagasinMxColumn[];
+  /** Si false, jamais de Total. Si true (défaut), Total seulement avec plus d’un magasin. */
   showTotalColumn?: boolean;
   magasinColumnHeader?: string;
   labels: TableLabels;
@@ -141,7 +142,9 @@ export function VendeurRecapTable({
   compact = false,
   fitContent = false,
 }: VendeurRecapTableProps) {
-  const colSpan = 2 + magasinColumns.length + (showTotalColumn ? 1 : 0);
+  // Un seul magasin : la colonne Total est redondante (export vendeur / catégorie / chauffeur).
+  const displayTotalColumn = showTotalColumn && magasinColumns.length > 1;
+  const colSpan = 2 + magasinColumns.length + (displayTotalColumn ? 1 : 0);
   const headerArabicSx = captureDir === "rtl" ? arabicTextSx : {};
   const tableSx = compact ? compactExportTableSx : exportTableSx;
 
@@ -162,7 +165,7 @@ export function VendeurRecapTable({
               {magasinColumnHeader ?? m.mxCode}
             </TableCell>
           ))}
-          {showTotalColumn ? (
+          {displayTotalColumn ? (
             <TableCell
               align="center"
               dir={captureDir === "rtl" ? "rtl" : undefined}
@@ -316,7 +319,7 @@ export function VendeurRecapTable({
                   </TableCell>
                 );
               })}
-              {showTotalColumn ? (
+              {displayTotalColumn ? (
                 <TableCell
                   align="center"
                   className="tabular-nums"
