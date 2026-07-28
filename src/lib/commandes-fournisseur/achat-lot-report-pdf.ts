@@ -189,9 +189,11 @@ function drawHeader(doc: PDFKit.PDFDocument, payload: AchatLotReportPayload): vo
   const statusLabel =
     payload.status === "terminee"
       ? "Terminé"
-      : payload.status === "prete"
-        ? "Prêt"
-        : payload.status;
+      : payload.status === "achat_en_cours"
+        ? "Achat en cours"
+        : payload.status === "prete"
+          ? "Prêt"
+          : payload.status;
   doc
     .fillColor(COLOR.ink)
     .font("Helvetica-Bold")

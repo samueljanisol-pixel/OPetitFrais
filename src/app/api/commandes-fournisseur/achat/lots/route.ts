@@ -16,7 +16,13 @@ export async function GET(req: Request) {
   const allowed = new Set(["prete", "terminee", "all"]);
   const mode =
     statusParam && allowed.has(statusParam) ? statusParam : "prete";
-  const statuses = mode === "all" ? (["prete", "terminee"] as const) : ([mode] as const);
+  /** Filtre « en attente » = prêt + achat en cours. */
+  const statuses =
+    mode === "all"
+      ? (["prete", "achat_en_cours", "terminee"] as const)
+      : mode === "prete"
+        ? (["prete", "achat_en_cours"] as const)
+        : ([mode] as const);
 
   const supabase = await createSupabaseServerClient();
   const query = supabase

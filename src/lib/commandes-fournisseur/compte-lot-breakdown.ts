@@ -14,6 +14,8 @@ export type CompteAchatLineDetail = {
   product_id: string;
   product_name: string;
   qte_achat: number;
+  prix_unitaire: number | null;
+  uda_label: string | null;
   montant: number;
 };
 
@@ -84,7 +86,7 @@ export async function computeLotCompteBreakdown(
     supabase
       .from("commande_fournisseur_lot_ligne")
       .select(
-        "id, product_id, product_packaging_id, qte_achat, vendeur_id, prix_achat_unitaire, montant_ligne_achat, product(id, name, ref_order_unit(label), ref_sales_unit(label), product_packaging(id, quantity, nom, nom_ar, ref_conditionnement(label), ref_sales_unit(label)))",
+        "id, product_id, product_packaging_id, qte_achat, vendeur_id, prix_achat_unitaire, montant_ligne_achat, product(id, name, ref_order_unit(label), ref_sales_unit(label), ref_purchase_unit(label), product_packaging(id, quantity, nom, nom_ar, ref_conditionnement(label), ref_sales_unit(label)))",
       )
       .eq("lot_id", lotId),
     supabase
@@ -105,13 +107,28 @@ export async function computeLotCompteBreakdown(
 
   for (const L of lignes) {
     const montant = montantFromLigne(L);
-    const pr = one(L.product as { name?: string | null } | null);
+    const pr = one(
+      L.product as {
+        name?: string | null;
+        ref_purchase_unit?: { label?: string | null } | { label?: string | null }[] | null;
+      } | null,
+    );
     const productName =
       typeof pr?.name === "string" && pr.name.trim().length > 0 ? pr.name.trim() : "—";
+    const puRaw = L.prix_achat_unitaire;
+    const prix_unitaire =
+      puRaw !== null && puRaw !== undefined && Number.isFinite(Number(puRaw))
+        ? Number(puRaw)
+        : null;
+    const purchaseUnit = one(pr?.ref_purchase_unit ?? null);
+    const udaLabelRaw =
+      typeof purchaseUnit?.label === "string" ? purchaseUnit.label.trim() : "";
     const lineDetail: CompteAchatLineDetail = {
       product_id: String(L.product_id),
       product_name: productName,
       qte_achat: num(L.qte_achat, 0),
+      prix_unitaire,
+      uda_label: udaLabelRaw.length > 0 ? udaLabelRaw : null,
       montant,
     };
 

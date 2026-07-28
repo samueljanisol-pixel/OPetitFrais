@@ -28,6 +28,7 @@ import CommandeFournisseurStatusChip from "@/components/commandes-fournisseur/Co
 import AppLink from "@/components/AppLink";
 import FormDialog from "@/lib/mui/FormDialog";
 import { useSessionPermissions } from "@/lib/auth/useSessionPermissions";
+import { isLotPretOrAchatEnCours } from "@/lib/commandes-fournisseur/lot-status-achat";
 import { useStatusLabels } from "@/lib/statusLabels/useStatusLabels";
 import {
   buildLotProductDisplayInfoForLocale,
@@ -315,6 +316,7 @@ export default function ValidationLotDetailClient({ lotId }: { lotId: string }) 
   const [lotCommentSaving, setLotCommentSaving] = useState(false);
   const [cmdCommentSavingId, setCmdCommentSavingId] = useState<string | null>(null);
   const [vendeurWhatsAppSent, setVendeurWhatsAppSent] = useState<Record<string, boolean>>({});
+  const [achatStarted, setAchatStarted] = useState(false);
   /** Quantité par cellule au focus : enregistrement seulement si la valeur a changé au blur. */
   const cellFocusBaseline = useRef<Record<string, number>>({});
 
@@ -346,6 +348,7 @@ export default function ValidationLotDetailClient({ lotId }: { lotId: string }) 
         vendeurs?: VendeurRef[];
         vendeurCommentaires?: Record<string, string | null>;
         vendeurWhatsAppSent?: Record<string, boolean>;
+        achatStarted?: boolean;
         error?: string;
       };
       if (!res.ok) {
@@ -362,6 +365,7 @@ export default function ValidationLotDetailClient({ lotId }: { lotId: string }) 
       }
       applyVendeurCommentDrafts(vc);
       setVendeurWhatsAppSent(j.vendeurWhatsAppSent ?? {});
+      setAchatStarted(j.achatStarted === true);
     } catch (e) {
       setErr(e instanceof Error ? e.message : genericError);
     } finally {
@@ -751,7 +755,30 @@ export default function ValidationLotDetailClient({ lotId }: { lotId: string }) 
         setErr(e instanceof Error ? e.message : genericError);
       }
     },
-    [genericError, lotId],
+    [lotId, genericError],
+  );
+
+  const persistVendeurCommandeImage = useCallback(
+    async (vendeurKey: string, file: File) => {
+      try {
+        const form = new FormData();
+        form.append("file", file);
+        const res = await fetch(
+          `/api/commandes-fournisseur/validation/lots/${encodeURIComponent(lotId)}/vendeurs/${encodeURIComponent(vendeurKey)}/commande-photo`,
+          { method: "POST", credentials: "include", body: form },
+        );
+        if (!res.ok) {
+          const j = (await res.json().catch(() => undefined)) as { error?: string } | undefined;
+          // Ne bloque pas l’UI WhatsApp ; log discret via setErr seulement si message clair
+          if (typeof j?.error === "string" && j.error.length > 0) {
+            console.warn("[commande-photo]", j.error);
+          }
+        }
+      } catch (e) {
+        console.warn("[commande-photo]", e);
+      }
+    },
+    [lotId],
   );
 
   const patchCommandeCommentaire = useCallback(
@@ -872,8 +899,10 @@ export default function ValidationLotDetailClient({ lotId }: { lotId: string }) 
   const rSup = one(lot.ref_supplier as { label?: string } | { label?: string }[]);
   const supplierName = rSup && "label" in rSup && rSup.label ? String(rSup.label) : tCommandesCommon("emDash");
   const editable = lot.status === "brouillon";
-  const vendeurCommentEditable = lot.status === "brouillon" || lot.status === "prete";
-  const matrixGroupByEffective: MatrixGroupBy = lot.status === "prete" ? "category" : matrixGroupBy;
+  const vendeurCommentEditable = lot.status === "brouillon" || isLotPretOrAchatEnCours(lot.status);
+  const matrixGroupByEffective: MatrixGroupBy = isLotPretOrAchatEnCours(lot.status)
+    ? "category"
+    : matrixGroupBy;
   const matrixDisplayItems = buildMatrixDisplayItems(
     recapLignes,
     matrixGroupByEffective,
@@ -925,20 +954,22 @@ export default function ValidationLotDetailClient({ lotId }: { lotId: string }) 
         <div className="!mb-4" />
       )}
 
-      {lot.status === "prete" ? (
+      {isLotPretOrAchatEnCours(lot.status) ? (
         <div className="!mb-4 flex flex-col gap-2">
-          <div className="flex flex-wrap items-center gap-2">
-            <Button
-              type="button"
-              variant="outlined"
-              color="warning"
-              disabled={saving}
-              onClick={() => setReopenBrouillonDialogOpen(true)}
-              sx={{ textTransform: "none" }}
-            >
-              {tLotDetail("reopenDraft")}
-            </Button>
-          </div>
+          {!achatStarted && lot.status === "prete" ? (
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                type="button"
+                variant="outlined"
+                color="warning"
+                disabled={saving}
+                onClick={() => setReopenBrouillonDialogOpen(true)}
+                sx={{ textTransform: "none" }}
+              >
+                {tLotDetail("reopenDraft")}
+              </Button>
+            </div>
+          ) : null}
           {lignes.length > 0 ? (
             <LotConsolidationExportPanel
               lignes={recapLignes}
@@ -1322,7 +1353,7 @@ export default function ValidationLotDetailClient({ lotId }: { lotId: string }) 
         </div>
       )}
 
-      {lot.status === "prete" && lignes.length > 0 ? (
+      {isLotPretOrAchatEnCours(lot.status) && lignes.length > 0 ? (
         <ValidationLotVendeurRecap
           lot={lot}
           supplierLabel={supplierName}
@@ -1336,6 +1367,7 @@ export default function ValidationLotDetailClient({ lotId }: { lotId: string }) 
           onVendeurCommentSave={onVendeurCommentBlur}
           vendeurWhatsAppSent={vendeurWhatsAppSent}
           onVendeurWhatsAppSent={markVendeurWhatsAppSent}
+          onPersistVendeurCommandeImage={persistVendeurCommandeImage}
         />
       ) : null}
 

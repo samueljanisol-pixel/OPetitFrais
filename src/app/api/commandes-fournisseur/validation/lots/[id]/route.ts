@@ -16,6 +16,8 @@ import {
 import { packagingIdByProductFromCommandeLignes } from "@/lib/commandes-fournisseur/packaging-from-saisie";
 import { clampQtyToApiRange } from "@/lib/commandes-fournisseur/qty-parse";
 import { syncCommandeLignesFromLotMagasinQty } from "@/lib/commandes-fournisseur/sync-lot-magasin-lignes";
+import { lotHasAchatProgress } from "@/lib/commandes-fournisseur/lot-achat-progress";
+import { isLotPretOrAchatEnCours } from "@/lib/commandes-fournisseur/lot-status-achat";
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -273,7 +275,21 @@ export async function GET(_req: Request, ctx: Ctx) {
     vendeurWhatsAppSent[key] = typed.whatsapp_sent_at != null;
   }
 
-  return NextResponse.json({ lot, lignes: lignesWithCategory, vendeurs, vendeurCommentaires, vendeurWhatsAppSent });
+  const progress = await lotHasAchatProgress(supabase, id);
+  if ("error" in progress) {
+    return NextResponse.json({ error: progress.error }, { status: 500 });
+  }
+  const achatStarted =
+    progress.started || (lot as { status: string }).status === "achat_en_cours";
+
+  return NextResponse.json({
+    lot,
+    lignes: lignesWithCategory,
+    vendeurs,
+    vendeurCommentaires,
+    vendeurWhatsAppSent,
+    achatStarted,
+  });
 }
 
 export async function PATCH(req: Request, ctx: Ctx) {
@@ -324,7 +340,7 @@ export async function PATCH(req: Request, ctx: Ctx) {
       return NextResponse.json({ error: reWa?.message ?? "Introuvable" }, { status: reWa ? 500 : 404 });
     }
     const lotStatus = (lotCur as { status: string }).status;
-    if (lotStatus !== "brouillon" && lotStatus !== "prete") {
+    if (lotStatus !== "brouillon" && !isLotPretOrAchatEnCours(lotStatus)) {
       return NextResponse.json({ error: "Modification impossible : lot verrouillé" }, { status: 409 });
     }
     const vendeurKey = payload.vendeurKey.trim();
@@ -365,7 +381,7 @@ export async function PATCH(req: Request, ctx: Ctx) {
       return NextResponse.json({ error: reVc?.message ?? "Introuvable" }, { status: reVc ? 500 : 404 });
     }
     const lotStatus = (lotCur as { status: string }).status;
-    if (lotStatus !== "brouillon" && lotStatus !== "prete") {
+    if (lotStatus !== "brouillon" && !isLotPretOrAchatEnCours(lotStatus)) {
       return NextResponse.json({ error: "Modification impossible : lot verrouillé" }, { status: 409 });
     }
     const vendeurKey = payload.vendeurKey.trim();
@@ -624,6 +640,20 @@ export async function PATCH(req: Request, ctx: Ctx) {
       if (st !== "prete") {
         return NextResponse.json(
           { error: "Seul un lot « prêt pour l’achat » peut revenir en saisie" },
+          { status: 409 },
+        );
+      }
+
+      const progress = await lotHasAchatProgress(supabase, id);
+      if ("error" in progress) {
+        return NextResponse.json({ error: progress.error }, { status: 500 });
+      }
+      if (progress.started) {
+        return NextResponse.json(
+          {
+            error:
+              "Impossible de revenir en saisie : l’enregistrement des achats a déjà commencé sur ce lot",
+          },
           { status: 409 },
         );
       }

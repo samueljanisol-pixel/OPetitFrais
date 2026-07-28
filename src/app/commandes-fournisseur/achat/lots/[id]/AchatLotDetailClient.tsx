@@ -28,6 +28,8 @@ import useMediaQuery from "@mui/material/useMediaQuery";
 import DeleteOutlineOutlinedIcon from "@mui/icons-material/DeleteOutlineOutlined";
 import EditOutlinedIcon from "@mui/icons-material/EditOutlined";
 import PictureAsPdfOutlinedIcon from "@mui/icons-material/PictureAsPdfOutlined";
+import ChatBubbleOutlineOutlinedIcon from "@mui/icons-material/ChatBubbleOutlineOutlined";
+import PhotoCameraOutlinedIcon from "@mui/icons-material/PhotoCameraOutlined";
 import { useTranslations } from "next-intl";
 import AppLink from "@/components/AppLink";
 import FormDialog from "@/lib/mui/FormDialog";
@@ -44,11 +46,19 @@ import AchatLignePricingFields, {
 import AchatVendeurFormDialog, {
   type AchatVendeurFormValues,
 } from "@/features/commandes-fournisseur/AchatVendeurFormDialog";
+import AchatVendeurClotureDialog, {
+  type VendeurClotureIssue,
+} from "@/features/commandes-fournisseur/AchatVendeurClotureDialog";
+import AchatVendeurCommentDialog from "@/features/commandes-fournisseur/AchatVendeurCommentDialog";
+import AchatVendeurPhotosDialog, {
+  type AchatVendeurPhotoItem,
+} from "@/features/commandes-fournisseur/AchatVendeurPhotosDialog";
 import {
   dhToRial,
   parseDeviseAchat,
   type DeviseAchat,
 } from "@/lib/commandes-fournisseur/achat-devise";
+import { SUPPLIER_SOLE_VENDEUR_KEY } from "@/lib/commandes-fournisseur/achat-vendeur-key";
 import {
   ParcoursProductQuantityPanel,
   packArray,
@@ -229,6 +239,7 @@ type LignePatch = {
   marque_achete?: boolean;
   qte_achat?: number;
   prix_achat_unitaire?: number | null;
+  montant_ligne_achat?: number | null;
   product_packaging_id?: string | null;
 };
 
@@ -328,8 +339,37 @@ function draftSnapshot(d: DraftRow): string {
     marque_achete: d.marque_achete,
     qte_achat: d.qte_achat,
     puText: d.puText.trim().replace(",", "."),
+    totalText: d.totalText.trim().replace(",", "."),
     product_packaging_id: d.product_packaging_id,
   });
+}
+
+type PendingPricing = {
+  qte_achat?: number;
+  puText?: string;
+  totalText?: string;
+};
+
+/** Fusionne l’état React avec les saisies locales encore non commitées (frappe / focus). */
+function mergeDraftsWithPending(
+  drafts: Record<string, DraftRow>,
+  pending: Record<string, PendingPricing>,
+): Record<string, DraftRow> {
+  const pendingIds = Object.keys(pending);
+  if (pendingIds.length === 0) return drafts;
+  const next: Record<string, DraftRow> = { ...drafts };
+  for (const id of pendingIds) {
+    const row = next[id];
+    const p = pending[id];
+    if (!row || !p) continue;
+    next[id] = {
+      ...row,
+      ...(p.qte_achat !== undefined ? { qte_achat: coerceQty(p.qte_achat, 0) } : {}),
+      ...(p.puText !== undefined ? { puText: p.puText } : {}),
+      ...(p.totalText !== undefined ? { totalText: p.totalText } : {}),
+    };
+  }
+  return next;
 }
 
 function computeDirtyPatches(
@@ -344,12 +384,15 @@ function computeDirtyPatches(
     if (!d) continue;
     if (draftSnapshot(d) === baseline[id]) continue;
     const pu = parsePuText(d.puText);
+    const total = parsePuText(d.totalText);
     patches.push({
       lotLigneId: id,
       vendeur_id: d.vendeur_id ?? null,
       marque_achete: d.marque_achete,
       qte_achat: d.qte_achat,
       prix_achat_unitaire: pu,
+      /** Total saisi (DH) — évite de perdre le montant si le PU seul est ambigu. */
+      montant_ligne_achat: total,
       product_packaging_id: d.product_packaging_id,
     });
   }
@@ -378,8 +421,7 @@ function hasVendeurDraft(d: DraftRow | undefined): boolean {
   return d.vendeur_id != null && String(d.vendeur_id).length > 0;
 }
 
-/** Clé UI : fournisseur sans marchands (ex. Station) = vendeur unique. */
-const SUPPLIER_SOLE_VENDEUR_KEY = "__supplier_sole__";
+/** Clé UI : fournisseur sans marchands (ex. Station) = vendeur unique — voir SUPPLIER_SOLE_VENDEUR_KEY. */
 
 /** Retrait du vendeur : remise à zéro des saisies achat (qté, prix, marque). */
 function draftAfterVendeurRemoved(): Partial<DraftRow> {
@@ -552,13 +594,76 @@ function CelluleUdV({
   );
 }
 
+type VendeurAchatMeta = {
+  status: "ouvert" | "cloture";
+  commentaire: string | null;
+  marque_cloture_at: string | null;
+  photos: AchatVendeurPhotoItem[];
+  comptePaye: boolean;
+};
+
 type ApiPayload = {
   lot: LotApi;
   lignes: LotLineApi[];
   frais: FraisApi[];
   vendeurs: VendeurApi[];
   compteAchatPaye: boolean;
+  vendeursAchat: Record<string, VendeurAchatMeta>;
 };
+
+function normalizeVendeurAchatMeta(
+  raw: Record<string, unknown> | undefined,
+): Record<string, VendeurAchatMeta> {
+  if (!raw || typeof raw !== "object") return {};
+  const out: Record<string, VendeurAchatMeta> = {};
+  for (const [key, val] of Object.entries(raw)) {
+    if (!val || typeof val !== "object") continue;
+    const v = val as {
+      status?: unknown;
+      commentaire?: unknown;
+      marque_cloture_at?: unknown;
+      photos?: unknown;
+      comptePaye?: unknown;
+    };
+    const photosRaw = Array.isArray(v.photos) ? v.photos : [];
+    const photos: AchatVendeurPhotoItem[] = photosRaw.flatMap((ph) => {
+      if (!ph || typeof ph !== "object") return [];
+      const p = ph as {
+        id?: unknown;
+        storage_path?: unknown;
+        url?: unknown;
+        created_at?: unknown;
+      };
+      if (typeof p.id !== "string" || typeof p.storage_path !== "string") return [];
+      return [
+        {
+          id: p.id,
+          storage_path: p.storage_path,
+          url: typeof p.url === "string" ? p.url : null,
+          created_at: typeof p.created_at === "string" ? p.created_at : "",
+        },
+      ];
+    });
+    out[key] = {
+      status: v.status === "cloture" ? "cloture" : "ouvert",
+      commentaire: typeof v.commentaire === "string" ? v.commentaire : null,
+      marque_cloture_at: typeof v.marque_cloture_at === "string" ? v.marque_cloture_at : null,
+      photos,
+      comptePaye: v.comptePaye === true,
+    };
+  }
+  return out;
+}
+
+function defaultVendeurMeta(): VendeurAchatMeta {
+  return {
+    status: "ouvert",
+    commentaire: null,
+    marque_cloture_at: null,
+    photos: [],
+    comptePaye: false,
+  };
+}
 
 async function fetchLotPayload(lotId: string): Promise<
   { ok: true; data: ApiPayload } | { ok: false; error: string; status: number }
@@ -570,6 +675,7 @@ async function fetchLotPayload(lotId: string): Promise<
     frais?: FraisApi[];
     vendeurs?: VendeurApi[];
     compteAchatPaye?: boolean;
+    vendeursAchat?: Record<string, unknown>;
     error?: string;
   };
 
@@ -589,11 +695,12 @@ async function fetchLotPayload(lotId: string): Promise<
       frais: json.frais ?? [],
       vendeurs: json.vendeurs ?? [],
       compteAchatPaye: json.compteAchatPaye === true,
+      vendeursAchat: normalizeVendeurAchatMeta(json.vendeursAchat),
     },
   };
 }
 
-const AUTOSAVE_MS = 500;
+const AUTOSAVE_MS = 350;
 
 export default function AchatLotDetailClient({ lotId }: { lotId: string }) {
   const router = useRouter();
@@ -625,6 +732,17 @@ export default function AchatLotDetailClient({ lotId }: { lotId: string }) {
   const fraisDeletesPending = useRef<string[]>([]);
   const [vendeurs, setVendeurs] = useState<VendeurApi[]>([]);
   const [compteAchatPaye, setCompteAchatPaye] = useState(false);
+  const [vendeursAchat, setVendeursAchat] = useState<Record<string, VendeurAchatMeta>>({});
+
+  const [vendorMetaBusy, setVendorMetaBusy] = useState(false);
+  const [commentDlg, setCommentDlg] = useState<{ key: string; label: string } | null>(null);
+  const [photosDlg, setPhotosDlg] = useState<{ key: string; label: string } | null>(null);
+  const [clotureVendeurDlg, setClotureVendeurDlg] = useState<{
+    key: string;
+    label: string;
+    missingPuLines: VendeurClotureIssue[];
+    needConfirmLines: VendeurClotureIssue[];
+  } | null>(null);
 
   const [draftByLine, setDraftByLine] = useState<Record<string, DraftRow>>({});
   const lignesRef = useRef(lignes);
@@ -632,6 +750,8 @@ export default function AchatLotDetailClient({ lotId }: { lotId: string }) {
   const draftByLineRef = useRef(draftByLine);
   draftByLineRef.current = draftByLine;
   const baselineRef = useRef<Record<string, string>>({});
+  /** Saisies PU/total/qté encore locales (avant blur) — lues par autosave / flush. */
+  const pendingPricingRef = useRef<Record<string, PendingPricing>>({});
 
   const [saving, setSaving] = useState(false);
   const [closing, setClosing] = useState(false);
@@ -670,7 +790,7 @@ export default function AchatLotDetailClient({ lotId }: { lotId: string }) {
     lot?.supplier_id ?? null,
   );
 
-  const editable = Boolean(lot && lot.status === "prete");
+  const editable = Boolean(lot && (lot.status === "prete" || lot.status === "achat_en_cours"));
   const emDash = tCommon("emDash");
   const formatQty = useCallback(
     (value: number) =>
@@ -736,7 +856,32 @@ export default function AchatLotDetailClient({ lotId }: { lotId: string }) {
 
   const applyPayload = useCallback((payload: ApiPayload) => {
     const { drafts, baseline } = draftsFromLines(payload.lignes);
-    baselineRef.current = baseline;
+    const prevDrafts = mergeDraftsWithPending(
+      draftByLineRef.current,
+      pendingPricingRef.current,
+    );
+    const prevBaseline = baselineRef.current;
+    const mergedDrafts = { ...drafts };
+    const mergedBaseline = { ...baseline };
+    /** Conserve les brouillons locaux dirty (ex. reload après ajout produit pendant une saisie). */
+    for (const [id, row] of Object.entries(prevDrafts)) {
+      if (!(id in mergedDrafts)) continue;
+      const prevSnap = draftSnapshot(row);
+      if (prevSnap === prevBaseline[id]) continue;
+      mergedDrafts[id] = {
+        ...mergedDrafts[id],
+        vendeur_id: row.vendeur_id,
+        marque_achete: row.marque_achete,
+        qte_achat: row.qte_achat,
+        puText: row.puText,
+        totalText: row.totalText,
+        product_packaging_id: row.product_packaging_id,
+      };
+      mergedBaseline[id] = prevBaseline[id] ?? baseline[id];
+    }
+    pendingPricingRef.current = {};
+    baselineRef.current = mergedBaseline;
+    draftByLineRef.current = mergedDrafts;
     setLot(payload.lot);
     setLignes(payload.lignes);
     const fl = fraisGlobauxVersUi(payload.frais ?? []);
@@ -745,7 +890,8 @@ export default function AchatLotDetailClient({ lotId }: { lotId: string }) {
     fraisBaselineSnap.current = serialiserEtatFrais(fl, []);
     setVendeurs(payload.vendeurs);
     setCompteAchatPaye(payload.compteAchatPaye);
-    setDraftByLine(drafts);
+    setVendeursAchat(payload.vendeursAchat);
+    setDraftByLine(mergedDrafts);
     setSelectedSansVendeur(new Set());
   }, []);
 
@@ -848,13 +994,15 @@ export default function AchatLotDetailClient({ lotId }: { lotId: string }) {
   }, [permLoading, can, lotId, applyPayload, tErrors]);
 
   /** Met à jour la baseline après sauvegarde sans recharger tout le lot. */
-  function commitBaselineForPatches(patches: LignePatch[]) {
+  function commitBaselineForPatches(
+    patches: LignePatch[],
+    draftsAtSend: Record<string, DraftRow>,
+  ) {
     const base = { ...baselineRef.current };
-    const drafts = draftByLineRef.current;
     for (const p of patches) {
-      const row = drafts[p.lotLigneId];
-      if (!row) continue;
-      base[p.lotLigneId] = draftSnapshot(row);
+      const sent = draftsAtSend[p.lotLigneId];
+      if (!sent) continue;
+      base[p.lotLigneId] = draftSnapshot(sent);
     }
     baselineRef.current = base;
   }
@@ -877,11 +1025,20 @@ export default function AchatLotDetailClient({ lotId }: { lotId: string }) {
   const persistAll = useCallback(
     (opts?: { silent?: boolean; lignesOnly?: boolean }) => {
       const runOne = async (): Promise<boolean> => {
+        const draftsMerged = mergeDraftsWithPending(
+          draftByLineRef.current,
+          pendingPricingRef.current,
+        );
         const patches = computeDirtyPatches(
           lignesRef.current,
-          draftByLineRef.current,
+          draftsMerged,
           baselineRef.current,
         );
+        const draftsAtSend: Record<string, DraftRow> = {};
+        for (const p of patches) {
+          const row = draftsMerged[p.lotLigneId];
+          if (row) draftsAtSend[p.lotLigneId] = row;
+        }
         const delIds = [...fraisDeletesPending.current];
         const flNow = fraisLinesRef.current;
         const statutFrais = serialiserEtatFrais(flNow, delIds);
@@ -937,7 +1094,11 @@ export default function AchatLotDetailClient({ lotId }: { lotId: string }) {
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(corps),
           });
-          const json = (await res.json()) as { error?: string; frais?: FraisApi[] };
+          const json = (await res.json()) as {
+            error?: string;
+            frais?: FraisApi[];
+            status?: string;
+          };
           if (!res.ok) {
             setErr(typeof json.error === "string" ? json.error : tErrors("saveRegistrationFailed"));
             return false;
@@ -945,8 +1106,18 @@ export default function AchatLotDetailClient({ lotId }: { lotId: string }) {
 
           if (saveSeq.current !== seq) return true;
 
+          if (typeof json.status === "string" && json.status.length > 0) {
+            setLot((prev) => (prev ? { ...prev, status: json.status as string } : prev));
+          }
+
           if (aLignes) {
-            commitBaselineForPatches(patches);
+            commitBaselineForPatches(patches, draftsAtSend);
+            /** Purge pending déjà inclus dans le PATCH réussi. */
+            const pending = { ...pendingPricingRef.current };
+            for (const p of patches) {
+              delete pending[p.lotLigneId];
+            }
+            pendingPricingRef.current = pending;
           }
           if (sendFrais) {
             const sentDel = new Set(delIds);
@@ -982,13 +1153,17 @@ export default function AchatLotDetailClient({ lotId }: { lotId: string }) {
     [lotId, rechargerFraisDepuisApi, t, tErrors],
   );
 
+  const persistAllRef = useRef(persistAll);
+  persistAllRef.current = persistAll;
+
   /** Sauvegarde automatique des lignes produit (debounced, `lignesOnly`). */
   useEffect(() => {
     if (!editable || loading) return;
 
+    const draftsMerged = mergeDraftsWithPending(draftByLine, pendingPricingRef.current);
     const dirtyLignes = computeDirtyPatches(
       lignesRef.current,
-      draftByLine,
+      draftsMerged,
       baselineRef.current,
     );
     if (dirtyLignes.length === 0) return;
@@ -996,27 +1171,115 @@ export default function AchatLotDetailClient({ lotId }: { lotId: string }) {
     if (debounceRef.current) clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(() => {
       debounceRef.current = null;
-      void persistAll({ silent: true, lignesOnly: true });
+      void persistAllRef.current({ silent: true, lignesOnly: true });
     }, AUTOSAVE_MS);
 
     return () => {
-      if (debounceRef.current) clearTimeout(debounceRef.current);
+      if (debounceRef.current) {
+        clearTimeout(debounceRef.current);
+        debounceRef.current = null;
+      }
     };
-  }, [draftByLine, editable, loading, persistAll]);
+  }, [draftByLine, editable, loading]);
+
+  /**
+   * Flush immédiat si l’utilisateur quitte la page avant la fin du debounce
+   * (sinon les PU/totaux saisis au blur peuvent ne jamais être PATCH).
+   */
+  useEffect(() => {
+    if (!editable) return;
+
+    const flushPending = () => {
+      if (debounceRef.current) {
+        clearTimeout(debounceRef.current);
+        debounceRef.current = null;
+      }
+      const draftsMerged = mergeDraftsWithPending(
+        draftByLineRef.current,
+        pendingPricingRef.current,
+      );
+      const patches = computeDirtyPatches(
+        lignesRef.current,
+        draftsMerged,
+        baselineRef.current,
+      );
+      if (patches.length === 0) return;
+
+      const draftsAtSend: Record<string, DraftRow> = {};
+      for (const p of patches) {
+        const row = draftsMerged[p.lotLigneId];
+        if (row) draftsAtSend[p.lotLigneId] = row;
+      }
+
+      const body = JSON.stringify({ ligneUpdates: patches });
+      try {
+        void fetch(`/api/commandes-fournisseur/achat/lots/${encodeURIComponent(lotId)}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body,
+          keepalive: true,
+        }).then((res) => {
+          if (!res.ok) return;
+          commitBaselineForPatches(patches, draftsAtSend);
+          const pending = { ...pendingPricingRef.current };
+          for (const p of patches) {
+            delete pending[p.lotLigneId];
+          }
+          pendingPricingRef.current = pending;
+        });
+      } catch {
+        /* ignore — best effort à la sortie */
+      }
+    };
+
+    const onVis = () => {
+      if (document.visibilityState === "hidden") flushPending();
+    };
+
+    window.addEventListener("pagehide", flushPending);
+    document.addEventListener("visibilitychange", onVis);
+    return () => {
+      window.removeEventListener("pagehide", flushPending);
+      document.removeEventListener("visibilitychange", onVis);
+      flushPending();
+    };
+  }, [editable, lotId]);
 
   const changeDraft = useCallback((lineId: string, patch: Partial<DraftRow>) => {
     setDraftByLine((prev) => {
       const row = prev[lineId];
       if (!row) return prev;
-      return {
+      const next = {
         ...prev,
         [lineId]: {
           ...row,
           ...patch,
         },
       };
+      draftByLineRef.current = next;
+      return next;
     });
   }, []);
+
+  const applyPendingPricing = useCallback((lineId: string, patch: AchatPricingCommit) => {
+    const prev = pendingPricingRef.current[lineId] ?? {};
+    pendingPricingRef.current = {
+      ...pendingPricingRef.current,
+      [lineId]: {
+        ...prev,
+        ...(patch.qte_achat !== undefined ? { qte_achat: patch.qte_achat } : {}),
+        ...(patch.puText !== undefined ? { puText: patch.puText } : {}),
+        ...(patch.totalText !== undefined ? { totalText: patch.totalText } : {}),
+      },
+    };
+    /** Relance le debounce sans setState (évite re-render du lot à chaque frappe). */
+    if (!editable || loading) return;
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => {
+      debounceRef.current = null;
+      void persistAllRef.current({ silent: true, lignesOnly: true });
+    }, AUTOSAVE_MS);
+  }, [editable, loading]);
 
   const applyPricingEdit = useCallback(
     (lineId: string, changed: AchatPricingChanged, patch: AchatPricingCommit) => {
@@ -1024,16 +1287,30 @@ export default function AchatLotDetailClient({ lotId }: { lotId: string }) {
         const row = prev[lineId];
         if (!row) return prev;
         const L = lignesRef.current.find((x) => String(x.id) === lineId);
-        const next: DraftRow = {
+        const nextRow: DraftRow = {
           ...row,
           ...(patch.qte_achat !== undefined ? { qte_achat: coerceQty(patch.qte_achat, 0) } : {}),
           ...(patch.puText !== undefined ? { puText: patch.puText } : {}),
           ...(patch.totalText !== undefined ? { totalText: patch.totalText } : {}),
         };
-        if (!L) return { ...prev, [lineId]: next };
-        const display = displayForDraftLine(L, next);
-        return { ...prev, [lineId]: syncPricingDraft(next, display, changed) };
+        const synced =
+          L != null ? syncPricingDraft(nextRow, displayForDraftLine(L, nextRow), changed) : nextRow;
+        const next = { ...prev, [lineId]: synced };
+        /** Ref à jour tout de suite — le flush pagehide / debounce lit la ref, pas le state React. */
+        draftByLineRef.current = next;
+        return next;
       });
+      /** Pending absorbé par le commit React. */
+      const pending = { ...pendingPricingRef.current };
+      if (pending[lineId]) {
+        const rest = { ...pending[lineId] };
+        if (patch.qte_achat !== undefined) delete rest.qte_achat;
+        if (patch.puText !== undefined) delete rest.puText;
+        if (patch.totalText !== undefined) delete rest.totalText;
+        if (Object.keys(rest).length === 0) delete pending[lineId];
+        else pending[lineId] = rest;
+        pendingPricingRef.current = pending;
+      }
     },
     [],
   );
@@ -1094,6 +1371,7 @@ export default function AchatLotDetailClient({ lotId }: { lotId: string }) {
         if (!row) continue;
         next[lid] = { ...row, vendeur_id: vid };
       }
+      draftByLineRef.current = next;
       return next;
     });
     setSelectedSansVendeur(new Set());
@@ -1240,6 +1518,24 @@ export default function AchatLotDetailClient({ lotId }: { lotId: string }) {
         return false;
       }
 
+      if (res.status === 409 && json.code === "VENDEURS_OUVERTS") {
+        const labels =
+          Array.isArray((json as { openVendeurLabels?: unknown }).openVendeurLabels)
+            ? ((json as { openVendeurLabels: string[] }).openVendeurLabels).filter(
+                (x) => typeof x === "string",
+              )
+            : [];
+        setErr(
+          labels.length > 0
+            ? t("vendorsStillOpen", { list: labels.join(", ") })
+            : typeof json.error === "string"
+              ? json.error
+              : tErrors("closeFailed"),
+        );
+        setConfirmZeroOpen(false);
+        return false;
+      }
+
       setErr(typeof json.error === "string" ? json.error : tErrors("closeFailed"));
       setConfirmZeroOpen(false);
       return false;
@@ -1249,6 +1545,152 @@ export default function AchatLotDetailClient({ lotId }: { lotId: string }) {
     } finally {
       setClosing(false);
     }
+  }
+
+  async function cloturerVendeur(vendeurKey: string, forceConfirmZeros: boolean): Promise<boolean> {
+    setVendorMetaBusy(true);
+    setErr(null);
+    try {
+      const okFlush = await persistAll({ silent: true });
+      if (!okFlush) return false;
+
+      const res = await fetch(
+        `/api/commandes-fournisseur/achat/lots/${encodeURIComponent(lotId)}/vendeurs/${encodeURIComponent(vendeurKey)}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            action: "cloturer",
+            confirmZeroQtyLines: forceConfirmZeros,
+          }),
+        },
+      );
+      const json = (await res.json()) as {
+        error?: string;
+        code?: string;
+        needConfirmLines?: VendeurClotureIssue[];
+        missingPuLines?: VendeurClotureIssue[];
+      };
+
+      if (res.ok) {
+        setClotureVendeurDlg(null);
+        setInfo(t("vendorClosedSuccess"));
+        await reloadFromServer();
+        return true;
+      }
+
+      const missingPu = Array.isArray(json.missingPuLines) ? json.missingPuLines : [];
+      const needConfirm = Array.isArray(json.needConfirmLines) ? json.needConfirmLines : [];
+      if (missingPu.length > 0 || (res.status === 409 && json.code === "NEED_CONFIRM_ZERO_QTY")) {
+        const label =
+          clotureVendeurDlg?.key === vendeurKey
+            ? clotureVendeurDlg.label
+            : vendeurKey === SUPPLIER_SOLE_VENDEUR_KEY
+              ? supplierHeading(lot?.ref_supplier ?? null)
+              : (vendeurs.find((v) => v.id === vendeurKey)?.label ?? vendeurKey);
+        setClotureVendeurDlg({
+          key: vendeurKey,
+          label,
+          missingPuLines: missingPu,
+          needConfirmLines: needConfirm,
+        });
+        return false;
+      }
+
+      setErr(typeof json.error === "string" ? json.error : tErrors("closeFailed"));
+      return false;
+    } catch {
+      setErr(tErrors("networkCloseFailed"));
+      return false;
+    } finally {
+      setVendorMetaBusy(false);
+    }
+  }
+
+  async function rouvrirVendeur(vendeurKey: string): Promise<void> {
+    setVendorMetaBusy(true);
+    setErr(null);
+    try {
+      const res = await fetch(
+        `/api/commandes-fournisseur/achat/lots/${encodeURIComponent(lotId)}/vendeurs/${encodeURIComponent(vendeurKey)}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "rouvrir" }),
+        },
+      );
+      const json = (await res.json()) as { error?: string };
+      if (!res.ok) {
+        setErr(typeof json.error === "string" ? json.error : tErrors("reopenFailed"));
+        return;
+      }
+      setInfo(t("vendorReopenedSuccess"));
+      await reloadFromServer();
+    } catch {
+      setErr(tErrors("networkReopenFailed"));
+    } finally {
+      setVendorMetaBusy(false);
+    }
+  }
+
+  async function saveVendeurCommentaire(vendeurKey: string, commentaire: string): Promise<void> {
+    setVendorMetaBusy(true);
+    setErr(null);
+    try {
+      const res = await fetch(
+        `/api/commandes-fournisseur/achat/lots/${encodeURIComponent(lotId)}/vendeurs/${encodeURIComponent(vendeurKey)}`,
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ commentaire }),
+        },
+      );
+      const json = (await res.json()) as { error?: string };
+      if (!res.ok) {
+        setErr(typeof json.error === "string" ? json.error : tErrors("generic"));
+        return;
+      }
+      setCommentDlg(null);
+      await reloadFromServer();
+    } catch {
+      setErr(tErrors("networkUnavailableDot"));
+    } finally {
+      setVendorMetaBusy(false);
+    }
+  }
+
+  async function uploadVendeurPhoto(vendeurKey: string, file: File): Promise<void> {
+    setErr(null);
+    const form = new FormData();
+    form.append("file", file);
+    const res = await fetch(
+      `/api/commandes-fournisseur/achat/lots/${encodeURIComponent(lotId)}/vendeurs/${encodeURIComponent(vendeurKey)}/photos`,
+      { method: "POST", body: form },
+    );
+    const json = (await res.json()) as { error?: string };
+    if (!res.ok) {
+      setErr(typeof json.error === "string" ? json.error : tErrors("generic"));
+      throw new Error("upload failed");
+    }
+    await reloadFromServer();
+  }
+
+  async function deleteVendeurPhoto(vendeurKey: string, photoId: string): Promise<void> {
+    setErr(null);
+    const res = await fetch(
+      `/api/commandes-fournisseur/achat/lots/${encodeURIComponent(lotId)}/vendeurs/${encodeURIComponent(vendeurKey)}/photos`,
+      {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ photoId }),
+      },
+    );
+    const json = (await res.json()) as { error?: string };
+    if (!res.ok) {
+      setErr(typeof json.error === "string" ? json.error : tErrors("generic"));
+      throw new Error("delete failed");
+    }
+    await reloadFromServer();
   }
 
   async function rouvrirLot(): Promise<void> {
@@ -1759,63 +2201,142 @@ export default function AchatLotDetailClient({ lotId }: { lotId: string }) {
               ? "dirham"
               : parseDeviseAchat(vendeurs.find((v) => v.id === vid)?.devise_achat);
             const colCount = isSoleSupplierVendor ? 7 : 8;
+            const vMeta = vendeursAchat[vid] ?? defaultVendeurMeta();
+            const vendeurCloture = vMeta.status === "cloture";
+            const lineEditable = editable && !vendeurCloture;
             return (
               <Fragment key={vid}>
                 <Box
-                  className={isSoleSupplierVendor ? "!mb-0" : "!mt-4 !mb-0"}
                   sx={{
-                    display: "flex",
-                    flexWrap: "wrap",
-                    alignItems: "center",
-                    justifyContent: "space-between",
-                    gap: 1,
+                    mt: isSoleSupplierVendor ? 0 : { xs: 4, sm: 5 },
+                    mb: { xs: 4, sm: 5 },
+                    pt: isSoleSupplierVendor ? 0 : { xs: 2.5, sm: 3 },
+                    borderTop: isSoleSupplierVendor ? "none" : 1,
+                    borderColor: "divider",
+                    borderRadius: vendeurCloture ? 1 : 0,
+                    bgcolor: vendeurCloture
+                      ? (thm) =>
+                          thm.palette.mode === "dark"
+                            ? alpha(thm.palette.success.main, 0.14)
+                            : alpha(thm.palette.success.main, 0.1)
+                      : undefined,
+                    px: vendeurCloture ? { xs: 1, sm: 1.5 } : 0,
+                    pb: vendeurCloture ? { xs: 1.5, sm: 2 } : 0,
                   }}
                 >
-                  <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
-                    <Typography variant="h6" sx={{ fontWeight: 700, m: 0 }}>
-                      {vLabel}
-                    </Typography>
-                    {editable &&
-                    !isSoleSupplierVendor &&
-                    canCommandesFournisseurVendeursRenommer &&
-                    !vendeurDlgBusy ? (
-                      <IconButton
-                        aria-label={t("editVendorAria", { label: vLabel })}
-                        size="small"
-                        onClick={() => setVendeurDlg({ mode: "edit", id: vid })}
+                  <Box
+                    sx={{
+                      display: "flex",
+                      flexWrap: "wrap",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      gap: 1,
+                      mb: 1,
+                      position: "relative",
+                    }}
+                  >
+                    <Box
+                      sx={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        gap: 0.5,
+                        maxWidth: "100%",
+                      }}
+                    >
+                      <Typography
+                        variant="h5"
+                        component="h2"
+                        sx={{
+                          fontWeight: 800,
+                          m: 0,
+                          textAlign: "center",
+                          fontSize: { xs: "1.35rem", sm: "1.6rem" },
+                          lineHeight: 1.25,
+                          wordBreak: "break-word",
+                        }}
                       >
-                        <EditOutlinedIcon fontSize="small" />
-                      </IconButton>
+                        {vLabel}
+                      </Typography>
+                      {editable &&
+                      !isSoleSupplierVendor &&
+                      canCommandesFournisseurVendeursRenommer &&
+                      !vendeurDlgBusy ? (
+                        <IconButton
+                          aria-label={t("editVendorAria", { label: vLabel })}
+                          size="small"
+                          onClick={() => setVendeurDlg({ mode: "edit", id: vid })}
+                        >
+                          <EditOutlinedIcon fontSize="small" />
+                        </IconButton>
+                      ) : null}
+                    </Box>
+                    <Box
+                      sx={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 0.25,
+                        position: { sm: "absolute" },
+                        right: { sm: isSoleSupplierVendor && editable ? 120 : 0 },
+                        top: { sm: 0 },
+                      }}
+                    >
+                      <Tooltip title={t("vendorCommentAria")}>
+                        <span>
+                          <IconButton
+                            aria-label={t("vendorCommentAria")}
+                            size="small"
+                            color={
+                              (vMeta.commentaire ?? "").trim().length > 0 ? "success" : "default"
+                            }
+                            disabled={vendorMetaBusy}
+                            onClick={() => setCommentDlg({ key: vid, label: vLabel })}
+                          >
+                            <ChatBubbleOutlineOutlinedIcon fontSize="small" />
+                          </IconButton>
+                        </span>
+                      </Tooltip>
+                      <Tooltip title={t("vendorPhotosAria")}>
+                        <span>
+                          <IconButton
+                            aria-label={t("vendorPhotosAria")}
+                            size="small"
+                            color={vMeta.photos.length > 0 ? "success" : "default"}
+                            disabled={vendorMetaBusy}
+                            onClick={() => setPhotosDlg({ key: vid, label: vLabel })}
+                          >
+                            <PhotoCameraOutlinedIcon fontSize="small" />
+                          </IconButton>
+                        </span>
+                      </Tooltip>
+                    </Box>
+                    {isSoleSupplierVendor && editable ? (
+                      <Button
+                        type="button"
+                        variant="outlined"
+                        size="small"
+                        disabled={saving || closing || productPickerBusy}
+                        onClick={() => setPickerOpen(true)}
+                        sx={{
+                          textTransform: "none",
+                          position: { sm: "absolute" },
+                          right: { sm: 0 },
+                        }}
+                      >
+                        {tCommonOrder("addProduct")}
+                      </Button>
                     ) : null}
                   </Box>
-                  {isSoleSupplierVendor && editable ? (
-                    <Button
-                      type="button"
-                      variant="outlined"
-                      size="small"
-                      disabled={saving || closing || productPickerBusy}
-                      onClick={() => setPickerOpen(true)}
-                      sx={{ textTransform: "none" }}
-                    >
-                      {tCommonOrder("addProduct")}
-                    </Button>
-                  ) : null}
-                </Box>
-                {vendorDevise === "rial" ? (
-                  <Box className="!mb-2">
-                    <Typography variant="body2" color="text.secondary">
-                      {t("vendorTotal", { amount: formatRial(dhToRial(vendorTotalDh)) })}
-                    </Typography>
-                    <Typography variant="caption" color="text.secondary" sx={{ display: "block" }}>
-                      {formatSoitDh(vendorTotalDh)}
-                    </Typography>
-                  </Box>
-                ) : (
-                  <Typography variant="body2" color="text.secondary" className="!mb-2">
-                    {t("vendorTotal", { amount: formatDh(vendorTotalDh) })}
+                {vendeurCloture ? (
+                  <Typography
+                    variant="caption"
+                    color="success.dark"
+                    sx={{ display: "block", textAlign: "center", mb: 1, fontWeight: 600 }}
+                  >
+                    {t("vendorClosedBadge")}
                   </Typography>
-                )}
-                <div className="mb-6 min-w-0 w-full">
+                ) : null}
+                <div className="mb-0 min-w-0 w-full">
                   <Table
                     size="small"
                     sx={{
@@ -1990,7 +2511,7 @@ export default function AchatLotDetailClient({ lotId }: { lotId: string }) {
                                   qte={qa}
                                   puText={dRow?.puText ?? ""}
                                   totalText={dRow?.totalText ?? ""}
-                                  editable={editable}
+                                  editable={lineEditable}
                                   udaLabel={labelFromRef(pr?.ref_purchase_unit)}
                                   qtyAria={tCommonOrder("quantityPurchaseAria")}
                                   pricePlaceholder={tCommonOrder("price")}
@@ -1998,6 +2519,7 @@ export default function AchatLotDetailClient({ lotId }: { lotId: string }) {
                                   totalAria={tCommonOrder("total")}
                                   deviseAchat={vendorDevise}
                                   formatSoitDh={formatSoitDh}
+                                  onPending={applyPendingPricing}
                                   onCommit={applyPricingEdit}
                                 />
                                 {!isSoleSupplierVendor ? (
@@ -2007,7 +2529,7 @@ export default function AchatLotDetailClient({ lotId }: { lotId: string }) {
                                       size="small"
                                       variant="text"
                                       color="error"
-                                      disabled={!editable || saving || closing}
+                                      disabled={!lineEditable || saving || closing || vendorMetaBusy}
                                       onClick={() => changeDraft(lid, draftAfterVendeurRemoved())}
                                       sx={{
                                         textTransform: "none",
@@ -2047,6 +2569,77 @@ export default function AchatLotDetailClient({ lotId }: { lotId: string }) {
                     </TableBody>
                   </Table>
                 </div>
+                <Box
+                  sx={{
+                    display: "flex",
+                    flexDirection: "column",
+                    alignItems: "flex-end",
+                    gap: 1,
+                    mt: 1.5,
+                  }}
+                >
+                  {vendorDevise === "rial" ? (
+                    <Box sx={{ textAlign: "right" }}>
+                      <Typography
+                        variant="h6"
+                        component="p"
+                        sx={{
+                          m: 0,
+                          fontWeight: 800,
+                          fontSize: { xs: "1.1rem", sm: "1.25rem" },
+                          fontVariantNumeric: "tabular-nums",
+                        }}
+                      >
+                        {t("vendorTotal", { amount: formatRial(dhToRial(vendorTotalDh)) })}
+                      </Typography>
+                      <Typography variant="caption" color="text.secondary" sx={{ display: "block" }}>
+                        {formatSoitDh(vendorTotalDh)}
+                      </Typography>
+                    </Box>
+                  ) : (
+                    <Typography
+                      variant="h6"
+                      component="p"
+                      sx={{
+                        m: 0,
+                        fontWeight: 800,
+                        fontSize: { xs: "1.1rem", sm: "1.25rem" },
+                        fontVariantNumeric: "tabular-nums",
+                        textAlign: "right",
+                      }}
+                    >
+                      {t("vendorTotal", { amount: formatDh(vendorTotalDh) })}
+                    </Typography>
+                  )}
+                  {editable && rows.length > 0 ? (
+                    <Box sx={{ display: "flex", justifyContent: "flex-end", gap: 1 }}>
+                      {vendeurCloture && !vMeta.comptePaye ? (
+                        <Button
+                          variant="outlined"
+                          size="small"
+                          disabled={vendorMetaBusy || saving || closing}
+                          onClick={() => void rouvrirVendeur(vid)}
+                          sx={{ textTransform: "none" }}
+                        >
+                          {t("reopenVendor")}
+                        </Button>
+                      ) : null}
+                      {!vendeurCloture ? (
+                        <Button
+                          variant="contained"
+                          size="small"
+                          color="success"
+                          disabled={vendorMetaBusy || saving || closing}
+                          onClick={() => void cloturerVendeur(vid, false)}
+                          sx={{ textTransform: "none" }}
+                        >
+                          {t("closeVendor")}
+                        </Button>
+                      ) : null}
+                    </Box>
+                  ) : null}
+                </Box>
+                </Box>
               </Fragment>
             );
           })}
@@ -2373,6 +2966,74 @@ export default function AchatLotDetailClient({ lotId }: { lotId: string }) {
           if (!vendeurDlgBusy) setVendeurDlg(null);
         }}
         onSave={(values) => void saveVendeurDlg(values)}
+      />
+
+      <AchatVendeurClotureDialog
+        open={clotureVendeurDlg != null}
+        vendorLabel={clotureVendeurDlg?.label ?? ""}
+        missingPuLines={clotureVendeurDlg?.missingPuLines ?? []}
+        needConfirmLines={clotureVendeurDlg?.needConfirmLines ?? []}
+        busy={vendorMetaBusy}
+        onClose={() => {
+          if (!vendorMetaBusy) setClotureVendeurDlg(null);
+        }}
+        onConfirmZeros={() => {
+          if (clotureVendeurDlg) void cloturerVendeur(clotureVendeurDlg.key, true);
+        }}
+        labels={{
+          title: t("vendorCloseDialog.title"),
+          missingPu: t("vendorCloseDialog.missingPu"),
+          zeroQty: t("vendorCloseDialog.zeroQty"),
+          confirmZeros: t("vendorCloseDialog.confirmZeros"),
+          cancel: tCommon("cancel"),
+          close: tCommon("close"),
+        }}
+      />
+
+      <AchatVendeurCommentDialog
+        open={commentDlg != null}
+        vendorLabel={commentDlg?.label ?? ""}
+        initialCommentaire={
+          commentDlg ? (vendeursAchat[commentDlg.key]?.commentaire ?? "") : ""
+        }
+        busy={vendorMetaBusy}
+        onClose={() => {
+          if (!vendorMetaBusy) setCommentDlg(null);
+        }}
+        onSave={(commentaire) => {
+          if (commentDlg) void saveVendeurCommentaire(commentDlg.key, commentaire);
+        }}
+        labels={{
+          title: t("vendorCommentDialog.title"),
+          field: t("vendorCommentDialog.field"),
+          save: tCommon("save"),
+          cancel: tCommon("cancel"),
+        }}
+      />
+
+      <AchatVendeurPhotosDialog
+        open={photosDlg != null}
+        vendorLabel={photosDlg?.label ?? ""}
+        photos={photosDlg ? (vendeursAchat[photosDlg.key]?.photos ?? []) : []}
+        busy={vendorMetaBusy}
+        canEdit={editable}
+        onClose={() => {
+          if (!vendorMetaBusy) setPhotosDlg(null);
+        }}
+        onUpload={async (file) => {
+          if (photosDlg) await uploadVendeurPhoto(photosDlg.key, file);
+        }}
+        onDelete={async (photoId) => {
+          if (photosDlg) await deleteVendeurPhoto(photosDlg.key, photoId);
+        }}
+        labels={{
+          title: t("vendorPhotosDialog.title"),
+          empty: t("vendorPhotosDialog.empty"),
+          camera: t("vendorPhotosDialog.camera"),
+          gallery: t("vendorPhotosDialog.gallery"),
+          close: tCommon("close"),
+          deleteAria: t("vendorPhotosDialog.deleteAria"),
+        }}
       />
     </main>
   );

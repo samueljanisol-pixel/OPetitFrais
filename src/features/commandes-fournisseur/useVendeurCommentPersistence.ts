@@ -76,7 +76,7 @@ export function useVendeurCommentPersistence({
 
   const persistVendeurComment = useCallback(
     async (vendeurKey: string, nextRaw: string) => {
-      if (lotStatus !== "brouillon" && lotStatus !== "prete") {
+      if (lotStatus !== "brouillon" && lotStatus !== "prete" && lotStatus !== "achat_en_cours") {
         return;
       }
 

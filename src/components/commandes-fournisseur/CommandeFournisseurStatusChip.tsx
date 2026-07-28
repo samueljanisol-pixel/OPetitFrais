@@ -29,6 +29,8 @@ function chipColorForStatus(
       return "warning";
     case "prete":
       return "success";
+    case "achat_en_cours":
+      return "info";
     case "terminee":
       return "primary";
     default:

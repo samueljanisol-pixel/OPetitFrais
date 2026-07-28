@@ -44,6 +44,7 @@ type Props = {
   onVendeurCommentSave: (vendeurKey: string, commentaire: string) => void | Promise<void>;
   vendeurWhatsAppSent?: Record<string, boolean>;
   onVendeurWhatsAppSent?: (vendeurKey: string) => void | Promise<void>;
+  onPersistVendeurCommandeImage?: (vendeurKey: string, file: File) => void | Promise<void>;
 };
 
 function vendeurForGroup(vendeurs: VendeurRef[], vendeurKey: string): VendeurRef | undefined {
@@ -90,6 +91,7 @@ export default function ValidationLotVendeurRecap({
   onVendeurCommentSave,
   vendeurWhatsAppSent = {},
   onVendeurWhatsAppSent,
+  onPersistVendeurCommandeImage,
 }: Props) {
   const t = useTranslations("backoffice.commandes.validation.lotDetail");
   const magasinColumns = useMemo(() => buildMagasinMxColumnsFromLot(lot), [lot]);
@@ -164,6 +166,11 @@ export default function ValidationLotVendeurRecap({
               whatsAppSent={vendeurWhatsAppSent[g.vendeurKey] === true}
               onWhatsAppSent={
                 onVendeurWhatsAppSent ? () => onVendeurWhatsAppSent(g.vendeurKey) : undefined
+              }
+              onPersistCommandeImage={
+                onPersistVendeurCommandeImage
+                  ? (file) => onPersistVendeurCommandeImage(g.vendeurKey, file)
+                  : undefined
               }
             />
           </div>

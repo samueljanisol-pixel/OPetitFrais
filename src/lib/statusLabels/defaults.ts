@@ -9,6 +9,7 @@ export const FALLBACK_STATUS_LABELS: Record<string, Record<string, string>> = {
   commande_fournisseur_lot: {
     brouillon: "Brouillon",
     prete: "Prête",
+    achat_en_cours: "Achat en cours",
     terminee: "Terminée",
   },
 };

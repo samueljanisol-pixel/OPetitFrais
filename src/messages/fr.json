@@ -176,6 +176,7 @@
       "commande_fournisseur_lot": {
         "brouillon": "Brouillon",
         "prete": "Prête",
+        "achat_en_cours": "Achat en cours",
         "terminee": "Terminée"
       },
       "listSections": {
@@ -490,6 +491,31 @@
             "body2": "Confirmez-vous la clôture tout de même ?",
             "confirm": "Confirmer la clôture"
           },
+          "vendorsStillOpen": "Clôturez d'abord tous les vendeurs : {list}",
+          "closeVendor": "Clôturer ce vendeur",
+          "reopenVendor": "Rouvrir",
+          "vendorClosedBadge": "Vendeur clôturé",
+          "vendorClosedSuccess": "Vendeur clôturé — le lot reste ouvert pour les frais et les autres vendeurs.",
+          "vendorReopenedSuccess": "Vendeur rouvert.",
+          "vendorCommentAria": "Commentaire vendeur",
+          "vendorPhotosAria": "Photos vendeur",
+          "vendorCloseDialog": {
+            "title": "Clôturer le vendeur",
+            "missingPu": "Prix unitaire manquant sur ces lignes :",
+            "zeroQty": "Certaines lignes ont une quantité achat à 0. Confirmez-vous la clôture ?",
+            "confirmZeros": "Confirmer malgré les quantités à 0"
+          },
+          "vendorCommentDialog": {
+            "title": "Commentaire",
+            "field": "Commentaire"
+          },
+          "vendorPhotosDialog": {
+            "title": "Photos",
+            "empty": "Aucune photo pour ce vendeur.",
+            "camera": "Prendre une photo",
+            "gallery": "Galerie",
+            "deleteAria": "Supprimer la photo"
+          },
           "reopenBlockedPaid": "Impossible : un achat comptable de ce lot est déjà payé.",
           "vendorForm": {
             "titleCreate": "Nouveau vendeur",
@@ -545,12 +571,22 @@
           "back": "Retour au compte",
           "paidBadge": "Payé",
           "unpaidBadge": "À payer",
+          "commentTitle": "Commentaire",
+          "noComment": "Aucun commentaire.",
+          "editCommentAria": "Modifier le commentaire",
+          "photosTitle": "Photos",
+          "noPhotos": "Aucune photo.",
+          "managePhotos": "Gérer les photos",
+          "photoCamera": "Prendre une photo",
+          "photoGallery": "Galerie",
+          "photoDeleteAria": "Supprimer la photo",
           "product": "Produit",
           "qty": "Qté",
+          "uda": "UdA",
+          "unitPrice": "Prix à l'unité",
           "amount": "Montant",
           "noLines": "Pas de détail produit (frais généraux ou achat global).",
-          "openLot": "Voir le lot achat",
-          "openPdf": "PDF du lot"
+          "openLot": "Voir le lot achat"
         }
       },
       "quantityPanel": {

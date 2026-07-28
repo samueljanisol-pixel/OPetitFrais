@@ -1,6 +1,6 @@
 "use client";
 
-import { memo, useEffect, useMemo, useState, type FocusEvent } from "react";
+import { memo, useEffect, useMemo, useRef, useState, type FocusEvent } from "react";
 import { TableCell, TextField, Typography } from "@mui/material";
 import { DecimalQtyTextField } from "@/components/commandes-fournisseur/DecimalQtyTextField";
 import {
@@ -40,6 +40,11 @@ type Props = {
   deviseAchat?: DeviseAchat;
   /** Libellé sous le total en Rial, ex. « Soit 3,25 DH ». */
   formatSoitDh?: (amountDh: number) => string;
+  /**
+   * Mise à jour « live » (sans setState parent) pendant la frappe —
+   * permet à l’autosave / flush de voir les valeurs avant blur.
+   */
+  onPending?: (lineId: string, patch: AchatPricingCommit) => void;
   /** Commit parent uniquement au blur (évite de re-rendre tout le lot à chaque frappe). */
   onCommit: (lineId: string, changed: AchatPricingChanged, patch: AchatPricingCommit) => void;
 };
@@ -57,6 +62,7 @@ function AchatLignePricingFields({
   totalAria,
   deviseAchat = "dirham",
   formatSoitDh,
+  onPending,
   onCommit,
 }: Props) {
   const devise: DeviseAchat = deviseAchat === "rial" ? "rial" : "dirham";
@@ -75,6 +81,24 @@ function AchatLignePricingFields({
   const [puFocused, setPuFocused] = useState(false);
   const [totalFocused, setTotalFocused] = useState(false);
 
+  const puLocalRef = useRef(puLocal);
+  puLocalRef.current = puLocal;
+  const totalLocalRef = useRef(totalLocal);
+  totalLocalRef.current = totalLocal;
+  const puFocusedRef = useRef(puFocused);
+  puFocusedRef.current = puFocused;
+  const totalFocusedRef = useRef(totalFocused);
+  totalFocusedRef.current = totalFocused;
+
+  const onPendingRef = useRef(onPending);
+  onPendingRef.current = onPending;
+  const onCommitRef = useRef(onCommit);
+  onCommitRef.current = onCommit;
+  const deviseRef = useRef(devise);
+  deviseRef.current = devise;
+  const lineIdRef = useRef(lineId);
+  lineIdRef.current = lineId;
+
   useEffect(() => {
     if (!puFocused) setPuLocal(puDisplay);
   }, [puDisplay, puFocused]);
@@ -82,6 +106,33 @@ function AchatLignePricingFields({
   useEffect(() => {
     if (!totalFocused) setTotalLocal(totalDisplay);
   }, [totalDisplay, totalFocused]);
+
+  /** Flush des saisies locales encore focus / non commitées (démontage, remount tableau). */
+  useEffect(() => {
+    return () => {
+      const id = lineIdRef.current;
+      const d = deviseRef.current;
+      const patch: AchatPricingCommit = {};
+      let changed: AchatPricingChanged | null = null;
+      if (puFocusedRef.current) {
+        patch.puText = displayTextToDhText(
+          sanitizeMontantDhTypingFrac2(puLocalRef.current),
+          d,
+        );
+        changed = "pu";
+      }
+      if (totalFocusedRef.current) {
+        patch.totalText = displayTextToDhText(
+          sanitizeMontantDhTypingFrac2(totalLocalRef.current),
+          d,
+        );
+        changed = changed === "pu" ? "pu" : "total";
+      }
+      if (changed == null) return;
+      onPendingRef.current?.(id, patch);
+      onCommitRef.current(id, changed, patch);
+    };
+  }, []);
 
   const soitAmountDh = useMemo(() => {
     if (devise !== "rial") return null;
@@ -99,7 +150,10 @@ function AchatLignePricingFields({
           disabled={!editable}
           value={qte}
           commitWhileTyping={false}
-          onQtyChange={(n) => onCommit(lineId, "qte", { qte_achat: n })}
+          onQtyChange={(n) => {
+            onPending?.(lineId, { qte_achat: n });
+            onCommit(lineId, "qte", { qte_achat: n });
+          }}
           sx={{
             "& .MuiInputBase-input": {
               py: 0.65,
@@ -133,15 +187,22 @@ function AchatLignePricingFields({
             queueMicrotask(() => el.select());
           }}
           onBlur={() => {
+            const dh = displayTextToDhText(
+              sanitizeMontantDhTypingFrac2(puLocalRef.current),
+              devise,
+            );
+            onPending?.(lineId, { puText: dh });
+            onCommit(lineId, "pu", { puText: dh });
+            setPuLocal(dhTextToDisplayText(dh, devise));
             setPuFocused(false);
-            onCommit(lineId, "pu", {
-              puText: displayTextToDhText(
-                sanitizeMontantDhTypingFrac2(puLocal),
-                devise,
-              ),
+          }}
+          onChange={(e) => {
+            const next = sanitizeMontantDhTypingFrac2(e.target.value);
+            setPuLocal(next);
+            onPending?.(lineId, {
+              puText: displayTextToDhText(next, devise),
             });
           }}
-          onChange={(e) => setPuLocal(sanitizeMontantDhTypingFrac2(e.target.value))}
           slotProps={{
             htmlInput: { inputMode: "decimal" },
           }}
@@ -161,15 +222,22 @@ function AchatLignePricingFields({
             queueMicrotask(() => el.select());
           }}
           onBlur={() => {
+            const dh = displayTextToDhText(
+              sanitizeMontantDhTypingFrac2(totalLocalRef.current),
+              devise,
+            );
+            onPending?.(lineId, { totalText: dh });
+            onCommit(lineId, "total", { totalText: dh });
+            setTotalLocal(dhTextToDisplayText(dh, devise));
             setTotalFocused(false);
-            onCommit(lineId, "total", {
-              totalText: displayTextToDhText(
-                sanitizeMontantDhTypingFrac2(totalLocal),
-                devise,
-              ),
+          }}
+          onChange={(e) => {
+            const next = sanitizeMontantDhTypingFrac2(e.target.value);
+            setTotalLocal(next);
+            onPending?.(lineId, {
+              totalText: displayTextToDhText(next, devise),
             });
           }}
-          onChange={(e) => setTotalLocal(sanitizeMontantDhTypingFrac2(e.target.value))}
           slotProps={{
             htmlInput: {
               inputMode: "decimal",

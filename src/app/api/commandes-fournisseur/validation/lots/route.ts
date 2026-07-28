@@ -14,7 +14,7 @@ export async function GET() {
   const { data: lots, error } = await supabase
     .from("commande_fournisseur_lot")
     .select("id, status, created_at, marque_prete_at, ref_supplier(id, code, label)")
-    .in("status", ["brouillon", "prete", "terminee"])
+    .in("status", ["brouillon", "prete", "achat_en_cours", "terminee"])
     .order("created_at", { ascending: false })
     .limit(50);
 

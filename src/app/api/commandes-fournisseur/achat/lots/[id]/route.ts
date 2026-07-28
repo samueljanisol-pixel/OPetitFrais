@@ -23,6 +23,14 @@ import {
   lotHasPaidAchats,
   syncCompteAchatsForLot,
 } from "@/lib/commandes-fournisseur/compte-lot-breakdown";
+import { listOpenVendeurKeysForLot } from "@/lib/commandes-fournisseur/achat-vendeur-cloture";
+import { SUPPLIER_SOLE_VENDEUR_KEY } from "@/lib/commandes-fournisseur/achat-vendeur-key";
+import { achatVendeurPhotoPublicUrl } from "@/lib/commandes-fournisseur/achat-vendeur-photos";
+import {
+  ensureLotAchatEnCours,
+  isLotAchatEditable,
+  LOT_STATUS_ACHAT_EN_COURS,
+} from "@/lib/commandes-fournisseur/lot-status-achat";
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -38,7 +46,7 @@ type LignePatch = {
 
 type PatchBody = {
   ligneUpdates?: LignePatch[];
-  /** `terminee` = clôturer (depuis prete) ; `prete` = rouvrir (depuis terminee). */
+  /** `terminee` = clôturer (depuis prete/achat_en_cours) ; `prete` = rouvrir (depuis terminee → achat_en_cours). */
   status?: "terminee" | "prete";
   confirmZeroQtyLines?: boolean;
   /** Frais lot : lignes générales (vendeur_id null dans la table). **/
@@ -85,27 +93,41 @@ export async function GET(_req: NextRequest, ctx: Ctx) {
 
   const supplierId = (lot as { supplier_id: string }).supplier_id;
 
-  const [lotLigs, fraisRes, vendeursRes] = await Promise.all([
-    supabase
-      .from("commande_fournisseur_lot_ligne")
-      .select(
-        "id, product_id, product_packaging_id, qte_achat, qte_besoin_fige, vendeur_id, marque_achete, prix_achat_unitaire, montant_ligne_achat, product(id, name, name_ar, code, ref_sales_unit(label), ref_purchase_unit(label, label_ar, code), ref_category(label, sort_order), product_packaging(id, quantity, nom, nom_ar, ref_conditionnement(label, label_ar), ref_sales_unit(label))), commande_fournisseur_lot_ligne_magasin(magasin_id, qte, magasins(id, code, nom))",
-      )
-      .eq("lot_id", id),
-    supabase
-      .from("commande_fournisseur_lot_frais")
-      .select("id, lot_id, type_code, label, montant, vendeur_id, created_at")
-      .eq("lot_id", id)
-      .order("created_at", { ascending: true }),
-    supabase
-      .from("ref_supplier_vendeur")
-      .select(
-        "id, supplier_id, label, sort_order, created_at, phone, preferred_locale, devise_achat",
-      )
-      .eq("supplier_id", supplierId)
-      .order("sort_order", { ascending: true })
-      .order("label", { ascending: true }),
-  ]);
+  const [lotLigs, fraisRes, vendeursRes, vendeurAchatRes, photosRes, comptesRes] =
+    await Promise.all([
+      supabase
+        .from("commande_fournisseur_lot_ligne")
+        .select(
+          "id, product_id, product_packaging_id, qte_achat, qte_besoin_fige, vendeur_id, marque_achete, prix_achat_unitaire, montant_ligne_achat, product(id, name, name_ar, code, ref_sales_unit(label), ref_purchase_unit(label, label_ar, code), ref_category(label, sort_order), product_packaging(id, quantity, nom, nom_ar, ref_conditionnement(label, label_ar), ref_sales_unit(label))), commande_fournisseur_lot_ligne_magasin(magasin_id, qte, magasins(id, code, nom))",
+        )
+        .eq("lot_id", id),
+      supabase
+        .from("commande_fournisseur_lot_frais")
+        .select("id, lot_id, type_code, label, montant, vendeur_id, created_at")
+        .eq("lot_id", id)
+        .order("created_at", { ascending: true }),
+      supabase
+        .from("ref_supplier_vendeur")
+        .select(
+          "id, supplier_id, label, sort_order, created_at, phone, preferred_locale, devise_achat",
+        )
+        .eq("supplier_id", supplierId)
+        .order("sort_order", { ascending: true })
+        .order("label", { ascending: true }),
+      supabase
+        .from("commande_fournisseur_lot_vendeur_achat")
+        .select("vendeur_key, status, commentaire, marque_cloture_at")
+        .eq("lot_id", id),
+      supabase
+        .from("commande_fournisseur_lot_vendeur_photo")
+        .select("id, vendeur_key, storage_path, created_at")
+        .eq("lot_id", id)
+        .order("created_at", { ascending: true }),
+      supabase
+        .from("fournisseur_compte_achat")
+        .select("id, kind, vendeur_id")
+        .eq("lot_id", id),
+    ]);
 
   if (lotLigs.error) {
     return NextResponse.json({ error: lotLigs.error.message }, { status: 500 });
@@ -115,6 +137,15 @@ export async function GET(_req: NextRequest, ctx: Ctx) {
   }
   if (vendeursRes.error) {
     return NextResponse.json({ error: vendeursRes.error.message }, { status: 500 });
+  }
+  if (vendeurAchatRes.error) {
+    return NextResponse.json({ error: vendeurAchatRes.error.message }, { status: 500 });
+  }
+  if (photosRes.error) {
+    return NextResponse.json({ error: photosRes.error.message }, { status: 500 });
+  }
+  if (comptesRes.error) {
+    return NextResponse.json({ error: comptesRes.error.message }, { status: 500 });
   }
 
   type LotRow = {
@@ -164,12 +195,117 @@ export async function GET(_req: NextRequest, ctx: Ctx) {
   const paidCheck = await lotHasPaidAchats(supabase, id);
   const compteAchatPaye = "paid" in paidCheck ? paidCheck.paid : false;
 
+  const compteIds = ((comptesRes.data ?? []) as Array<{ id: string }>).map((c) => c.id);
+  const paidAchatIds = new Set<string>();
+  if (compteIds.length > 0) {
+    const { data: paiements, error: payErr } = await supabase
+      .from("fournisseur_paiement_achat")
+      .select("achat_id")
+      .in("achat_id", compteIds);
+    if (payErr) {
+      return NextResponse.json({ error: payErr.message }, { status: 500 });
+    }
+    for (const p of paiements ?? []) {
+      paidAchatIds.add(String((p as { achat_id: string }).achat_id));
+    }
+  }
+
+  const comptePayeByKey = new Map<string, boolean>();
+  for (const c of (comptesRes.data ?? []) as Array<{
+    id: string;
+    kind: string;
+    vendeur_id: string | null;
+  }>) {
+    const key =
+      c.kind === "station"
+        ? SUPPLIER_SOLE_VENDEUR_KEY
+        : c.vendeur_id != null
+          ? String(c.vendeur_id)
+          : null;
+    if (!key) continue;
+    comptePayeByKey.set(key, paidAchatIds.has(String(c.id)));
+  }
+
+  type VendeurAchatStateRow = {
+    vendeur_key: string;
+    status: string;
+    commentaire: string | null;
+    marque_cloture_at: string | null;
+  };
+  type PhotoRow = {
+    id: string;
+    vendeur_key: string;
+    storage_path: string;
+    created_at: string;
+  };
+
+  const photosByKey = new Map<
+    string,
+    Array<{ id: string; storage_path: string; url: string | null; created_at: string }>
+  >();
+  for (const ph of (photosRes.data ?? []) as PhotoRow[]) {
+    const key = String(ph.vendeur_key);
+    const list = photosByKey.get(key) ?? [];
+    list.push({
+      id: String(ph.id),
+      storage_path: String(ph.storage_path),
+      url: achatVendeurPhotoPublicUrl(supabase, String(ph.storage_path)),
+      created_at: ph.created_at,
+    });
+    photosByKey.set(key, list);
+  }
+
+  const vendeursAchat: Record<
+    string,
+    {
+      status: "ouvert" | "cloture";
+      commentaire: string | null;
+      marque_cloture_at: string | null;
+      photos: Array<{ id: string; storage_path: string; url: string | null; created_at: string }>;
+      comptePaye: boolean;
+    }
+  > = {};
+
+  for (const st of (vendeurAchatRes.data ?? []) as VendeurAchatStateRow[]) {
+    const key = String(st.vendeur_key);
+    vendeursAchat[key] = {
+      status: st.status === "cloture" ? "cloture" : "ouvert",
+      commentaire: st.commentaire,
+      marque_cloture_at: st.marque_cloture_at,
+      photos: photosByKey.get(key) ?? [],
+      comptePaye: comptePayeByKey.get(key) ?? false,
+    };
+  }
+
+  for (const [key, photos] of photosByKey) {
+    if (vendeursAchat[key]) continue;
+    vendeursAchat[key] = {
+      status: "ouvert",
+      commentaire: null,
+      marque_cloture_at: null,
+      photos,
+      comptePaye: comptePayeByKey.get(key) ?? false,
+    };
+  }
+
+  for (const [key, paye] of comptePayeByKey) {
+    if (vendeursAchat[key]) continue;
+    vendeursAchat[key] = {
+      status: "ouvert",
+      commentaire: null,
+      marque_cloture_at: null,
+      photos: [],
+      comptePaye: paye,
+    };
+  }
+
   return NextResponse.json({
     lot,
     lignes: lignesWithCategory,
     frais: fraisRes.data ?? [],
     vendeurs: vendeursRes.data ?? [],
     compteAchatPaye,
+    vendeursAchat,
   });
 }
 
@@ -256,7 +392,7 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
     const { error: ue } = await supabase
       .from("commande_fournisseur_lot")
       .update({
-        status: "prete",
+        status: LOT_STATUS_ACHAT_EN_COURS,
         marque_terminee_at: null,
       })
       .eq("id", id)
@@ -274,9 +410,12 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
     );
   }
 
-  if (lotStatus !== "prete") {
+  if (!isLotAchatEditable(lotStatus)) {
     if (hasClose) {
-      return NextResponse.json({ error: "Seul un lot « prêt » peut être clôturé" }, { status: 409 });
+      return NextResponse.json(
+        { error: "Seul un lot « prêt » ou « achat en cours » peut être clôturé" },
+        { status: 409 },
+      );
     }
     return NextResponse.json({ error: "Modifications impossibles pour ce statut" }, { status: 409 });
   }
@@ -284,6 +423,20 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
   if (!hasClose && !hasLines && !hasFrais) {
     return NextResponse.json({ error: "Corps de requête vide" }, { status: 400 });
   }
+
+  if (hasLines || hasFrais) {
+    const marked = await ensureLotAchatEnCours(supabase, id);
+    if ("error" in marked) {
+      return NextResponse.json({ error: marked.error }, { status: 500 });
+    }
+  }
+
+  const lotStatusAfterEdits =
+    hasLines || hasFrais
+      ? lotStatus === "prete"
+        ? LOT_STATUS_ACHAT_EN_COURS
+        : lotStatus
+      : lotStatus;
 
   if (hasLines) {
     const { error: lumpErr } = await applyLineUpdates(supabase, id, supplierId, body.ligneUpdates!);
@@ -326,6 +479,17 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
           { status: 409 },
         );
       }
+      if (out.code === "VENDEURS_OUVERTS") {
+        return NextResponse.json(
+          {
+            error: out.error,
+            code: out.code,
+            openVendeurKeys: out.openVendeurKeys,
+            openVendeurLabels: out.openVendeurLabels,
+          },
+          { status: 409 },
+        );
+      }
       return NextResponse.json({ error: out.error }, { status: out.status ?? 400 });
     }
     return NextResponse.json({
@@ -337,6 +501,7 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
 
   return NextResponse.json({
     ok: true,
+    status: lotStatusAfterEdits,
     ...(fraisApresPatch ? { frais: fraisApresPatch } : {}),
   });
 }
@@ -541,6 +706,18 @@ async function applyLineUpdates(
     if (pu === 0) {
       montant = 0;
     }
+    /** Si le client envoie un total explicite (DH), on le conserve (cohérent avec la saisie). */
+    if (
+      u.montant_ligne_achat !== undefined &&
+      u.montant_ligne_achat != null &&
+      Number.isFinite(Number(u.montant_ligne_achat))
+    ) {
+      montant = Math.round(Number(u.montant_ligne_achat) * 100) / 100;
+      if ((pu == null || !Number.isFinite(pu)) && qtyBase > 0) {
+        const derived = puFromMontantLigne(montant, qtyBase);
+        pu = derived != null && derived >= 0 ? derived : null;
+      }
+    }
 
     const rowUpdate: Record<string, unknown> = {};
     if (u.vendeur_id !== undefined) rowUpdate.vendeur_id = u.vendeur_id;
@@ -585,7 +762,10 @@ async function cloturerLotAchat(opts: {
   | {
       error: string;
       status?: number;
+      code?: string;
       needConfirmLines?: Array<{ lotLigneId: string; productName: string | null }>;
+      openVendeurKeys?: string[];
+      openVendeurLabels?: string[];
     }
 > {
   const { supabase, lotId, supplierId, confirmZeroQtyLines } = opts;
@@ -655,6 +835,21 @@ async function cloturerLotAchat(opts: {
     return { error: "Prix unitaire manquant sur une ou plusieurs lignes", status: 400 };
   }
 
+  const openCheck = await listOpenVendeurKeysForLot(supabase, { lotId, supplierId });
+  if ("error" in openCheck) {
+    return { error: openCheck.error, status: 500 };
+  }
+  if (openCheck.openKeys.length > 0) {
+    const openLabels = openCheck.openKeys.map((k) => openCheck.labels[k] ?? k);
+    return {
+      error: `Clôturez d'abord tous les vendeurs : ${openLabels.join(", ")}`,
+      status: 409,
+      code: "VENDEURS_OUVERTS",
+      openVendeurKeys: openCheck.openKeys,
+      openVendeurLabels: openLabels,
+    };
+  }
+
   for (const L of lignes) {
     const pu = Number((L as { prix_achat_unitaire: number }).prix_achat_unitaire);
     const pid = String((L as { product_id: string }).product_id);
@@ -674,12 +869,13 @@ async function cloturerLotAchat(opts: {
       marque_terminee_at: dateCloture,
     })
     .eq("id", lotId)
-    .eq("status", "prete");
+    .in("status", ["prete", "achat_en_cours"]);
 
   if (ue) {
     return { error: ue.message, status: 500 };
   }
 
+  // Idempotent : les comptes vendeurs déjà écrits sont mis à jour / laissés.
   const sync = await syncCompteAchatsForLot(supabase, {
     lotId,
     supplierId,

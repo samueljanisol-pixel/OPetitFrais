@@ -176,6 +176,7 @@
       "commande_fournisseur_lot": {
         "brouillon": "مسودة",
         "prete": "جاهزة",
+        "achat_en_cours": "الشرا جاري",
         "terminee": "كملات"
       },
       "listSections": {
@@ -490,6 +491,31 @@
             "body2": "واش كتأكّد الإغلاق على أي حال ؟",
             "confirm": "أكّد الإغلاق"
           },
+          "vendorsStillOpen": "سدّ أولا جميع الباعة : {list}",
+          "closeVendor": "سدّ هاد البائع",
+          "reopenVendor": "عاود فتح",
+          "vendorClosedBadge": "البائع مسدود",
+          "vendorClosedSuccess": "البائع تسَدّ — اللوط باقي مفتوح للمصاريف و الباعة لخرين.",
+          "vendorReopenedSuccess": "البائع تعاود فتح.",
+          "vendorCommentAria": "تعليق البائع",
+          "vendorPhotosAria": "صور البائع",
+          "vendorCloseDialog": {
+            "title": "سدّ البائع",
+            "missingPu": "الثمن للوحدة ناقص فهاد السطور :",
+            "zeroQty": "شي سطور عندهم كمية شرا = 0. واش كتأكّد الإغلاق ؟",
+            "confirmZeros": "أكّد رغم الكميات = 0"
+          },
+          "vendorCommentDialog": {
+            "title": "تعليق",
+            "field": "تعليق"
+          },
+          "vendorPhotosDialog": {
+            "title": "صور",
+            "empty": "ما كاين حتى صورة لهاد البائع.",
+            "camera": "خود صورة",
+            "gallery": "المعرض",
+            "deleteAria": "حذف الصورة"
+          },
           "reopenBlockedPaid": "تعذّر التعديل: أحد مشتريات هذا الدفتر مدفوع بالفعل.",
           "vendorForm": {
             "titleCreate": "بائع جديد",
@@ -545,12 +571,22 @@
           "back": "رجوع للحساب",
           "paidBadge": "مدفوع",
           "unpaidBadge": "باقي",
+          "commentTitle": "تعليق",
+          "noComment": "ما كاين حتى تعليق.",
+          "editCommentAria": "بدّل التعليق",
+          "photosTitle": "صور",
+          "noPhotos": "ما كاين حتى صورة.",
+          "managePhotos": "سيّر الصور",
+          "photoCamera": "خود صورة",
+          "photoGallery": "المعرض",
+          "photoDeleteAria": "حذف الصورة",
           "product": "المنتج",
           "qty": "الكمية",
+          "uda": "وحدة الشراء",
+          "unitPrice": "الثمن للوحدة",
           "amount": "المبلغ",
           "noLines": "ما كاينش تفاصيل منتجات (مصاريف عامة أو شراء شامل).",
-          "openLot": "شوف لوط الشرا",
-          "openPdf": "PDF ديال اللوط"
+          "openLot": "شوف لوط الشرا"
         }
       },
       "quantityPanel": {

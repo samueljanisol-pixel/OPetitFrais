@@ -56,7 +56,7 @@ export async function PATCH(req: Request, ctx: Ctx) {
 
   if (canConsolid && lotStatus === "brouillon") {
     // ok
-  } else if (canAchat && lotStatus === "prete") {
+  } else if (canAchat && (lotStatus === "prete" || lotStatus === "achat_en_cours")) {
     // ok
   } else {
     return NextResponse.json(

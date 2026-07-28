@@ -48,6 +48,8 @@ type Props = {
   whatsAppSent?: boolean;
   whatsAppSentLabel?: string;
   onWhatsAppSent?: () => void | Promise<void>;
+  /** Persiste l’image commande (PNG) côté serveur pour l’achat vendeur. */
+  onPersistCommandeImage?: (file: File) => void | Promise<void>;
 };
 
 type ActionButtonsProps = {
@@ -136,10 +138,12 @@ export default function VendeurRecapExportBlock({
   whatsAppSent = false,
   whatsAppSentLabel = "WhatsApp déjà ouvert",
   onWhatsAppSent,
+  onPersistCommandeImage,
 }: Props) {
   const tc = useTranslations("backoffice.commandes.common");
   const captureRef = useRef<HTMLDivElement>(null);
   const pngFileRef = useRef<File | null>(null);
+  const persistSigRef = useRef<string | null>(null);
   const [exporting, setExporting] = useState(false);
   const [whatsAppBusy, setWhatsAppBusy] = useState(false);
   const [exportErr, setExportErr] = useState<string | null>(null);
@@ -159,6 +163,20 @@ export default function VendeurRecapExportBlock({
     return vendorWhatsAppHref(phone);
   }, [vendeurPhone]);
 
+  const persistCommandeImage = useCallback(
+    (file: File) => {
+      if (!onPersistCommandeImage) return;
+      const sig = `${file.name}:${file.size}:${file.lastModified}`;
+      if (persistSigRef.current === sig) return;
+      persistSigRef.current = sig;
+      void Promise.resolve(onPersistCommandeImage(file)).catch(() => {
+        // Réessaie au prochain envoi / capture si l’upload a échoué.
+        persistSigRef.current = null;
+      });
+    },
+    [onPersistCommandeImage],
+  );
+
   const ensurePngFile = useCallback(async (): Promise<File | null> => {
     if (pngFileRef.current) {
       return pngFileRef.current;
@@ -173,11 +191,13 @@ export default function VendeurRecapExportBlock({
       return null;
     }
     pngFileRef.current = captured.file;
+    persistCommandeImage(captured.file);
     return captured.file;
-  }, [filename]);
+  }, [filename, persistCommandeImage]);
 
   useEffect(() => {
     pngFileRef.current = null;
+    persistSigRef.current = null;
     const el = captureRef.current;
     if (!el || group.rows.length === 0) {
       return;
@@ -188,11 +208,12 @@ export default function VendeurRecapExportBlock({
         return;
       }
       pngFileRef.current = captured.file;
+      persistCommandeImage(captured.file);
     });
     return () => {
       cancelled = true;
     };
-  }, [filename, group, footerComment, exportLocale, supplierLabel, commandeDateLabel]);
+  }, [filename, group, footerComment, exportLocale, supplierLabel, commandeDateLabel, persistCommandeImage]);
 
   const onExport = useCallback(async () => {
     const el = captureRef.current;
@@ -217,6 +238,7 @@ export default function VendeurRecapExportBlock({
 
       const triggerDownload = (file: File) => {
         downloadPngFileUnique(file, filename);
+        persistCommandeImage(file);
       };
 
       const markSent = () => {
@@ -242,7 +264,7 @@ export default function VendeurRecapExportBlock({
         })
         .finally(() => setWhatsAppBusy(false));
     },
-    [ensurePngFile, filename, onWhatsAppSent, whatsAppHref],
+    [ensurePngFile, filename, onWhatsAppSent, persistCommandeImage, whatsAppHref],
   );
 
   const footer = footerComment?.trim() ?? "";

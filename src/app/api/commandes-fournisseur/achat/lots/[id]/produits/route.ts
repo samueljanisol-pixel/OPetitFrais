@@ -6,6 +6,10 @@ import { insertLotLignesMerged } from "@/lib/commandes-fournisseur/insert-lot-li
 import { normalizeEntityId, normalizeProductPackagingId } from "@/lib/commandes-fournisseur/commande-ligne-key";
 import { vendeurIdForProduct } from "@/lib/commandes-fournisseur/product-vendeur";
 import { productBelongsToSupplier } from "@/lib/products/product-supplier";
+import {
+  ensureLotAchatEnCours,
+  isLotAchatEditable,
+} from "@/lib/commandes-fournisseur/lot-status-achat";
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -53,8 +57,15 @@ export async function POST(req: Request, ctx: Ctx) {
     return NextResponse.json({ error: "Introuvable" }, { status: 404 });
   }
   const st = (lot as { status: string }).status;
-  if (st !== "prete") {
-    return NextResponse.json({ error: "Seul un lot « prêt » peut recevoir un produit" }, { status: 409 });
+  if (!isLotAchatEditable(st)) {
+    return NextResponse.json(
+      { error: "Seul un lot « prêt » ou « achat en cours » peut recevoir un produit" },
+      { status: 409 },
+    );
+  }
+  const marked = await ensureLotAchatEnCours(supabase, lotId);
+  if ("error" in marked) {
+    return NextResponse.json({ error: marked.error }, { status: 500 });
   }
   const lotSupplierId = (lot as { supplier_id: string }).supplier_id;
 

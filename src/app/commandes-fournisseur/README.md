@@ -28,7 +28,12 @@ Si le **commentaire du lot** est déjà rempli, un dialogue permet de **Ajouter 
 
 ## Lot prêt — lecture seule et retour brouillon
 
-Lorsque le lot est **prêt pour l’achat**, le commentaire du lot est affiché dans un encadré gris (comme les commentaires de commande en lecture seule). Un bouton permet, avec confirmation, de **repasser le lot en brouillon** (`PATCH` sur `/api/commandes-fournisseur/validation/lots/[id]` avec `{ status: "brouillon" }`), ce qui efface `marque_prete_at` et réactive l’édition de la consolidation.
+Lorsque le lot est **prêt pour l’achat**, le commentaire du lot est affiché dans un encadré gris (comme les commentaires de commande en lecture seule). Un bouton permet, avec confirmation, de **repasser le lot en brouillon** (`PATCH` sur `/api/commandes-fournisseur/validation/lots/[id]` avec `{ status: "brouillon" }`), ce qui efface `marque_prete_at` et réactive l’édition de la consolidation — **masqué / refusé** dès qu’une saisie achat a commencé (statut `achat_en_cours`, ou qté/prix/montant/marque ; flag `achatStarted` du GET).
+
+### Statut `achat_en_cours`
+
+Cycle : `brouillon` → `prete` → **`achat_en_cours`** → `terminee`.  
+Dès la première modification d’achat (lignes, frais, produit, clôture vendeur, photo…), le lot passe automatiquement en **Achat en cours** (migration `20260728200000_lot_status_achat_en_cours.sql`). La réouverture d’un lot terminé repasse en `achat_en_cours`.
 
 ### Récapitulatif par vendeur (lot prêt)
 
@@ -45,6 +50,7 @@ Sur `/commandes-fournisseur/validation/lots/[id]`, lorsque le statut est **`pret
 - **Commentaires** : `line_comment` dans la **cellule quantité** du magasin (bas à droite, souvent en arabe, `dir="rtl"`). Optionnel : **commentaire par vendeur** (table `commande_fournisseur_lot_vendeur_comment`, éditable en brouillon et quand le lot est prêt) affiché sous chaque groupe vendeur et en bas de l’image exportée. Police **Noto Sans Arabic** (ligatures) pour l’écran et l’export PNG.
 - Bouton **Exporter en image** par vendeur : capture PNG (`html-to-image`, rendu navigateur + polices embarquées) puis **partage natif** (`navigator.share` avec fichier) sur mobile, sinon **téléchargement** du PNG — pour envoi WhatsApp, e-mail, SMS, etc. Nom de fichier du type `commande-2026-05-19-{fournisseur}-{vendeur}.png`. L’ordre des colonnes de l’image suit l’affichage (RTL en arabe) via `dir` / `style.direction` sur le nœud capturé — **pas** `sx.direction` (inversé par `stylis-plugin-rtl`).
 - Bouton **Envoyer WhatsApp** (si le vendeur a un **téléphone** renseigné dans Paramètres → Vendeurs) : télécharge l’image en arrière-plan (nom unique horodaté à chaque clic, ex. `commande-2026-05-19-fournisseur-vendeur-1734567890123.png`) et ouvre directement la conversation `wa.me` du vendeur (comme le panier boutique). L’image est pré-capturée dans la langue du vendeur (Station : toujours arabe) ; le commentaire figure dans l’image, pas dans le message WhatsApp. Une **coche verte** apparaît à côté du bouton après le premier clic (enregistré en base par lot et vendeur, visible pour toute l’équipe). Migration `20260725220000_lot_vendeur_whatsapp_sent.sql` — colonne `whatsapp_sent_at` sur `commande_fournisseur_lot_vendeur_comment` ; `PATCH` `{ whatsappSent: { vendeurKey } }`.
+- **Photo commande → achat** : dès qu’un lot est **prêt**, la pré-capture PNG du récap vendeur (et chaque envoi WhatsApp) est enregistrée automatiquement dans les photos achat du vendeur (`POST …/validation/lots/[id]/vendeurs/[vendeurKey]/commande-photo`, bucket `achat-vendeur-photos`, fichier fixe `commande-whatsapp.png`). Visible ensuite dans le détail achat (icône appareil photo). **Non supprimable** (pas de bouton supprimer ; DELETE API refusé). RLS consolidation : `20260728193000_achat_vendeur_photos_consolidation.sql`.
 
 Le GET lot validation renvoie aussi `vendeurs` (`ref_supplier_vendeur` du fournisseur), `product.name_ar`, et les dates `created_at` / `validated_at` des commandes incluses.
 
@@ -151,11 +157,17 @@ Les quantités stockées en base sont en **`numeric(14,2)`** (au plus **2 décim
 ## Achat (lots prêts → clôture)
 
 - **Liste** : `/commandes-fournisseur/achat` — appelle `GET /api/commandes-fournisseur/achat/lots` (filtre préparés ou tous).
-- **Détail lot** : `/commandes-fournisseur/achat/lots/[id]` — tableau « sans vendeur » **uniquement s’il y a des lignes** (sélection + attribution groupe), sinon masqué (boutons Ajouter / Nouveau vendeur conservés en édition) ; puis **un tableau par vendeur** ; totaux par vendeur (DH), frais généraux (tableau lecture + dialogue isolé `AchatFraisDialog` ; **PATCH à la validation** / suppression, liste serveur remplacée sans fusion locale pour éviter les doublons). **Sauvegarde automatique** (debounce) des **lignes produit** (`lignesOnly`). Clôture avec `status: "terminee"` ; si `409` + `NEED_CONFIRM_ZERO_QTY`, dialogue puis `confirmZeroQtyLines: true`. Lot **terminé** : boutons **Modifier** (`PATCH` `{ status: "prete" }`, montants conservés) et **Imprimer le rapport PDF** (`GET …/achat/lots/[id]/pdf`, A4). Le PDF est aussi disponible tant que le lot est prêt. Pas d’affichage des commentaires magasin (MXX) en achat. Noms produit : français (+ arabe si UI arabe).
+- **Détail lot** : `/commandes-fournisseur/achat/lots/[id]` — tableau « sans vendeur » **uniquement s’il y a des lignes** (sélection + attribution groupe), sinon masqué (boutons Ajouter / Nouveau vendeur conservés en édition) ; puis **un tableau par vendeur** ; totaux par vendeur (DH), frais généraux (tableau lecture + dialogue isolé `AchatFraisDialog` ; **PATCH à la validation** / suppression, liste serveur remplacée sans fusion locale pour éviter les doublons). **Sauvegarde automatique** (debounce) des **lignes produit** (`lignesOnly`) : PU + montant lus aussi depuis les saisies locales **avant blur** ; **flush à la sortie** (`pagehide` / onglet caché / démontage) ; **préservation des brouillons dirty** lors d’un reload (ex. ajout produit). **Clôture par vendeur** (voir ci-dessous) puis clôture **lot** globale (`status: "terminee"`) quand tous les vendeurs concernés sont déjà clôturés ; si `409` + `VENDEURS_OUVERTS`, message listant les vendeurs encore ouverts ; si `409` + `NEED_CONFIRM_ZERO_QTY`, dialogue puis `confirmZeroQtyLines: true`. Lot **terminé** : boutons **Modifier** (`PATCH` `{ status: "prete" }`, montants conservés) et **Imprimer le rapport PDF** (`GET …/achat/lots/[id]/pdf`, A4). Le PDF est aussi disponible tant que le lot est prêt. Pas d’affichage des commentaires magasin (MXX) en achat. Noms produit : français (+ arabe si UI arabe).
+- **Clôture partielle par vendeur** (migration `20260728190000_lot_vendeur_achat.sql`) :
+  - Tables `commande_fournisseur_lot_vendeur_achat` (status `ouvert`|`cloture`, commentaire) et `commande_fournisseur_lot_vendeur_photo` ; bucket Storage `achat-vendeur-photos`.
+  - API : `POST …/vendeurs/[vendeurKey]` `{ action: "cloturer"|"rouvrir", confirmZeroQtyLines? }` ; `PATCH` `{ commentaire }` ; `GET/POST/DELETE …/photos`.
+  - Clôture vendeur : validations PU / qté 0, maj `product.cost_purchase`, upsert `fournisseur_compte_achat` pour ce vendeur — **le lot reste `prete`** (frais et autres vendeurs encore éditables). Zone UI verte + lignes verrouillées ; « Rouvrir » si l’achat n’est pas payé.
+  - Commentaire / photos : icônes en en-tête de bloc (`AchatVendeurCommentDialog`, `AchatVendeurPhotosDialog` — caméra + galerie).
+  - `GET` lot renvoie `vendeursAchat` : `{ status, commentaire, photos[], comptePaye }` par `vendeur_key` (uuid ou `__supplier_sole__`).
 - **API PDF** : `GET /api/commandes-fournisseur/achat/lots/[id]/pdf` — permission `commandes_fournisseur.achat` ; données via `achat-lot-report-data.ts`, rendu pdfkit `achat-lot-report-pdf.ts` (sections vendeurs, frais, totaux).
 - **Réouverture** : RLS `cflot update achat reopen` (`20260727130000_achat_lot_reopen.sql`) — `terminee` → `prete` avec permission achat.
-- **Fournisseur sans marchands** (ex. **Station**, aucun `ref_supplier_vendeur`) : le fournisseur est le **vendeur unique** — saisie qté/prix directement sur les lignes même sans `vendeur_id` ; pas d’écran d’attribution ; la clôture **n’exige pas** de vendeur sur chaque ligne.
-- **Colonnes détail achat** : **UdC**, **Qté Acheté**, **UdA**, **Prix achat**, **Total** (saisie via `AchatLignePricingFields` : état local pendant la frappe, commit + calcul croisé **au blur** pour éviter les ralentissements). Pas d’affichage des commentaires magasin (MXX) en achat. Les noms arabes produit ne s’affichent que si l’UI est en arabe.
+- **Fournisseur sans marchands** (ex. **Station**, aucun `ref_supplier_vendeur`) : le fournisseur est le **vendeur unique** — saisie qté/prix directement sur les lignes même sans `vendeur_id` ; pas d’écran d’attribution ; clôture vendeur via clé `__supplier_sole__` ; la clôture lot **n’exige pas** de vendeur sur chaque ligne.
+- **Colonnes détail achat** : **UdC**, **Qté Acheté**, **UdA**, **Prix achat**, **Total** (saisie via `AchatLignePricingFields` : état local pendant la frappe ; **pending ref** + autosave pendant la frappe, commit React + calcul croisé **au blur** ; flush démontage / `pagehide`). Pas d’affichage des commentaires magasin (MXX) en achat. Les noms arabes produit ne s’affichent que si l’UI est en arabe.
 - **UdA produit** : si `purchase_unit_id` est vide, backfill SQL (`20260727120000_backfill_product_purchase_unit.sql`) — **Kg** quand l’UdV est Kg, **Pièce** quand l’UdV est Unité / Unité(s).
 - **Vendeurs fournisseur** :
   - `GET/POST /api/commandes-fournisseur/achat/suppliers/[supplierId]/vendeurs` (liste / création avec `label`, `phone`, `preferred_locale`, `devise_achat`, permission achat).
@@ -196,7 +208,7 @@ Doc : [`/api/caisse/README.md`](../api/caisse/README.md).
 Les libellés de statut commande / lot s’affichent via `CommandeFournisseurStatusChip` (`src/components/commandes-fournisseur/CommandeFournisseurStatusChip.tsx`) :
 
 - **Commande** : en saisie (warning), validée (info), intégrée (primary), annulée (error)
-- **Lot** : brouillon (warning), prêt (success), terminé (primary)
+- **Lot** : brouillon (warning), prêt (success), achat en cours (info), terminé (primary)
 
 Les listes **saisie** (commandes), **validation** (lots) et **achat** (lots) partagent le même design de ligne : `ListItemButton` bordé, fournisseur à gauche, **chip statut** à droite, date (et infos secondaires) en dessous.
 
@@ -229,7 +241,7 @@ Le fournisseur Marché parent **n’a pas** de compte : seuls ses vendeurs appar
 
 ### Génération des achats comptables
 
-À la **clôture** d’un lot (`PATCH` achat → `status: terminee`), des lignes **`fournisseur_compte_achat`** sont créées :
+À la **clôture d’un vendeur** (`POST …/vendeurs/[vendeurKey]` action `cloturer`), un **`fournisseur_compte_achat`** est upserté pour ce vendeur (ou Station). À la **clôture globale du lot** (`PATCH` → `status: terminee`), tous les vendeurs concernés doivent déjà être clôturés ; un sync idempotent recalcule éventuellement les montants restants.
 
 | Type | Achats générés |
 |---|---|
@@ -237,6 +249,11 @@ Le fournisseur Marché parent **n’a pas** de compte : seuls ses vendeurs appar
 | **Marché** | 1 achat par vendeur = **produits de ce vendeur** |
 
 Les **frais généraux** ne sont **pas** gérés dans les comptes pour l’instant.
+
+### Détail d’un achat
+
+`/commandes-fournisseur/comptes/achats/[achatId]` — montant, lignes produits (**Produit**, **Qté**, **UdA**, **Prix à l’unité**, **Montant**), **commentaire** et **photos** (édition depuis la page : crayon / « Gérer les photos » ; photo commande WhatsApp non supprimable). Lien vers le lot achat (pas de PDF depuis cette page).  
+API : `GET/PATCH …/comptes/achats/[achatId]`, `POST/DELETE …/photos`. RLS : `20260728210000_…` (lecture) + `20260728211000_compte_achat_vendeur_media_write.sql` (écriture).
 
 ### Paiements
 
