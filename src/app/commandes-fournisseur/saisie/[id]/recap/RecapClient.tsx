@@ -268,7 +268,7 @@ function StepQte({
         <DecimalQtyTextField
           size="small"
           value={clampQtyToApiRange(value)}
-          onQtyChange={(n) => onChange(clampQtyToApiRange(n))}
+          onQtyChange={(n) => onChange(clampQtyToApiRange(n ?? 0))}
           sx={QTE_FIELD_SX}
           slotProps={{ htmlInput: { "aria-label": quantityProductAria } }}
         />

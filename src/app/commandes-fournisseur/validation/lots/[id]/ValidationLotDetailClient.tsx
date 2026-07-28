@@ -1211,7 +1211,7 @@ export default function ValidationLotDetailClient({ lotId }: { lotId: string }) 
                               value={v}
                               size="small"
                               disabled={rowSaving === l.id}
-                              onQtyChange={(n) => updateLocalQte(l.id, col.id, n)}
+                              onQtyChange={(n) => updateLocalQte(l.id, col.id, n ?? 0)}
                               onFocus={() => {
                                 cellFocusBaseline.current[cellKey] = v;
                               }}

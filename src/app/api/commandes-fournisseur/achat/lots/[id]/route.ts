@@ -793,6 +793,7 @@ async function cloturerLotAchat(opts: {
       code?: string;
       openVendeurKeys?: string[];
       openVendeurLabels?: string[];
+      missingQtyLines?: Array<{ lotLigneId: string; productName: string | null }>;
     }
 > {
   const { supabase, lotId, supplierId } = opts;
