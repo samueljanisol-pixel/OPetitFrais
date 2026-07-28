@@ -61,8 +61,8 @@ function formatMAD(n: number): string {
   }).format(n)
 }
 
-export default function ChargesMagasinsAdminPanel() {
-  const { canWriteParametres } = useSessionPermissions()
+export default function ChargesEstimationPanel() {
+  const { canWriteCharges } = useSessionPermissions()
   const [magasins, setMagasins] = useState<MagasinLite[]>([])
   const [charges, setCharges] = useState<ChargeRow[]>([])
   const [loading, setLoading] = useState(true)
@@ -250,7 +250,7 @@ export default function ChargesMagasinsAdminPanel() {
                   Total section : {formatMAD(sectionTotal)} DH
                 </Typography>
               </div>
-              {canWriteParametres ? (
+              {canWriteCharges ? (
                 <Button
                   size="small"
                   variant="outlined"
@@ -277,7 +277,7 @@ export default function ChargesMagasinsAdminPanel() {
                       <th className="px-2 py-1.5 text-right font-medium">Prix</th>
                       <th className="px-2 py-1.5 font-medium">Périodicité</th>
                       <th className="px-2 py-1.5 text-right font-medium">Total</th>
-                      {canWriteParametres ? (
+                      {canWriteCharges ? (
                         <th className="px-2 py-1.5 text-right font-medium">Actions</th>
                       ) : null}
                     </tr>
@@ -292,7 +292,7 @@ export default function ChargesMagasinsAdminPanel() {
                         <td className="px-2 py-1.5 text-right font-medium tabular-nums">
                           {formatMAD(lineAmount(r))}
                         </td>
-                        {canWriteParametres ? (
+                        {canWriteCharges ? (
                           <td className="px-2 py-1.5 text-right">
                             <Button size="small" onClick={() => openEdit(r)} sx={{ textTransform: 'none' }}>
                               Modifier

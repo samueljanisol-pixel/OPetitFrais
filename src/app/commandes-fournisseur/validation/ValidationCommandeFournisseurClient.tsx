@@ -9,12 +9,16 @@ import {
   FormControl,
   FormControlLabel,
   InputLabel,
+  List,
+  ListItem,
+  ListItemButton,
+  ListItemText,
   MenuItem,
   Select,
   Typography,
 } from "@mui/material";
-import { alpha } from "@mui/material/styles";
 import AppLink from "@/components/AppLink";
+import CommandeFournisseurStatusChip from "@/components/commandes-fournisseur/CommandeFournisseurStatusChip";
 import { useSessionPermissions } from "@/lib/auth/useSessionPermissions";
 import { useStatusLabels } from "@/lib/statusLabels/useStatusLabels";
 import { useAppFormat } from "@/lib/i18n/useAppFormat";
@@ -186,7 +190,7 @@ export default function ValidationCommandeFournisseurClient() {
   }
 
   return (
-    <main className="mx-auto w-full max-w-3xl px-4 py-6">
+    <main className="mx-auto w-full max-w-lg px-4 py-4">
       <Button
         component={AppLink}
         href="/commandes-fournisseur"
@@ -289,64 +293,43 @@ export default function ValidationCommandeFournisseurClient() {
         <Typography variant="subtitle1" className="!mb-2" sx={{ fontWeight: 600 }}>
           {t("lotsSection")}
         </Typography>
-        {lots.length === 0 ? (
+        {loadingData ? (
+          <Typography color="text.secondary" variant="body2">
+            {tc("loading")}
+          </Typography>
+        ) : lots.length === 0 ? (
           <Typography color="text.secondary" variant="body2">
             {t("lotsEmpty")}
           </Typography>
         ) : (
-          <ul className="space-y-1">
-            {lots.map((l) => {
-              const isDraft = l.status === "brouillon";
-              const isPrete = l.status === "prete";
-              const isEmphasized = isDraft || isPrete;
-              return (
-                <li key={l.id}>
-                  <Button
-                    component={AppLink}
-                    href={`/commandes-fournisseur/validation/lots/${l.id}`}
-                    size="small"
-                    color={isDraft ? "warning" : isPrete ? "success" : "inherit"}
-                    variant={isEmphasized ? "outlined" : "text"}
-                    sx={(theme) => ({
-                      width: "100%",
-                      maxWidth: "100%",
-                      textTransform: "none",
-                      justifyContent: "flex-start",
-                      textAlign: "left",
-                      fontWeight: isEmphasized ? 600 : 400,
-                      ...(isDraft
-                        ? {
-                            py: 0.75,
-                            px: 1.25,
-                            borderWidth: 2,
-                            bgcolor: alpha(theme.palette.warning.main, 0.12),
-                            "&:hover": {
-                              bgcolor: alpha(theme.palette.warning.main, 0.2),
-                            },
-                          }
-                        : isPrete
-                          ? {
-                              py: 0.75,
-                              px: 1.25,
-                              borderWidth: 2,
-                              bgcolor: alpha(theme.palette.success.main, 0.12),
-                              "&:hover": {
-                                bgcolor: alpha(theme.palette.success.main, 0.2),
-                              },
-                            }
-                          : {}),
-                    })}
-                  >
-                    {t("lotRow", {
-                      supplier: oneLabel(l.ref_supplier, emDash),
-                      statusLabel: labelFor("commande_fournisseur_lot", l.status),
-                      dateTime: formatDateTime(l.created_at),
-                    })}
-                  </Button>
-                </li>
-              );
-            })}
-          </ul>
+          <List dense disablePadding>
+            {lots.map((l) => (
+              <ListItem key={l.id} disablePadding className="!mb-1">
+                <ListItemButton
+                  component={AppLink}
+                  href={`/commandes-fournisseur/validation/lots/${l.id}`}
+                  sx={{ borderRadius: 2, border: "1px solid", borderColor: "divider" }}
+                >
+                  <ListItemText
+                    primary={
+                      <span className="flex items-center justify-between gap-2">
+                        <span className="min-w-0 truncate">{oneLabel(l.ref_supplier, emDash)}</span>
+                        <CommandeFournisseurStatusChip
+                          domain="commande_fournisseur_lot"
+                          status={l.status}
+                          label={labelFor("commande_fournisseur_lot", l.status)}
+                        />
+                      </span>
+                    }
+                    secondary={formatDateTime(l.created_at)}
+                    slotProps={{
+                      primary: { component: "div" },
+                    }}
+                  />
+                </ListItemButton>
+              </ListItem>
+            ))}
+          </List>
         )}
       </section>
     </main>

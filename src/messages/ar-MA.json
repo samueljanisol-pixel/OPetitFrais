@@ -32,6 +32,9 @@
       "products": "المنتجات",
       "stats": "الإحصائيات",
       "supplierOrders": "طلبيات المزود",
+      "supplierAccounts": "حسابات المزودين",
+      "charges": "إدارة التكاليف",
+      "packagingManagement": "إدارة التغليف",
       "cuisine": "المطبخ",
       "cuisineHistorique": "تاريخ المطبخ",
       "shopStats": "المتجر الإلكتروني",
@@ -53,6 +56,88 @@
       "activeCartsHint": "سلة غير فارغة، آخر مزامنة خلال {minutes} دقيقة.",
       "visitsChartTitle": "الزيارات حسب اليوم (آخر 30 يومًا)",
       "refreshHint": "تحديث تلقائي كل {seconds} ث."
+    },
+    "emballages": {
+      "title": "إدارة التغليف",
+      "subtitle": "مرجع مواد التغليف وسجل المشتريات.",
+      "backHome": "الرئيسية",
+      "tabs": {
+        "catalog": "التغليف",
+        "types": "الأنواع",
+        "achats": "المشتريات"
+      },
+      "catalogHint": "قائمة مواد التغليف (الاسم + النوع).",
+      "typesHint": "أنواع المواد (كيس، علبة، زجاجة…).",
+      "typesEmpty": "ما كاين حتى نوع دابا.",
+      "newType": "نوع جديد",
+      "editType": "تعديل النوع",
+      "deleteTypeTitle": "حذف النوع",
+      "deleteTypeBody": "تحذف « {label} » ؟",
+      "catalogEmpty": "ما كاين حتى تغليف دابا.",
+      "achatsHint": "حل شراء، زيد السطور، وسدّو.",
+      "achatsEmpty": "ما كاين حتى شراء مسجل.",
+      "achatLinesEmpty": "ما كاين حتى سطر — زيد التغليف المشترى.",
+      "newEmballage": "تغليف جديد",
+      "editEmballage": "تعديل التغليف",
+      "newAchat": "شراء جديد",
+      "openAchat": "فتح الإدخال",
+      "backAchats": "رجوع للمشتريات",
+      "achatDetailTitle": "شراء ب {date}",
+      "addLine": "زيد سطر",
+      "editLine": "تعديل السطر",
+      "closeAchat": "سد الشراء",
+      "closeAchatTitle": "سد الشراء",
+      "closeAchatBody": "من بعد الإغلاق ما يمكنش التعديل. كمل؟",
+      "edit": "تعديل",
+      "moveUp": "صاعد",
+      "moveDown": "نازل",
+      "activeYes": "نعم",
+      "activeNo": "لا",
+      "deleteEmballageTitle": "حذف التغليف",
+      "deleteEmballageBody": "تحذف « {label} » ؟",
+      "deleteLineTitle": "حذف السطر",
+      "deleteLineBody": "تحذف هاد السطر ؟",
+      "statut": {
+        "ouvert": "جاري",
+        "cloture": "مسدود"
+      },
+      "columns": {
+        "label": "الاسم",
+        "type": "النوع",
+        "sortOrder": "الترتيب",
+        "active": "نشط",
+        "actions": "إجراءات",
+        "date": "التاريخ",
+        "statut": "الحالة",
+        "ligneCount": "السطور",
+        "emballage": "التغليف",
+        "quantite": "الكمية",
+        "prixUnitaire": "الثمن للوحدة",
+        "montant": "المبلغ",
+        "note": "ملاحظة"
+      },
+      "filters": {
+        "from": "من",
+        "to": "إلى",
+        "emballage": "التغليف",
+        "allEmballages": "الكل",
+        "allStatuts": "الكل"
+      },
+      "types": {
+        "sachet": "كيس",
+        "barquette": "علبة",
+        "bouteille": "زجاجة",
+        "sac_vente": "كيس البيع"
+      },
+      "errors": {
+        "loadFailed": "ما قدرناش نحمّلو",
+        "saveFailed": "ما قدرناش نسجّلو",
+        "deleteFailed": "ما قدرناش نحذفو",
+        "labelRequired": "الاسم ضروري",
+        "typeRequired": "النوع ضروري",
+        "emballageRequired": "التغليف ضروري",
+        "closeFailed": "ما قدرناش نسدّو"
+      }
     },
     "accessDenied": {
       "title": "الوصول ممنوع",
@@ -98,7 +183,8 @@
         "integratedReadOnly": "مأخوذة بعين الاعتبار (ما تقدرش تبدّل)",
         "cancelled": "annulées"
       },
-      "orderListSecondary": "{statusLabel} — {dateTime} — {productCount}",
+      "orderListSecondary": "{dateTime} — {productCount}",
+      "orderListSecondaryWithStatus": "{statusLabel} — {dateTime} — {productCount}",
       "productCount": "{count, plural, one {# منتج} other {# منتجات}}"
     },
     "commandes": {
@@ -189,7 +275,8 @@
         "subtitle": "اختار الفضاء اللي بغيتي تحل",
         "navSaisie": "الإدخال",
         "navValidation": "التصديق",
-        "navAchat": "الشرا"
+        "navAchat": "الشرا",
+        "navComptes": "حسابات الموردين"
       },
       "saisie": {
         "index": {
@@ -256,7 +343,8 @@
           "pendingRow": "{supplier} — {store} — {dateTime} — {productCount}",
           "lotsSection": "لوطات فالخدمة",
           "lotsEmpty": "ما كاين حتى لوط.",
-          "lotRow": "{supplier} — {statusLabel} — {dateTime}"
+          "lotRow": "{supplier} — {dateTime}",
+          "lotRowWithStatus": "{supplier} — {statusLabel} — {dateTime}"
         },
         "lotDetail": {
           "backToList": "لائحة الطلبيات",
@@ -335,12 +423,16 @@
           "loadingLots": "كيتسنا اللوطات…",
           "emptyLots": "ما كاين حتى لوط لهاد الفلتر.",
           "lotStatusLine": "الحالة : {status} — جاهزة نهار {readyDate}",
-          "lotStatusClosed": " — تسدات نهار {closedDate}"
+          "lotDatesLine": "جاهزة نهار {readyDate}",
+          "lotStatusClosed": " — تسدات نهار {closedDate}",
+          "lotClosedLine": "تسدات نهار {closedDate}"
         },
         "detail": {
           "backToLots": "لائحة اللوطات",
           "saving": "كيتسنا التسجيل…",
           "statusLine": "الحالة : {status} — متحضّرة : {readyDate} — الإغلاق : {closedDate}",
+          "datesLine": "متحضّرة : {readyDate} — الإغلاق : {closedDate}",
+          "datesLineReady": "متحضّرة : {readyDate}",
           "readOnlyNotice": "اللوط كمل : للقراة فقط. استعمل « تعديل » باش تعاود تفتحو.",
           "close": "سد",
           "closing": "كيتسنا الإغلاق…",
@@ -398,6 +490,7 @@
             "body2": "واش كتأكّد الإغلاق على أي حال ؟",
             "confirm": "أكّد الإغلاق"
           },
+          "reopenBlockedPaid": "تعذّر التعديل: أحد مشتريات هذا الدفتر مدفوع بالفعل.",
           "vendorForm": {
             "titleCreate": "بائع جديد",
             "titleEdit": "بدّل البائع",
@@ -413,6 +506,51 @@
             "currencyRial": "ريال (1 درهم = 20 ريال)",
             "add": "زيد"
           }
+        }
+      },
+      "comptes": {
+        "list": {
+          "title": "حسابات الموردين",
+          "subtitle": "حساب لكل بائع سوق أو لكل مورد Station.",
+          "empty": "ما كاين حتى بائع ولا station.",
+          "total": "المجموع",
+          "reste": "الباقي للدفع",
+          "parentSupplier": "المورد : {label}"
+        },
+        "detail": {
+          "backList": "قائمة الحسابات",
+          "parentSupplier": "المورد : {label}",
+          "total": "مجموع المشتريات",
+          "paid": "المدفوع",
+          "remaining": "الباقي للدفع",
+          "achatsTitle": "المشتريات",
+          "addPayment": "زيد دفع",
+          "selectAllUnpaid": "حدّد الكل (غير المدفوع)",
+          "deselectAll": "لغي التحديد",
+          "paidBadge": "مدفوع",
+          "unpaidBadge": "باقي",
+          "noAchats": "ما كاين حتى مشتريات محاسبية.",
+          "paymentsTitle": "سجل المدفوعات",
+          "noPayments": "ما كاين حتى مدفوعات مسجّلة.",
+          "achatsCount": "{count, plural, one {مشتريات #} other {مشتريات #}}"
+        },
+        "paymentDialog": {
+          "title": "سجّل دفع",
+          "summary": "{count, plural, one {مشتريات # محددة} other {مشتريات # محددة}} — {amount} DH",
+          "method": "طريقة الدفع",
+          "date": "تاريخ الدفع",
+          "comment": "تعليق"
+        },
+        "achatDetail": {
+          "back": "رجوع للحساب",
+          "paidBadge": "مدفوع",
+          "unpaidBadge": "باقي",
+          "product": "المنتج",
+          "qty": "الكمية",
+          "amount": "المبلغ",
+          "noLines": "ما كاينش تفاصيل منتجات (مصاريف عامة أو شراء شامل).",
+          "openLot": "شوف لوط الشرا",
+          "openPdf": "PDF ديال اللوط"
         }
       },
       "quantityPanel": {

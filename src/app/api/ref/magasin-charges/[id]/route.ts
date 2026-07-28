@@ -6,7 +6,7 @@ import { parsePeriodicite } from "@/lib/ca/magasinCharges";
 type Ctx = { params: Promise<{ id: string }> };
 
 export async function PATCH(req: Request, ctx: Ctx) {
-  const gate = await requireApiPermission("parametres.write");
+  const gate = await requireApiPermission("charges.write");
   if (!gate.ok) {
     return NextResponse.json({ error: gate.error }, { status: gate.status });
   }
@@ -120,7 +120,7 @@ export async function PATCH(req: Request, ctx: Ctx) {
 }
 
 export async function DELETE(_req: Request, ctx: Ctx) {
-  const gate = await requireApiPermission("parametres.write");
+  const gate = await requireApiPermission("charges.write");
   if (!gate.ok) {
     return NextResponse.json({ error: gate.error }, { status: gate.status });
   }

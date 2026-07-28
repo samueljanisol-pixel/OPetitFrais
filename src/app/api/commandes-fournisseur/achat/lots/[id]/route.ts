@@ -18,6 +18,11 @@ import {
   saisieLigneTargetsByProductForLot,
 } from "@/lib/commandes-fournisseur/ligne-saisie-comments";
 import { buildLotProductDisplayInfo } from "@/lib/commandes-fournisseur/product-display";
+import {
+  deleteAllAchatsForLot,
+  lotHasPaidAchats,
+  syncCompteAchatsForLot,
+} from "@/lib/commandes-fournisseur/compte-lot-breakdown";
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -156,11 +161,15 @@ export async function GET(_req: NextRequest, ctx: Ctx) {
     };
   });
 
+  const paidCheck = await lotHasPaidAchats(supabase, id);
+  const compteAchatPaye = "paid" in paidCheck ? paidCheck.paid : false;
+
   return NextResponse.json({
     lot,
     lignes: lignesWithCategory,
     frais: fraisRes.data ?? [],
     vendeurs: vendeursRes.data ?? [],
+    compteAchatPaye,
   });
 }
 
@@ -229,6 +238,20 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
         { error: "La réouverture ne peut pas être combinée à d'autres modifications" },
         { status: 400 },
       );
+    }
+    const paidCheck = await lotHasPaidAchats(supabase, id);
+    if ("error" in paidCheck) {
+      return NextResponse.json({ error: paidCheck.error }, { status: 500 });
+    }
+    if (paidCheck.paid) {
+      return NextResponse.json(
+        { error: "Impossible : un achat comptable de ce lot est déjà payé" },
+        { status: 409 },
+      );
+    }
+    const delAchats = await deleteAllAchatsForLot(supabase, id);
+    if ("error" in delAchats) {
+      return NextResponse.json({ error: delAchats.error }, { status: 500 });
     }
     const { error: ue } = await supabase
       .from("commande_fournisseur_lot")
@@ -643,17 +666,27 @@ async function cloturerLotAchat(opts: {
     }
   }
 
+  const dateCloture = new Date().toISOString();
   const { error: ue } = await supabase
     .from("commande_fournisseur_lot")
     .update({
       status: "terminee",
-      marque_terminee_at: new Date().toISOString(),
+      marque_terminee_at: dateCloture,
     })
     .eq("id", lotId)
     .eq("status", "prete");
 
   if (ue) {
     return { error: ue.message, status: 500 };
+  }
+
+  const sync = await syncCompteAchatsForLot(supabase, {
+    lotId,
+    supplierId,
+    dateCloture,
+  });
+  if ("error" in sync) {
+    return { error: sync.error, status: 500 };
   }
 
   return { ok: true };

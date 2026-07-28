@@ -19,12 +19,13 @@ import {
   fetchBenefitTotalsForDateRange,
 } from "./benefitFromSales";
 import {
-  aggregateChargesByYmInRange,
-  aggregateChargesForDay,
-  aggregateChargesForMonth,
   benefitNet,
   daysInPeriodForMonthYm,
+  fetchChargeFeuilleBundle,
   fetchMagasinChargeLines,
+  resolveChargesByYmInRange,
+  resolveChargesForDay,
+  resolveChargesForMonth,
 } from "./magasinCharges";
 import {
   canonicalMagasinCode,
@@ -323,6 +324,7 @@ export async function fetchCaDashboardFromSupabase(
     dayBenefitByMagRes,
     monthBenefitByMagRes,
     chargeLinesRes,
+    chargeFeuilleRes,
   ] = await Promise.all([
     dayQb,
     j1Qb,
@@ -337,11 +339,14 @@ export async function fetchCaDashboardFromSupabase(
     fetchBenefitByDayMagasinForDateRange(supabase, date, date, magInBenefit),
     fetchBenefitByDayMagasinForDateRange(supabase, monthBounds.from, monthBounds.to, magInBenefit),
     fetchMagasinChargeLines(supabase),
+    fetchChargeFeuilleBundle(supabase, ym, ym),
   ]);
 
   const firstErr = dayQ.error || j1Q.error || j7Q.error || monthQ.error || hourQ.error;
   if (firstErr) return { error: firstErr.message };
   if ("error" in chargeLinesRes) return { error: chargeLinesRes.error };
+  if ("error" in chargeFeuilleRes) return { error: chargeFeuilleRes.error };
+  const chargeFeuilleBundle = chargeFeuilleRes.data;
 
   const dayAgg = sumDayRows(dayQ.data);
   const j1Agg = sumDayRows(j1Q.data);
@@ -479,9 +484,20 @@ export async function fetchCaDashboardFromSupabase(
       ? monthBenefitTotals.caWithMargin
       : undefined;
 
-  const dayCharges = aggregateChargesForDay(chargeLinesRes.lines, date, codes);
+  const dayCharges = resolveChargesForDay(
+    chargeLinesRes.lines,
+    chargeFeuilleBundle,
+    date,
+    codes,
+  );
   const monthDaysInPeriod = daysInPeriodForMonthYm(ym, todayIso);
-  const monthCharges = aggregateChargesForMonth(chargeLinesRes.lines, monthDaysInPeriod, codes);
+  const monthCharges = resolveChargesForMonth(
+    chargeLinesRes.lines,
+    chargeFeuilleBundle,
+    ym,
+    monthDaysInPeriod,
+    codes,
+  );
 
   /** Clés d’affichage = codes `ca_day` (cartes magasin) ; jointure tolérante M01/M1. */
   const displayMagKeys = [
@@ -634,15 +650,18 @@ export async function fetchHistoriqueFromSupabase(
   if (magInCa !== undefined) {
     hq = hq.in("magasin", magInCa);
   }
-  const [dayRes, benefitBreakdown, chargeLinesRes] = await Promise.all([
+  const [dayRes, benefitBreakdown, chargeLinesRes, chargeFeuilleRes] = await Promise.all([
     hq.order("date", { ascending: true }),
     fetchBenefitByDayMagasinForDateRange(supabase, from, to, magInBenefit),
     fetchMagasinChargeLines(supabase),
+    fetchChargeFeuilleBundle(supabase, from.slice(0, 7), to.slice(0, 7)),
   ]);
 
   if (dayRes.error) return { error: dayRes.error.message };
   if ("error" in benefitBreakdown) return { error: benefitBreakdown.error };
   if ("error" in chargeLinesRes) return { error: chargeLinesRes.error };
+  if ("error" in chargeFeuilleRes) return { error: chargeFeuilleRes.error };
+  const chargeFeuilleBundle = chargeFeuilleRes.data;
 
   const byDate = new Map<
     string,
@@ -707,7 +726,12 @@ export async function fetchHistoriqueFromSupabase(
   const days: HistoriqueDayRow[] = Array.from(byDate.entries())
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([date, v]) => {
-      const dayCharges = aggregateChargesForDay(chargeLinesRes.lines, date, codes);
+      const dayCharges = resolveChargesForDay(
+        chargeLinesRes.lines,
+        chargeFeuilleBundle,
+        date,
+        codes,
+      );
       const displayKeys = [
         ...new Set([
           ...Object.keys(v.magasins),
@@ -751,8 +775,9 @@ export async function fetchHistoriqueFromSupabase(
     const ym = d.date.slice(0, 7);
     daysInPeriodByYm[ym] = (daysInPeriodByYm[ym] ?? 0) + 1;
   }
-  const chargesByYmRaw = aggregateChargesByYmInRange(
+  const chargesByYmRaw = resolveChargesByYmInRange(
     chargeLinesRes.lines,
+    chargeFeuilleBundle,
     from,
     to,
     codes,

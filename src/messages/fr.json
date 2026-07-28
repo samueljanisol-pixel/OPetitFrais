@@ -32,6 +32,9 @@
       "products": "Produits",
       "stats": "Statistique",
       "supplierOrders": "Commandes fournisseur",
+      "supplierAccounts": "Comptes fournisseurs",
+      "charges": "Gestion Charges",
+      "packagingManagement": "Gestion Emballages",
       "cuisine": "Cuisine",
       "cuisineHistorique": "Historique cuisine",
       "shopStats": "Boutique en ligne",
@@ -53,6 +56,88 @@
       "activeCartsHint": "Panier non vide, sync dans les {minutes} dernières minutes.",
       "visitsChartTitle": "Visites par jour (30 derniers jours)",
       "refreshHint": "Actualisation automatique toutes les {seconds} s."
+    },
+    "emballages": {
+      "title": "Gestion Emballages",
+      "subtitle": "Référentiel des matériaux d'emballage et journal des achats.",
+      "backHome": "Accueil",
+      "tabs": {
+        "catalog": "Emballages",
+        "types": "Types",
+        "achats": "Achats"
+      },
+      "catalogHint": "Liste des matériaux d'emballage (libellé + type).",
+      "typesHint": "Types de matériaux (sachet, barquette, bouteille, sac de vente…).",
+      "typesEmpty": "Aucun type pour le moment.",
+      "newType": "Nouveau type",
+      "editType": "Modifier le type",
+      "deleteTypeTitle": "Supprimer le type",
+      "deleteTypeBody": "Supprimer « {label} » ?",
+      "catalogEmpty": "Aucun emballage pour le moment.",
+      "achatsHint": "Ouvrez un achat, ajoutez des lignes, puis clôturez-le.",
+      "achatsEmpty": "Aucun achat enregistré.",
+      "achatLinesEmpty": "Aucune ligne — ajoutez des emballages achetés.",
+      "newEmballage": "Nouvel emballage",
+      "editEmballage": "Modifier l'emballage",
+      "newAchat": "Nouvel achat",
+      "openAchat": "Ouvrir la saisie",
+      "backAchats": "Retour aux achats",
+      "achatDetailTitle": "Achat du {date}",
+      "addLine": "Ajouter une ligne",
+      "editLine": "Modifier la ligne",
+      "closeAchat": "Clôturer l'achat",
+      "closeAchatTitle": "Clôturer l'achat",
+      "closeAchatBody": "Une fois clôturé, l'achat ne pourra plus être modifié. Continuer ?",
+      "edit": "Modifier",
+      "moveUp": "Monter",
+      "moveDown": "Descendre",
+      "activeYes": "Oui",
+      "activeNo": "Non",
+      "deleteEmballageTitle": "Supprimer l'emballage",
+      "deleteEmballageBody": "Supprimer « {label} » ?",
+      "deleteLineTitle": "Supprimer la ligne",
+      "deleteLineBody": "Supprimer cette ligne ?",
+      "statut": {
+        "ouvert": "En cours",
+        "cloture": "Clôturé"
+      },
+      "columns": {
+        "label": "Libellé",
+        "type": "Type",
+        "sortOrder": "Ordre",
+        "active": "Actif",
+        "actions": "Actions",
+        "date": "Date",
+        "statut": "Statut",
+        "ligneCount": "Lignes",
+        "emballage": "Emballage",
+        "quantite": "Quantité",
+        "prixUnitaire": "Prix unitaire",
+        "montant": "Montant",
+        "note": "Note"
+      },
+      "filters": {
+        "from": "Du",
+        "to": "Au",
+        "emballage": "Emballage",
+        "allEmballages": "Tous",
+        "allStatuts": "Tous"
+      },
+      "types": {
+        "sachet": "Sachet",
+        "barquette": "Barquette",
+        "bouteille": "Bouteille",
+        "sac_vente": "Sac de vente"
+      },
+      "errors": {
+        "loadFailed": "Chargement impossible",
+        "saveFailed": "Enregistrement impossible",
+        "deleteFailed": "Suppression impossible",
+        "labelRequired": "Libellé requis",
+        "typeRequired": "Type requis",
+        "emballageRequired": "Emballage requis",
+        "closeFailed": "Clôture impossible"
+      }
     },
     "accessDenied": {
       "title": "Accès refusé",
@@ -98,7 +183,8 @@
         "integratedReadOnly": "Prises en compte (non modifiables)",
         "cancelled": "Annulées"
       },
-      "orderListSecondary": "{statusLabel} — {dateTime} — {productCount}",
+      "orderListSecondary": "{dateTime} — {productCount}",
+      "orderListSecondaryWithStatus": "{statusLabel} — {dateTime} — {productCount}",
       "productCount": "{count, plural, one {# produit} other {# produits}}"
     },
     "commandes": {
@@ -189,7 +275,8 @@
         "subtitle": "Choisissez l'espace à ouvrir",
         "navSaisie": "Saisie",
         "navValidation": "Validation",
-        "navAchat": "Achat"
+        "navAchat": "Achat",
+        "navComptes": "Comptes fournisseurs"
       },
       "saisie": {
         "index": {
@@ -256,7 +343,8 @@
           "pendingRow": "{supplier} — {store} — {dateTime} — {productCount}",
           "lotsSection": "Lots en cours",
           "lotsEmpty": "Aucun lot.",
-          "lotRow": "{supplier} — {statusLabel} — {dateTime}"
+          "lotRow": "{supplier} — {dateTime}",
+          "lotRowWithStatus": "{supplier} — {statusLabel} — {dateTime}"
         },
         "lotDetail": {
           "backToList": "Liste des commandes",
@@ -335,12 +423,16 @@
           "loadingLots": "Chargement des lots…",
           "emptyLots": "Aucun lot pour ce filtre.",
           "lotStatusLine": "Statut : {status} — Prête le {readyDate}",
-          "lotStatusClosed": " — Clôturée le {closedDate}"
+          "lotDatesLine": "Prête le {readyDate}",
+          "lotStatusClosed": " — Clôturée le {closedDate}",
+          "lotClosedLine": "Clôturée le {closedDate}"
         },
         "detail": {
           "backToLots": "Liste des lots",
           "saving": "Enregistrement…",
           "statusLine": "Statut : {status} — préparée : {readyDate} — clôture : {closedDate}",
+          "datesLine": "Préparée : {readyDate} — clôture : {closedDate}",
+          "datesLineReady": "Préparée : {readyDate}",
           "readOnlyNotice": "Lot terminé : lecture seule. Utilisez « Modifier » pour le rouvrir.",
           "close": "Clôturer",
           "closing": "Clôture…",
@@ -398,6 +490,7 @@
             "body2": "Confirmez-vous la clôture tout de même ?",
             "confirm": "Confirmer la clôture"
           },
+          "reopenBlockedPaid": "Impossible : un achat comptable de ce lot est déjà payé.",
           "vendorForm": {
             "titleCreate": "Nouveau vendeur",
             "titleEdit": "Modifier le vendeur",
@@ -413,6 +506,51 @@
             "currencyRial": "Rial (1 DH = 20 Rial)",
             "add": "Ajouter"
           }
+        }
+      },
+      "comptes": {
+        "list": {
+          "title": "Comptes fournisseurs",
+          "subtitle": "Un compte par vendeur Marché ou par fournisseur Station.",
+          "empty": "Aucun vendeur ni station configuré.",
+          "total": "Total",
+          "reste": "Reste à payer",
+          "parentSupplier": "Fournisseur : {label}"
+        },
+        "detail": {
+          "backList": "Liste des comptes",
+          "parentSupplier": "Fournisseur : {label}",
+          "total": "Total achats",
+          "paid": "Payé",
+          "remaining": "Reste à payer",
+          "achatsTitle": "Achats",
+          "addPayment": "Ajouter un paiement",
+          "selectAllUnpaid": "Tout sélectionner (impayés)",
+          "deselectAll": "Tout désélectionner",
+          "paidBadge": "Payé",
+          "unpaidBadge": "À payer",
+          "noAchats": "Aucun achat comptable.",
+          "paymentsTitle": "Historique des paiements",
+          "noPayments": "Aucun paiement enregistré.",
+          "achatsCount": "{count, plural, one {# achat} other {# achats}}"
+        },
+        "paymentDialog": {
+          "title": "Enregistrer un paiement",
+          "summary": "{count, plural, one {# achat sélectionné} other {# achats sélectionnés}} — {amount} DH",
+          "method": "Mode de paiement",
+          "date": "Date du paiement",
+          "comment": "Commentaire"
+        },
+        "achatDetail": {
+          "back": "Retour au compte",
+          "paidBadge": "Payé",
+          "unpaidBadge": "À payer",
+          "product": "Produit",
+          "qty": "Qté",
+          "amount": "Montant",
+          "noLines": "Pas de détail produit (frais généraux ou achat global).",
+          "openLot": "Voir le lot achat",
+          "openPdf": "PDF du lot"
         }
       },
       "quantityPanel": {

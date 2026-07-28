@@ -42,7 +42,6 @@ import StatusLabelsAdminPanel from './StatusLabelsAdminPanel'
 import StockAdminPanel from './StockAdminPanel'
 import TranslationsAdminPanel from './TranslationsAdminPanel'
 import ChauffeurAdminPanel from './ChauffeurAdminPanel'
-import ChargesMagasinsAdminPanel from './ChargesMagasinsAdminPanel'
 import ShopDeliveryZoneAdminPanel from './ShopDeliveryZoneAdminPanel'
 
 type TabId =
@@ -55,7 +54,7 @@ type TabId =
   | 'cond'
   | 'vend'
   | 'commandes'
-  | 'charges'
+  | 'paiement'
   | 'livraison'
   | 'stock'
   | 'traductions'
@@ -72,7 +71,7 @@ const tabLabels: Record<TabId, string> = {
   cond: 'Conditionnements',
   vend: 'Vendeurs',
   commandes: 'Commandes',
-  charges: 'Charges Magasins',
+  paiement: 'Modes de paiement',
   livraison: 'Zone livraison',
   stock: 'Stock',
   traductions: 'Traductions',
@@ -89,6 +88,7 @@ const deleteConfirmPhrase: Partial<Record<TabId, string>> = {
   sup: 'ce fournisseur',
   cond: 'ce conditionnement',
   vend: 'ce vendeur',
+  paiement: 'ce mode de paiement',
 }
 
 type DeleteConfirmTarget = { tab: TabId; id: string; label: string }
@@ -166,7 +166,7 @@ export default function ParametresClient() {
       'cond',
       'vend',
       'commandes',
-      'charges',
+      'paiement',
       'livraison',
       'stock',
       'traductions',
@@ -185,6 +185,7 @@ export default function ParametresClient() {
   const [sup, setSup] = useState<RefSupplierRow[]>([])
   const [cond, setCond] = useState<RefConditionnementRow[]>([])
   const [vendeurs, setVendeurs] = useState<RefVendeurRow[]>([])
+  const [paymentMethods, setPaymentMethods] = useState<RefRow[]>([])
   const [err, setErr] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [open, setOpen] = useState(false)
@@ -215,7 +216,7 @@ export default function ParametresClient() {
   const load = useCallback(async () => {
     setErr(null)
     setLoading(true)
-    const [a, udcRes, udaRes, ucvRes, b, sc, c, d, e] = await Promise.all([
+    const [a, udcRes, udaRes, ucvRes, b, sc, c, d, e, pmRes] = await Promise.all([
       supabase.from('ref_sales_unit').select('*').order('sort_order'),
       supabase.from('ref_order_unit').select('*').order('sort_order'),
       supabase.from('ref_purchase_unit').select('*').order('sort_order'),
@@ -229,6 +230,7 @@ export default function ParametresClient() {
         .select('*, ref_supplier(id, code, label)')
         .order('sort_order')
         .order('label'),
+      supabase.from('ref_payment_method').select('*').order('sort_order').order('label'),
     ])
     const firstErr =
       a.error ??
@@ -239,7 +241,8 @@ export default function ParametresClient() {
       sc.error ??
       c.error ??
       d.error ??
-      e.error
+      e.error ??
+      pmRes.error
     if (firstErr) setErr(firstErr.message)
     setUdv((a.data as RefRow[]) ?? [])
     setUdc((udcRes.data as RefRow[]) ?? [])
@@ -255,6 +258,7 @@ export default function ParametresClient() {
     )
     setCond((d.data as RefConditionnementRow[]) ?? [])
     setVendeurs((e.data as RefVendeurRow[]) ?? [])
+    setPaymentMethods((pmRes.data as RefRow[]) ?? [])
     setLoading(false)
   }, [supabase])
 
@@ -435,6 +439,7 @@ export default function ParametresClient() {
     if (t === 'cat') return 'ref_category'
     if (t === 'sup') return 'ref_supplier'
     if (t === 'vend') return 'ref_supplier_vendeur'
+    if (t === 'paiement') return 'ref_payment_method'
     if (t === 'cond') return 'ref_conditionnement'
     return 'ref_sales_unit'
   }
@@ -447,7 +452,6 @@ export default function ParametresClient() {
       tab === 'stock' ||
       tab === 'traductions' ||
       tab === 'commandes' ||
-      tab === 'charges' ||
       tab === 'livraison'
     )
       return
@@ -516,7 +520,7 @@ export default function ParametresClient() {
           return
         }
       }
-    } else if (tab === 'cat' || tab === 'udv' || tab === 'udc' || tab === 'uda') {
+    } else if (tab === 'cat' || tab === 'udv' || tab === 'udc' || tab === 'uda' || tab === 'paiement') {
       const labelArTrim = form.label_ar.trim()
       const payload: { label: string; label_ar: string | null; sort_order?: number } = {
         label: form.label.trim(),
@@ -605,7 +609,6 @@ export default function ParametresClient() {
       tab === 'stock' ||
       tab === 'traductions' ||
       tab === 'commandes' ||
-      tab === 'charges' ||
       tab === 'livraison'
     )
       return
@@ -676,7 +679,6 @@ export default function ParametresClient() {
         tab !== 'stock' &&
         tab !== 'traductions' &&
         tab !== 'commandes' &&
-        tab !== 'charges' &&
         tab !== 'livraison' ? (
           <Button variant="contained" color="success" onClick={openNew} sx={{ mb: 2, textTransform: 'none' }}>
             Ajouter — {tabLabels[tab]}
@@ -684,7 +686,6 @@ export default function ParametresClient() {
         ) : null}
         {tab === 'traductions' ? <TranslationsAdminPanel /> : null}
         {tab === 'commandes' ? <ChauffeurAdminPanel /> : null}
-        {tab === 'charges' ? <ChargesMagasinsAdminPanel /> : null}
         {tab === 'livraison' ? <ShopDeliveryZoneAdminPanel /> : null}
         {tab === 'taches' ? <AutomatedTasksAdminPanel /> : null}
         {tab === 'comptes' ? (
@@ -767,6 +768,29 @@ export default function ParametresClient() {
           <RefTable
             title="Unités d'achat"
             rows={uda}
+            onEdit={openRow}
+            onDelete={requestDelete}
+            extras={[
+              {
+                header: 'Libellé arabe',
+                render: r => {
+                  const ar = (r as RefRow).label_ar?.trim()
+                  return ar && ar.length > 0 ? (
+                    <span dir="rtl" className="block text-right">
+                      {ar}
+                    </span>
+                  ) : (
+                    '—'
+                  )
+                },
+              },
+            ]}
+          />
+        )}
+        {tab === 'paiement' && (
+          <RefTable
+            title="Modes de paiement"
+            rows={paymentMethods}
             onEdit={openRow}
             onDelete={requestDelete}
             extras={[
@@ -1055,7 +1079,7 @@ export default function ParametresClient() {
           <DialogContent>
             <div className="mt-1 flex flex-col gap-4">
               <TextField label="Libellé" value={form.label} onChange={e => setForm(f => ({ ...f, label: e.target.value }))} size="small" fullWidth />
-              {tab === 'cond' || tab === 'cat' || tab === 'udv' || tab === 'udc' || tab === 'uda' || tab === 'ucv' ? (
+              {tab === 'cond' || tab === 'cat' || tab === 'udv' || tab === 'udc' || tab === 'uda' || tab === 'ucv' || tab === 'paiement' ? (
                 <TextField
                   label="Libellé arabe"
                   value={form.label_ar}

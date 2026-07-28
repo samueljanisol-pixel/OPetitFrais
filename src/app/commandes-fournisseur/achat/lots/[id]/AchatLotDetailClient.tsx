@@ -20,6 +20,7 @@ import {
   TableHead,
   TableRow,
   TextField,
+  Tooltip,
   Typography,
 } from "@mui/material";
 import { alpha, useTheme } from "@mui/material/styles";
@@ -31,6 +32,7 @@ import { useTranslations } from "next-intl";
 import AppLink from "@/components/AppLink";
 import FormDialog from "@/lib/mui/FormDialog";
 import ProductArabicSubtitle from "@/components/ProductArabicSubtitle";
+import CommandeFournisseurStatusChip from "@/components/commandes-fournisseur/CommandeFournisseurStatusChip";
 import CommandeFournisseurProductPicker, {
   type ProductPickRow,
 } from "@/features/commandes-fournisseur/CommandeFournisseurProductPicker";
@@ -555,6 +557,7 @@ type ApiPayload = {
   lignes: LotLineApi[];
   frais: FraisApi[];
   vendeurs: VendeurApi[];
+  compteAchatPaye: boolean;
 };
 
 async function fetchLotPayload(lotId: string): Promise<
@@ -566,6 +569,7 @@ async function fetchLotPayload(lotId: string): Promise<
     lignes?: LotLineApi[];
     frais?: FraisApi[];
     vendeurs?: VendeurApi[];
+    compteAchatPaye?: boolean;
     error?: string;
   };
 
@@ -584,6 +588,7 @@ async function fetchLotPayload(lotId: string): Promise<
       lignes: json.lignes,
       frais: json.frais ?? [],
       vendeurs: json.vendeurs ?? [],
+      compteAchatPaye: json.compteAchatPaye === true,
     },
   };
 }
@@ -619,6 +624,7 @@ export default function AchatLotDetailClient({ lotId }: { lotId: string }) {
   const fraisBaselineSnap = useRef<string>("");
   const fraisDeletesPending = useRef<string[]>([]);
   const [vendeurs, setVendeurs] = useState<VendeurApi[]>([]);
+  const [compteAchatPaye, setCompteAchatPaye] = useState(false);
 
   const [draftByLine, setDraftByLine] = useState<Record<string, DraftRow>>({});
   const lignesRef = useRef(lignes);
@@ -738,6 +744,7 @@ export default function AchatLotDetailClient({ lotId }: { lotId: string }) {
     fraisDeletesPending.current = [];
     fraisBaselineSnap.current = serialiserEtatFrais(fl, []);
     setVendeurs(payload.vendeurs);
+    setCompteAchatPaye(payload.compteAchatPaye);
     setDraftByLine(drafts);
     setSelectedSansVendeur(new Set());
   }, []);
@@ -1449,15 +1456,25 @@ export default function AchatLotDetailClient({ lotId }: { lotId: string }) {
 
       {lot ? (
         <>
-          <Typography variant="h5" className="!mb-2" sx={{ fontWeight: 600 }}>
-            {supplierHeading(lot.ref_supplier)}
-          </Typography>
+          <div className="!mb-2 flex items-center justify-between gap-2">
+            <Typography variant="h5" sx={{ fontWeight: 600 }}>
+              {supplierHeading(lot.ref_supplier)}
+            </Typography>
+            <CommandeFournisseurStatusChip
+              domain="commande_fournisseur_lot"
+              status={lot.status}
+              label={labelFor("commande_fournisseur_lot", lot.status)}
+            />
+          </div>
           <Typography variant="body2" color="text.secondary" className="!mb-2">
-            {t("statusLine", {
-              status: labelFor("commande_fournisseur_lot", lot.status),
-              readyDate: lot.marque_prete_at ? formatDate(lot.marque_prete_at) : emDash,
-              closedDate: lot.marque_terminee_at ? formatDate(lot.marque_terminee_at) : emDash,
-            })}
+            {lot.marque_terminee_at
+              ? t("datesLine", {
+                  readyDate: lot.marque_prete_at ? formatDate(lot.marque_prete_at) : emDash,
+                  closedDate: formatDate(lot.marque_terminee_at),
+                })
+              : t("datesLineReady", {
+                  readyDate: lot.marque_prete_at ? formatDate(lot.marque_prete_at) : emDash,
+                })}
           </Typography>
           {!editable ? (
             <Alert severity="info" className="!mb-3">
@@ -1465,30 +1482,26 @@ export default function AchatLotDetailClient({ lotId }: { lotId: string }) {
             </Alert>
           ) : null}
 
-          <Box className="!mb-3 flex flex-wrap items-center gap-2">
-            {editable ? (
-              <Button
-                variant="outlined"
-                size="small"
-                disabled={closing || saving || reopening || pdfBusy}
-                onClick={() => void cloturer(false)}
-                sx={{ textTransform: "none" }}
-              >
-                {closing ? t("closing") : t("close")}
-              </Button>
-            ) : null}
+          <Box className="!mb-3 flex flex-wrap items-center justify-end gap-2">
             {lot.status === "terminee" ? (
-              <Button
-                variant="outlined"
-                size="small"
-                color="primary"
-                startIcon={<EditOutlinedIcon fontSize="small" />}
-                disabled={reopening || closing || pdfBusy}
-                onClick={() => setConfirmReopenOpen(true)}
-                sx={{ textTransform: "none" }}
+              <Tooltip
+                title={compteAchatPaye ? t("reopenBlockedPaid") : ""}
+                disableHoverListener={!compteAchatPaye}
               >
-                {reopening ? t("reopening") : t("edit")}
-              </Button>
+                <span>
+                  <Button
+                    variant="outlined"
+                    size="small"
+                    color="primary"
+                    startIcon={<EditOutlinedIcon fontSize="small" />}
+                    disabled={reopening || closing || pdfBusy || compteAchatPaye}
+                    onClick={() => setConfirmReopenOpen(true)}
+                    sx={{ textTransform: "none" }}
+                  >
+                    {reopening ? t("reopening") : t("edit")}
+                  </Button>
+                </span>
+              </Tooltip>
             ) : null}
             <Button
               variant="contained"
@@ -1509,7 +1522,7 @@ export default function AchatLotDetailClient({ lotId }: { lotId: string }) {
             </Button>
           </Box>
 
-          {!supplierAsSoleVendor ? (
+          {!supplierAsSoleVendor && lignesSansVendeurSorted.length > 0 ? (
             <>
               <Box className="!mb-2 flex flex-row flex-wrap items-center justify-between gap-2">
                 <Typography variant="h6" sx={{ fontWeight: 700, mb: 0 }}>
@@ -1546,18 +1559,15 @@ export default function AchatLotDetailClient({ lotId }: { lotId: string }) {
                       >
                         <Checkbox
                           size="small"
-                          disabled={!editable || lignesSansVendeurSorted.length === 0}
-                          checked={
-                            lignesSansVendeurSorted.length > 0 &&
-                            lignesSansVendeurSorted.every((L) => selectedSansVendeur.has(String(L.id)))
-                          }
+                          disabled={!editable}
+                          checked={lignesSansVendeurSorted.every((L) => selectedSansVendeur.has(String(L.id)))}
                           indeterminate={
                             lignesSansVendeurSorted.some((L) => selectedSansVendeur.has(String(L.id))) &&
                             !lignesSansVendeurSorted.every((L) => selectedSansVendeur.has(String(L.id)))
                           }
                           onChange={() => {
                             const allIds = lignesSansVendeurSorted.map((L) => String(L.id));
-                            const allOn = allIds.length > 0 && allIds.every((id) => selectedSansVendeur.has(id));
+                            const allOn = allIds.every((id) => selectedSansVendeur.has(id));
                             setSelectedSansVendeur(allOn ? new Set() : new Set(allIds));
                           }}
                         />
@@ -1582,16 +1592,7 @@ export default function AchatLotDetailClient({ lotId }: { lotId: string }) {
                     </TableRow>
                   </TableHead>
                   <TableBody>
-                    {lignesSansVendeurSorted.length === 0 ? (
-                      <TableRow>
-                        <TableCell colSpan={4}>
-                          <Typography variant="body2" color="text.secondary">
-                            {t("allProductsHaveVendor")}
-                          </Typography>
-                        </TableCell>
-                      </TableRow>
-                    ) : (
-                      lignesSansVendeurSorted.map((L, i) => {
+                    {lignesSansVendeurSorted.map((L, i) => {
                         const lid = String(L.id);
                         const pr = one(L.product);
                         const dRow = draftByLine[lid];
@@ -1661,13 +1662,12 @@ export default function AchatLotDetailClient({ lotId }: { lotId: string }) {
                             </TableRow>
                           </Fragment>
                         );
-                      })
-                    )}
+                      })}
                   </TableBody>
                 </Table>
               </div>
 
-              {editable && lignesSansVendeurSorted.length > 0 ? (
+              {editable ? (
                 <Box
                   className="!mb-8"
                   sx={{
@@ -1721,20 +1721,29 @@ export default function AchatLotDetailClient({ lotId }: { lotId: string }) {
                     {t("newVendor")}
                   </Button>
                 </Box>
-              ) : editable ? (
-                <Box className="!mb-6 flex justify-end">
-                  <Button
-                    variant="text"
-                    size="small"
-                    disabled={!editable}
-                    onClick={() => setVendeurDlg({ mode: "create" })}
-                    sx={{ textTransform: "none" }}
-                  >
-                    {t("newVendor")}
-                  </Button>
-                </Box>
               ) : null}
             </>
+          ) : !supplierAsSoleVendor && editable ? (
+            <Box className="!mb-6 flex flex-wrap items-center justify-end gap-2">
+              <Button
+                type="button"
+                variant="outlined"
+                size="small"
+                disabled={saving || closing || productPickerBusy}
+                onClick={() => setPickerOpen(true)}
+                sx={{ textTransform: "none" }}
+              >
+                {tCommonOrder("addProduct")}
+              </Button>
+              <Button
+                variant="text"
+                size="small"
+                onClick={() => setVendeurDlg({ mode: "create" })}
+                sx={{ textTransform: "none" }}
+              >
+                {t("newVendor")}
+              </Button>
+            </Box>
           ) : null}
 
           {vendeurIdsSorted.map((vid) => {
@@ -2045,9 +2054,6 @@ export default function AchatLotDetailClient({ lotId }: { lotId: string }) {
           <Typography variant="h6" className="!mt-6 !mb-2" sx={{ fontWeight: 700 }}>
             {t("feesSection")}
           </Typography>
-          <Typography variant="body2" color="text.secondary" className="!mb-2">
-            {editable ? t("feesHintEditable") : t("feesHintReadOnly")}
-          </Typography>
           <div className="!mb-2 overflow-x-auto">
             <Table
               size="small"
@@ -2228,6 +2234,21 @@ export default function AchatLotDetailClient({ lotId }: { lotId: string }) {
               </Typography>
             </Box>
           </Box>
+
+          {editable ? (
+            <Box className="!mt-6 !mb-2 flex justify-end">
+              <Button
+                variant="contained"
+                color="success"
+                size="medium"
+                disabled={closing || saving || reopening || pdfBusy}
+                onClick={() => void cloturer(false)}
+                sx={{ textTransform: "none", fontWeight: 700 }}
+              >
+                {closing ? t("closing") : t("close")}
+              </Button>
+            </Box>
+          ) : null}
         </>
       ) : null}
 

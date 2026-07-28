@@ -15,6 +15,12 @@ const rules: RouteRule[] = [
   { match: (p) => p.startsWith("/boutique/stats"), permission: "shop.read" },
   { match: (p) => p.startsWith("/historique-ca") || p.startsWith("/ca") || p.startsWith("/analyse-stats"), permission: "ventes.read" },
   { match: (p) => p.startsWith("/parametres"), permission: "parametres.read" },
+  { match: (p) => p.startsWith("/charges"), permission: "charges.read" },
+  { match: (p) => p.startsWith("/emballages"), permission: "emballages.read" },
+  {
+    match: (p) => p.startsWith("/commandes-fournisseur/comptes"),
+    permission: "commandes_fournisseur.comptes",
+  },
   {
     match: (p) => p.startsWith("/commandes-fournisseur/achat"),
     permission: "commandes_fournisseur.achat",
@@ -36,6 +42,7 @@ const rules: RouteRule[] = [
         "commandes_fournisseur.saisie",
         "commandes_fournisseur.consolidation",
         "commandes_fournisseur.achat",
+        "commandes_fournisseur.comptes",
       ],
     },
   },

@@ -151,7 +151,7 @@ Les quantités stockées en base sont en **`numeric(14,2)`** (au plus **2 décim
 ## Achat (lots prêts → clôture)
 
 - **Liste** : `/commandes-fournisseur/achat` — appelle `GET /api/commandes-fournisseur/achat/lots` (filtre préparés ou tous).
-- **Détail lot** : `/commandes-fournisseur/achat/lots/[id]` — tableau « sans vendeur » (sélection + attribution groupe), puis **un tableau par vendeur** ; totaux par vendeur (DH), frais généraux (tableau lecture + dialogue isolé `AchatFraisDialog` ; **PATCH à la validation** / suppression, liste serveur remplacée sans fusion locale pour éviter les doublons). **Sauvegarde automatique** (debounce) des **lignes produit** (`lignesOnly`). Clôture avec `status: "terminee"` ; si `409` + `NEED_CONFIRM_ZERO_QTY`, dialogue puis `confirmZeroQtyLines: true`. Lot **terminé** : boutons **Modifier** (`PATCH` `{ status: "prete" }`, montants conservés) et **Imprimer le rapport PDF** (`GET …/achat/lots/[id]/pdf`, A4). Le PDF est aussi disponible tant que le lot est prêt. Pas d’affichage des commentaires magasin (MXX) en achat. Noms produit : français (+ arabe si UI arabe).
+- **Détail lot** : `/commandes-fournisseur/achat/lots/[id]` — tableau « sans vendeur » **uniquement s’il y a des lignes** (sélection + attribution groupe), sinon masqué (boutons Ajouter / Nouveau vendeur conservés en édition) ; puis **un tableau par vendeur** ; totaux par vendeur (DH), frais généraux (tableau lecture + dialogue isolé `AchatFraisDialog` ; **PATCH à la validation** / suppression, liste serveur remplacée sans fusion locale pour éviter les doublons). **Sauvegarde automatique** (debounce) des **lignes produit** (`lignesOnly`). Clôture avec `status: "terminee"` ; si `409` + `NEED_CONFIRM_ZERO_QTY`, dialogue puis `confirmZeroQtyLines: true`. Lot **terminé** : boutons **Modifier** (`PATCH` `{ status: "prete" }`, montants conservés) et **Imprimer le rapport PDF** (`GET …/achat/lots/[id]/pdf`, A4). Le PDF est aussi disponible tant que le lot est prêt. Pas d’affichage des commentaires magasin (MXX) en achat. Noms produit : français (+ arabe si UI arabe).
 - **API PDF** : `GET /api/commandes-fournisseur/achat/lots/[id]/pdf` — permission `commandes_fournisseur.achat` ; données via `achat-lot-report-data.ts`, rendu pdfkit `achat-lot-report-pdf.ts` (sections vendeurs, frais, totaux).
 - **Réouverture** : RLS `cflot update achat reopen` (`20260727130000_achat_lot_reopen.sql`) — `terminee` → `prete` avec permission achat.
 - **Fournisseur sans marchands** (ex. **Station**, aucun `ref_supplier_vendeur`) : le fournisseur est le **vendeur unique** — saisie qté/prix directement sur les lignes même sans `vendeur_id` ; pas d’écran d’attribution ; la clôture **n’exige pas** de vendeur sur chaque ligne.
@@ -191,6 +191,15 @@ GET /api/caisse/commande-ticket?magasin={code}&token=…&format=json
 
 Doc : [`/api/caisse/README.md`](../api/caisse/README.md).
 
+## Statuts (chips)
+
+Les libellés de statut commande / lot s’affichent via `CommandeFournisseurStatusChip` (`src/components/commandes-fournisseur/CommandeFournisseurStatusChip.tsx`) :
+
+- **Commande** : en saisie (warning), validée (info), intégrée (primary), annulée (error)
+- **Lot** : brouillon (warning), prêt (success), terminé (primary)
+
+Les listes **saisie** (commandes), **validation** (lots) et **achat** (lots) partagent le même design de ligne : `ListItemButton` bordé, fournisseur à gauche, **chip statut** à droite, date (et infos secondaires) en dessous.
+
 ## Notifications (validation magasin)
 
 Lorsqu'une commande passe au statut **`validee`** (validation depuis le récap saisie magasin, `PATCH /api/commandes-fournisseur/commandes/[id]`), une notification est créée pour les utilisateurs ayant la permission **`commandes_fournisseur.consolidation`** et le type activé dans leurs préférences.
@@ -198,4 +207,50 @@ Lorsqu'une commande passe au statut **`validee`** (validation depuis le récap s
 - **Contenu** : magasin + fournisseur
 - **Lien** : `/commandes-fournisseur/validation`
 - **Documentation** : [`/notifications/README.md`](../notifications/README.md)
+
+## Script admin — purge commandes / lots / achats
+
+`scripts/purge-commandes-fournisseur.ts` (service role) : dry-run par défaut, `--execute` pour appliquer.
+
+Conserve des commandes ciblées (préfixes `created_at` UTC dans le script) et **leurs lots liés** (`lot_id` / inclusions). Supprime les autres commandes (CASCADE lignes) et les autres lots (CASCADE lignes d’achat, frais, commentaires vendeur, inclusions).
+
+## Comptes fournisseurs (`/commandes-fournisseur/comptes`)
+
+Permission **`commandes_fournisseur.comptes`**. Accès depuis le **menu principal** (accueil backoffice), pas depuis le hub Commandes fournisseur.
+
+### Comptes
+
+| Entité | Compte | Route détail |
+|---|---|---|
+| **Vendeur Marché** | 1 compte par vendeur | `/comptes/v/[vendeurId]` |
+| **Station** (sans vendeurs) | 1 compte par fournisseur | `/comptes/s/[supplierId]` |
+
+Le fournisseur Marché parent **n’a pas** de compte : seuls ses vendeurs apparaissent dans la liste.
+
+### Génération des achats comptables
+
+À la **clôture** d’un lot (`PATCH` achat → `status: terminee`), des lignes **`fournisseur_compte_achat`** sont créées :
+
+| Type | Achats générés |
+|---|---|
+| **Station** | 1 achat = **produits uniquement** (frais exclus des comptes) |
+| **Marché** | 1 achat par vendeur = **produits de ce vendeur** |
+
+Les **frais généraux** ne sont **pas** gérés dans les comptes pour l’instant.
+
+### Paiements
+
+- Un paiement est rattaché au **compte vendeur** (`vendeur_id`) ou **compte station** (`supplier_id`, `vendeur_id` null).
+- Sélection de plusieurs achats **impayés** (orange) du même compte → mode de paiement, date, commentaire.
+- Achats payés en **vert** ; totaux : total, payé, reste à payer.
+
+### Réouverture lot
+
+Interdite si un achat comptable du lot est déjà payé (`409` API + bouton « Modifier » désactivé).
+
+### Backfill / recalcul
+
+`POST /api/commandes-fournisseur/comptes/backfill` — recalcule tous les lots `terminee` (produits seuls).
+
+Migrations : `20260728120000_fournisseur_comptes.sql`, `20260728140000_comptes_par_vendeur.sql`.
 

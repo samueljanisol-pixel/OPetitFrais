@@ -82,6 +82,8 @@ export type ProductRow = {
   shop_allow_sales_unit?: boolean
   /** Favori boutique : id `ref_shop_order_unit` ; null = favori = UdV. */
   shop_favorite_unit_id?: string | null
+  /** Matériau d'emballage utilisé ; null = aucun. */
+  emballage_id?: string | null
   created_at: string
   updated_at: string
 }

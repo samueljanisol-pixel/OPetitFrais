@@ -6,6 +6,7 @@ import { useTranslations } from "next-intl";
 import { Button, List, ListItem, ListItemButton, ListItemText, Typography } from "@mui/material";
 import AddIcon from "@mui/icons-material/Add";
 import AppLink from "@/components/AppLink";
+import CommandeFournisseurStatusChip from "@/components/commandes-fournisseur/CommandeFournisseurStatusChip";
 import { useSessionPermissions } from "@/lib/auth/useSessionPermissions";
 import { useMagasinSaisie } from "./MagasinSaisieContext";
 import SaisieMagasinStrip from "./SaisieMagasinStrip";
@@ -42,15 +43,56 @@ function sortCmdByCreatedDesc(a: CmdRow, b: CmdRow): number {
 
 function orderSecondaryText(
   c: CmdRow,
-  labelFor: (scope: "commande_fournisseur", status: string) => string,
   formatDate: (iso: string) => string,
   tStatusList: ReturnType<typeof useTranslations<"backoffice.status">>,
 ): string {
   return tStatusList("orderListSecondary", {
-    statusLabel: labelFor("commande_fournisseur", c.status),
     dateTime: formatDate(c.created_at),
     productCount: tStatusList("productCount", { count: c.lineCount ?? 0 }),
   });
+}
+
+function OrderListRow({
+  c,
+  emDash,
+  formatDate,
+  labelFor,
+  tStatusList,
+  sx,
+}: {
+  c: CmdRow;
+  emDash: string;
+  formatDate: (iso: string) => string;
+  labelFor: (domain: string, code: string) => string;
+  tStatusList: ReturnType<typeof useTranslations<"backoffice.status">>;
+  sx?: object;
+}) {
+  return (
+    <ListItem disablePadding className="!mb-1">
+      <ListItemButton
+        component={AppLink}
+        href={`/commandes-fournisseur/saisie/${c.id}/recap`}
+        sx={{ borderRadius: 2, border: "1px solid", borderColor: "divider", ...sx }}
+      >
+        <ListItemText
+          primary={
+            <span className="flex items-center justify-between gap-2">
+              <span className="min-w-0 truncate">{supplierLabel(c, emDash)}</span>
+              <CommandeFournisseurStatusChip
+                domain="commande_fournisseur"
+                status={c.status}
+                label={labelFor("commande_fournisseur", c.status)}
+              />
+            </span>
+          }
+          secondary={orderSecondaryText(c, formatDate, tStatusList)}
+          slotProps={{
+            primary: { component: "div" },
+          }}
+        />
+      </ListItemButton>
+    </ListItem>
+  );
 }
 
 export default function SaisieIndexPage() {
@@ -193,18 +235,14 @@ export default function SaisieIndexPage() {
               </Typography>
               <List dense disablePadding>
                 {enCoursOrders.map((c) => (
-                  <ListItem key={c.id} disablePadding className="!mb-1">
-                    <ListItemButton
-                      component={AppLink}
-                      href={`/commandes-fournisseur/saisie/${c.id}/recap`}
-                      sx={{ borderRadius: 2, border: "1px solid", borderColor: "divider" }}
-                    >
-                      <ListItemText
-                        primary={supplierLabel(c, emDash)}
-                        secondary={orderSecondaryText(c, labelFor, formatDate, tStatusList)}
-                      />
-                    </ListItemButton>
-                  </ListItem>
+                  <OrderListRow
+                    key={c.id}
+                    c={c}
+                    emDash={emDash}
+                    formatDate={formatDate}
+                    labelFor={labelFor}
+                    tStatusList={tStatusList}
+                  />
                 ))}
               </List>
             </section>
@@ -217,23 +255,15 @@ export default function SaisieIndexPage() {
               </Typography>
               <List dense disablePadding>
                 {prisesEnCompteOrders.map((c) => (
-                  <ListItem key={c.id} disablePadding className="!mb-1">
-                    <ListItemButton
-                      component={AppLink}
-                      href={`/commandes-fournisseur/saisie/${c.id}/recap`}
-                      sx={{
-                        borderRadius: 2,
-                        border: "1px solid",
-                        borderColor: "divider",
-                        bgcolor: "action.hover",
-                      }}
-                    >
-                      <ListItemText
-                        primary={supplierLabel(c, emDash)}
-                        secondary={orderSecondaryText(c, labelFor, formatDate, tStatusList)}
-                      />
-                    </ListItemButton>
-                  </ListItem>
+                  <OrderListRow
+                    key={c.id}
+                    c={c}
+                    emDash={emDash}
+                    formatDate={formatDate}
+                    labelFor={labelFor}
+                    tStatusList={tStatusList}
+                    sx={{ bgcolor: "action.hover" }}
+                  />
                 ))}
               </List>
             </section>
@@ -246,23 +276,15 @@ export default function SaisieIndexPage() {
               </Typography>
               <List dense disablePadding>
                 {annuleesOrders.map((c) => (
-                  <ListItem key={c.id} disablePadding className="!mb-1">
-                    <ListItemButton
-                      component={AppLink}
-                      href={`/commandes-fournisseur/saisie/${c.id}/recap`}
-                      sx={{
-                        borderRadius: 2,
-                        border: "1px solid",
-                        borderColor: "divider",
-                        opacity: 0.85,
-                      }}
-                    >
-                      <ListItemText
-                        primary={supplierLabel(c, emDash)}
-                        secondary={orderSecondaryText(c, labelFor, formatDate, tStatusList)}
-                      />
-                    </ListItemButton>
-                  </ListItem>
+                  <OrderListRow
+                    key={c.id}
+                    c={c}
+                    emDash={emDash}
+                    formatDate={formatDate}
+                    labelFor={labelFor}
+                    tStatusList={tStatusList}
+                    sx={{ opacity: 0.85 }}
+                  />
                 ))}
               </List>
             </section>

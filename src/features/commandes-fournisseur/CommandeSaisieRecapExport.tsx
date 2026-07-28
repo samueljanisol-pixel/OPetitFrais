@@ -43,7 +43,7 @@ export default function CommandeSaisieRecapExport({
 }: Props) {
   const locale = useAppLocale();
   const tc = useTranslations("backoffice.commandes.common");
-  const tRecap = useTranslations("backoffice.commandes.saisie.recap");
+  const tRecap = useTranslations("backoffice.commandes.recap");
   const tStatus = useTranslations("backoffice.status");
   const captureRef = useRef<HTMLDivElement>(null);
   const [exporting, setExporting] = useState(false);
@@ -156,9 +156,6 @@ export default function CommandeSaisieRecapExport({
 
   return (
     <div className="!mb-4">
-      <Typography variant="subtitle2" className="!mb-2" sx={{ fontWeight: 600 }}>
-        {tc("exportImageSection")}
-      </Typography>
       <div className="!mb-2 flex flex-wrap items-center justify-end gap-2">
         <Button
           type="button"

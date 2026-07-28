@@ -1,12 +1,14 @@
 'use client'
 
-import Image from 'next/image'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { Button, Fab, Paper, Stack, Tooltip } from '@mui/material'
 import AssessmentOutlinedIcon from '@mui/icons-material/AssessmentOutlined'
 import Inventory2OutlinedIcon from '@mui/icons-material/Inventory2Outlined'
 import LocalShippingOutlinedIcon from '@mui/icons-material/LocalShippingOutlined'
+import AccountBalanceWalletOutlinedIcon from '@mui/icons-material/AccountBalanceWalletOutlined'
+import ReceiptLongOutlinedIcon from '@mui/icons-material/ReceiptLongOutlined'
+import InventoryOutlinedIcon from '@mui/icons-material/InventoryOutlined'
 import RestaurantMenuOutlinedIcon from '@mui/icons-material/RestaurantMenuOutlined'
 import SettingsIcon from '@mui/icons-material/Settings'
 import StorefrontOutlinedIcon from '@mui/icons-material/StorefrontOutlined'
@@ -24,8 +26,11 @@ export default function BackofficeHome() {
     canReadVentes,
     canReadShop,
     canReadParametres,
+    canReadCharges,
+    canReadEmballages,
     canCuisineSaisie,
     canCuisineHistorique,
+    canCommandesFournisseurComptes,
   } = useSessionPermissions()
   const canCommandesFournisseur =
     can('commandes_fournisseur.saisie') ||
@@ -50,23 +55,6 @@ export default function BackofficeHome() {
   return (
     <main className="relative min-h-[calc(100vh-0px)] bg-gradient-to-br from-emerald-50 via-white to-rose-50 px-6 py-16">
       <div className="mx-auto flex w-full max-w-md flex-col items-center">
-        <div className="mb-8 flex w-full justify-center px-2">
-          <AppLink
-            href="/"
-            className="block w-full max-w-[min(26rem,calc(100vw-3rem))] rounded-3xl bg-white p-5 shadow-sm ring-1 ring-emerald-100 transition hover:ring-emerald-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-500"
-            aria-label={t('homeAria')}
-          >
-            <Image
-              src="/logo-opetitfrais.png"
-              alt=""
-              width={400}
-              height={150}
-              className="h-auto w-full object-contain"
-              sizes="(max-width: 640px) min(320px, 90vw), 416px"
-              priority
-            />
-          </AppLink>
-        </div>
         <Paper
           elevation={0}
           className="w-full"
@@ -170,6 +158,75 @@ export default function BackofficeHome() {
                 }}
               >
                 {t('supplierOrders')}
+              </Button>
+            ) : null}
+            {canCommandesFournisseurComptes ? (
+              <Button
+                component={AppLink}
+                href="/commandes-fournisseur/comptes"
+                variant="contained"
+                color="success"
+                size="large"
+                fullWidth
+                startIcon={<AccountBalanceWalletOutlinedIcon sx={{ fontSize: 28 }} />}
+                sx={{
+                  borderRadius: 2,
+                  textTransform: 'none',
+                  fontWeight: 600,
+                  py: 1.25,
+                  px: 2,
+                  justifyContent: 'flex-start',
+                  gap: 1.25,
+                  '& .MuiButton-startIcon': { mr: 0.5, ml: 0 },
+                }}
+              >
+                {t('supplierAccounts')}
+              </Button>
+            ) : null}
+            {canReadCharges ? (
+              <Button
+                component={AppLink}
+                href="/charges"
+                variant="contained"
+                color="success"
+                size="large"
+                fullWidth
+                startIcon={<ReceiptLongOutlinedIcon sx={{ fontSize: 28 }} />}
+                sx={{
+                  borderRadius: 2,
+                  textTransform: 'none',
+                  fontWeight: 600,
+                  py: 1.25,
+                  px: 2,
+                  justifyContent: 'flex-start',
+                  gap: 1.25,
+                  '& .MuiButton-startIcon': { mr: 0.5, ml: 0 },
+                }}
+              >
+                {t('charges')}
+              </Button>
+            ) : null}
+            {canReadEmballages ? (
+              <Button
+                component={AppLink}
+                href="/emballages"
+                variant="contained"
+                color="success"
+                size="large"
+                fullWidth
+                startIcon={<InventoryOutlinedIcon sx={{ fontSize: 28 }} />}
+                sx={{
+                  borderRadius: 2,
+                  textTransform: 'none',
+                  fontWeight: 600,
+                  py: 1.25,
+                  px: 2,
+                  justifyContent: 'flex-start',
+                  gap: 1.25,
+                  '& .MuiButton-startIcon': { mr: 0.5, ml: 0 },
+                }}
+              >
+                {t('packagingManagement')}
               </Button>
             ) : null}
             {canCuisineSaisie ? (

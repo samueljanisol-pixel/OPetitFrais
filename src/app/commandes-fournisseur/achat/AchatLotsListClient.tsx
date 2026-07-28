@@ -6,12 +6,16 @@ import {
   Alert,
   Button,
   CircularProgress,
-  Paper,
+  List,
+  ListItem,
+  ListItemButton,
+  ListItemText,
   ToggleButton,
   ToggleButtonGroup,
   Typography,
 } from "@mui/material";
 import AppLink from "@/components/AppLink";
+import CommandeFournisseurStatusChip from "@/components/commandes-fournisseur/CommandeFournisseurStatusChip";
 import { useRouter } from "next/navigation";
 import { useSessionPermissions } from "@/lib/auth/useSessionPermissions";
 import { useStatusLabels } from "@/lib/statusLabels/useStatusLabels";
@@ -54,6 +58,7 @@ export default function AchatLotsListClient() {
   const [lots, setLots] = useState<LotRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
+  const emDash = tCommon("emDash");
 
   useEffect(() => {
     if (!permLoading && !can("commandes_fournisseur.achat")) {
@@ -102,7 +107,7 @@ export default function AchatLotsListClient() {
   }
 
   return (
-    <main className="mx-auto w-full max-w-3xl px-4 py-6">
+    <main className="mx-auto w-full max-w-lg px-4 py-4">
       <Button
         component={AppLink}
         href="/"
@@ -127,7 +132,7 @@ export default function AchatLotsListClient() {
         {t("subtitle")}
       </Typography>
 
-      <div className="flex flex-wrap items-center gap-2 !mb-4">
+      <div className="!mb-4 flex flex-wrap items-center gap-2">
         <ToggleButtonGroup
           size="small"
           exclusive
@@ -163,51 +168,50 @@ export default function AchatLotsListClient() {
           {t("emptyLots")}
         </Typography>
       ) : (
-        <div className="flex flex-col gap-3">
-          {lots.map((l) => (
-            <Paper
-              key={l.id}
-              variant="outlined"
-              sx={{
-                px: 1.5,
-                py: 2.5,
-                borderRadius: 2,
-                bgcolor: "background.paper",
-                borderColor: "divider",
-              }}
-            >
-              <div className="flex flex-wrap items-start justify-between gap-2">
-                <div className="min-w-0">
-                  <Typography variant="subtitle1" sx={{ fontWeight: 600 }} className="truncate">
-                    {supplierLabel(l.ref_supplier) || tCommon("emDash")}
-                  </Typography>
-                  <Typography variant="caption" color="text.secondary" component="div">
-                    {t("lotStatusLine", {
-                      status: labelFor("commande_fournisseur_lot", String(l.status)),
-                      readyDate: l.marque_prete_at ? formatDateTime(l.marque_prete_at) : tCommon("emDash"),
-                    })}
-                    {l.status === "terminee" ? (
-                      <>
-                        {t("lotStatusClosed", {
-                          closedDate: l.marque_terminee_at ? formatDateTime(l.marque_terminee_at) : tCommon("emDash"),
-                        })}
-                      </>
-                    ) : null}
-                  </Typography>
-                </div>
-                <Button
+        <List dense disablePadding>
+          {lots.map((l) => {
+            const secondaryParts = [
+              t("lotDatesLine", {
+                readyDate: l.marque_prete_at ? formatDateTime(l.marque_prete_at) : emDash,
+              }),
+            ];
+            if (l.status === "terminee") {
+              secondaryParts.push(
+                t("lotClosedLine", {
+                  closedDate: l.marque_terminee_at ? formatDateTime(l.marque_terminee_at) : emDash,
+                }),
+              );
+            }
+            return (
+              <ListItem key={l.id} disablePadding className="!mb-1">
+                <ListItemButton
                   component={AppLink}
                   href={`/commandes-fournisseur/achat/lots/${l.id}`}
-                  variant="contained"
-                  size="small"
-                  sx={{ textTransform: "none", flexShrink: 0 }}
+                  sx={{ borderRadius: 2, border: "1px solid", borderColor: "divider" }}
                 >
-                  {tc("open")}
-                </Button>
-              </div>
-            </Paper>
-          ))}
-        </div>
+                  <ListItemText
+                    primary={
+                      <span className="flex items-center justify-between gap-2">
+                        <span className="min-w-0 truncate">
+                          {supplierLabel(l.ref_supplier) || emDash}
+                        </span>
+                        <CommandeFournisseurStatusChip
+                          domain="commande_fournisseur_lot"
+                          status={String(l.status)}
+                          label={labelFor("commande_fournisseur_lot", String(l.status))}
+                        />
+                      </span>
+                    }
+                    secondary={secondaryParts.join(" — ")}
+                    slotProps={{
+                      primary: { component: "div" },
+                    }}
+                  />
+                </ListItemButton>
+              </ListItem>
+            );
+          })}
+        </List>
       )}
     </main>
   );

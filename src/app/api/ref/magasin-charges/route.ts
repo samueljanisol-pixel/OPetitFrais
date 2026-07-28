@@ -22,6 +22,8 @@ export type MagasinLite = {
 
 export async function GET() {
   const gate = await requireAnyApiPermission([
+    "charges.read",
+    "charges.write",
     "parametres.read",
     "parametres.write",
     "ventes.read",
@@ -82,7 +84,7 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
-  const gate = await requireApiPermission("parametres.write");
+  const gate = await requireApiPermission("charges.write");
   if (!gate.ok) {
     return NextResponse.json({ error: gate.error }, { status: gate.status });
   }

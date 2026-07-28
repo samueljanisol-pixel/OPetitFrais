@@ -18,7 +18,7 @@ Les boutons **2026**, **2025** et **Tous** restreignent les agrégats et le dét
 | Moy. paniers / jour | Paniers total ÷ nombre de jours |
 | Moy. paniers / mois | Paniers total ÷ nombre de mois avec données |
 | Bénéfice estimé | Somme des bénéfices (qté × marge historique explicite) sur la période filtrée, avec % du CA et % du CA avec marge |
-| Charges | Somme des charges recalculées en **formule mois** (forfait mensuel ×1 par mois + journalières × jours du mois filtrés) |
+| Charges | Si feuille réelle du mois : somme des lignes ; sinon estimation (forfait mensuel ×1 + journalières × jours filtrés) |
 | Bénéfice net estimé | Bénéfice estimé − charges |
 | Moy. bénéfice / jour | Bénéfice estimé ÷ nombre de jours |
 | Moy. bénéfice net / jour | Bénéfice net ÷ nombre de jours |
@@ -35,18 +35,18 @@ Chaque mois affiche, dans le résumé :
 |------|-------------|
 | Total mois / Moyenne / jour | CA du mois (comme avant) |
 | Bénéfice estimé | Total du mois (mêmes règles que la page Statistique), avec % du CA et % du CA avec marge |
-| Charges / Bénéfice net | Charges formule mois (forfait ×1) ; net = bénéfice − charges |
+| Charges / Bénéfice net | Réel si feuille du `ym`, sinon estimation mois ; net = bénéfice − charges |
 | Paniers (mois) / Moy. paniers / jour | Somme et moyenne journalière des paniers sur les jours du mois |
 | CA par magasin (mois) | Part du CA du mois (%), total, moyenne journalière, **bénéfice estimé**, charges et net par magasin |
 | Paniers par magasin (mois) | Total et moyenne journalière des paniers par magasin |
 
-En ouvrant le mois, chaque jour affiche le CA, le bénéfice, les charges (formule jour), le bénéfice net, le nombre de paniers, et par magasin le détail correspondant.
+En ouvrant le mois, chaque jour affiche le CA, le bénéfice, les charges (réel prorata ou estimation jour), le bénéfice net, le nombre de paniers, et par magasin le détail correspondant.
 
 ## Données
 
 - Source : Supabase (`fetchHistoriqueFromSupabase`), avec sync FTP automatique au premier chargement si stale.
 - CA / paniers : table `ca_day`.
 - Bénéfice estimé : table `ca_product_day` + historique de marges explicites (`fetchBenefitByDayMagasinForDateRange`) — mêmes règles que `/ca` (jour et mois) ; produits sans marge renseignée ou `qty ≤ 0` exclus ; résolution produit alignée sur le catalogue (id / code article).
-- Charges : table `magasin_charge` via `src/lib/ca/magasinCharges.ts` ; charges générales uniquement sur les totaux globaux.
+- Charges : **feuille réelle** (`magasin_charge_feuille` + lignes) si le `ym` existe, sinon estimation `magasin_charge` — lib `src/lib/ca/magasinCharges.ts` ; générales uniquement sur les totaux globaux. Saisie : `/charges`.
 - Borne basse : `2025-05-13` (`HISTORIQUE_FROM_ISO`).
 - Périmètre magasin restreint (`session.magasinsRestricted`) : CA, bénéfice et charges limités aux magasins assignés au profil.

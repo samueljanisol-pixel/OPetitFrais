@@ -24,6 +24,7 @@ import {
 import { alpha } from "@mui/material/styles";
 import DeleteOutlineOutlinedIcon from "@mui/icons-material/DeleteOutlineOutlined";
 import ProductArabicSubtitle from "@/components/ProductArabicSubtitle";
+import CommandeFournisseurStatusChip from "@/components/commandes-fournisseur/CommandeFournisseurStatusChip";
 import AppLink from "@/components/AppLink";
 import FormDialog from "@/lib/mui/FormDialog";
 import { useSessionPermissions } from "@/lib/auth/useSessionPermissions";
@@ -882,7 +883,7 @@ export default function ValidationLotDetailClient({ lotId }: { lotId: string }) 
     locale,
   );
   const readyAtText = lot.marque_prete_at
-    ? tLotDetail("readyAtSuffix", {
+    ? tCommandesCommon("readyAt", {
         date: formatDate(lot.marque_prete_at, { dateStyle: "short", timeStyle: "short" }),
       })
     : "";
@@ -906,13 +907,23 @@ export default function ValidationLotDetailClient({ lotId }: { lotId: string }) 
       >
         {tLotDetail("backToList")}
       </Button>
-      <Typography variant="h5" className="!mb-1" sx={{ fontWeight: 600 }} component="h1">
-        {tLotDetail("title", { supplier: supplierName })}
-      </Typography>
-      <Typography variant="body2" color="text.secondary" className="!mb-4">
-        <strong>{tLotDetail("statusLine", { statusLabel: labelFor("commande_fournisseur_lot", lot.status) })}</strong>
-        {readyAtText}
-      </Typography>
+      <div className="!mb-1 flex items-center justify-between gap-2">
+        <Typography variant="h5" sx={{ fontWeight: 600 }} component="h1">
+          {tLotDetail("title", { supplier: supplierName })}
+        </Typography>
+        <CommandeFournisseurStatusChip
+          domain="commande_fournisseur_lot"
+          status={lot.status}
+          label={labelFor("commande_fournisseur_lot", lot.status)}
+        />
+      </div>
+      {readyAtText ? (
+        <Typography variant="body2" color="text.secondary" className="!mb-4">
+          {readyAtText}
+        </Typography>
+      ) : (
+        <div className="!mb-4" />
+      )}
 
       {lot.status === "prete" ? (
         <div className="!mb-4 flex flex-col gap-2">
@@ -1416,14 +1427,16 @@ export default function ValidationLotDetailClient({ lotId }: { lotId: string }) 
             const cmdText = cmdComments[cf.id] ?? "";
             return (
               <div key={cf.id} className="rounded border border-slate-200/80 bg-slate-50/50 p-3">
-                <Typography variant="body2" className="!mb-1 !font-medium">
-                  {magLabel(cf.magasins)}{" "}
-                  <span className="font-normal text-slate-500">
-                    {tLotDetail("orderStatusInline", {
-                      statusLabel: labelFor("commande_fournisseur", cf.status),
-                    })}
-                  </span>
-                </Typography>
+                <div className="!mb-1 flex flex-wrap items-center justify-between gap-2">
+                  <Typography variant="body2" className="!font-medium">
+                    {magLabel(cf.magasins)}
+                  </Typography>
+                  <CommandeFournisseurStatusChip
+                    domain="commande_fournisseur"
+                    status={cf.status}
+                    label={labelFor("commande_fournisseur", cf.status)}
+                  />
+                </div>
                 {editable ? (
                   <TextField
                     fullWidth

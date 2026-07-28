@@ -78,19 +78,6 @@ Migration : `20260619120000_unify_marchand_vendeur.sql` (fusion de l’ancien `r
 - **`product.subcategory_id`** : optionnel ; doit correspondre à la catégorie du produit.
 - Import Google Sheet : colonne **Sous-Catégorie** (création auto si absente). Migration `20260701160000_ref_subcategory.sql`.
 
-## Charges Magasins
-
-Onglet **Charges Magasins** : charges fixes par magasin et charges **générales** (sans magasin), utilisées pour le **bénéfice net estimé** dans `/ca` et `/historique-ca`.
-
-- Composant : [`ChargesMagasinsAdminPanel.tsx`](ChargesMagasinsAdminPanel.tsx)
-- Table `magasin_charge` (`magasin_id` null = générale, `label`, `quantite`, `prix`, `periodicite` `jour`|`mois`) — migration `20260727150000_magasin_charge.sql`
-- API : `GET/POST /api/ref/magasin-charges`, `PATCH/DELETE /api/ref/magasin-charges/[id]`
-- Total ligne = quantité × prix
-- **Vue jour** : charge journalière = forfait ; charge mensuelle = forfait ÷ jours du mois
-- **Vue mois** : charge mensuelle = 1 × forfait (même si mois incomplet) ; charge journalière × jours de la période
-- Charges générales : soustraites uniquement des totaux globaux (pas réparties par magasin)
-- Écriture : `parametres.write` ; lecture : `parametres.read` ou `ventes.read`
-
 ## Commandes fournisseur
 
 Onglet **Commandes** : choix du **chauffeur** pour l’envoi WhatsApp depuis un lot prêt (export consolidation).
@@ -126,3 +113,10 @@ Onglet **Tâches automatisées** visible uniquement pour le rôle **administrate
   - **`sheet_import`** — import catalogue depuis Google Sheet (service role, config `importFields` : champs cochés pour les produits existants). **Importé uniquement si le contenu export a changé** (empreinte SHA-256) depuis le dernier import réussi ; « Lancer maintenant » force l’import.
 
 Les horaires **quotidiens** sont en **UTC**. L’historique et le statut footer CA lisent `automated_task_runs` en priorité (repli `sync_runs` pour FTP). Un run resté **En cours** plus de 20 minutes (timeout serverless, crash) est automatiquement marqué **Interrompu** au chargement de l’onglet, au tick cron ou au lancement manuel.
+
+## Modes de paiement
+
+- Table **`ref_payment_method`** : modes de règlement fournisseurs (espèce, virement, Wafacash, etc.).
+- Onglet **Modes de paiement** dans Paramètres (libellé + libellé arabe optionnel).
+- Valeurs initiales : Espèce, Virement Bancaire, Transfert Wafacash. Migration `20260728120000_fournisseur_comptes.sql`.
+- Utilisés dans **Comptes fournisseurs** (`/commandes-fournisseur/comptes`).

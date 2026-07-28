@@ -26,6 +26,7 @@ import { alpha } from "@mui/material/styles";
 import CommentOutlinedIcon from "@mui/icons-material/CommentOutlined";
 import DeleteOutlineOutlinedIcon from "@mui/icons-material/DeleteOutlineOutlined";
 import LigneSaisieComments from "@/components/commandes-fournisseur/LigneSaisieComments";
+import CommandeFournisseurStatusChip from "@/components/commandes-fournisseur/CommandeFournisseurStatusChip";
 import AppLink from "@/components/AppLink";
 import FormDialog from "@/lib/mui/FormDialog";
 import CommandeFournisseurProductPicker, {
@@ -54,6 +55,7 @@ import {
   productLogisticDisplayName,
 } from "@/lib/products/product-display-name";
 import CommandeSaisieRecapExport from "@/features/commandes-fournisseur/CommandeSaisieRecapExport";
+import { magasinLabelFromCommande } from "@/lib/commandes-fournisseur/commande-saisie-recap-export";
 import { useAppFormat } from "@/lib/i18n/useAppFormat";
 import type { AppLocale } from "@/i18n/config";
 import { useBackChevronIcon } from "@/lib/i18n/useBackChevronIcon";
@@ -88,7 +90,10 @@ type Commande = {
   commentaire: string | null;
   supplier_id: string;
   magasin_id: string;
+  validated_at?: string | null;
+  created_at?: string;
   ref_supplier: { label: string } | { label: string }[] | null;
+  magasins?: { code?: string | null; nom?: string | null } | { code?: string | null; nom?: string | null }[] | null;
 };
 
 function supplierLabel(c: Commande, emDash: string): string {
@@ -304,7 +309,7 @@ export default function RecapClient({ commandeId }: { commandeId: string }) {
   const tStatus = useTranslations("backoffice.status");
   const tCommon = useTranslations("common");
   const BackChevron = useBackChevronIcon();
-  const { formatNumber, locale } = useAppFormat();
+  const { formatNumber, formatDate, locale } = useAppFormat();
   const { labelFor } = useStatusLabels();
   const [commande, setCommande] = useState<Commande | null>(null);
   const [lignes, setLignes] = useState<Ligne[]>([]);
@@ -720,6 +725,13 @@ export default function RecapClient({ commandeId }: { commandeId: string }) {
     return null;
   }
   const emDash = tc("emDash");
+  const magasinName = magasinLabelFromCommande(commande);
+  const dateIso =
+    typeof commande.validated_at === "string" && commande.validated_at.length > 0
+      ? commande.validated_at
+      : commande.created_at;
+  const dateLabel = typeof dateIso === "string" && dateIso.length > 0 ? formatDate(dateIso) : "";
+  const titleSubtitle = [magasinName, dateLabel].filter((s) => s.length > 0).join(" · ");
 
   return (
     <main className="mx-auto w-full max-w-lg px-4 py-4">
@@ -740,15 +752,24 @@ export default function RecapClient({ commandeId }: { commandeId: string }) {
       >
         {t("backToList")}
       </Button>
-      <Typography variant="h5" className="!mb-1" sx={{ fontWeight: 600 }}>
-        {t("title")}
-      </Typography>
+      <div className="!mb-1 flex items-center justify-between gap-2">
+        <Typography variant="h5" sx={{ fontWeight: 600 }}>
+          {t("title")}
+        </Typography>
+        <CommandeFournisseurStatusChip
+          domain="commande_fournisseur"
+          status={commande.status}
+          label={labelFor("commande_fournisseur", commande.status)}
+        />
+      </div>
+      {titleSubtitle ? (
+        <Typography variant="body1" color="text.secondary" className="!mb-2" sx={{ fontWeight: 500 }}>
+          {titleSubtitle}
+        </Typography>
+      ) : null}
       <div className="!mb-4 flex flex-col gap-1">
         <Typography variant="subtitle1" sx={{ fontWeight: 600 }} component="p" className="!m-0">
           {tc("supplierColon", { label: supplierLabel(commande, emDash) })}
-        </Typography>
-        <Typography variant="subtitle1" color="primary" sx={{ fontWeight: 700 }} component="p" className="!m-0">
-          {labelFor("commande_fournisseur", commande.status)}
         </Typography>
       </div>
 

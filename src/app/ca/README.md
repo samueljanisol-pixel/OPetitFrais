@@ -34,10 +34,12 @@ Dans les cartes **Total global** (jour) et **Total du mois** :
 
 ## Charges & bénéfice net
 
-Charges configurées dans **Paramètres → Charges Magasins** (`magasin_charge`, lib `src/lib/ca/magasinCharges.ts`) :
+Sources dans **Gestion Charges** (`/charges`, lib `src/lib/ca/magasinCharges.ts`) :
 
-- **Jour** : charge `jour` = qté × prix ; charge `mois` = (qté × prix) ÷ jours du mois.
-- **Mois** : charge `mois` = 1 × forfait (même mois incomplet) ; charge `jour` × jours de la période affichée.
+- **Priorité** : si une **feuille réelle** existe pour le `ym` → montants de la feuille ; sinon **estimation** (`magasin_charge`).
+- **Estimation — jour** : charge `jour` = qté × prix ; charge `mois` = (qté × prix) ÷ jours du mois.
+- **Estimation — mois** : charge `mois` = 1 × forfait (même mois incomplet) ; charge `jour` × jours de la période affichée.
+- **Réel — jour** : total feuille ÷ jours calendaires du mois ; **réel — mois** : somme des lignes.
 - Charges **générales** (`magasin_id` null) : uniquement sur les totaux globaux.
 - Affichage : **Charges** puis **Bénéfice net estimé** (= bénéfice − charges), global et par magasin (sans générales).
 
