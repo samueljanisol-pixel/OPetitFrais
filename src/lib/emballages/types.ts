@@ -1,3 +1,10 @@
+export type EmballageCategorieRow = {
+  id: string
+  code: string
+  label: string
+  sort_order: number
+}
+
 export type EmballageTypeRow = {
   id: string
   label: string
@@ -7,17 +14,27 @@ export type EmballageTypeRow = {
   updated_at?: string
 }
 
+export type EmballageVendeurRow = {
+  id: string
+  label: string
+  supplier_id: string
+  sort_order: number
+}
+
 export type EmballageStatutFiche = 'ouvert' | 'cloture'
 
 export type EmballageRow = {
   id: string
   label: string
-  type_id: string
+  categorie_id: string
+  reference: string | null
+  type_id: string | null
   sort_order: number
   active: boolean
   created_at?: string
   updated_at?: string
   ref_emballage_type?: Pick<EmballageTypeRow, 'id' | 'label'> | null
+  ref_emballage_categorie?: Pick<EmballageCategorieRow, 'id' | 'code' | 'label'> | null
 }
 
 export type EmballageAchatFicheRow = {
@@ -25,11 +42,13 @@ export type EmballageAchatFicheRow = {
   date_achat: string
   statut: EmballageStatutFiche
   note: string | null
+  vendeur_id: string | null
   cloture_at: string | null
   created_at?: string
   updated_at?: string
   total?: number
   ligne_count?: number
+  ref_supplier_vendeur?: Pick<EmballageVendeurRow, 'id' | 'label'> | null
 }
 
 export type EmballageAchatLigneRow = {
@@ -57,6 +76,32 @@ export type EmballageTypeRelation =
   | Pick<EmballageTypeRow, 'id' | 'label'>
   | Pick<EmballageTypeRow, 'id' | 'label'>[]
   | null
+
+export type EmballageCategorieRelation =
+  | Pick<EmballageCategorieRow, 'id' | 'code' | 'label'>
+  | Pick<EmballageCategorieRow, 'id' | 'code' | 'label'>[]
+  | null
+
+export type EmballageVendeurRelation =
+  | Pick<EmballageVendeurRow, 'id' | 'label'>
+  | Pick<EmballageVendeurRow, 'id' | 'label'>[]
+  | null
+
+export function normalizeEmballageCategorieRef(
+  raw: EmballageCategorieRelation | undefined,
+): Pick<EmballageCategorieRow, 'id' | 'code' | 'label'> | null {
+  if (raw == null) return null
+  if (Array.isArray(raw)) return raw[0] ?? null
+  return raw
+}
+
+export function normalizeEmballageVendeurRef(
+  raw: EmballageVendeurRelation | undefined,
+): Pick<EmballageVendeurRow, 'id' | 'label'> | null {
+  if (raw == null) return null
+  if (Array.isArray(raw)) return raw[0] ?? null
+  return raw
+}
 
 export function normalizeEmballageTypeRef(
   raw: EmballageTypeRelation | undefined,

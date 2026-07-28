@@ -14,7 +14,7 @@ export const TRANSLATION_SECTIONS: TranslationSection[] = [
   { id: "common", label: "Commun (boutons)", prefix: "common" },
   { id: "shell", label: "En-tête application", prefix: "backoffice.shell" },
   { id: "home", label: "Accueil", prefix: "backoffice.home" },
-  { id: "emballages", label: "Gestion Emballages", prefix: "backoffice.emballages" },
+  { id: "emballages", label: "Emballages et Consommables", prefix: "backoffice.emballages" },
   { id: "login", label: "Connexion", prefix: "backoffice.login" },
   { id: "accessDenied", label: "Accès refusé", prefix: "backoffice.accessDenied" },
   { id: "auth", label: "Erreurs connexion", prefix: "backoffice.auth" },

@@ -58,6 +58,7 @@ Les **vendeurs** (`ref_supplier_vendeur`) sont rattachés à un **fournisseur**.
 Ils servent à la fois :
 
 - à la configuration des **conditionnements produit** (cases « Vendeurs » dans les paramètres du colis) ;
+- aux **achats Emballages et Consommables** (`/emballages`) lorsque le vendeur est rattaché au fournisseur seed **« Emballages et Consommables »** (`ref_supplier.code = emballages_consommables`, créé par migration `20260728240000_emballages_consommables_extension.sql`). Ce fournisseur a `commande_active = false` (pas de commandes magasin) — les achats passent par le module dédié.
 - à l’**achat** (attribution des lignes de lot, frais, création / modification vendeur selon les droits).
 
 Un même libellé peut exister chez plusieurs fournisseurs (enregistrements distincts).

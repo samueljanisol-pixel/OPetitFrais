@@ -10,6 +10,7 @@ import {
   sumLignesMontant,
 } from "@/lib/emballages/achat-api";
 import type { EmballageAchatFicheRow } from "@/lib/emballages/types";
+import { validateEmballagesVendeurId } from "@/lib/emballages/supplier-api";
 
 export async function GET(req: Request) {
   const gate = await requireAnyApiPermission(["emballages.read", "emballages.write"]);
@@ -92,7 +93,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: gate.error }, { status: gate.status });
   }
 
-  let body: { date_achat?: string; note?: string | null };
+  let body: { date_achat?: string; note?: string | null; vendeur_id?: string | null };
   try {
     body = (await req.json()) as typeof body;
   } catch {
@@ -121,9 +122,22 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Service role non configurée" }, { status: 500 });
   }
 
+  let vendeur_id: string | null = null;
+  if ("vendeur_id" in body) {
+    if (body.vendeur_id == null || body.vendeur_id === "") {
+      vendeur_id = null;
+    } else if (typeof body.vendeur_id === "string" && body.vendeur_id.trim()) {
+      const check = await validateEmballagesVendeurId(service, body.vendeur_id.trim());
+      if (!check.ok) {
+        return NextResponse.json({ error: check.error }, { status: 400 });
+      }
+      vendeur_id = body.vendeur_id.trim();
+    }
+  }
+
   const { data, error } = await service
     .from("emballage_achat_fiche")
-    .insert({ date_achat, statut: "ouvert", note })
+    .insert({ date_achat, statut: "ouvert", note, vendeur_id })
     .select(FICHE_SELECT)
     .single();
 

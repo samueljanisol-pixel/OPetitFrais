@@ -84,6 +84,8 @@ export type ProductRow = {
   shop_favorite_unit_id?: string | null
   /** Matériau d'emballage utilisé ; null = aucun. */
   emballage_id?: string | null
+  /** Étiquette utilisée ; null = aucune. */
+  etiquette_id?: string | null
   created_at: string
   updated_at: string
 }

@@ -5,13 +5,26 @@
 
 import { COMMANDE_PACKAGING_SELECT } from "@/lib/commandes-fournisseur/commande-packaging-fields";
 
+/** Emballage produit : `product.emballage_id` → `ref_emballage`. */
+export const PRODUCT_EMBALLAGE_EMBED = "ref_emballage!product_emballage_id_fkey";
+
+/** Étiquette produit : `product.etiquette_id` → `ref_emballage`. */
+export const PRODUCT_ETIQUETTE_EMBED = "ref_emballage!product_etiquette_id_fkey";
+
 /** Fournisseur principal : `product.supplier_id` → `ref_supplier`. */
 export const PRODUCT_PRIMARY_SUPPLIER_EMBED = "ref_supplier!product_supplier_id_fkey";
+
+/** Favori boutique : `product.shop_favorite_unit_id` → `ref_shop_order_unit` (évite l’ambiguïté avec `product_shop_order_unit`). */
+export const PRODUCT_SHOP_FAVORITE_UNIT_EMBED =
+  "ref_shop_order_unit!product_shop_favorite_unit_id_fkey";
 
 /** Produit depuis `product_supplier` : `product_supplier.product_id` → `product`. */
 export const PRODUCT_SUPPLIER_PRODUCT_EMBED = "product!product_supplier_product_id_fkey";
 
 export const PRODUCT_LIST_SELECT = `*, ref_sales_unit(*), ref_category(*), ${PRODUCT_PRIMARY_SUPPLIER_EMBED}(*)`;
+
+/** Liste produits avec embeds pour édition inline (colonnes configurables). */
+export const PRODUCT_LIST_EXTENDED_SELECT = `*, ref_sales_unit(*), ref_order_unit(*), ref_purchase_unit(*), ref_category(*), ref_subcategory(*), ${PRODUCT_PRIMARY_SUPPLIER_EMBED}(*), ref_supplier_vendeur(id, supplier_id, label, sort_order), emballage_ref:${PRODUCT_EMBALLAGE_EMBED}(id, label, type_id, ref_emballage_type(id, label)), etiquette_ref:${PRODUCT_ETIQUETTE_EMBED}(id, label, reference), ${PRODUCT_SHOP_FAVORITE_UNIT_EMBED}(id, code, label, sort_order)`;
 
 export const PRODUCT_FORM_SELECT = `*, ref_sales_unit(*), ref_order_unit(*), ref_purchase_unit(*), ref_category(*), ref_subcategory(*), ${PRODUCT_PRIMARY_SUPPLIER_EMBED}(*)`;
 

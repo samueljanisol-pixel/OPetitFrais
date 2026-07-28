@@ -35,7 +35,6 @@ import type {
   RefRow,
 } from '@/lib/products/types'
 import type { EmballageRow } from '@/lib/emballages/types'
-import { parseEmballageRow } from '@/lib/emballages/emballage-api'
 import { useRouter } from 'next/navigation'
 import { muiSlotPropsDecimalKeypad } from '@/lib/mui/numericTextFieldProps'
 import { insertProductPriceHistoryRow, pricingSnapshotChanged, type ProductPricingSnapshot } from '@/lib/products/priceHistory'
@@ -109,6 +108,7 @@ export default function ProductFormClient({ productId, returnTo = null }: Props)
   const [sups, setSups] = useState<RefRow[]>([])
   const [conds, setConds] = useState<RefConditionnementRow[]>([])
   const [emballages, setEmballages] = useState<EmballageRow[]>([])
+  const [etiquettes, setEtiquettes] = useState<EmballageRow[]>([])
 
   const [p, setP] = useState<Partial<ProductRow> & { id?: string }>({
     name: '',
@@ -121,6 +121,7 @@ export default function ProductFormClient({ productId, returnTo = null }: Props)
     cost_packaging: null,
     margin: null,
     emballage_id: null,
+    etiquette_id: null,
     active: true,
     visible_vitrine: true,
     allow_unit_in_commande: true,
@@ -189,7 +190,7 @@ export default function ProductFormClient({ productId, returnTo = null }: Props)
   }, [subcats, p.category_id])
 
   const loadRefs = useCallback(async () => {
-    const [u, ou, pu, ucv, c, sc, s, co, em, ma, mg] = await Promise.all([
+    const [u, ou, pu, ucv, c, sc, s, co, embRes, etqRes, ma, mg] = await Promise.all([
       supabase.from('ref_sales_unit').select('*').order('sort_order'),
       supabase.from('ref_order_unit').select('*').order('sort_order'),
       supabase.from('ref_purchase_unit').select('*').order('sort_order'),
@@ -198,7 +199,8 @@ export default function ProductFormClient({ productId, returnTo = null }: Props)
       supabase.from('ref_subcategory').select('*, ref_category(id, label)').order('sort_order').order('label'),
       supabase.from('ref_supplier').select('*').order('sort_order'),
       supabase.from('ref_conditionnement').select('*').order('sort_order'),
-      supabase.from('ref_emballage').select('id, label, type_id, sort_order, active, ref_emballage_type(id, label)').order('sort_order').order('label'),
+      fetch('/api/emballages?categorie=emballages', { credentials: 'include' }),
+      fetch('/api/emballages?categorie=etiquettes', { credentials: 'include' }),
       supabase.from('ref_supplier_vendeur').select('id, supplier_id, label, sort_order').order('sort_order').order('label'),
       supabase.from('magasins').select('id, code, nom').order('sort_order'),
     ])
@@ -226,9 +228,10 @@ export default function ProductFormClient({ productId, returnTo = null }: Props)
       setConds(co.data as RefConditionnementRow[])
       if (co.data[0]) setAddCond((co.data[0] as RefConditionnementRow).id)
     }
-    if (em.data) {
-      setEmballages((em.data as Record<string, unknown>[]).map((r) => parseEmballageRow(r)))
-    }
+    const embJson = (await embRes.json().catch(() => ({}))) as { emballages?: EmballageRow[] }
+    const etqJson = (await etqRes.json().catch(() => ({}))) as { emballages?: EmballageRow[] }
+    if (embJson.emballages) setEmballages(embJson.emballages)
+    if (etqJson.emballages) setEtiquettes(etqJson.emballages)
     if (ma.data) setVendeurs(ma.data as RefVendeurRow[])
     if (mg.data) setMagasins(mg.data as MagasinMini[])
     if (u.data?.[0]) setAddUnit((u.data[0] as RefRow).id)
@@ -503,6 +506,7 @@ export default function ProductFormClient({ productId, returnTo = null }: Props)
       shop_allow_sales_unit: allowUdv,
       shop_favorite_unit_id: favId,
       emballage_id: p.emballage_id?.trim() ? p.emballage_id : null,
+      etiquette_id: p.etiquette_id?.trim() ? p.etiquette_id : null,
     }
     if (isNew) {
       const { data, error: e1 } = await supabase
@@ -1015,6 +1019,30 @@ export default function ProductFormClient({ productId, returnTo = null }: Props)
                 <MenuItem key={e.id} value={e.id}>
                   {e.label}
                   {e.ref_emballage_type?.label ? ` (${e.ref_emballage_type.label})` : ''}
+                  {!e.active ? ' (inactif)' : ''}
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+          <FormControl size="small" fullWidth disabled={readOnly}>
+            <InputLabel>Étiquette</InputLabel>
+            <Select
+              value={p.etiquette_id ?? ''}
+              label="Étiquette"
+              onChange={e =>
+                setP(x => ({
+                  ...x,
+                  etiquette_id: e.target.value.length > 0 ? e.target.value : null,
+                }))
+              }
+            >
+              <MenuItem value="">
+                <em>Aucune</em>
+              </MenuItem>
+              {etiquettes.map(e => (
+                <MenuItem key={e.id} value={e.id}>
+                  {e.label}
+                  {e.reference ? ` (${e.reference})` : ''}
                   {!e.active ? ' (inactif)' : ''}
                 </MenuItem>
               ))}

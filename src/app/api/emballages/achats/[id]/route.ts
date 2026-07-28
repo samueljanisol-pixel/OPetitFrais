@@ -10,6 +10,7 @@ import {
   sumLignesMontant,
 } from "@/lib/emballages/achat-api";
 import { parseEmballageNumeric } from "@/lib/emballages/types";
+import { validateEmballagesVendeurId } from "@/lib/emballages/supplier-api";
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -83,7 +84,7 @@ export async function PATCH(req: Request, ctx: Ctx) {
     return NextResponse.json({ error: "Id requis" }, { status: 400 });
   }
 
-  let body: { date_achat?: string; note?: string | null };
+  let body: { date_achat?: string; note?: string | null; vendeur_id?: string | null };
   try {
     body = (await req.json()) as typeof body;
   } catch {
@@ -120,6 +121,17 @@ export async function PATCH(req: Request, ctx: Ctx) {
         : typeof body.note === "string"
           ? body.note.trim() || null
           : null;
+  }
+  if ("vendeur_id" in body) {
+    if (body.vendeur_id == null || body.vendeur_id === "") {
+      patch.vendeur_id = null;
+    } else if (typeof body.vendeur_id === "string" && body.vendeur_id.trim()) {
+      const check = await validateEmballagesVendeurId(service, body.vendeur_id.trim());
+      if (!check.ok) {
+        return NextResponse.json({ error: check.error }, { status: 400 });
+      }
+      patch.vendeur_id = body.vendeur_id.trim();
+    }
   }
   if (Object.keys(patch).length === 0) {
     return NextResponse.json({ error: "Aucun champ à mettre à jour" }, { status: 400 });

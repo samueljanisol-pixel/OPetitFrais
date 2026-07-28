@@ -19,7 +19,9 @@ export async function PATCH(req: Request, ctx: Ctx) {
 
   let body: {
     label?: string;
-    type_id?: string;
+    categorie_id?: string;
+    reference?: string | null;
+    type_id?: string | null;
     sort_order?: number | string;
     active?: boolean;
   };
@@ -37,12 +39,24 @@ export async function PATCH(req: Request, ctx: Ctx) {
     }
     patch.label = label;
   }
-  if ("type_id" in body) {
-    const type_id = typeof body.type_id === "string" ? body.type_id.trim() : "";
-    if (!type_id) {
-      return NextResponse.json({ error: "Type requis" }, { status: 400 });
+  if ("categorie_id" in body) {
+    const categorie_id = typeof body.categorie_id === "string" ? body.categorie_id.trim() : "";
+    if (!categorie_id) {
+      return NextResponse.json({ error: "Catégorie requise" }, { status: 400 });
     }
-    patch.type_id = type_id;
+    patch.categorie_id = categorie_id;
+  }
+  if ("reference" in body) {
+    patch.reference =
+      body.reference == null || body.reference === ""
+        ? null
+        : typeof body.reference === "string"
+          ? body.reference.trim() || null
+          : null;
+  }
+  if ("type_id" in body) {
+    patch.type_id =
+      typeof body.type_id === "string" && body.type_id.trim() ? body.type_id.trim() : null;
   }
   if ("sort_order" in body) {
     patch.sort_order =
@@ -78,7 +92,7 @@ export async function PATCH(req: Request, ctx: Ctx) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
   if (!data) {
-    return NextResponse.json({ error: "Emballage introuvable" }, { status: 404 });
+    return NextResponse.json({ error: "Article introuvable" }, { status: 404 });
   }
 
   return NextResponse.json({ emballage: parseEmballageRow(data as Record<string, unknown>) });
@@ -112,7 +126,21 @@ export async function DELETE(_req: Request, ctx: Ctx) {
   }
   if ((count ?? 0) > 0) {
     return NextResponse.json(
-      { error: "Emballage utilisé sur des achats — suppression impossible" },
+      { error: "Article utilisé sur des achats — suppression impossible" },
+      { status: 409 },
+    );
+  }
+
+  const { count: productEmbCount, error: pe } = await service
+    .from("product")
+    .select("id", { count: "exact", head: true })
+    .or(`emballage_id.eq.${id},etiquette_id.eq.${id}`);
+  if (pe) {
+    return NextResponse.json({ error: pe.message }, { status: 500 });
+  }
+  if ((productEmbCount ?? 0) > 0) {
+    return NextResponse.json(
+      { error: "Article utilisé sur des produits — suppression impossible" },
       { status: 409 },
     );
   }

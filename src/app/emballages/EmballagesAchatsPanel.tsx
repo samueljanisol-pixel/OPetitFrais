@@ -5,7 +5,7 @@ import { Button, Dialog, DialogActions, DialogContent, DialogTitle, FormControl,
 import FormDialog from '@/lib/mui/FormDialog'
 import AppLink from '@/components/AppLink'
 import { useTranslations } from 'next-intl'
-import type { EmballageAchatFicheRow } from '@/lib/emballages/types'
+import type { EmballageAchatFicheRow, EmballageVendeurRow } from '@/lib/emballages/types'
 
 type Props = {
   canWrite: boolean
@@ -43,7 +43,19 @@ export default function EmballagesAchatsPanel({ canWrite, onError }: Props) {
   const [createOpen, setCreateOpen] = useState(false)
   const [dateAchat, setDateAchat] = useState(() => new Date().toISOString().slice(0, 10))
   const [note, setNote] = useState('')
+  const [vendeurId, setVendeurId] = useState('')
+  const [vendeurs, setVendeurs] = useState<EmballageVendeurRow[]>([])
   const [creating, setCreating] = useState(false)
+
+  const loadVendeurs = useCallback(async () => {
+    try {
+      const res = await fetch('/api/emballages/vendeurs', { credentials: 'include' })
+      const j = (await res.json().catch(() => ({}))) as { error?: string; vendeurs?: EmballageVendeurRow[] }
+      if (res.ok) setVendeurs(j.vendeurs ?? [])
+    } catch {
+      /* optional */
+    }
+  }, [])
 
   const loadAchats = useCallback(async () => {
     setLoading(true)
@@ -69,6 +81,10 @@ export default function EmballagesAchatsPanel({ canWrite, onError }: Props) {
     void loadAchats()
   }, [loadAchats])
 
+  useEffect(() => {
+    void loadVendeurs()
+  }, [loadVendeurs])
+
   const createAchat = async () => {
     setCreating(true)
     onError(null)
@@ -77,7 +93,11 @@ export default function EmballagesAchatsPanel({ canWrite, onError }: Props) {
         method: 'POST',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ date_achat: dateAchat, note: note.trim() || null }),
+        body: JSON.stringify({
+          date_achat: dateAchat,
+          note: note.trim() || null,
+          vendeur_id: vendeurId.trim() || null,
+        }),
       })
       const j = (await res.json().catch(() => ({}))) as { error?: string; achat?: EmballageAchatFicheRow }
       if (!res.ok) throw new Error(j.error ?? t('errors.saveFailed'))
@@ -142,6 +162,7 @@ export default function EmballagesAchatsPanel({ canWrite, onError }: Props) {
               onClick={() => {
                 setDateAchat(new Date().toISOString().slice(0, 10))
                 setNote('')
+                setVendeurId('')
                 setCreateOpen(true)
               }}
               sx={{ textTransform: 'none' }}
@@ -163,6 +184,7 @@ export default function EmballagesAchatsPanel({ canWrite, onError }: Props) {
               <tr className="border-b border-slate-200 text-left text-slate-600">
                 <th className="px-2 py-1.5 font-medium">{t('columns.date')}</th>
                 <th className="px-2 py-1.5 font-medium">{t('columns.statut')}</th>
+                <th className="px-2 py-1.5 font-medium">{t('columns.vendeur')}</th>
                 <th className="px-2 py-1.5 text-right font-medium">{t('columns.ligneCount')}</th>
                 <th className="px-2 py-1.5 text-right font-medium">{t('columns.montant')}</th>
                 <th className="px-2 py-1.5 font-medium">{t('columns.note')}</th>
@@ -175,6 +197,9 @@ export default function EmballagesAchatsPanel({ canWrite, onError }: Props) {
                   <td className="px-2 py-1.5 whitespace-nowrap">{formatDate(row.date_achat)}</td>
                   <td className="px-2 py-1.5">
                     {row.statut === 'ouvert' ? t('statut.ouvert') : t('statut.cloture')}
+                  </td>
+                  <td className="px-2 py-1.5">
+                    {row.ref_supplier_vendeur?.label ?? t('vendeurOptional')}
                   </td>
                   <td className="px-2 py-1.5 text-right tabular-nums">{row.ligne_count ?? 0}</td>
                   <td className="px-2 py-1.5 text-right tabular-nums">
@@ -227,6 +252,23 @@ export default function EmballagesAchatsPanel({ canWrite, onError }: Props) {
               multiline
               minRows={2}
             />
+            <FormControl size="small" fullWidth>
+              <InputLabel>{t('columns.vendeur')}</InputLabel>
+              <Select
+                value={vendeurId}
+                label={t('columns.vendeur')}
+                onChange={(e) => setVendeurId(e.target.value)}
+              >
+                <MenuItem value="">
+                  <em>{t('vendeurOptional')}</em>
+                </MenuItem>
+                {vendeurs.map((v) => (
+                  <MenuItem key={v.id} value={v.id}>
+                    {v.label}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
           </div>
         </DialogContent>
         <DialogActions>

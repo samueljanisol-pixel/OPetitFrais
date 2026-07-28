@@ -9,10 +9,42 @@ import {
   InputLabel,
   MenuItem,
   Select,
-  Switch,
   TextField,
   Typography,
 } from '@mui/material'
+import ViewColumnOutlinedIcon from '@mui/icons-material/ViewColumnOutlined'
+import BackNavButton from '@/components/BackNavButton'
+import AppLink from '@/components/AppLink'
+import { createSupabaseBrowserClient } from '@/lib/supabase/client'
+import type { RefRow, RefSubcategoryRow, RefVendeurRow } from '@/lib/products/types'
+import { useRouter } from 'next/navigation'
+import { SHEET_IMPORT_ENABLED, SheetImportBar } from '@/features/sheet-import'
+import { PRODUCT_LIST_EXTENDED_SELECT } from '@/lib/products/product-supabase-select'
+import { useSessionPermissions } from '@/lib/auth/useSessionPermissions'
+import { textIncludesFolded } from '@/lib/text/fold-for-search'
+import {
+  compareProductListRows,
+  PRODUCT_LIST_COLUMN_BY_KEY,
+  type ProductListColumnKey,
+  type ProductListFieldKey,
+  type ProductListRefs,
+  type ProductListRow,
+} from '@/lib/products/product-list-columns'
+import {
+  isProductListColumnEditable,
+  readProductListColumnPreference,
+  resolveVisibleProductListColumns,
+  writeProductListColumnPreference,
+  type ProductListColumnPreference,
+} from '@/lib/products/product-list-column-preference'
+import {
+  commitProductField,
+  commitProductFieldBulk,
+  isDraftDirty,
+} from '@/lib/products/product-field-commit'
+import ProductListCell from '@/app/produits/ProductListCell'
+import ProductListColumnPicker from '@/app/produits/ProductListColumnPicker'
+import ProductListBulkEditDialog from '@/app/produits/ProductListBulkEditDialog'
 
 /** Sélection stable avec nouveau Set pour le rendu React. */
 function toggleIds(ids: string[], selected: Set<string>, mode: 'add' | 'remove') {
@@ -25,84 +57,116 @@ function toggleIds(ids: string[], selected: Set<string>, mode: 'add' | 'remove')
 }
 
 const BULK_PROMPT = '__bulk_prompt__' as const
-import BackNavButton from '@/components/BackNavButton'
-import AppLink from '@/components/AppLink'
-import { createSupabaseBrowserClient } from '@/lib/supabase/client'
-import type { ProductWithRefs, RefRow } from '@/lib/products/types'
-import { useRouter } from 'next/navigation'
-import { SHEET_IMPORT_ENABLED, SheetImportBar } from '@/features/sheet-import'
-import { muiSlotPropsDecimalKeypad } from '@/lib/mui/numericTextFieldProps'
-import { insertProductPriceHistoryRow } from '@/lib/products/priceHistory'
-import { PRODUCT_LIST_SELECT } from '@/lib/products/product-supabase-select'
-import { useSessionPermissions } from '@/lib/auth/useSessionPermissions'
-import { productSalesNameFr } from '@/lib/products/product-display-name'
-import { textIncludesFolded } from '@/lib/text/fold-for-search'
 
-type Row = ProductWithRefs
-
-type SortKey = 'code' | 'name' | 'price'
 type SortDir = 'asc' | 'desc'
-
-/** Filtre « Actif » : par défaut « Tous » (sans filtre) ; options Actifs / Inactifs. */
 type ActiveFilter = 'active' | 'inactive' | 'all'
-
-function codeToNum(code: string): number {
-  const n = Number.parseInt(String(code).replace(/\D/g, ''), 10)
-  return Number.isFinite(n) ? n : 0
-}
-
-function parsePriceInput(raw: string): number | null {
-  const s = raw.replace(/\s/g, '').replace(',', '.')
-  if (s === '') return null
-  const n = Number(s)
-  return Number.isFinite(n) ? n : null
-}
-
-function priceDiffers(a: number, b: number) {
-  return Math.abs(a - b) > 0.005
-}
+type DraftsState = Record<string, Partial<Record<ProductListColumnKey, string>>>
 
 export default function ProduitsListClient() {
   const supabase = useMemo(() => createSupabaseBrowserClient(), [])
   const router = useRouter()
   const { canWriteProducts } = useSessionPermissions()
-  const [rows, setRows] = useState<Row[]>([])
-  const [categories, setCategories] = useState<RefRow[]>([])
-  const [suppliers, setSuppliers] = useState<RefRow[]>([])
+  const [rows, setRows] = useState<ProductListRow[]>([])
+  const [refs, setRefs] = useState<ProductListRefs>({
+    categories: [],
+    subcategories: [],
+    suppliers: [],
+    vendeurs: [],
+    salesUnits: [],
+    orderUnits: [],
+    purchaseUnits: [],
+    shopOrderUnits: [],
+    emballages: [],
+    etiquettes: [],
+  })
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [qName, setQName] = useState('')
   const [catId, setCatId] = useState<string>('')
   const [suppId, setSuppId] = useState<string>('')
   const [activeFilter, setActiveFilter] = useState<ActiveFilter>('all')
-  const [editing, setEditing] = useState<Record<string, string>>({})
-  const [sortKey, setSortKey] = useState<SortKey>('name')
+  const [drafts, setDrafts] = useState<DraftsState>({})
+  const [sortKey, setSortKey] = useState<ProductListColumnKey>('sales_name')
   const [sortDir, setSortDir] = useState<SortDir>('asc')
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set())
   const [bulkBusy, setBulkBusy] = useState(false)
   const [bulkMenuNonce, setBulkMenuNonce] = useState(0)
-  const [activeToggleBusyId, setActiveToggleBusyId] = useState<string | null>(null)
+  const [cellBusyKey, setCellBusyKey] = useState<string | null>(null)
+  const [columnPref, setColumnPref] = useState<ProductListColumnPreference>(() =>
+    readProductListColumnPreference(),
+  )
+  const [columnPickerOpen, setColumnPickerOpen] = useState(false)
+  const [bulkEditOpen, setBulkEditOpen] = useState(false)
+
+  const visibleColumns = useMemo(
+    () => resolveVisibleProductListColumns(columnPref),
+    [columnPref],
+  )
 
   const load = useCallback(async () => {
     setError(null)
     setLoading(true)
-    setEditing({})
-    const { data, error: e1 } = await supabase
-      .from('product')
-      .select(PRODUCT_LIST_SELECT)
+    setDrafts({})
+    const { data, error: e1 } = await supabase.from('product').select(PRODUCT_LIST_EXTENDED_SELECT)
     if (e1) {
       setError(e1.message)
       setRows([])
       setLoading(false)
       return
     }
-    setRows((data as Row[]) ?? [])
+    setRows(
+      ((data as Record<string, unknown>[]) ?? []).map(raw => {
+        const emballageRef = raw.emballage_ref ?? raw.ref_emballage
+        const etiquetteRef = raw.etiquette_ref
+        const { emballage_ref: _e, etiquette_ref: _t, ref_emballage: _r, ...rest } = raw
+        return {
+          ...(rest as ProductListRow),
+          ref_emballage: (Array.isArray(emballageRef) ? emballageRef[0] : emballageRef) as ProductListRow['ref_emballage'],
+          ref_etiquette: (Array.isArray(etiquetteRef) ? etiquetteRef[0] : etiquetteRef) as ProductListRow['ref_etiquette'],
+        }
+      }),
+    )
     setSelectedIds(new Set())
 
-    const { data: cats } = await supabase.from('ref_category').select('*').order('sort_order')
-    const { data: sups } = await supabase.from('ref_supplier').select('*').order('sort_order')
-    setCategories((cats as RefRow[]) ?? [])
-    setSuppliers((sups as RefRow[]) ?? [])
+    const [
+      catsRes,
+      subcatsRes,
+      supsRes,
+      vendeursRes,
+      unitsRes,
+      orderUnitsRes,
+      purchaseUnitsRes,
+      shopUnitsRes,
+      embRes,
+      etqRes,
+    ] = await Promise.all([
+      supabase.from('ref_category').select('*').order('sort_order'),
+      supabase.from('ref_subcategory').select('*').order('sort_order'),
+      supabase.from('ref_supplier').select('*').order('sort_order'),
+      supabase.from('ref_supplier_vendeur').select('id, supplier_id, label, sort_order').order('sort_order').order('label'),
+      supabase.from('ref_sales_unit').select('*').order('sort_order'),
+      supabase.from('ref_order_unit').select('*').order('sort_order'),
+      supabase.from('ref_purchase_unit').select('*').order('sort_order'),
+      supabase.from('ref_shop_order_unit').select('*').order('sort_order'),
+      fetch('/api/emballages?categorie=emballages', { credentials: 'include' }),
+      fetch('/api/emballages?categorie=etiquettes', { credentials: 'include' }),
+    ])
+
+    const embJson = (await embRes.json().catch(() => ({}))) as { emballages?: ProductListRefs['emballages'] }
+    const etqJson = (await etqRes.json().catch(() => ({}))) as { emballages?: ProductListRefs['etiquettes'] }
+
+    setRefs({
+      categories: (catsRes.data as RefRow[]) ?? [],
+      subcategories: (subcatsRes.data as RefSubcategoryRow[]) ?? [],
+      suppliers: (supsRes.data as RefRow[]) ?? [],
+      vendeurs: (vendeursRes.data as RefVendeurRow[]) ?? [],
+      salesUnits: (unitsRes.data as RefRow[]) ?? [],
+      orderUnits: (orderUnitsRes.data as RefRow[]) ?? [],
+      purchaseUnits: (purchaseUnitsRes.data as RefRow[]) ?? [],
+      shopOrderUnits: (shopUnitsRes.data as RefRow[]) ?? [],
+      emballages: embJson.emballages ?? [],
+      etiquettes: etqJson.emballages ?? [],
+    })
     setLoading(false)
   }, [supabase])
 
@@ -130,14 +194,7 @@ export default function ProduitsListClient() {
 
   const sortedFiltered = useMemo(() => {
     const list = [...filtered]
-    const m = sortDir === 'asc' ? 1 : -1
-    list.sort((a, b) => {
-      if (sortKey === 'code') return (codeToNum(a.code) - codeToNum(b.code)) * m
-      if (sortKey === 'name') {
-        return productSalesNameFr(a).localeCompare(productSalesNameFr(b), 'fr', { sensitivity: 'base' }) * m
-      }
-      return (a.price - b.price) * m
-    })
+    list.sort((a, b) => compareProductListRows(a, b, sortKey, sortDir))
     return list
   }, [filtered, sortKey, sortDir])
 
@@ -163,6 +220,11 @@ export default function ProduitsListClient() {
 
   const selectedHiddenCount = selectedIds.size - selectedInViewCount
 
+  const selectedRows = useMemo(
+    () => rows.filter(r => selectedIds.has(r.id)),
+    [rows, selectedIds],
+  )
+
   const toggleSelectRow = (id: string) => {
     setSelectedIds(prev => {
       const next = new Set(prev)
@@ -179,38 +241,112 @@ export default function ProduitsListClient() {
     setSelectedIds(prev => toggleIds(ids, prev, allOn ? 'remove' : 'add'))
   }
 
+  const clearDraftForRow = (productId: string, field?: ProductListColumnKey) => {
+    setDrafts(prev => {
+      if (!field) {
+        const next = { ...prev }
+        delete next[productId]
+        return next
+      }
+      const rowDrafts = { ...prev[productId] }
+      delete rowDrafts[field]
+      const next = { ...prev }
+      if (Object.keys(rowDrafts).length === 0) delete next[productId]
+      else next[productId] = rowDrafts
+      return next
+    })
+  }
+
+  const setDraft = (productId: string, field: ProductListColumnKey, value: string) => {
+    setDrafts(prev => ({
+      ...prev,
+      [productId]: { ...prev[productId], [field]: value },
+    }))
+  }
+
+  const isRowDirty = (row: ProductListRow) => {
+    const rowDrafts = drafts[row.id]
+    if (!rowDrafts) return false
+    for (const [key, draft] of Object.entries(rowDrafts)) {
+      if (isDraftDirty(row, key as ProductListFieldKey, draft)) return true
+    }
+    return false
+  }
+
+  const applyRowUpdate = (updated: ProductListRow) => {
+    setRows(prev => prev.map(r => (r.id === updated.id ? updated : r)))
+    clearDraftForRow(updated.id)
+  }
+
+  const commitField = async (row: ProductListRow, field: ProductListFieldKey, rawValue: unknown) => {
+    if (!canWriteProducts) return
+    const busyKey = `${row.id}:${field}`
+    setCellBusyKey(busyKey)
+    setError(null)
+    const result = await commitProductField(supabase, { row, field, rawValue, refs })
+    setCellBusyKey(null)
+    if (!result.ok) {
+      setError(result.error)
+      return
+    }
+    applyRowUpdate(result.row)
+  }
+
+  const handleTextNumberCommit = async (row: ProductListRow, field: ProductListFieldKey) => {
+    const draft = drafts[row.id]?.[field]
+    const raw = draft !== undefined ? draft : undefined
+    if (raw === undefined) return
+    await commitField(row, field, raw)
+  }
+
   const runBulkAction = async (action: string) => {
     if (!canWriteProducts || !action || selectedIds.size === 0) return
-    const ids = [...selectedIds]
     const active = action === 'activate'
     if (action !== 'activate' && action !== 'deactivate') return
     setBulkBusy(true)
     setError(null)
-    const { error: e0 } = await supabase.from('product').update({ active }).in('id', ids)
+    const result = await commitProductFieldBulk(supabase, {
+      rows: selectedRows,
+      field: 'active',
+      rawValue: active,
+      refs,
+    })
     setBulkBusy(false)
-    if (e0) {
-      setError(e0.message)
+    if (!result.ok) {
+      setError(result.error)
       return
     }
-    setRows(prev => prev.map(r => (ids.includes(r.id) ? { ...r, active } : r)))
+    const byId = new Map(result.rows.map(r => [r.id, r]))
+    setRows(prev => prev.map(r => byId.get(r.id) ?? r))
     setSelectedIds(new Set())
     setBulkMenuNonce(n => n + 1)
   }
 
-  const toggleActive = async (r: Row, active: boolean) => {
-    if (!canWriteProducts || activeToggleBusyId != null || r.active === active) return
-    setActiveToggleBusyId(r.id)
+  const handleBulkEditApply = async (field: ProductListFieldKey, rawValue: unknown) => {
+    if (!canWriteProducts || selectedIds.size === 0) return
+    setBulkBusy(true)
     setError(null)
-    const { error: e0 } = await supabase.from('product').update({ active }).eq('id', r.id)
-    setActiveToggleBusyId(null)
-    if (e0) {
-      setError(e0.message)
+    const result = await commitProductFieldBulk(supabase, {
+      rows: selectedRows,
+      field,
+      rawValue,
+      refs,
+    })
+    setBulkBusy(false)
+    if (!result.ok) {
+      setError(result.error)
       return
     }
-    setRows(prev => prev.map(p => (p.id === r.id ? { ...p, active } : p)))
+    const byId = new Map(result.rows.map(r => [r.id, r]))
+    setRows(prev => prev.map(r => byId.get(r.id) ?? r))
+    setSelectedIds(new Set())
+    setBulkEditOpen(false)
+    setBulkMenuNonce(n => n + 1)
   }
 
-  const toggleSort = (key: SortKey) => {
+  const toggleSort = (key: ProductListColumnKey) => {
+    const def = PRODUCT_LIST_COLUMN_BY_KEY[key]
+    if (!def.sortable) return
     if (sortKey === key) setSortDir(d => (d === 'asc' ? 'desc' : 'asc'))
     else {
       setSortKey(key)
@@ -218,65 +354,10 @@ export default function ProduitsListClient() {
     }
   }
 
-  const isPriceRowDirty = (r: Row) => {
-    const override = editing[r.id]
-    if (override === undefined) return false
-    const n = parsePriceInput(override)
-    if (n == null) return true
-    if (n < 0) return true
-    return priceDiffers(n, r.price)
-  }
-
-  const revertPriceLocal = (id: string) => {
-    setEditing(s => {
-      const c = { ...s }
-      delete c[id]
-      return c
-    })
-  }
-
-  const onPriceCommit = async (r: Row, raw: string) => {
-    if (!canWriteProducts) return
-    const n = Number(raw.replace(',', '.'))
-    if (!Number.isFinite(n) || n < 0) {
-      setEditing(s => {
-        const c = { ...s }
-        delete c[r.id]
-        return c
-      })
-      return
-    }
-    if (n === r.price) {
-      setEditing(s => {
-        const c = { ...s }
-        delete c[r.id]
-        return c
-      })
-      return
-    }
-    const { error: e2 } = await supabase.from('product').update({ price: n }).eq('id', r.id)
-    if (e2) {
-      setError(e2.message)
-      return
-    }
-    const { error: hErr } = await insertProductPriceHistoryRow(supabase, {
-      product_id: r.id,
-      price: n,
-      cost_purchase: r.cost_purchase ?? null,
-      cost_manufacturing: r.cost_manufacturing ?? null,
-      cost_packaging: r.cost_packaging ?? null,
-      margin: r.margin ?? null,
-    })
-    if (hErr) {
-      setError(hErr.message)
-      return
-    }
-    setRows(prev => prev.map(p => (p.id === r.id ? { ...p, price: n } : p)))
-    setEditing(s => {
-      const c = { ...s }
-      delete c[r.id]
-      return c
-    })
+  const handleColumnPrefSave = (pref: ProductListColumnPreference) => {
+    writeProductListColumnPreference(pref)
+    setColumnPref(pref)
+    setColumnPickerOpen(false)
   }
 
   if (loading)
@@ -288,7 +369,7 @@ export default function ProduitsListClient() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-emerald-50 via-white to-rose-50 p-4 md:p-8">
-      <div className="mx-auto max-w-6xl">
+      <div className="mx-auto max-w-[96rem]">
         <div className="mb-3 flex flex-wrap items-start justify-between gap-2">
           <div className="flex min-w-0 flex-1 flex-col gap-1">
             <BackNavButton href="/" size="small">
@@ -298,16 +379,26 @@ export default function ProduitsListClient() {
               Produits
             </Typography>
           </div>
-          {canWriteProducts ? (
-            <div className="flex flex-wrap gap-2">
-              <Button component={AppLink} href="/produits/photo" variant="outlined" color="primary" sx={{ borderRadius: 2, textTransform: 'none' }}>
-                Photos terrain
-              </Button>
-              <Button component={AppLink} href="/produits/nouveau" variant="contained" color="success" sx={{ borderRadius: 2, textTransform: 'none' }}>
-                Nouveau produit
-              </Button>
-            </div>
-          ) : null}
+          <div className="flex flex-wrap gap-2">
+            <Button
+              variant="outlined"
+              startIcon={<ViewColumnOutlinedIcon />}
+              onClick={() => setColumnPickerOpen(true)}
+              sx={{ borderRadius: 2, textTransform: 'none' }}
+            >
+              Colonnes
+            </Button>
+            {canWriteProducts ? (
+              <>
+                <Button component={AppLink} href="/produits/photo" variant="outlined" color="primary" sx={{ borderRadius: 2, textTransform: 'none' }}>
+                  Photos terrain
+                </Button>
+                <Button component={AppLink} href="/produits/nouveau" variant="contained" color="success" sx={{ borderRadius: 2, textTransform: 'none' }}>
+                  Nouveau produit
+                </Button>
+              </>
+            ) : null}
+          </div>
         </div>
 
         {SHEET_IMPORT_ENABLED ? (
@@ -341,13 +432,9 @@ export default function ProduitsListClient() {
           />
           <FormControl size="small" sx={{ minWidth: 180 }}>
             <InputLabel>Catégorie</InputLabel>
-            <Select
-              value={catId}
-              label="Catégorie"
-              onChange={e => setCatId(e.target.value as string)}
-            >
+            <Select value={catId} label="Catégorie" onChange={e => setCatId(e.target.value as string)}>
               <MenuItem value="">Toutes</MenuItem>
-              {categories.map(c => (
+              {refs.categories.map(c => (
                 <MenuItem key={c.id} value={c.id}>
                   {c.label}
                 </MenuItem>
@@ -356,13 +443,9 @@ export default function ProduitsListClient() {
           </FormControl>
           <FormControl size="small" sx={{ minWidth: 180 }}>
             <InputLabel>Fournisseur</InputLabel>
-            <Select
-              value={suppId}
-              label="Fournisseur"
-              onChange={e => setSuppId(e.target.value as string)}
-            >
+            <Select value={suppId} label="Fournisseur" onChange={e => setSuppId(e.target.value as string)}>
               <MenuItem value="">Tous</MenuItem>
-              {suppliers.map(s => (
+              {refs.suppliers.map(s => (
                 <MenuItem key={s.id} value={s.id}>
                   {s.label}
                 </MenuItem>
@@ -387,51 +470,38 @@ export default function ProduitsListClient() {
                     />
                   ) : null}
                 </th>
-                <th className="px-3 py-2">
-                  <button
-                    type="button"
-                    onClick={() => toggleSort('code')}
-                    className="inline-flex items-center gap-0.5 text-slate-800 hover:text-emerald-800"
-                    title="Trier par code (numérique)"
-                  >
-                    Code
-                    {sortKey === 'code' ? (sortDir === 'asc' ? ' ↑' : ' ↓') : null}
-                  </button>
-                </th>
-                <th className="px-3 py-2 w-20">Actif</th>
-                <th className="px-3 py-2">
-                  <button
-                    type="button"
-                    onClick={() => toggleSort('name')}
-                    className="inline-flex items-center gap-0.5 font-semibold text-slate-600 hover:text-emerald-800"
-                    title="Trier par nom"
-                  >
-                    Nom
-                    {sortKey === 'name' ? (sortDir === 'asc' ? ' ↑' : ' ↓') : null}
-                  </button>
-                </th>
-                <th className="px-3 py-2 w-32">
-                  <button
-                    type="button"
-                    onClick={() => toggleSort('price')}
-                    className="inline-flex items-center gap-0.5 text-slate-800 hover:text-emerald-800"
-                    title="Trier par prix"
-                  >
-                    Prix (DH)
-                    {sortKey === 'price' ? (sortDir === 'asc' ? ' ↑' : ' ↓') : null}
-                  </button>
-                </th>
-                <th className="w-9 px-0.5 py-2" scope="col" aria-label="Réinitialiser le prix" />
-                <th className="px-3 py-2">UdV</th>
-                <th className="px-3 py-2">Catégorie</th>
-                <th className="px-3 py-2">Fournisseur</th>
-                <th className="px-3 py-2" />
+                {visibleColumns.map(colKey => {
+                  const def = PRODUCT_LIST_COLUMN_BY_KEY[colKey]
+                  return (
+                    <th
+                      key={colKey}
+                      className="px-3 py-2"
+                      style={{ minWidth: def.minWidth }}
+                    >
+                      {def.sortable ? (
+                        <button
+                          type="button"
+                          onClick={() => toggleSort(colKey)}
+                          className={`inline-flex items-center gap-0.5 hover:text-emerald-800 ${
+                            colKey === 'sales_name' ? 'font-semibold text-slate-600' : 'text-slate-800'
+                          }`}
+                          title={`Trier par ${def.label}`}
+                        >
+                          {def.label}
+                          {sortKey === colKey ? (sortDir === 'asc' ? ' ↑' : ' ↓') : null}
+                        </button>
+                      ) : (
+                        def.label
+                      )}
+                    </th>
+                  )
+                })}
+                <th className="w-9 px-0.5 py-2" scope="col" aria-label="Annuler les modifications" />
               </tr>
             </thead>
             <tbody>
               {sortedFiltered.map(r => {
-                const priceVal = editing[r.id] != null ? editing[r.id]! : String(r.price)
-                const dirty = isPriceRowDirty(r)
+                const dirty = isRowDirty(r)
                 return (
                   <tr
                     key={r.id}
@@ -440,7 +510,7 @@ export default function ProduitsListClient() {
                     }`}
                     onClick={ev => {
                       const t = ev.target as HTMLElement
-                      if (t.closest('input,button,a,[role="checkbox"],[role="switch"]')) return
+                      if (t.closest('input,button,a,[role="checkbox"],[role="switch"],select,.MuiSelect-select')) return
                       router.push(`/produits/${r.id}`)
                     }}
                   >
@@ -455,33 +525,58 @@ export default function ProduitsListClient() {
                         />
                       ) : null}
                     </td>
-                    <td className="px-3 py-2 font-mono text-slate-800">{r.code}</td>
-                    <td className="px-3 py-1.5 align-middle" onClick={e => e.stopPropagation()}>
-                      <Switch
-                        size="small"
-                        color="success"
-                        checked={r.active}
-                        disabled={!canWriteProducts || activeToggleBusyId === r.id || bulkBusy}
-                        onChange={(_, checked) => void toggleActive(r, checked)}
-                        slotProps={{ input: { 'aria-label': `Actif — ${productSalesNameFr(r)}` } }}
-                      />
-                    </td>
-                    <td className="px-3 py-2 text-slate-900">{productSalesNameFr(r)}</td>
-                    <td className="px-3 py-1.5 align-middle" onClick={e => e.stopPropagation()}>
-                      <TextField
-                        size="small"
-                        type="text"
-                        value={priceVal}
-                        onChange={e => setEditing(s => ({ ...s, [r.id]: e.target.value }))}
-                        onBlur={() => onPriceCommit(r, editing[r.id] ?? String(r.price))}
-                        onKeyDown={e => {
-                          if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
-                        }}
-                        disabled={!canWriteProducts}
-                        sx={{ width: 100, '& .MuiInputBase-input': { fontSize: 14 } }}
-                        slotProps={muiSlotPropsDecimalKeypad}
-                      />
-                    </td>
+                    {visibleColumns.map(colKey => {
+                      const def = PRODUCT_LIST_COLUMN_BY_KEY[colKey]
+                      const columnEditable = isProductListColumnEditable(columnPref, colKey)
+                      const field =
+                        def.editable && columnEditable ? (colKey as ProductListFieldKey) : null
+                      const busy = field != null && cellBusyKey === `${r.id}:${field}`
+                      return (
+                        <td
+                          key={colKey}
+                          className="px-3 py-1.5 align-middle"
+                          onClick={e => {
+                            if (
+                              columnEditable ||
+                              def.cellKind === 'fiche' ||
+                              def.cellKind === 'image'
+                            ) {
+                              e.stopPropagation()
+                            }
+                          }}
+                        >
+                          <ProductListCell
+                            columnKey={colKey}
+                            row={r}
+                            supabase={supabase}
+                            refs={refs}
+                            canWrite={canWriteProducts && columnEditable}
+                            disabled={busy || bulkBusy}
+                            draft={field ? drafts[r.id]?.[colKey] : undefined}
+                            onDraftChange={
+                              field && (def.cellKind === 'text' || def.cellKind === 'number')
+                                ? v => setDraft(r.id, colKey, v)
+                                : undefined
+                            }
+                            onCommitTextNumber={
+                              field && (def.cellKind === 'text' || def.cellKind === 'number')
+                                ? () => void handleTextNumberCommit(r, field)
+                                : undefined
+                            }
+                            onCommitSwitch={
+                              field && def.cellKind === 'switch'
+                                ? v => void commitField(r, field, v)
+                                : undefined
+                            }
+                            onCommitSelect={
+                              field && def.cellKind === 'select'
+                                ? v => void commitField(r, field, v)
+                                : undefined
+                            }
+                          />
+                        </td>
+                      )
+                    })}
                     <td className="w-9 px-0.5 py-1.5 text-center align-middle" onClick={e => e.stopPropagation()}>
                       {dirty && canWriteProducts ? (
                         <Button
@@ -489,10 +584,10 @@ export default function ProduitsListClient() {
                           size="small"
                           variant="outlined"
                           color="warning"
-                          title="Revenir au prix enregistré"
+                          title="Annuler les modifications locales"
                           onClick={e => {
                             e.stopPropagation()
-                            revertPriceLocal(r.id)
+                            clearDraftForRow(r.id)
                           }}
                           sx={{
                             minWidth: 32,
@@ -507,14 +602,6 @@ export default function ProduitsListClient() {
                           ↺
                         </Button>
                       ) : null}
-                    </td>
-                    <td className="px-3 py-2 text-slate-900">{(r.ref_sales_unit as RefRow | null)?.label ?? '—'}</td>
-                    <td className="px-3 py-2 text-slate-900">{(r.ref_category as RefRow | null)?.label ?? '—'}</td>
-                    <td className="px-3 py-2 text-slate-900">{(r.ref_supplier as RefRow | null)?.label ?? '—'}</td>
-                    <td className="px-3 py-2" onClick={e => e.stopPropagation()}>
-                      <Button size="small" href={`/produits/${r.id}`} component={AppLink} sx={{ textTransform: 'none' }}>
-                        Fiche
-                      </Button>
                     </td>
                   </tr>
                 )
@@ -548,39 +635,49 @@ export default function ProduitsListClient() {
               ) : null}
             </div>
             {canWriteProducts ? (
-              <FormControl size="small" sx={{ minWidth: 260 }} aria-label="Actions groupées sur la sélection">
-                <Select
-                  key={bulkMenuNonce}
+              <div className="flex flex-wrap items-center gap-2">
+                <Button
                   variant="outlined"
-                  defaultValue={BULK_PROMPT}
                   disabled={bulkBusy || selectedIds.size === 0}
-                  displayEmpty
-                  renderValue={selected => {
-                    const s = String(selected)
-                    if (bulkBusy || s === 'activate' || s === 'deactivate') {
-                      return <span className="text-slate-700">Traitement…</span>
-                    }
-                    if (selectedIds.size === 0) {
-                      return <span className="text-slate-500">Sélectionnez des lignes</span>
-                    }
-                    return <span className="font-semibold text-slate-800">Actions groupées</span>
-                  }}
-                  onChange={e => {
-                    const v = e.target.value as string
-                    if (v === 'activate' || v === 'deactivate') void runBulkAction(v as 'activate' | 'deactivate')
-                  }}
-                  sx={{
-                    bgcolor: 'background.paper',
-                    '& .MuiSelect-select': { py: 1.25 },
-                  }}
+                  onClick={() => setBulkEditOpen(true)}
+                  sx={{ textTransform: 'none' }}
                 >
-                  <MenuItem value={BULK_PROMPT} sx={{ display: 'none' }} aria-hidden tabIndex={-1}>
-                    —
-                  </MenuItem>
-                  <MenuItem value="activate">Activer</MenuItem>
-                  <MenuItem value="deactivate">Désactiver</MenuItem>
-                </Select>
-              </FormControl>
+                  Modifier la sélection…
+                </Button>
+                <FormControl size="small" sx={{ minWidth: 260 }} aria-label="Actions groupées sur la sélection">
+                  <Select
+                    key={bulkMenuNonce}
+                    variant="outlined"
+                    defaultValue={BULK_PROMPT}
+                    disabled={bulkBusy || selectedIds.size === 0}
+                    displayEmpty
+                    renderValue={selected => {
+                      const s = String(selected)
+                      if (bulkBusy || s === 'activate' || s === 'deactivate') {
+                        return <span className="text-slate-700">Traitement…</span>
+                      }
+                      if (selectedIds.size === 0) {
+                        return <span className="text-slate-500">Sélectionnez des lignes</span>
+                      }
+                      return <span className="font-semibold text-slate-800">Actions groupées</span>
+                    }}
+                    onChange={e => {
+                      const v = e.target.value as string
+                      if (v === 'activate' || v === 'deactivate') void runBulkAction(v)
+                    }}
+                    sx={{
+                      bgcolor: 'background.paper',
+                      '& .MuiSelect-select': { py: 1.25 },
+                    }}
+                  >
+                    <MenuItem value={BULK_PROMPT} sx={{ display: 'none' }} aria-hidden tabIndex={-1}>
+                      —
+                    </MenuItem>
+                    <MenuItem value="activate">Activer</MenuItem>
+                    <MenuItem value="deactivate">Désactiver</MenuItem>
+                  </Select>
+                </FormControl>
+              </div>
             ) : null}
           </div>
         ) : null}
@@ -589,11 +686,28 @@ export default function ProduitsListClient() {
           <p className="mt-4 text-slate-600 text-sm">Aucun produit. Créez-en un ou ajustez les filtres.</p>
         ) : null}
         <p className="mt-2 text-xs text-slate-500">
-          Astuce : cliquez sur Code, Nom ou Prix pour trier. Le switch Actif active ou désactive le produit tout de suite.
-          Modifiez le prix puis validez (Entrée ou clic ailleurs) ; la ligne s’affiche en orange, bouton ↺ pour annuler le
-          changement.
+          Astuce : bouton Colonnes pour choisir les champs affichés. Cliquez sur un en-tête triable pour ordonner la
+          liste. Modifiez une cellule puis validez (Entrée ou clic ailleurs) ; la ligne s’affiche en orange, bouton ↺
+          pour annuler. Sélectionnez des lignes pour une modification groupée.
         </p>
       </div>
+
+      <ProductListColumnPicker
+        open={columnPickerOpen}
+        preference={columnPref}
+        onClose={() => setColumnPickerOpen(false)}
+        onSave={handleColumnPrefSave}
+      />
+
+      <ProductListBulkEditDialog
+        open={bulkEditOpen}
+        selectedCount={selectedIds.size}
+        sampleRow={selectedRows[0] ?? null}
+        refs={refs}
+        busy={bulkBusy}
+        onClose={() => setBulkEditOpen(false)}
+        onApply={(field, raw) => void handleBulkEditApply(field, raw)}
+      />
     </div>
   )
 }

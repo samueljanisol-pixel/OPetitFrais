@@ -14,6 +14,12 @@ File d’attente après achat fournisseur (menu accueil + badge) :
 
 ## Liste (`ProduitsListClient`)
 
+- **Colonnes configurables** : bouton **Colonnes** → choix des champs affichés, option **Éditable** par colonne (lecture seule dans la liste si décochée), réordonnancement, préférence en `localStorage` (`produits.list.columns`). Colonnes par défaut = comportement historique (Code, Actif, Nom vente, Prix, UdV, Catégorie, Fournisseur, Fiche) ; toutes les colonnes éditables du registre sont modifiables par défaut.
+- **Édition inline** : toutes les colonnes éditables (champs scalaires `product.*`) — texte/nombre (commit au blur ou Entrée), switches et listes (commit immédiat). Ligne en orange si brouillon non enregistré, bouton ↺ pour annuler.
+- **Modification groupée** : sélection par cases à cocher → **Modifier la sélection…** (FormDialog : un champ, une valeur pour tous) ou menu **Actions groupées** (Activer / Désactiver).
+- Effets de bord alignés fiche produit : historique prix si prix/coûts/marge changent ; reset vendeur si fournisseur incompatible ; reset sous-catégorie si catégorie incompatible ; sync `product_supplier` si fournisseur principal modifié.
+- Helpers : `src/lib/products/product-list-columns.ts`, `product-list-column-preference.ts`, `product-field-commit.ts`. Composants : `ProductListCell`, `ProductListColumnPicker`, `ProductListBulkEditDialog`.
+- **Hors liste** (fiche produit uniquement) : conditionnements (`product_packaging`), fournisseurs multiples (cases à cocher), unités boutique cochées (`product_shop_order_unit`).
 - Colonne **Actif** : switch par ligne (permission `produits.write`) qui met à jour `product.active` immédiatement. Avec le filtre « Actifs », une désactivation retire la ligne de la liste.
 - Filtre **Actif** : par défaut **Tous** (actifs et inactifs).
 - Tri par défaut : **Nom** croissant.
@@ -42,7 +48,8 @@ File d’attente après achat fournisseur (menu accueil + badge) :
 - Changer de fournisseur réinitialise le vendeur s’il n’appartient plus au nouveau fournisseur.
 - **Historique prix et marges** (`product_price_history`) : une ligne est ajoutée à chaque enregistrement qui modifie le prix de vente, un coût (achat, fabrication, emballage) ou la marge. La **marge n’est stockée que si elle est saisie** (fiche, import Sheet, marge rétroactive) — jamais calculée automatiquement à partir du prix de vente. Migration nettoyage : `20260701140000_clear_auto_price_history_margin.sql`.
 - **Marge rétroactive** : bouton sur la fiche produit pour enregistrer une marge (ex. marge moyenne) **à partir d’une date passée** (`valid_from`, min = `HISTORIQUE_FROM_ISO` dans `src/lib/ca/constants.ts`) sans modifier le produit courant — permet d’estimer le bénéfice sur l’historique des ventes.
-- **Emballage utilisé** : liste déroulante optionnelle (`product.emballage_id` → `ref_emballage`) pour indiquer le matériau d’emballage du produit. Distinct du **Prix emballage** (`cost_packaging`) et des conditionnements colis. Géré dans **Gestion Emballages** (`/emballages`). Migration `20260728160000_gestion_emballages.sql`.
+- **Emballage utilisé** : liste déroulante optionnelle (`product.emballage_id` → article catégorie **emballages**). Distinct du **Prix emballage** (`cost_packaging`) et des conditionnements colis.
+- **Étiquette** : liste déroulante optionnelle (`product.etiquette_id` → article catégorie **étiquettes**, défaut aucune). Géré dans **Emballages et Consommables** (`/emballages`). Migrations `20260728160000_gestion_emballages.sql`, `20260728240000_emballages_consommables_extension.sql`.
 
 Les vendeurs se créent dans **Paramètres → Vendeurs**. Les liaisons par conditionnement restent dans **Paramètres du conditionnement** (`product_packaging_vendeur`).
 
