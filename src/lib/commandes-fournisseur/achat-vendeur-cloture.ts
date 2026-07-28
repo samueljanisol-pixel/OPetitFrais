@@ -9,6 +9,7 @@ import {
   vendeurIdFromKey,
 } from "@/lib/commandes-fournisseur/achat-vendeur-key";
 import { ensureLotAchatEnCours, isLotAchatEditable } from "@/lib/commandes-fournisseur/lot-status-achat";
+import { enqueueProductActualisationAfterPurchase } from "@/lib/products/actualisation";
 
 export type VendeurClotureLineIssue = {
   lotLigneId: string;
@@ -133,10 +134,38 @@ export async function cloturerVendeurAchat(
     if (!Number.isFinite(qaa) || qaa <= 0) continue;
     const pu = Number((L as { prix_achat_unitaire: number }).prix_achat_unitaire);
     const pid = String((L as { product_id: string }).product_id);
-    if (pu > 0) {
-      const { error: pe } = await supabase.from("product").update({ cost_purchase: pu }).eq("id", pid);
-      if (pe) return { error: pe.message, status: 500 };
-    }
+    if (!(pu > 0)) continue;
+
+    const { data: prod, error: prodErr } = await supabase
+      .from("product")
+      .select("cost_purchase, active, price, cost_manufacturing, cost_packaging, margin")
+      .eq("id", pid)
+      .maybeSingle();
+    if (prodErr) return { error: prodErr.message, status: 500 };
+    if (!prod) return { error: `Produit introuvable (${pid})`, status: 404 };
+
+    const productActive = Boolean((prod as { active?: boolean }).active);
+    const productPrice = Number((prod as { price?: number }).price) || 0;
+    const costManufacturing =
+      (prod as { cost_manufacturing?: number | null }).cost_manufacturing ?? null;
+    const costPackaging = (prod as { cost_packaging?: number | null }).cost_packaging ?? null;
+    const margin = (prod as { margin?: number | null }).margin ?? null;
+
+    const enq = await enqueueProductActualisationAfterPurchase(supabase, {
+      productId: pid,
+      lotId,
+      supplierId,
+      newCostPurchase: pu,
+      productActive,
+      productPrice,
+      costManufacturing,
+      costPackaging,
+      margin,
+    });
+    if ("error" in enq) return { error: enq.error, status: 500 };
+
+    const { error: pe } = await supabase.from("product").update({ cost_purchase: pu }).eq("id", pid);
+    if (pe) return { error: pe.message, status: 500 };
   }
 
   const dateCloture = new Date().toISOString();

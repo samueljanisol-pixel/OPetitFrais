@@ -127,3 +127,45 @@ export async function assignProductVendeursToLotLines(
   }
   return null;
 }
+
+/**
+ * Enregistre le dernier vendeur sur la fiche produit (même fournisseur).
+ * Ne vide pas `product.vendeur_id` si `vendeurId` est null.
+ */
+export async function setProductLastVendeur(
+  supabase: SupabaseClient,
+  opts: { productId: string; supplierId: string; vendeurId: string },
+): Promise<string | null> {
+  const productId = opts.productId.trim();
+  const vendeurId = opts.vendeurId.trim();
+  if (!productId || !vendeurId) return null;
+
+  const { data: product, error: pe } = await supabase
+    .from("product")
+    .select("id, supplier_id, vendeur_id")
+    .eq("id", productId)
+    .maybeSingle();
+  if (pe) return pe.message;
+  if (!product) return null;
+  const row = product as { id: string; supplier_id: string; vendeur_id?: string | null };
+  if (row.supplier_id !== opts.supplierId) return null;
+
+  const { data: vendeur, error: ve } = await supabase
+    .from("ref_supplier_vendeur")
+    .select("id")
+    .eq("id", vendeurId)
+    .eq("supplier_id", opts.supplierId)
+    .maybeSingle();
+  if (ve) return ve.message;
+  if (!vendeur) return "Vendeur invalide pour ce fournisseur";
+
+  if (row.vendeur_id === vendeurId) return null;
+
+  const { error: ue } = await supabase
+    .from("product")
+    .update({ vendeur_id: vendeurId })
+    .eq("id", productId)
+    .eq("supplier_id", opts.supplierId);
+  if (ue) return ue.message;
+  return null;
+}

@@ -30,6 +30,7 @@
     },
     "home": {
       "products": "Produits",
+      "productActualisation": "Actualisation produit",
       "stats": "Statistique",
       "supplierOrders": "Commandes fournisseur",
       "supplierAccounts": "Comptes fournisseurs",
@@ -42,6 +43,41 @@
       "settings": "Paramètres",
       "settingsAria": "Paramètres",
       "homeAria": "O' Petit Frais — accueil"
+    },
+    "productActualisation": {
+      "title": "Actualisation produit",
+      "subtitle": "Recalcul des prix de vente, activation et proposition de désactivation après achat fournisseur.",
+      "backHome": "Accueil",
+      "prixSection": "Prix à actualiser",
+      "prixHint": "Lorsque le prix actuel diffère du prix proposé (coûts + marge).",
+      "prixEmpty": "Aucun prix à actualiser.",
+      "activationSection": "À activer",
+      "activationHint": "Produits inactifs achetés sans changement de prix de vente.",
+      "activationEmpty": "Aucun produit à activer.",
+      "desactSection": "À désactiver (non commandés)",
+      "desactHint": "Produits actifs et vitrine du fournisseur absents de la commande (clôture lot).",
+      "desactEmpty": "Aucune désactivation proposée.",
+      "validateSelection": "Valider la sélection",
+      "dismissSelection": "Ne rien faire",
+      "selectAll": "Tout sélectionner",
+      "unselectAll": "Tout désélectionner",
+      "editProduct": "Éditer la fiche produit",
+      "inactiveBadge": "Inactif → sera réactivé",
+      "columns": {
+        "product": "Produit",
+        "currentPrice": "Prix actuel",
+        "costPurchase": "Prix d’achat",
+        "margin": "Marge",
+        "proposedPrice": "Prix proposé",
+        "vitrine": "Vitrine",
+        "active": "Actif"
+      },
+      "errors": {
+        "loadFailed": "Chargement impossible",
+        "validateFailed": "Validation impossible",
+        "dismissFailed": "Retrait impossible",
+        "invalidPrice": "Prix invalide pour « {name} »"
+      }
     },
     "shopStats": {
       "title": "Statistiques boutique",

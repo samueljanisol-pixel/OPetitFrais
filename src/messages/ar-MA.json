@@ -30,6 +30,7 @@
     },
     "home": {
       "products": "المنتجات",
+      "productActualisation": "تحديث المنتج",
       "stats": "الإحصائيات",
       "supplierOrders": "طلبيات المزود",
       "supplierAccounts": "حسابات المزودين",
@@ -42,6 +43,41 @@
       "settings": "الإعدادات",
       "settingsAria": "الإعدادات",
       "homeAria": "O' Petit Frais — الرئيسية"
+    },
+    "productActualisation": {
+      "title": "تحديث المنتج",
+      "subtitle": "إعادة حساب أسعار البيع والتفعيل واقتراح إلغاء التفعيل بعد شراء المزود.",
+      "backHome": "الرئيسية",
+      "prixSection": "أسعار للتحديث",
+      "prixHint": "عندما يختلف السعر الحالي عن السعر المقترح (التكاليف + الهامش).",
+      "prixEmpty": "لا يوجد سعر للتحديث.",
+      "activationSection": "للتفعيل",
+      "activationHint": "منتجات غير مفعّلة تم شراؤها دون تغيير سعر البيع.",
+      "activationEmpty": "لا يوجد منتج للتفعيل.",
+      "desactSection": "للإلغاء (غير مطلوبة)",
+      "desactHint": "منتجات مفعّلة ومعروضة للمزود وغير موجودة في الطلبية (إغلاق الدفعة).",
+      "desactEmpty": "لا يوجد اقتراح إلغاء.",
+      "validateSelection": "تأكيد المحدد",
+      "dismissSelection": "لا شيء",
+      "selectAll": "تحديد الكل",
+      "unselectAll": "إلغاء التحديد",
+      "editProduct": "تعديل بطاقة المنتج",
+      "inactiveBadge": "غير مفعّل → سيُفعَّل",
+      "columns": {
+        "product": "المنتج",
+        "currentPrice": "السعر الحالي",
+        "costPurchase": "سعر الشراء",
+        "margin": "الهامش",
+        "proposedPrice": "السعر المقترح",
+        "vitrine": "الواجهة",
+        "active": "مفعّل"
+      },
+      "errors": {
+        "loadFailed": "تعذر التحميل",
+        "validateFailed": "تعذر التأكيد",
+        "dismissFailed": "تعذر الإزالة",
+        "invalidPrice": "سعر غير صالح لـ « {name} »"
+      }
     },
     "shopStats": {
       "title": "إحصائيات المتجر",

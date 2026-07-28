@@ -26,11 +26,13 @@ import {
 import { listOpenVendeurKeysForLot } from "@/lib/commandes-fournisseur/achat-vendeur-cloture";
 import { SUPPLIER_SOLE_VENDEUR_KEY } from "@/lib/commandes-fournisseur/achat-vendeur-key";
 import { achatVendeurPhotoPublicUrl } from "@/lib/commandes-fournisseur/achat-vendeur-photos";
+import { setProductLastVendeur } from "@/lib/commandes-fournisseur/product-vendeur";
 import {
   ensureLotAchatEnCours,
   isLotAchatEditable,
   LOT_STATUS_ACHAT_EN_COURS,
 } from "@/lib/commandes-fournisseur/lot-status-achat";
+import { enqueueProductActualisationDesactivationForLot } from "@/lib/products/actualisation";
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -757,6 +759,23 @@ async function applyLineUpdates(
     if (ue) {
       return { error: { response: NextResponse.json({ error: ue.message }, { status: 500 }) } };
     }
+
+    /** Changement de vendeur sur la ligne → dernier vendeur sur la fiche produit. */
+    if (
+      u.vendeur_id !== undefined &&
+      u.vendeur_id != null &&
+      String(u.vendeur_id).length > 0
+    ) {
+      const productId = String((ligne as { product_id: string }).product_id);
+      const pe = await setProductLastVendeur(supabase, {
+        productId,
+        supplierId,
+        vendeurId: String(u.vendeur_id),
+      });
+      if (pe) {
+        return { error: { response: NextResponse.json({ error: pe }, { status: 500 }) } };
+      }
+    }
   }
 
   return { error: null };
@@ -900,6 +919,14 @@ async function cloturerLotAchat(opts: {
   });
   if ("error" in sync) {
     return { error: sync.error, status: 500 };
+  }
+
+  const desact = await enqueueProductActualisationDesactivationForLot(supabase, {
+    lotId,
+    supplierId,
+  });
+  if ("error" in desact) {
+    return { error: desact.error, status: 500 };
   }
 
   return { ok: true };

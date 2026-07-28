@@ -10,6 +10,10 @@ const rules: RouteRule[] = [
   { match: (p) => p.startsWith("/admin/utilisateurs"), permission: "admin.utilisateurs" },
   { match: (p) => p.startsWith("/admin"), permission: "admin.utilisateurs" },
   { match: (p) => p.startsWith("/produits/nouveau"), permission: "produits.write" },
+  {
+    match: (p) => p.startsWith("/produits/actualisation"),
+    permission: { anyOf: ["produits.write", "commandes_fournisseur.achat"] },
+  },
   { match: (p) => p.startsWith("/produits/") && p !== "/produits/", permission: "produits.read" },
   { match: (p) => p.startsWith("/produits"), permission: "produits.read" },
   { match: (p) => p.startsWith("/boutique/stats"), permission: "shop.read" },

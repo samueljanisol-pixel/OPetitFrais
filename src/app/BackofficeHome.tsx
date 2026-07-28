@@ -1,10 +1,12 @@
 'use client'
 
+import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
-import { Button, Fab, Paper, Stack, Tooltip } from '@mui/material'
+import { Badge, Button, Fab, Paper, Stack, Tooltip } from '@mui/material'
 import AssessmentOutlinedIcon from '@mui/icons-material/AssessmentOutlined'
 import Inventory2OutlinedIcon from '@mui/icons-material/Inventory2Outlined'
+import PriceChangeOutlinedIcon from '@mui/icons-material/PriceChangeOutlined'
 import LocalShippingOutlinedIcon from '@mui/icons-material/LocalShippingOutlined'
 import AccountBalanceWalletOutlinedIcon from '@mui/icons-material/AccountBalanceWalletOutlined'
 import ReceiptLongOutlinedIcon from '@mui/icons-material/ReceiptLongOutlined'
@@ -36,6 +38,35 @@ export default function BackofficeHome() {
     can('commandes_fournisseur.saisie') ||
     can('commandes_fournisseur.consolidation') ||
     can('commandes_fournisseur.achat')
+  const canActualisationProduit = can('produits.write') || can('commandes_fournisseur.achat')
+  const [actualisationCount, setActualisationCount] = useState(0)
+
+  useEffect(() => {
+    if (!canActualisationProduit) {
+      setActualisationCount(0)
+      return
+    }
+    let cancelled = false
+    const loadCount = async () => {
+      try {
+        const res = await fetch('/api/produits/actualisation/count', { credentials: 'include' })
+        const json = (await res.json().catch(() => ({}))) as { total?: number }
+        if (!cancelled && res.ok && typeof json.total === 'number') {
+          setActualisationCount(json.total)
+        }
+      } catch {
+        // ignore réseau
+      }
+    }
+    void loadCount()
+    const timer = window.setInterval(() => {
+      void loadCount()
+    }, 60_000)
+    return () => {
+      cancelled = true
+      window.clearInterval(timer)
+    }
+  }, [canActualisationProduit])
 
   const logout = async () => {
     await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' })
@@ -90,6 +121,39 @@ export default function BackofficeHome() {
               >
                 {t('products')}
               </Button>
+            ) : null}
+            {canActualisationProduit ? (
+              <Badge
+                badgeContent={actualisationCount > 0 ? actualisationCount : null}
+                color="error"
+                overlap="rectangular"
+                sx={{
+                  width: '100%',
+                  '& .MuiBadge-badge': { right: 14, top: 14 },
+                }}
+              >
+                <Button
+                  component={AppLink}
+                  href="/produits/actualisation"
+                  variant="contained"
+                  color="success"
+                  size="large"
+                  fullWidth
+                  startIcon={<PriceChangeOutlinedIcon sx={{ fontSize: 28 }} />}
+                  sx={{
+                    borderRadius: 2,
+                    textTransform: 'none',
+                    fontWeight: 600,
+                    py: 1.25,
+                    px: 2,
+                    justifyContent: 'flex-start',
+                    gap: 1.25,
+                    '& .MuiButton-startIcon': { mr: 0.5, ml: 0 },
+                  }}
+                >
+                  {t('productActualisation')}
+                </Button>
+              </Badge>
             ) : null}
             {canReadVentes ? (
               <Button
