@@ -106,6 +106,10 @@ export async function computeLotCompteBreakdown(
   const lineDetailsByKey = new Map<string, CompteAchatLineDetail[]>();
 
   for (const L of lignes) {
+    const qteAchat = num(L.qte_achat, 0);
+    /** Lignes à qté 0 (pas acheté) : hors compte fournisseur. */
+    if (qteAchat <= 0) continue;
+
     const montant = montantFromLigne(L);
     const pr = one(
       L.product as {
@@ -126,7 +130,7 @@ export async function computeLotCompteBreakdown(
     const lineDetail: CompteAchatLineDetail = {
       product_id: String(L.product_id),
       product_name: productName,
-      qte_achat: num(L.qte_achat, 0),
+      qte_achat: qteAchat,
       prix_unitaire,
       uda_label: udaLabelRaw.length > 0 ? udaLabelRaw : null,
       montant,

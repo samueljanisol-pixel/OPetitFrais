@@ -144,32 +144,17 @@ export async function POST(req: NextRequest, ctx: Ctx) {
     });
   }
 
-  const confirmZeroQtyLines =
-    typeof body === "object" &&
-    body !== null &&
-    (body as { confirmZeroQtyLines?: unknown }).confirmZeroQtyLines === true;
-
   const out = await cloturerVendeurAchat(supabase, {
     lotId,
     supplierId,
     vendeurKey,
-    confirmZeroQtyLines,
   });
 
   if ("error" in out) {
-    if (out.code === "NEED_CONFIRM_ZERO_QTY") {
-      return NextResponse.json(
-        {
-          error: out.error,
-          code: out.code,
-          needConfirmLines: out.needConfirmLines,
-        },
-        { status: 409 },
-      );
-    }
     return NextResponse.json(
       {
         error: out.error,
+        ...(out.missingQtyLines ? { missingQtyLines: out.missingQtyLines } : {}),
         ...(out.missingPuLines ? { missingPuLines: out.missingPuLines } : {}),
       },
       { status: out.status },

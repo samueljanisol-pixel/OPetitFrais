@@ -14,6 +14,16 @@ export function isCommandeWhatsAppPhotoPath(storagePath: string): boolean {
   return storagePath.endsWith(`/${COMMANDE_WHATSAPP_PHOTO_FILENAME}`) || storagePath === COMMANDE_WHATSAPP_PHOTO_FILENAME;
 }
 
+/** Photos « métier » hors image commande WhatsApp (pour badge vert / alerte clôture). */
+export function hasAchatVendeurExtraPhotos(
+  photos: ReadonlyArray<{ storage_path?: string | null }>,
+): boolean {
+  return photos.some((ph) => {
+    const path = typeof ph.storage_path === "string" ? ph.storage_path : "";
+    return path.length > 0 && !isCommandeWhatsAppPhotoPath(path);
+  });
+}
+
 export function achatVendeurPhotoPublicUrl(
   supabase: SupabaseClient,
   storagePath: string | null | undefined,

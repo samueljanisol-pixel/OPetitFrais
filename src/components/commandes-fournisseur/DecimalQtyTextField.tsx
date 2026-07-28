@@ -14,13 +14,21 @@ export type DecimalQtyTextFieldProps = Omit<
   TextFieldProps,
   "value" | "onChange" | "type" | "defaultValue"
 > & {
-  value: number;
-  /** À chaque changement utilisateur après normalisation ≥ 0, max 2 déc. */
-  onQtyChange: (n: number) => void;
-  /** Si faux, aucune valeur n’est poussée pendant la frappe (commits au blur uniquement via onBlurCapture interne si besoin — utiliser blur manuel). */
+  /** `null` = champ vide (uniquement si `emptyAsNull`). */
+  value: number | null;
+  /** À chaque changement utilisateur après normalisation ≥ 0, max 2 déc. ; `null` si vide et `emptyAsNull`. */
+  onQtyChange: (n: number | null) => void;
+  /** Si faux, aucune valeur n’est poussée pendant la frappe (commits au blur uniquement). */
   commitWhileTyping?: boolean;
   /** Borne API (défaut true). */
   clamp?: boolean;
+  /**
+   * Achat : vide ≠ 0.
+   * - affichage : `null` → vide, `0` → « 0 »
+   * - blur sur vide → `null` (pas encore saisi)
+   * - saisie « 0 » → `0` (pas acheté)
+   */
+  emptyAsNull?: boolean;
 };
 
 /**
@@ -32,33 +40,41 @@ export function DecimalQtyTextField({
   onQtyChange,
   commitWhileTyping = true,
   clamp = true,
+  emptyAsNull = false,
   onFocus,
   onBlur,
   slotProps,
   ...rest
 }: DecimalQtyTextFieldProps) {
   const [focused, setFocused] = useState(false);
-  const [text, setText] = useState(() => formatQtyDisplayWhenBlurred(value));
+  const [text, setText] = useState(() =>
+    formatQtyDisplayWhenBlurred(value, { showZero: emptyAsNull || (value != null && value === 0) }),
+  );
 
   useEffect(() => {
     if (!focused) {
-      setText(formatQtyDisplayWhenBlurred(value));
+      setText(
+        formatQtyDisplayWhenBlurred(value, {
+          showZero: emptyAsNull || (value != null && value === 0),
+        }),
+      );
     }
-  }, [value, focused]);
+  }, [value, focused, emptyAsNull]);
+
+  const toCommitted = (raw: string): number | null => {
+    const trimmed = raw.trim();
+    if (trimmed === "") {
+      return emptyAsNull ? null : 0;
+    }
+    const parsed = parseQtyInputToNumber(trimmed) ?? 0;
+    return clamp ? clampQtyToApiRange(parsed) : Math.max(0, roundQty2(parsed));
+  };
 
   const handleChange: ChangeEventHandler<HTMLInputElement> = (e) => {
     const next = sanitizeQtyTypingFrac2(e.target.value);
     setText(next);
     if (!commitWhileTyping) return;
-    if (next.trim() === "") {
-      onQtyChange(0);
-      return;
-    }
-    const p = parseQtyInputToNumber(next);
-    if (p !== null) {
-      const n = clamp ? clampQtyToApiRange(p) : Math.max(0, p);
-      onQtyChange(n);
-    }
+    onQtyChange(toCommitted(next));
   };
 
   const handleFocus: FocusEventHandler<HTMLInputElement> = (e) => {
@@ -71,10 +87,13 @@ export function DecimalQtyTextField({
 
   const handleBlur: FocusEventHandler<HTMLInputElement> = (e) => {
     setFocused(false);
-    const parsed = parseQtyInputToNumber(text) ?? 0;
-    const n = clamp ? clampQtyToApiRange(parsed) : Math.max(0, roundQty2(parsed));
+    const n = toCommitted(text);
     onQtyChange(n);
-    setText(formatQtyDisplayWhenBlurred(n));
+    setText(
+      formatQtyDisplayWhenBlurred(n, {
+        showZero: emptyAsNull || (n != null && n === 0),
+      }),
+    );
     onBlur?.(e);
   };
 

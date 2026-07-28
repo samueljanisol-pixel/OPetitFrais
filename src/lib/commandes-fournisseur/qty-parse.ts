@@ -14,9 +14,13 @@ export function clampQtyToApiRange(n: number): number {
   return Math.max(0, Math.min(1_000_000_000, roundQty2(n)));
 }
 
-/** Texte hors focus : vide si 0 pour permettre suppression visuelle puis resaisie (cf. champ numérique MUI « 0 » collant). */
-export function formatQtyDisplayWhenBlurred(value: number): string {
-  if (!Number.isFinite(value) || value === 0) return "";
+/** Texte hors focus : vide si 0/null sauf `showZero` (0 explicite). */
+export function formatQtyDisplayWhenBlurred(
+  value: number | null | undefined,
+  opts?: { showZero?: boolean },
+): string {
+  if (value == null || !Number.isFinite(value)) return "";
+  if (value === 0) return opts?.showZero ? "0" : "";
   return value.toLocaleString("fr-FR", {
     minimumFractionDigits: 0,
     maximumFractionDigits: QTY_MAX_FRACTION_DIGITS,

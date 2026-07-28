@@ -38,7 +38,8 @@ type LignePatch = {
   lotLigneId: string;
   vendeur_id?: string | null;
   marque_achete?: boolean;
-  qte_achat?: number;
+  /** `null` = pas encore saisie. */
+  qte_achat?: number | null;
   prix_achat_unitaire?: number | null;
   montant_ligne_achat?: number | null;
   product_packaging_id?: string | null;
@@ -48,7 +49,6 @@ type PatchBody = {
   ligneUpdates?: LignePatch[];
   /** `terminee` = clôturer (depuis prete/achat_en_cours) ; `prete` = rouvrir (depuis terminee → achat_en_cours). */
   status?: "terminee" | "prete";
-  confirmZeroQtyLines?: boolean;
   /** Frais lot : lignes générales (vendeur_id null dans la table). **/
   fraisDeleteIds?: string[];
   fraisUpserts?: Array<{
@@ -466,19 +466,8 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
       supabase,
       lotId: id,
       supplierId,
-      confirmZeroQtyLines: Boolean(body.confirmZeroQtyLines),
     });
     if ("error" in out) {
-      if (out.needConfirmLines) {
-        return NextResponse.json(
-          {
-            error: out.error,
-            code: "NEED_CONFIRM_ZERO_QTY",
-            lignesSansQteAchats: out.needConfirmLines,
-          },
-          { status: 409 },
-        );
-      }
       if (out.code === "VENDEURS_OUVERTS") {
         return NextResponse.json(
           {
@@ -660,10 +649,17 @@ async function applyLineUpdates(
         ? u.product_packaging_id
         : ((ligne as { product_packaging_id?: string | null }).product_packaging_id ?? null);
 
-    let qteAchat =
+    let qteAchat: number | null =
       u.qte_achat !== undefined
-        ? clampQtyToApiRange(u.qte_achat)
-        : Number((ligne as { qte_achat?: number }).qte_achat) || 0;
+        ? u.qte_achat == null
+          ? null
+          : clampQtyToApiRange(u.qte_achat)
+        : (() => {
+            const raw = (ligne as { qte_achat?: number | null }).qte_achat;
+            if (raw == null) return null;
+            const n = Number(raw);
+            return Number.isFinite(n) ? n : null;
+          })();
 
     const puInput = u.prix_achat_unitaire !== undefined ? u.prix_achat_unitaire : ((ligne as { prix_achat_unitaire?: number | null }).prix_achat_unitaire ?? null);
 
@@ -690,7 +686,10 @@ async function applyLineUpdates(
       productForDisplay as Parameters<typeof buildLotProductDisplayInfo>[0],
       mergedPackagingId,
     );
-    let qtyBase = qtyBaseFromLotLine(Number.isFinite(qteAchat) ? qteAchat : 0, display);
+    let qtyBase = qtyBaseFromLotLine(
+      qteAchat != null && Number.isFinite(qteAchat) ? qteAchat : 0,
+      display,
+    );
 
     if (u.montant_ligne_achat !== undefined && u.prix_achat_unitaire === undefined) {
       const m = u.montant_ligne_achat;
@@ -702,7 +701,7 @@ async function applyLineUpdates(
       pu = Math.round(pu * 100) / 100;
     }
 
-    let montant = montantLigneFromPu(pu, qtyBase);
+    let montant: number | null = montantLigneFromPu(pu, qtyBase);
     if (pu === 0) {
       montant = 0;
     }
@@ -717,6 +716,17 @@ async function applyLineUpdates(
         const derived = puFromMontantLigne(montant, qtyBase);
         pu = derived != null && derived >= 0 ? derived : null;
       }
+    }
+
+    /** Qté vide = pas encore saisie ; qté 0 = pas acheté (PU + montant à 0). */
+    if (qteAchat == null) {
+      pu = null;
+      montant = null;
+      qtyBase = 0;
+    } else if (qteAchat === 0) {
+      pu = 0;
+      montant = 0;
+      qtyBase = 0;
     }
 
     const rowUpdate: Record<string, unknown> = {};
@@ -756,19 +766,17 @@ async function cloturerLotAchat(opts: {
   supabase: Awaited<ReturnType<typeof createSupabaseServerClient>>;
   lotId: string;
   supplierId: string;
-  confirmZeroQtyLines: boolean;
 }): Promise<
   | { ok: true }
   | {
       error: string;
       status?: number;
       code?: string;
-      needConfirmLines?: Array<{ lotLigneId: string; productName: string | null }>;
       openVendeurKeys?: string[];
       openVendeurLabels?: string[];
     }
 > {
-  const { supabase, lotId, supplierId, confirmZeroQtyLines } = opts;
+  const { supabase, lotId, supplierId } = opts;
 
   const { count: vendeurCount, error: vendeursCountErr } = await supabase
     .from("ref_supplier_vendeur")
@@ -794,8 +802,8 @@ async function cloturerLotAchat(opts: {
   }
 
   const listeSansVendeur: string[] = [];
+  const listeQteManquante: Array<{ lotLigneId: string; productName: string | null }> = [];
   const listePuVide: Array<{ lotLigneId: string; productName: string | null }> = [];
-  const listeQteZero: Array<{ lotLigneId: string; productName: string | null }> = [];
 
   for (const L of lignes) {
     const lid = String((L as { id: string }).id);
@@ -803,19 +811,28 @@ async function cloturerLotAchat(opts: {
     if (vendeur == null || String(vendeur).length === 0) {
       listeSansVendeur.push(lid);
     }
+    const rawQte = (L as { qte_achat?: number | null }).qte_achat;
     const pu = (L as { prix_achat_unitaire?: number | null }).prix_achat_unitaire;
-    if (pu === null || pu === undefined || Number.isNaN(Number(pu))) {
-      listePuVide.push({
-        lotLigneId: lid,
-        productName: extractNestedProductName(L),
-      });
+    const puMissing = pu === null || pu === undefined || Number.isNaN(Number(pu));
+    const name = extractNestedProductName(L);
+
+    if (rawQte == null) {
+      listeQteManquante.push({ lotLigneId: lid, productName: name });
+      continue;
     }
-    const qaa = Number((L as { qte_achat?: number | null }).qte_achat) || 0;
+    const qaa = Number(rawQte);
+    if (!Number.isFinite(qaa) || qaa < 0) {
+      listeQteManquante.push({ lotLigneId: lid, productName: name });
+      continue;
+    }
     if (qaa === 0) {
-      listeQteZero.push({
-        lotLigneId: lid,
-        productName: extractNestedProductName(L),
-      });
+      if (puMissing) {
+        listeQteManquante.push({ lotLigneId: lid, productName: name });
+      }
+      continue;
+    }
+    if (puMissing) {
+      listePuVide.push({ lotLigneId: lid, productName: name });
     }
   }
 
@@ -823,11 +840,11 @@ async function cloturerLotAchat(opts: {
     return { error: "Chaque ligne doit avoir un vendeur avant clôture", status: 400 };
   }
 
-  if (listeQteZero.length > 0 && !confirmZeroQtyLines) {
+  if (listeQteManquante.length > 0) {
     return {
-      error: "Certaines lignes ont une quantité achat à 0 : confirmation requise",
-      status: 409,
-      needConfirmLines: listeQteZero,
+      error: "Quantité manquante sur une ou plusieurs lignes",
+      status: 400,
+      missingQtyLines: listeQteManquante,
     };
   }
 

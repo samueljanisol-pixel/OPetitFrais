@@ -485,12 +485,6 @@
           "condDialogHint": "الاختيار الأول بحال فالتصديق؛ تقدر تختار بالوحدة ولا تغليف آخر.",
           "condDialogTitle": "التغليف",
           "addToLot": "زيد لللوط",
-          "confirmZeroDialog": {
-            "title": "كميات الشرا = 0",
-            "body1": "شي سطور عندهم كمية شرا = 0.",
-            "body2": "واش كتأكّد الإغلاق على أي حال ؟",
-            "confirm": "أكّد الإغلاق"
-          },
           "vendorsStillOpen": "سدّ أولا جميع الباعة : {list}",
           "closeVendor": "سدّ هاد البائع",
           "reopenVendor": "عاود فتح",
@@ -501,9 +495,11 @@
           "vendorPhotosAria": "صور البائع",
           "vendorCloseDialog": {
             "title": "سدّ البائع",
+            "missingQty": "الكمية ناقصة فهاد السطور :",
             "missingPu": "الثمن للوحدة ناقص فهاد السطور :",
-            "zeroQty": "شي سطور عندهم كمية شرا = 0. واش كتأكّد الإغلاق ؟",
-            "confirmZeros": "أكّد رغم الكميات = 0"
+            "noPhotos": "ما كاين حتى صورة شرا لهاد البائع (صورة الطلبية ما كتتحسبش). زيد صورة ولا سدّ بوحدك.",
+            "confirmNoPhotos": "سدّ بوحدك",
+            "back": "رجوع"
           },
           "vendorCommentDialog": {
             "title": "تعليق",

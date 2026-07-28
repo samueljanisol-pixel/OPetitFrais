@@ -144,7 +144,7 @@ export async function POST(req: Request, ctx: Ctx) {
       lot_id: lotId,
       product_id: productIdNorm,
       product_packaging_id: packagingId,
-      qte_achat: 0,
+      qte_achat: null,
       ...(vendeurId ? { vendeur_id: vendeurId } : {}),
     },
   ]);

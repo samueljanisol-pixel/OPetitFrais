@@ -485,12 +485,6 @@
           "condDialogHint": "Pré-sélection comme à la validation ; vous pouvez choisir à l'unité ou un autre conditionnement.",
           "condDialogTitle": "Conditionnement",
           "addToLot": "Ajouter au lot",
-          "confirmZeroDialog": {
-            "title": "Quantités achat à 0",
-            "body1": "Certaines lignes ont une quantité achat égale à 0.",
-            "body2": "Confirmez-vous la clôture tout de même ?",
-            "confirm": "Confirmer la clôture"
-          },
           "vendorsStillOpen": "Clôturez d'abord tous les vendeurs : {list}",
           "closeVendor": "Clôturer ce vendeur",
           "reopenVendor": "Rouvrir",
@@ -501,9 +495,11 @@
           "vendorPhotosAria": "Photos vendeur",
           "vendorCloseDialog": {
             "title": "Clôturer le vendeur",
+            "missingQty": "Quantité manquante sur ces lignes :",
             "missingPu": "Prix unitaire manquant sur ces lignes :",
-            "zeroQty": "Certaines lignes ont une quantité achat à 0. Confirmez-vous la clôture ?",
-            "confirmZeros": "Confirmer malgré les quantités à 0"
+            "noPhotos": "Aucune photo d’achat pour ce vendeur (la photo de commande ne compte pas). Ajoutez une photo ou clôturez quand même.",
+            "confirmNoPhotos": "Clôturer quand même",
+            "back": "Retour"
           },
           "vendorCommentDialog": {
             "title": "Commentaire",

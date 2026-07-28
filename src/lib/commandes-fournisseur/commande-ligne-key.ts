@@ -48,7 +48,7 @@ export type LotLigneInsertRow = {
   lot_id: string;
   product_id: string;
   product_packaging_id?: string | null;
-  qte_achat: number;
+  qte_achat: number | null;
   vendeur_id?: string | null;
 };
 

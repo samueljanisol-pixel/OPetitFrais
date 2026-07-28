@@ -13,7 +13,8 @@ import {
 import { sanitizeMontantDhTypingFrac2 } from "@/lib/commandes-fournisseur/qty-parse";
 
 export type AchatPricingCommit = {
-  qte_achat?: number;
+  /** `null` = quantité pas encore saisie (champ vide). */
+  qte_achat?: number | null;
   /** Toujours en DH (stockage). */
   puText?: string;
   /** Toujours en DH (stockage). */
@@ -24,7 +25,8 @@ export type AchatPricingChanged = "qte" | "pu" | "total";
 
 type Props = {
   lineId: string;
-  qte: number;
+  /** `null` = pas encore saisie. */
+  qte: number | null;
   /** PU en DH (état parent). */
   puText: string;
   /** Total en DH (état parent). */
@@ -149,6 +151,7 @@ function AchatLignePricingFields({
           fullWidth
           disabled={!editable}
           value={qte}
+          emptyAsNull
           commitWhileTyping={false}
           onQtyChange={(n) => {
             onPending?.(lineId, { qte_achat: n });

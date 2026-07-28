@@ -348,7 +348,7 @@ export function UnitQteControl({
             <DecimalQtyTextField
               size="small"
               value={clampQtyToApiRange(value)}
-              onQtyChange={(n) => onChange(clampQtyToApiRange(n))}
+              onQtyChange={(n) => onChange(clampQtyToApiRange(n ?? 0))}
               sx={{
                 width: "4.75rem",
                 minWidth: "4.75rem",
@@ -393,7 +393,7 @@ export function PackQteControl({
             <DecimalQtyTextField
               size="small"
               value={clampQtyToApiRange(value)}
-              onQtyChange={(n) => onChange(clampQtyToApiRange(n))}
+              onQtyChange={(n) => onChange(clampQtyToApiRange(n ?? 0))}
               sx={{
                 width: "4.75rem",
                 minWidth: "4.75rem",

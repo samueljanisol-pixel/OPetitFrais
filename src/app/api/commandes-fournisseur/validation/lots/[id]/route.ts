@@ -53,7 +53,7 @@ async function recomputeQteAchat(
   return ue ? ue.message : null;
 }
 
-/** Au passage brouillon → prêt : fige Σ magasin dans qte_besoin_fige et remet quantité achete à 0. */
+/** Au passage brouillon → prêt : fige Σ magasin dans qte_besoin_fige et vide la quantité achetée (null = pas encore saisie). */
 async function freezeBesoinEtResetQteAchat(
   supabase: Awaited<ReturnType<typeof createSupabaseServerClient>>,
   lotId: string,
@@ -79,7 +79,9 @@ async function freezeBesoinEtResetQteAchat(
       .from("commande_fournisseur_lot_ligne")
       .update({
         qte_besoin_fige: total,
-        qte_achat: 0,
+        qte_achat: null,
+        prix_achat_unitaire: null,
+        montant_ligne_achat: null,
       })
       .eq("id", lotLigneId);
     if (ue) {

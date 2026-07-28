@@ -20,16 +20,19 @@ export type VendeurClotureIssue = {
 type Props = {
   open: boolean;
   vendorLabel: string;
+  missingQtyLines: VendeurClotureIssue[];
   missingPuLines: VendeurClotureIssue[];
-  needConfirmLines: VendeurClotureIssue[];
+  /** Aucune photo hors image commande WhatsApp. */
+  noPhotos: boolean;
   busy: boolean;
   onClose: () => void;
-  onConfirmZeros: () => void;
+  onConfirmNoPhotos: () => void;
   labels: {
     title: string;
+    missingQty: string;
     missingPu: string;
-    zeroQty: string;
-    confirmZeros: string;
+    noPhotos: string;
+    confirmNoPhotos: string;
     cancel: string;
     close: string;
   };
@@ -39,15 +42,18 @@ type Props = {
 export default function AchatVendeurClotureDialog({
   open,
   vendorLabel,
+  missingQtyLines,
   missingPuLines,
-  needConfirmLines,
+  noPhotos,
   busy,
   onClose,
-  onConfirmZeros,
+  onConfirmNoPhotos,
   labels,
 }: Props) {
-  const hasMissingPu = missingPuLines.length > 0;
-  const hasZeros = needConfirmLines.length > 0 && !hasMissingPu;
+  const hasMissingQty = missingQtyLines.length > 0;
+  const hasMissingPu = missingPuLines.length > 0 && !hasMissingQty;
+  const hasBlocking = hasMissingQty || hasMissingPu;
+  const showNoPhotos = noPhotos && !hasBlocking;
 
   return (
     <Dialog open={open} onClose={() => (!busy ? onClose() : undefined)} fullWidth maxWidth="sm">
@@ -55,6 +61,20 @@ export default function AchatVendeurClotureDialog({
         {labels.title} — {vendorLabel}
       </DialogTitle>
       <DialogContent>
+        {hasMissingQty ? (
+          <>
+            <Typography variant="body2" sx={{ mb: 1 }}>
+              {labels.missingQty}
+            </Typography>
+            <List dense disablePadding>
+              {missingQtyLines.map((l) => (
+                <ListItem key={l.lotLigneId} disableGutters>
+                  <ListItemText primary={l.productName?.trim() || l.lotLigneId} />
+                </ListItem>
+              ))}
+            </List>
+          </>
+        ) : null}
         {hasMissingPu ? (
           <>
             <Typography variant="body2" sx={{ mb: 1 }}>
@@ -69,33 +89,22 @@ export default function AchatVendeurClotureDialog({
             </List>
           </>
         ) : null}
-        {hasZeros ? (
-          <>
-            <Typography variant="body2" sx={{ mb: 1 }}>
-              {labels.zeroQty}
-            </Typography>
-            <List dense disablePadding>
-              {needConfirmLines.map((l) => (
-                <ListItem key={l.lotLigneId} disableGutters>
-                  <ListItemText primary={l.productName?.trim() || l.lotLigneId} />
-                </ListItem>
-              ))}
-            </List>
-          </>
+        {showNoPhotos ? (
+          <Typography variant="body2">{labels.noPhotos}</Typography>
         ) : null}
       </DialogContent>
       <DialogActions>
         <Button onClick={onClose} disabled={busy} sx={{ textTransform: "none" }}>
-          {hasMissingPu ? labels.close : labels.cancel}
+          {hasBlocking ? labels.close : labels.cancel}
         </Button>
-        {hasZeros ? (
+        {showNoPhotos ? (
           <Button
             variant="contained"
             disabled={busy}
-            onClick={onConfirmZeros}
+            onClick={onConfirmNoPhotos}
             sx={{ textTransform: "none" }}
           >
-            {labels.confirmZeros}
+            {labels.confirmNoPhotos}
           </Button>
         ) : null}
       </DialogActions>

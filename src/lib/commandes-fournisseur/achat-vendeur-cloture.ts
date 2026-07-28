@@ -21,7 +21,6 @@ export async function cloturerVendeurAchat(
     lotId: string;
     supplierId: string;
     vendeurKey: string;
-    confirmZeroQtyLines: boolean;
   },
 ): Promise<
   | { ok: true }
@@ -29,11 +28,11 @@ export async function cloturerVendeurAchat(
       error: string;
       status: number;
       code?: string;
-      needConfirmLines?: VendeurClotureLineIssue[];
       missingPuLines?: VendeurClotureLineIssue[];
+      missingQtyLines?: VendeurClotureLineIssue[];
     }
 > {
-  const { lotId, supplierId, vendeurKey, confirmZeroQtyLines } = opts;
+  const { lotId, supplierId, vendeurKey } = opts;
   const sole = isSoleVendeurKey(vendeurKey);
   const vendeurId = vendeurIdFromKey(vendeurKey);
 
@@ -81,20 +80,44 @@ export async function cloturerVendeurAchat(
     return { error: "Aucune ligne pour ce vendeur", status: 400 };
   }
 
+  const listeQteManquante: VendeurClotureLineIssue[] = [];
   const listePuVide: VendeurClotureLineIssue[] = [];
-  const listeQteZero: VendeurClotureLineIssue[] = [];
 
   for (const L of lignes) {
     const lid = String((L as { id: string }).id);
     const name = extractNestedProductName(L as Record<string, unknown>);
+    const rawQte = (L as { qte_achat?: number | null }).qte_achat;
     const pu = (L as { prix_achat_unitaire?: number | null }).prix_achat_unitaire;
-    if (pu === null || pu === undefined || Number.isNaN(Number(pu))) {
+    const puMissing = pu === null || pu === undefined || Number.isNaN(Number(pu));
+
+    if (rawQte == null) {
+      listeQteManquante.push({ lotLigneId: lid, productName: name });
+      continue;
+    }
+    const qaa = Number(rawQte);
+    if (!Number.isFinite(qaa) || qaa < 0) {
+      listeQteManquante.push({ lotLigneId: lid, productName: name });
+      continue;
+    }
+    if (qaa === 0) {
+      if (puMissing) {
+        // Legacy / pas encore saisi (0 en base sans PU) ≠ « pas acheté »
+        listeQteManquante.push({ lotLigneId: lid, productName: name });
+      }
+      // Qté 0 explicite = pas acheté, déjà confirmé par la saisie — hors compte
+      continue;
+    }
+    if (puMissing) {
       listePuVide.push({ lotLigneId: lid, productName: name });
     }
-    const qaa = Number((L as { qte_achat?: number | null }).qte_achat) || 0;
-    if (qaa === 0) {
-      listeQteZero.push({ lotLigneId: lid, productName: name });
-    }
+  }
+
+  if (listeQteManquante.length > 0) {
+    return {
+      error: "Quantité manquante sur une ou plusieurs lignes",
+      status: 400,
+      missingQtyLines: listeQteManquante,
+    };
   }
 
   if (listePuVide.length > 0) {
@@ -105,16 +128,9 @@ export async function cloturerVendeurAchat(
     };
   }
 
-  if (listeQteZero.length > 0 && !confirmZeroQtyLines) {
-    return {
-      error: "Certaines lignes ont une quantité achat à 0 : confirmation requise",
-      status: 409,
-      code: "NEED_CONFIRM_ZERO_QTY",
-      needConfirmLines: listeQteZero,
-    };
-  }
-
   for (const L of lignes) {
+    const qaa = Number((L as { qte_achat?: number | null }).qte_achat);
+    if (!Number.isFinite(qaa) || qaa <= 0) continue;
     const pu = Number((L as { prix_achat_unitaire: number }).prix_achat_unitaire);
     const pid = String((L as { product_id: string }).product_id);
     if (pu > 0) {
