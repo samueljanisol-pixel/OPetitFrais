@@ -58,7 +58,9 @@
       "desactHint": "Produits actifs et vitrine du fournisseur absents de la commande (clôture lot).",
       "desactEmpty": "Aucune désactivation proposée.",
       "validateSelection": "Valider la sélection",
+      "validateRow": "Valider",
       "dismissSelection": "Ne rien faire",
+      "dismissRow": "Ne rien faire",
       "selectAll": "Tout sélectionner",
       "unselectAll": "Tout désélectionner",
       "editProduct": "Éditer la fiche produit",
@@ -70,7 +72,8 @@
         "margin": "Marge",
         "proposedPrice": "Prix proposé",
         "vitrine": "Vitrine",
-        "active": "Actif"
+        "active": "Actif",
+        "actions": "Actions"
       },
       "errors": {
         "loadFailed": "Chargement impossible",

@@ -115,6 +115,43 @@ function ProductNameCell({
   );
 }
 
+function RowActions({
+  onValidate,
+  onDismiss,
+  disabled,
+  t,
+}: {
+  onValidate: () => void;
+  onDismiss: () => void;
+  disabled: boolean;
+  t: ReturnType<typeof useTranslations>;
+}) {
+  return (
+    <Stack direction="row" spacing={0.5} sx={{ flexWrap: "nowrap", justifyContent: "flex-end" }}>
+      <Button
+        size="small"
+        variant="contained"
+        color="success"
+        disabled={disabled}
+        onClick={onValidate}
+        sx={{ textTransform: "none", fontWeight: 600, whiteSpace: "nowrap" }}
+      >
+        {t("validateRow")}
+      </Button>
+      <Button
+        size="small"
+        variant="outlined"
+        color="inherit"
+        disabled={disabled}
+        onClick={onDismiss}
+        sx={{ textTransform: "none", whiteSpace: "nowrap" }}
+      >
+        {t("dismissRow")}
+      </Button>
+    </Stack>
+  );
+}
+
 function SelectionToolbar({
   selectedCount,
   total,
@@ -480,6 +517,7 @@ export default function ActualisationProduitClient() {
                         <TableCell align="right">{t("columns.margin")}</TableCell>
                         <TableCell align="right">{t("columns.proposedPrice")}</TableCell>
                         <TableCell align="center">{t("columns.vitrine")}</TableCell>
+                        <TableCell align="right">{t("columns.actions")}</TableCell>
                       </TableRow>
                     </TableHead>
                     <TableBody>
@@ -540,6 +578,14 @@ export default function ActualisationProduitClient() {
                                 }
                                 disabled={saving}
                                 color="success"
+                              />
+                            </TableCell>
+                            <TableCell align="right" sx={{ whiteSpace: "nowrap" }}>
+                              <RowActions
+                                disabled={saving}
+                                onValidate={() => void validatePrix([item.product_id])}
+                                onDismiss={() => void dismiss("prix", [item.product_id])}
+                                t={t}
                               />
                             </TableCell>
                           </TableRow>

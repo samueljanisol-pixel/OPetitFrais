@@ -58,7 +58,9 @@
       "desactHint": "منتجات مفعّلة ومعروضة للمزود وغير موجودة في الطلبية (إغلاق الدفعة).",
       "desactEmpty": "لا يوجد اقتراح إلغاء.",
       "validateSelection": "تأكيد المحدد",
+      "validateRow": "تأكيد",
       "dismissSelection": "لا شيء",
+      "dismissRow": "لا شيء",
       "selectAll": "تحديد الكل",
       "unselectAll": "إلغاء التحديد",
       "editProduct": "تعديل بطاقة المنتج",
@@ -70,7 +72,8 @@
         "margin": "الهامش",
         "proposedPrice": "السعر المقترح",
         "vitrine": "الواجهة",
-        "active": "مفعّل"
+        "active": "مفعّل",
+        "actions": "إجراءات"
       },
       "errors": {
         "loadFailed": "تعذر التحميل",
