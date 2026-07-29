@@ -11,6 +11,8 @@ import {
   DialogContent,
   DialogTitle,
   IconButton,
+  MenuItem,
+  Select,
   Table,
   TableBody,
   TableCell,
@@ -429,8 +431,42 @@ export default function ValidationLotDetailClient({ lotId }: { lotId: string }) 
 
   const matrixCategoryColSpan = useMemo(() => {
     const ed = lot?.status === "brouillon";
-    return 1 + magasinColumns.length + 2 + (ed ? 1 : 0);
-  }, [lot?.status, magasinColumns.length]);
+    const vendorCol = ed && matrixGroupBy === "vendeur" && vendeurs.length > 0 ? 1 : 0;
+    return 1 + vendorCol + magasinColumns.length + 2 + (ed ? 1 : 0);
+  }, [lot?.status, magasinColumns.length, matrixGroupBy, vendeurs.length]);
+
+  const showVendorColumn =
+    lot?.status === "brouillon" && matrixGroupBy === "vendeur" && vendeurs.length > 0;
+
+  const patchLigneVendeur = useCallback(
+    async (lotLigneId: string, vendeur_id: string | null) => {
+      setRowSaving(lotLigneId);
+      setErr(null);
+      try {
+        const res = await fetch(`/api/commandes-fournisseur/validation/lots/${lotId}`, {
+          method: "PATCH",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ligneUpdates: [{ lotLigneId, vendeur_id }] }),
+        });
+        const j = (await res.json()) as { error?: string };
+        if (!res.ok) {
+          setErr(j.error ?? genericError);
+          await load();
+          return;
+        }
+        setLignes((prev) =>
+          prev.map((l) => (l.id === lotLigneId ? { ...l, vendeur_id } : l)),
+        );
+      } catch (e) {
+        setErr(e instanceof Error ? e.message : genericError);
+        await load();
+      } finally {
+        setRowSaving(null);
+      }
+    },
+    [lotId, load, genericError],
+  );
 
   const patchMagasinQte = useCallback(
     async (lotLigneId: string, magasinId: string, qte: number) => {
@@ -1056,6 +1092,9 @@ export default function ValidationLotDetailClient({ lotId }: { lotId: string }) 
             <TableHead>
               <TableRow>
                 <TableCell>{tCommandesCommon("product")}</TableCell>
+                {showVendorColumn ? (
+                  <TableCell sx={{ minWidth: 140 }}>{tLotDetail("vendorColumn")}</TableCell>
+                ) : null}
                 {magasinColumns.map((m) => (
                   <TableCell key={m.id} align="center">
                     {m.mxCode}
@@ -1194,6 +1233,36 @@ export default function ValidationLotDetailClient({ lotId }: { lotId: string }) 
                         {displayName}
                       </Typography>
                     </TableCell>
+                    {showVendorColumn ? (
+                      <TableCell sx={{ minWidth: 140, verticalAlign: "middle" }}>
+                        <Select
+                          size="small"
+                          displayEmpty
+                          fullWidth
+                          value={l.vendeur_id ?? ""}
+                          disabled={rowSaving === l.id || saving}
+                          onChange={(e) => {
+                            const raw = String(e.target.value);
+                            const next = raw.length > 0 ? raw : null;
+                            const cur = l.vendeur_id ?? null;
+                            if (next === cur) {
+                              return;
+                            }
+                            void patchLigneVendeur(l.id, next);
+                          }}
+                          sx={{ minWidth: 120, maxWidth: 200 }}
+                        >
+                          <MenuItem value="">
+                            <em>{tLotDetail("noVendorOption")}</em>
+                          </MenuItem>
+                          {vendeurs.map((v) => (
+                            <MenuItem key={v.id} value={v.id}>
+                              {v.label}
+                            </MenuItem>
+                          ))}
+                        </Select>
+                      </TableCell>
+                    ) : null}
                     {magasinColumns.map((col, i) => {
                       const v = mags[i] ?? 0;
                       const cellKey = `${l.id}::${col.id}`;

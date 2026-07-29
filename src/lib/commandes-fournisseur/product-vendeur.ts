@@ -1,5 +1,100 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
+export type LotLigneVendeurPatch = {
+  lotLigneId: string;
+  vendeur_id: string | null;
+};
+
+export async function vendorBelongsSupplier(
+  supabase: SupabaseClient,
+  vendeurId: string,
+  supplierId: string,
+): Promise<boolean> {
+  const { data, error } = await supabase
+    .from("ref_supplier_vendeur")
+    .select("id")
+    .eq("id", vendeurId)
+    .eq("supplier_id", supplierId)
+    .maybeSingle();
+  if (error || !data) {
+    return false;
+  }
+  return true;
+}
+
+/** Met à jour vendeur_id sur des lignes lot (validation ou achat). */
+export async function applyLotLigneVendeurUpdates(
+  supabase: SupabaseClient,
+  lotId: string,
+  supplierId: string,
+  updates: LotLigneVendeurPatch[],
+): Promise<string | null> {
+  for (const u of updates) {
+    if (typeof u.lotLigneId !== "string" || u.lotLigneId.trim().length === 0) {
+      return "lotLigneId invalide";
+    }
+    if (u.vendeur_id !== null && typeof u.vendeur_id !== "string") {
+      return "vendeur_id invalide";
+    }
+
+    const { data: ligne, error: le } = await supabase
+      .from("commande_fournisseur_lot_ligne")
+      .select("id, lot_id, product_id, vendeur_id")
+      .eq("id", u.lotLigneId)
+      .maybeSingle();
+    if (le) {
+      return le.message;
+    }
+    if (!ligne) {
+      return "Ligne introuvable";
+    }
+    const rowLotId = (ligne as { lot_id: string }).lot_id;
+    if (rowLotId !== lotId) {
+      return "Ligne hors lot";
+    }
+
+    const nextVendeur =
+      u.vendeur_id === null
+        ? null
+        : u.vendeur_id.trim().length > 0
+          ? u.vendeur_id.trim()
+          : null;
+
+    if (nextVendeur != null) {
+      const ok = await vendorBelongsSupplier(supabase, nextVendeur, supplierId);
+      if (!ok) {
+        return "Vendeur invalide pour ce fournisseur";
+      }
+    }
+
+    const currentVendeur = (ligne as { vendeur_id?: string | null }).vendeur_id ?? null;
+    if (currentVendeur === nextVendeur) {
+      continue;
+    }
+
+    const { error: ue } = await supabase
+      .from("commande_fournisseur_lot_ligne")
+      .update({ vendeur_id: nextVendeur })
+      .eq("id", u.lotLigneId);
+    if (ue) {
+      return ue.message;
+    }
+
+    if (nextVendeur != null) {
+      const productId = String((ligne as { product_id: string }).product_id);
+      const pe = await setProductLastVendeur(supabase, {
+        productId,
+        supplierId,
+        vendeurId: nextVendeur,
+      });
+      if (pe) {
+        return pe;
+      }
+    }
+  }
+  return null;
+}
+
 /** Vendeur produit si défini et cohérent avec le fournisseur du lot / produit. */
 export async function vendeurIdForProduct(
   supabase: SupabaseClient,

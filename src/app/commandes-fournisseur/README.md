@@ -61,7 +61,7 @@ Sur le détail lot validation, un **toggle** permet d’afficher la matrice **pa
 - **Lot prêt** : matrice **toujours par catégorie** ; vendeurs, commentaires et export en bas (`ValidationLotVendeurRecap`).
 
 - **Par catégorie** : lignes triées comme au récap commande (`ref_category.sort_order`, libellé, nom produit) ; en-tête bandeau vert par famille (ex. Fruit, « Sans catégorie »).
-- **Par vendeur** : en-tête par marchand (`vendeur_id` ou nom fournisseur si aucun vendeur) avec **champ commentaire vendeur** (sauvegarde au blur, statuts lot `brouillon` ou `prete`). API : `PATCH` `{ vendeurCommentaire: { vendeurKey, commentaire } }` ; GET renvoie `vendeurCommentaires`.
+- **Par vendeur** : en-tête par marchand (`vendeur_id` ou nom fournisseur si aucun vendeur) avec **champ commentaire vendeur** (sauvegarde au blur, statuts lot `brouillon` ou `prete`). Colonne **Vendeur** avec liste déroulante pour **attribuer ou changer** le marchand d’un produit (lot `brouillon` uniquement) ; met à jour `commande_fournisseur_lot_ligne.vendeur_id` et le dernier vendeur sur la fiche produit. API : `PATCH` `{ ligneUpdates: [{ lotLigneId, vendeur_id }] }` ; `PATCH` `{ vendeurCommentaire: { vendeurKey, commentaire } }` ; GET renvoie `vendeurCommentaires`.
 
 Le GET renvoie **`categoryLabel`** par ligne pour le groupement catégorie.
 

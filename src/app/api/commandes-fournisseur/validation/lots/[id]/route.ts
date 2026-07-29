@@ -6,7 +6,7 @@ import {
   compareByCategoryThenProductName,
   parseCategoryFromRef,
 } from "@/lib/commandes-fournisseur/ligne-category-order";
-import { assignProductVendeursToLotLines } from "@/lib/commandes-fournisseur/product-vendeur";
+import { assignProductVendeursToLotLines, applyLotLigneVendeurUpdates } from "@/lib/commandes-fournisseur/product-vendeur";
 import {
   commentairesMagasinFromTargets,
   enrichSaisieTargetsForMagasins,
@@ -30,8 +30,10 @@ type LotPatchBody = {
   lotCommentaire?: string | null;
   /** Commentaire par vendeur (brouillon ou prêt). */
   vendeurCommentaire?: { vendeurKey: string; commentaire: string | null };
-  /** Marque l’envoi WhatsApp pour un vendeur (lot prêt). */
+  /** Marque l'envoi WhatsApp pour un vendeur (lot prêt). */
   whatsappSent?: { vendeurKey: string };
+  /** Attribution ou changement de vendeur sur une ou plusieurs lignes (brouillon). */
+  ligneUpdates?: Array<{ lotLigneId: string; vendeur_id: string | null }>;
 };
 
 async function recomputeQteAchat(
@@ -315,18 +317,61 @@ export async function PATCH(req: Request, ctx: Ctx) {
     body.lotCommentaire !== undefined,
     body.vendeurCommentaire !== undefined,
     body.whatsappSent !== undefined,
+    body.ligneUpdates !== undefined,
   ].filter(Boolean).length;
   if (nKeys !== 1) {
     return NextResponse.json(
       {
         error:
-          "Un seul de : status (prete ou brouillon), setMagasinQte, removeLotLigneId, lotCommentaire, vendeurCommentaire, whatsappSent",
+          "Un seul de : status (prete ou brouillon), setMagasinQte, removeLotLigneId, lotCommentaire, vendeurCommentaire, whatsappSent, ligneUpdates",
       },
       { status: 400 },
     );
   }
 
   const supabase = await createSupabaseServerClient();
+
+  if (body.ligneUpdates !== undefined) {
+    const updates = body.ligneUpdates;
+    if (!Array.isArray(updates) || updates.length === 0) {
+      return NextResponse.json({ error: "ligneUpdates invalide" }, { status: 400 });
+    }
+    for (const u of updates) {
+      if (typeof u.lotLigneId !== "string" || u.lotLigneId.trim().length === 0) {
+        return NextResponse.json({ error: "lotLigneId invalide" }, { status: 400 });
+      }
+      if (u.vendeur_id !== null && typeof u.vendeur_id !== "string") {
+        return NextResponse.json({ error: "vendeur_id invalide" }, { status: 400 });
+      }
+    }
+
+    const { data: lotCur, error: reLu } = await supabase
+      .from("commande_fournisseur_lot")
+      .select("id, status, supplier_id")
+      .eq("id", id)
+      .maybeSingle();
+    if (reLu || !lotCur) {
+      return NextResponse.json({ error: reLu?.message ?? "Introuvable" }, { status: reLu ? 500 : 404 });
+    }
+    if ((lotCur as { status: string }).status !== "brouillon") {
+      return NextResponse.json({ error: "Modification impossible : lot non brouillon" }, { status: 409 });
+    }
+    const supplierId = (lotCur as { supplier_id: string }).supplier_id;
+    const errVendeur = await applyLotLigneVendeurUpdates(supabase, id, supplierId, updates);
+    if (errVendeur) {
+      const status =
+        errVendeur === "Ligne introuvable"
+          ? 404
+          : errVendeur === "Vendeur invalide pour ce fournisseur" ||
+              errVendeur === "lotLigneId invalide" ||
+              errVendeur === "vendeur_id invalide" ||
+              errVendeur === "Ligne hors lot"
+            ? 400
+            : 500;
+      return NextResponse.json({ error: errVendeur }, { status });
+    }
+    return NextResponse.json({ ok: true });
+  }
 
   if (body.whatsappSent !== undefined) {
     const payload = body.whatsappSent;
