@@ -2,10 +2,19 @@ import { createReadStream, promises as fs } from "node:fs";
 import path from "node:path";
 import { Readable } from "node:stream";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/server";
+import {
+  caisseReleasePublicUrl,
+  ftpCaisseReleaseExists,
+  ftpCaisseReleaseSizeBytes,
+  isFtpReleaseConfigured,
+} from "./caisse-release-ftp";
 
 export const CAISSE_RELEASE_BUCKET = "caisse-releases";
 
-/** Objet Supabase Storage (privé) — voir migration + script upload. */
+/** Dossier de sortie electron-builder (relatif à apps/caisse). */
+export const CAISSE_DIST_DIR_NAME = "dist-win";
+
+/** Objet Supabase Storage (privé) — secours si FTP indisponible. */
 export const CAISSE_RELEASE_STORAGE_PATH =
   process.env.CAISSE_RELEASE_STORAGE_PATH?.trim() || "windows/latest/setup.exe";
 
@@ -14,10 +23,12 @@ export const CAISSE_RELEASE_DOWNLOAD_NAME =
 
 const SIGNED_URL_TTL_SEC = 60 * 60;
 
+export type CaisseReleaseSource = "local" | "ftp" | "ftp-public" | "supabase";
+
 export type CaisseReleaseInfo = {
   version: string;
   filename: string;
-  source: "supabase" | "local";
+  source: CaisseReleaseSource;
   sizeBytes: number | null;
   downloadUrl: string;
   expiresAt: string | null;
@@ -27,13 +38,17 @@ function releaseVersion(): string {
   return process.env.CAISSE_RELEASE_VERSION?.trim() || "0.1.0";
 }
 
-async function getLocalInstallerPath(): Promise<string | null> {
+export async function getLocalCaisseInstallerPath(): Promise<string | null> {
   const configured = process.env.CAISSE_RELEASE_INSTALLER_PATH?.trim();
   if (configured) return configured;
 
+  const releaseDir = path.join(process.cwd(), "apps", "caisse", CAISSE_DIST_DIR_NAME);
+  const legacyReleaseDir = path.join(process.cwd(), "apps", "caisse", "release");
   const candidates = [
-    path.join(process.cwd(), "apps", "caisse", "release", "OPetitFrais-Caisse-Setup.exe"),
-    path.join(process.cwd(), "apps", "caisse", "release", "OPetitFrais Caisse Setup 0.1.0.exe"),
+    path.join(releaseDir, "OPetitFrais-Caisse-Setup.exe"),
+    path.join(releaseDir, "OPetitFrais Caisse Setup 0.1.0.exe"),
+    path.join(legacyReleaseDir, "OPetitFrais-Caisse-Setup.exe"),
+    path.join(legacyReleaseDir, "OPetitFrais Caisse Setup 0.1.0.exe"),
   ];
   for (const candidate of candidates) {
     try {
@@ -46,16 +61,20 @@ async function getLocalInstallerPath(): Promise<string | null> {
   return null;
 }
 
+function apiDownloadUrl(origin: string, token: string): string {
+  const downloadPath = `/api/caisse/release/download?token=${encodeURIComponent(token)}`;
+  return `${origin.replace(/\/$/, "")}${downloadPath}`;
+}
+
 export async function resolveCaisseReleaseDownload(
   origin: string,
   token: string,
 ): Promise<CaisseReleaseInfo | { error: string; status: number }> {
   const version = releaseVersion();
   const filename = CAISSE_RELEASE_DOWNLOAD_NAME;
-  const downloadPath = `/api/caisse/release/download?token=${encodeURIComponent(token)}`;
-  const downloadUrl = `${origin.replace(/\/$/, "")}${downloadPath}`;
+  const downloadUrl = apiDownloadUrl(origin, token);
 
-  const localPath = await getLocalInstallerPath();
+  const localPath = await getLocalCaisseInstallerPath();
   if (localPath) {
     let sizeBytes: number | null = null;
     try {
@@ -72,6 +91,28 @@ export async function resolveCaisseReleaseDownload(
       downloadUrl,
       expiresAt: null,
     };
+  }
+
+  const publicUrl = caisseReleasePublicUrl();
+  if (isFtpReleaseConfigured() || publicUrl) {
+    const exists = await ftpCaisseReleaseExists();
+    if (exists) {
+      return {
+        version,
+        filename,
+        source: publicUrl ? "ftp-public" : "ftp",
+        sizeBytes: await ftpCaisseReleaseSizeBytes(),
+        downloadUrl,
+        expiresAt: null,
+      };
+    }
+    if (isFtpReleaseConfigured()) {
+      return {
+        error:
+          "Installateur caisse introuvable sur le FTP (/POS). Lancez `npm run upload:caisse-release` après `npm run dist:caisse`.",
+        status: 404,
+      };
+    }
   }
 
   let supabase;
@@ -92,7 +133,7 @@ export async function resolveCaisseReleaseDownload(
   if (listError || !listed?.some((f) => f.name === objectName)) {
     return {
       error:
-        "Installateur caisse introuvable. Lancez le build (`npm run dist:caisse`) puis `npm run upload:caisse-release`, ou définissez CAISSE_RELEASE_INSTALLER_PATH.",
+        "Installateur caisse introuvable (FTP /POS ou Supabase). Lancez `npm run upload:caisse-release`.",
       status: 404,
     };
   }

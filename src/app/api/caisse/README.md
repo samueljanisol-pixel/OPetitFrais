@@ -178,19 +178,22 @@ Même token `CAISSE_TICKET_TOKEN` que le catalogue.
 
 | Route | Description |
 |-------|-------------|
-| `GET /api/caisse/release?token=…` | JSON : version, taille, `downloadUrl` (URL signée Supabase, 1 h) |
-| `GET /api/caisse/release/download?token=…` | Téléchargement direct (redirect Supabase ou fichier local) |
+| `GET /api/caisse/release?token=…` | JSON : version, taille, `downloadUrl` |
+| `GET /api/caisse/release/download?token=…` | Téléchargement direct (flux FTP ou fichier local) |
 
-**Production** : installateur dans le bucket Supabase privé `caisse-releases` (`windows/latest/setup.exe`), publié via `npm run upload:caisse-release`.
+**Production** : installateur hébergé sur le FTP Janisol (`/POS/OPetitFrais-Caisse-Setup.exe`), publié via `npm run upload:caisse-release` après `npm run dist:caisse`. L’API lit le fichier depuis le FTP et le sert au client (token requis).
 
-**Développement local** : si `apps/caisse/release/OPetitFrais-Caisse-Setup.exe` existe (après `npm run dist:caisse`), le backoffice sert le fichier sans Supabase.
+**Développement local** : si `apps/caisse/dist-win/OPetitFrais-Caisse-Setup.exe` existe, le backoffice sert le fichier sans FTP.
 
-Variables optionnelles :
+Variables :
 
 | Variable | Rôle |
 |----------|------|
-| `CAISSE_RELEASE_INSTALLER_PATH` | Chemin absolu vers l’installateur (.exe) |
-| `CAISSE_RELEASE_STORAGE_PATH` | Objet Storage (défaut `windows/latest/setup.exe`) |
+| `FTP_HOST`, `FTP_USER`, `FTP_PASSWORD` | Accès FTP Janisol (déjà utilisés pour sync photos) |
+| `CAISSE_RELEASE_FTP_DIR` | Dossier FTP (défaut `/POS`) |
+| `CAISSE_RELEASE_FTP_FILE` | Nom du fichier sur le FTP (défaut `OPetitFrais-Caisse-Setup.exe`) |
+| `CAISSE_RELEASE_PUBLIC_URL` | Optionnel : redirection HTTPS directe au lieu du flux FTP côté API |
+| `CAISSE_RELEASE_INSTALLER_PATH` | Chemin absolu local (dev / override) |
 | `CAISSE_RELEASE_DOWNLOAD_NAME` | Nom du fichier au téléchargement |
 | `CAISSE_RELEASE_VERSION` | Version affichée (défaut `0.1.0`) |
 

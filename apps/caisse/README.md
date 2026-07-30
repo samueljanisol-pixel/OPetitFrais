@@ -31,7 +31,9 @@ npm install
 npm run dist:caisse
 ```
 
-Fichier produit : `apps/caisse/release/OPetitFrais-Caisse-Setup.exe`
+Fichier produit : `apps/caisse/dist-win/OPetitFrais-Caisse-Setup.exe`
+
+Fermez la caisse (`npm run preview`) et l’explorateur Windows sur ce dossier avant de relancer `npm run dist:caisse`.
 
 ### 2. Publier pour téléchargement sécurisé
 
@@ -45,17 +47,18 @@ http://localhost:3000/api/caisse/release/download?token=VOTRE_TOKEN
 
 Ouvrir ce lien **sur le poste caisse** (même réseau LAN que le PC de dev).
 
-**Option B — production** (backoffice déployé + Supabase) :
+**Option B — production** (backoffice déployé + FTP Janisol) :
 
 ```powershell
-# Appliquer la migration bucket caisse-releases
 npm run upload:caisse-release
 ```
+
+Prérequis : variables `FTP_HOST`, `FTP_USER`, `FTP_PASSWORD` dans `.env.local` (même FTP que la sync photos). L’installateur est déposé dans `/POS/OPetitFrais-Caisse-Setup.exe`.
 
 Lien sur le poste magasin :
 
 ```
-https://VOTRE-BACKOFFICE/api/caisse/release/download?token=VOTRE_TOKEN
+https://opetitfrais.janisol.ma/api/caisse/release/download?token=VOTRE_TOKEN
 ```
 
 Le token est le même secret que pour le catalogue (`CAISSE_TICKET_TOKEN` côté serveur ; `caisseToken` dans `caisse.config.json` sur le poste).

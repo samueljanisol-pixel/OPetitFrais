@@ -1,15 +1,21 @@
 import { NextRequest, NextResponse } from "next/server";
 import { authorizeCaisseTicket } from "@/lib/caisse/authorize-caisse-ticket";
 import {
+  caisseReleasePublicUrl,
+  streamCaisseReleaseFromFtp,
+} from "@/lib/caisse/caisse-release-ftp";
+import {
   CAISSE_RELEASE_DOWNLOAD_NAME,
+  getLocalCaisseInstallerPath,
   resolveCaisseReleaseDownload,
   streamLocalCaisseRelease,
 } from "@/lib/caisse/caisse-release";
-import { promises as fs } from "node:fs";
-import path from "node:path";
 
+export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
+/** Installateur ~83 Mo via FTP */
+export const maxDuration = 300;
 
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
@@ -17,23 +23,17 @@ const CORS_HEADERS = {
   "Access-Control-Allow-Headers": "Authorization, x-caisse-ticket-token, Content-Type",
 };
 
-async function findLocalInstallerPath(): Promise<string | null> {
-  const configured = process.env.CAISSE_RELEASE_INSTALLER_PATH?.trim();
-  if (configured) return configured;
-
-  const candidates = [
-    path.join(process.cwd(), "apps", "caisse", "release", "OPetitFrais-Caisse-Setup.exe"),
-    path.join(process.cwd(), "apps", "caisse", "release", "OPetitFrais Caisse Setup 0.1.0.exe"),
-  ];
-  for (const candidate of candidates) {
-    try {
-      await fs.access(candidate);
-      return candidate;
-    } catch {
-      /* try next */
-    }
+function attachmentHeaders(sizeBytes?: number): HeadersInit {
+  const headers: Record<string, string> = {
+    ...CORS_HEADERS,
+    "Content-Type": "application/octet-stream",
+    "Content-Disposition": `attachment; filename="${CAISSE_RELEASE_DOWNLOAD_NAME}"`,
+    "Cache-Control": "no-store",
+  };
+  if (sizeBytes != null && sizeBytes > 0) {
+    headers["Content-Length"] = String(sizeBytes);
   }
-  return null;
+  return headers;
 }
 
 export async function OPTIONS() {
@@ -42,7 +42,7 @@ export async function OPTIONS() {
 
 /**
  * Téléchargement installateur caisse Windows (token requis).
- * Redirige vers Supabase (URL signée) ou sert le fichier local.
+ * Prod : flux depuis FTP /POS (ou redirection URL publique optionnelle).
  *
  * GET /api/caisse/release/download?token=…
  */
@@ -55,7 +55,7 @@ export async function GET(req: NextRequest) {
     req.headers.get("x-caisse-ticket-token")?.trim() ||
     "";
 
-  const localPath = await findLocalInstallerPath();
+  const localPath = await getLocalCaisseInstallerPath();
   if (localPath) {
     const streamed = await streamLocalCaisseRelease(localPath);
     if ("error" in streamed) {
@@ -65,13 +65,19 @@ export async function GET(req: NextRequest) {
       );
     }
     return new NextResponse(streamed.stream, {
-      headers: {
-        ...CORS_HEADERS,
-        "Content-Type": "application/octet-stream",
-        "Content-Disposition": `attachment; filename="${CAISSE_RELEASE_DOWNLOAD_NAME}"`,
-        "Content-Length": String(streamed.sizeBytes),
-        "Cache-Control": "no-store",
-      },
+      headers: attachmentHeaders(streamed.sizeBytes),
+    });
+  }
+
+  const publicUrl = caisseReleasePublicUrl();
+  if (publicUrl) {
+    return NextResponse.redirect(publicUrl, { headers: CORS_HEADERS });
+  }
+
+  const ftpStreamed = await streamCaisseReleaseFromFtp();
+  if (!("error" in ftpStreamed)) {
+    return new NextResponse(ftpStreamed.stream, {
+      headers: attachmentHeaders(ftpStreamed.sizeBytes),
     });
   }
 
@@ -83,12 +89,12 @@ export async function GET(req: NextRequest) {
     );
   }
 
-  if (result.source !== "supabase") {
-    return NextResponse.json(
-      { ok: false, error: "Source de release inattendue" },
-      { status: 500, headers: CORS_HEADERS },
-    );
+  if (result.source === "supabase" || result.source === "ftp-public") {
+    return NextResponse.redirect(result.downloadUrl, { headers: CORS_HEADERS });
   }
 
-  return NextResponse.redirect(result.downloadUrl, { headers: CORS_HEADERS });
+  return NextResponse.json(
+    { ok: false, error: ftpStreamed.error },
+    { status: 503, headers: CORS_HEADERS },
+  );
 }

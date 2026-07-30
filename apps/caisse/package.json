@@ -7,7 +7,8 @@
     "dev": "electron-vite dev",
     "build": "electron-vite build",
     "preview": "electron-vite preview",
-    "dist": "npm run build && electron-builder --win"
+    "predist": "node scripts/predist.mjs",
+    "dist": "npm run predist && npm run build && electron-builder --win"
   },
   "dependencies": {
     "@emotion/react": "^11.14.0",
@@ -36,7 +37,7 @@
     "copyright": "Copyright © Janisol",
     "electronVersion": "33.2.1",
     "directories": {
-      "output": "release",
+      "output": "dist-win",
       "buildResources": "build"
     },
     "files": [

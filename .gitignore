@@ -23,6 +23,7 @@ node_modules/
 /build
 apps/caisse/out/
 apps/caisse/release/
+apps/caisse/dist-win/
 apps/caisse-agent/dist/
 packages/*/dist/
 
