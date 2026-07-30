@@ -133,6 +133,9 @@ function readJsonFile(path: string): Record<string, unknown> {
 }
 
 export function getWritableConfigPath(): string {
+  const forced = process.env.OPF_CONFIG_PATH?.trim();
+  if (forced) return forced;
+
   for (const path of configCandidates()) {
     if (existsSync(path)) return path;
   }

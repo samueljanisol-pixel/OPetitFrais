@@ -127,10 +127,8 @@ export default function SettingsDialog({ open, onClose, onSaved }: Props) {
 
         {!loading && agentOnline === false ? (
           <Alert severity="warning">
-            <strong>Agent caisse non démarré</strong> — la balance et l&apos;impression ticket passent par
-            l&apos;agent local (port 4711). Installez Node.js, lancez{" "}
-            <code>npm run dev:caisse-agent</code> sur ce poste, ou configurez-le en service Windows.
-            Vous pouvez quand même choisir le port COM ci-dessous (liste Windows).
+            Service balance local indisponible (port 4711). Redémarrez la caisse — depuis la version
+            0.1.7 l&apos;agent est intégré à l&apos;application, Node.js n&apos;est plus requis.
           </Alert>
         ) : null}
 

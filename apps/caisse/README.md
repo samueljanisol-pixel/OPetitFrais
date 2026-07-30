@@ -63,14 +63,17 @@ https://opetitfrais.janisol.ma/api/caisse/release/download?token=VOTRE_TOKEN
 
 Le token est le même secret que pour le catalogue (`CAISSE_TICKET_TOKEN` côté serveur ; `caisseToken` dans `caisse.config.json` sur le poste).
 
-### 3. Agent local (obligatoire)
+### 3. Agent local (intégré depuis 0.1.7)
 
-L’installateur caisse **ne inclut pas** l’agent balance/impression. Sur le poste magasin :
+L’installateur caisse **inclut l’agent** balance/impression (port **4711**) — **Node.js n’est plus requis** sur le poste magasin.
 
-1. Installer **Node.js 20+**
-2. Copier le dossier projet (ou au minimum `apps/caisse-agent`, `packages/caisse-core`, `package.json`)
-3. `npm install` puis `npm run dev:caisse-agent` (ou service Windows à configurer)
-4. Créer `%ProgramData%\OPetitFrais\config.json` (ports COM, imprimante) — voir agent README
+En développement, vous pouvez toujours lancer l’agent séparément :
+
+```powershell
+npm run dev:caisse-agent
+```
+
+Si le port 4711 est déjà pris (agent externe), la caisse s’y connecte automatiquement.
 
 ### 4. Configuration du poste (premier lancement)
 
@@ -120,6 +123,8 @@ En bas à gauche de la caisse (barre d’état) :
 1. Au démarrage puis toutes les 4 h, la caisse interroge `GET /api/caisse/release?token=…`
 2. Si la version serveur est plus récente → téléchargement automatique (~83 Mo) en arrière-plan (`OPetitFrais-Caisse-Setup-{version}.exe`)
 3. Une fois prêt, le caissier clique sur « MAJ prête » → installateur NSIS silencieux (`/S`) puis fermeture de la caisse
+
+En cas d’échec (caisse se ferme sans installation) : consulter `%APPDATA%\OPetitFrais Caisse\caisse-update.log`, ou lancer manuellement l’installateur dans `%TEMP%\OPetitFrais-Caisse-Setup-{version}.exe`.
 
 **Publier une nouvelle version** (une seule commande) :
 
@@ -282,9 +287,8 @@ La config matérielle est persistée dans `caisse.config.json` (userData Electro
 
 | Symptôme | Cause | Action |
 |----------|--------|--------|
-| Liste COM vide, imprimantes visibles | **Agent caisse non démarré** | L’exe seul ne parle pas à l’Arduino : l’**agent** (`caisse-agent`, port **4711**) doit tourner en permanence sur le poste |
-| Port visible dans Gestionnaire de périphériques mais pas dans la caisse (≤ 0.1.5) | Liste COM uniquement via l’agent | Mettre à jour la caisse (prochaine version lit aussi les ports Windows directement) |
-| Balance reste à 0 après choix du COM | Agent arrêté ou mauvais port | `curl http://127.0.0.1:4711/health` doit répondre `ok:true` |
+| Liste COM vide | Agent intégré non démarré (bug ou redémarrage nécessaire) | Redémarrer la caisse ; vérifier `curl http://127.0.0.1:4711/health` |
+| Balance reste à 0 | Mauvais port COM ou Arduino occupé | Choisir le bon COM ; fermer Moniteur série Arduino |
 
 **Vérifier l’agent sur le poste magasin :**
 
@@ -293,14 +297,7 @@ curl.exe -s http://127.0.0.1:4711/health
 curl.exe -s http://127.0.0.1:4711/serial/ports
 ```
 
-Si `health` échoue → installer Node.js 20+, copier le projet, `npm install`, puis :
-
-```powershell
-cd D:\OPF\o-petit-frais
-npm run dev:caisse-agent
-```
-
-(À terme : service Windows au démarrage du poste.)
+Si `health` échoue → redémarrer la caisse (0.1.7+) ou lancer `npm run dev:caisse-agent` en dev.
 
 **Contournement immédiat** — éditer `%APPDATA%\OPetitFrais Caisse\caisse.config.json` :
 

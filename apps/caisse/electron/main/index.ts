@@ -23,6 +23,7 @@ import {
   startCaisseUpdateChecks,
   triggerCaisseUpdateCheck,
 } from "./caisse-update";
+import { startEmbeddedCaisseAgent, stopEmbeddedCaisseAgent } from "./embedded-agent";
 
 const CASHIER_WIDTH = 1024;
 const CASHIER_HEIGHT = 768;
@@ -180,6 +181,8 @@ function createCustomerWindow(): void {
 app.whenReady().then(async () => {
   Menu.setApplicationMenu(null);
 
+  await startEmbeddedCaisseAgent();
+
   const identityStatus = getIdentityConfigStatus();
   identityReady = identityStatus.complete;
 
@@ -298,4 +301,8 @@ app.on("window-all-closed", () => {
   if (process.platform !== "darwin") {
     app.quit();
   }
+});
+
+app.on("before-quit", () => {
+  void stopEmbeddedCaisseAgent();
 });

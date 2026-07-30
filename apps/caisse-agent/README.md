@@ -4,6 +4,10 @@ API HTTP locale pour la balance Arduino, l'impression ESC/POS et (futur) périph
 
 Port par défaut : **4711**
 
+**Production (≥ 0.1.7)** : l'agent est **intégré à l'exe caisse** — démarrage automatique, Node.js non requis sur le poste.
+
+**Développement** : lancer l'agent séparément si besoin (voir ci-dessous).
+
 ## Démarrage
 
 ```bash

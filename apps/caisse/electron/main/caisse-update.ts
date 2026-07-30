@@ -1,10 +1,13 @@
-import { createWriteStream, existsSync, promises as fs } from "node:fs";
-import { spawn } from "node:child_process";
+import { execFile, spawn } from "node:child_process";
+import { createWriteStream, existsSync, promises as fs, statSync } from "node:fs";
 import { join } from "node:path";
+import { promisify } from "node:util";
 import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { app, type BrowserWindow } from "electron";
 import { loadRuntimeConfig } from "./load-config";
+
+const execFileAsync = promisify(execFile);
 
 export type CaisseUpdatePhase = "idle" | "checking" | "downloading" | "ready" | "error";
 
@@ -32,6 +35,7 @@ type PendingMeta = {
 };
 
 const CHECK_INTERVAL_MS = 4 * 60 * 60 * 1000;
+const MIN_INSTALLER_BYTES = 5 * 1024 * 1024;
 
 function installerFileName(version: string): string {
   return `OPetitFrais-Caisse-Setup-${version.trim()}.exe`;
@@ -57,6 +61,20 @@ function pendingMetaPath(): string {
 
 function installerPath(version: string): string {
   return join(app.getPath("temp"), installerFileName(version));
+}
+
+function updateLogPath(): string {
+  return join(app.getPath("userData"), "caisse-update.log");
+}
+
+async function logUpdate(message: string): Promise<void> {
+  const line = `${new Date().toISOString()} ${message}\n`;
+  try {
+    await fs.appendFile(updateLogPath(), line, "utf8");
+  } catch {
+    /* ignore */
+  }
+  console.log(`[update] ${message}`);
 }
 
 function parseVersionParts(version: string): number[] {
@@ -187,6 +205,11 @@ async function downloadInstaller(
   });
 
   await pipeline(nodeStream, createWriteStream(dest));
+
+  const stat = statSync(dest);
+  if (stat.size < MIN_INSTALLER_BYTES) {
+    throw new Error(`Installateur incomplet (${stat.size} octets)`);
+  }
 }
 
 async function runUpdateCheck(): Promise<void> {
@@ -270,6 +293,7 @@ async function runUpdateCheck(): Promise<void> {
 
     await downloadInstaller(release.downloadUrl, dest, release.sizeBytes);
     await writePendingMeta({ version: release.version, filePath: dest });
+    await logUpdate(`téléchargé ${dest} (${statSync(dest).size} octets)`);
 
     setState({
       phase: "ready",
@@ -290,6 +314,61 @@ async function runUpdateCheck(): Promise<void> {
   }
 }
 
+async function unblockWindowsFile(filePath: string): Promise<void> {
+  if (process.platform !== "win32") return;
+  const escaped = filePath.replace(/'/g, "''");
+  try {
+    await execFileAsync(
+      "powershell.exe",
+      ["-NoProfile", "-Command", `Unblock-File -LiteralPath '${escaped}'`],
+      { windowsHide: true, timeout: 10_000 },
+    );
+  } catch {
+    /* ignore */
+  }
+}
+
+function spawnInstallerDirect(installerPath: string): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const child = spawn(installerPath, ["/S"], {
+      detached: true,
+      stdio: "ignore",
+      shell: true,
+      windowsHide: false,
+    });
+
+    child.once("error", (err) => {
+      reject(err);
+    });
+
+    child.once("spawn", () => {
+      child.unref();
+      resolve();
+    });
+  });
+}
+
+async function spawnInstaller(installerPath: string): Promise<void> {
+  try {
+    await spawnInstallerDirect(installerPath);
+    return;
+  } catch (directErr) {
+    const escaped = installerPath.replace(/'/g, "''");
+    await execFileAsync(
+      "powershell.exe",
+      [
+        "-NoProfile",
+        "-Command",
+        `Start-Process -LiteralPath '${escaped}' -ArgumentList '/S' -WindowStyle Hidden`,
+      ],
+      { windowsHide: true, timeout: 15_000 },
+    );
+    if (directErr instanceof Error) {
+      await logUpdate(`spawn direct échoué (${directErr.message}) — fallback PowerShell`);
+    }
+  }
+}
+
 export function getCaisseUpdateState(): CaisseUpdateState {
   return state;
 }
@@ -304,18 +383,29 @@ export async function installCaisseUpdate(): Promise<{ ok: true } | { ok: false;
     return { ok: false, error: "Installateur introuvable" };
   }
 
+  if (!existsSync(pending.filePath)) {
+    return { ok: false, error: "Fichier installateur supprimé — retéléchargez la MAJ" };
+  }
+
   try {
-    const child = spawn(pending.filePath, ["/S"], {
-      detached: true,
-      stdio: "ignore",
-    });
-    child.unref();
+    const size = statSync(pending.filePath).size;
+    if (size < MIN_INSTALLER_BYTES) {
+      return { ok: false, error: "Installateur incomplet — retéléchargez la MAJ" };
+    }
+
+    await unblockWindowsFile(pending.filePath);
+    await logUpdate(`lancement ${pending.filePath} /S (${size} octets)`);
+    await spawnInstaller(pending.filePath);
+
     setTimeout(() => {
       app.quit();
-    }, 400);
+    }, 1500);
+
     return { ok: true };
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Lancement installateur impossible";
+    await logUpdate(`échec lancement: ${msg}`);
+    setState({ phase: "error", error: msg, installerReady: true });
     return { ok: false, error: msg };
   }
 }
