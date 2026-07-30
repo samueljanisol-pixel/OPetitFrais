@@ -5,7 +5,13 @@ export const ACTUALISATION_PERMS = ["produits.write", "commandes_fournisseur.ach
 
 export type ActualisationQueue = "prix" | "activation" | "desactivation";
 
-/** Prix de vente proposé = coûts + marge (inverse de defaultMargin). */
+/** Arrondi au demi supérieur (ex. 10,1 → 10,5 ; 10,51 → 11). */
+export function roundSalePriceUpToHalf(n: number): number {
+  if (!Number.isFinite(n)) return 0;
+  return Math.ceil(n * 2) / 2;
+}
+
+/** Prix de vente proposé = coûts + marge (inverse de defaultMargin), arrondi au 0,5 supérieur. */
 export function proposedSalePrice(params: {
   costPurchase: number | null;
   costManufacturing: number | null;
@@ -16,7 +22,7 @@ export function proposedSalePrice(params: {
   const f = params.costManufacturing ?? 0;
   const e = params.costPackaging ?? 0;
   const m = params.margin ?? 0;
-  return a + f + e + m;
+  return roundSalePriceUpToHalf(a + f + e + m);
 }
 
 /** Comparaison monétaire à 2 décimales (prix de vente). */

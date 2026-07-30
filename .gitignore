@@ -2,6 +2,8 @@
 
 # dependencies
 /node_modules
+node_modules/
+**/node_modules/
 /.pnp
 .pnp.*
 .yarn/*
@@ -19,6 +21,10 @@
 
 # production
 /build
+apps/caisse/out/
+apps/caisse/release/
+apps/caisse-agent/dist/
+packages/*/dist/
 
 # misc
 .DS_Store
@@ -32,6 +38,7 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+apps/caisse/caisse.config.json
 
 # vercel
 .vercel

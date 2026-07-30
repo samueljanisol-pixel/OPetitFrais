@@ -2,6 +2,10 @@
   "name": "o-petit-frais",
   "version": "0.1.0",
   "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
   "scripts": {
     "dev": "next dev --webpack",
     "dev:turbo": "next dev",
@@ -10,7 +14,12 @@
     "lint": "eslint",
     "icons:pwa": "tsx scripts/generate-pwa-icons.ts",
     "sync:day": "tsx scripts/run-sync.ts",
-    "sync:all": "tsx scripts/run-sync-all.ts"
+    "sync:all": "tsx scripts/run-sync-all.ts",
+    "build:caisse-core": "npm run build -w @opf/caisse-core",
+    "dev:caisse-agent": "npm run dev -w @opf/caisse-agent",
+    "dev:caisse": "npm run build:caisse-core && npm run dev -w @opf/caisse",
+    "dist:caisse": "npm run build:caisse-core && npm run dist -w @opf/caisse",
+    "upload:caisse-release": "tsx scripts/upload-caisse-release.ts"
   },
   "dependencies": {
     "@emotion/cache": "^11.14.0",

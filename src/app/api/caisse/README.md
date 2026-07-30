@@ -158,6 +158,68 @@ Conservé pour tests navigateur uniquement. Non recommandé en caisse.
 
 ---
 
+## Catalogue produits (caisse Electron)
+
+```
+GET /api/caisse/catalog?token=…
+```
+
+Réponse JSON : `{ ok, products[], categories[], fetchedAt }` — produits actifs avec prix, UdV, catégorie, photo.
+
+**Exclus du catalogue caisse** : catégorie `emballages_consommables` (emballages et consommables — gérés hors grille caisse).
+
+Même token que `commande-ticket` (`CAISSE_TICKET_TOKEN`).
+
+---
+
+## Installateur caisse Windows (téléchargement sécurisé)
+
+Même token `CAISSE_TICKET_TOKEN` que le catalogue.
+
+| Route | Description |
+|-------|-------------|
+| `GET /api/caisse/release?token=…` | JSON : version, taille, `downloadUrl` (URL signée Supabase, 1 h) |
+| `GET /api/caisse/release/download?token=…` | Téléchargement direct (redirect Supabase ou fichier local) |
+
+**Production** : installateur dans le bucket Supabase privé `caisse-releases` (`windows/latest/setup.exe`), publié via `npm run upload:caisse-release`.
+
+**Développement local** : si `apps/caisse/release/OPetitFrais-Caisse-Setup.exe` existe (après `npm run dist:caisse`), le backoffice sert le fichier sans Supabase.
+
+Variables optionnelles :
+
+| Variable | Rôle |
+|----------|------|
+| `CAISSE_RELEASE_INSTALLER_PATH` | Chemin absolu vers l’installateur (.exe) |
+| `CAISSE_RELEASE_STORAGE_PATH` | Objet Storage (défaut `windows/latest/setup.exe`) |
+| `CAISSE_RELEASE_DOWNLOAD_NAME` | Nom du fichier au téléchargement |
+| `CAISSE_RELEASE_VERSION` | Version affichée (défaut `0.1.0`) |
+
+Exemple de lien pour un poste magasin :
+
+```
+https://opetitfrais.janisol.ma/api/caisse/release/download?token=VOTRE_CAISSSE_TICKET_TOKEN
+```
+
+---
+
+## Clients caisse (Electron)
+
+```
+GET /api/caisse/clients?token=…
+POST /api/caisse/clients?token=…
+PATCH /api/caisse/clients/[id]?token=…
+```
+
+Réponse GET : `{ ok, clients[], fetchedAt }` — clients actifs avec nom, téléphone, email, notes.
+
+POST body : `{ name, phone?, email?, notes? }` → `{ ok, client }`.
+
+PATCH body : `{ name?, phone?, email?, notes? }` → `{ ok, client }`.
+
+Solde **Reste à régler** (`balanceDue`) : 0 tant que les ventes crédit ne sont pas synchronisées (Phase 3).
+
+---
+
 ## Config
 
 ```

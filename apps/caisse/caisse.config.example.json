@@ -1,0 +1,8 @@
+{
+  "backofficeUrl": "http://localhost:3000",
+  "scalePort": "COM9",
+  "saurusScaleIp": "192.168.0.87",
+  "ticketPrinter": "",
+  "magasinCode": "00",
+  "caisseCode": "01"
+}
