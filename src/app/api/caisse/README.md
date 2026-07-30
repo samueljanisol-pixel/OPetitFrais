@@ -195,7 +195,7 @@ Variables :
 | `CAISSE_RELEASE_PUBLIC_URL` | Optionnel : redirection HTTPS directe au lieu du flux FTP côté API |
 | `CAISSE_RELEASE_INSTALLER_PATH` | Chemin absolu local (dev / override) |
 | `CAISSE_RELEASE_DOWNLOAD_NAME` | Nom du fichier au téléchargement |
-| `CAISSE_RELEASE_VERSION` | Version affichée (défaut `0.1.0`) |
+| `CAISSE_RELEASE_VERSION` | Override optionnel (sinon `apps/caisse/package.json`) |
 
 Exemple de lien pour un poste magasin :
 

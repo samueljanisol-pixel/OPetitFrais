@@ -8,6 +8,7 @@ import {
   ftpCaisseReleaseSizeBytes,
   isFtpReleaseConfigured,
 } from "./caisse-release-ftp";
+import { getCaisseAppVersion } from "./caisse-app-version";
 
 export const CAISSE_RELEASE_BUCKET = "caisse-releases";
 
@@ -35,7 +36,7 @@ export type CaisseReleaseInfo = {
 };
 
 function releaseVersion(): string {
-  return process.env.CAISSE_RELEASE_VERSION?.trim() || "0.1.0";
+  return getCaisseAppVersion();
 }
 
 export async function getLocalCaisseInstallerPath(): Promise<string | null> {

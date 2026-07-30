@@ -14,6 +14,13 @@ import {
 } from "./fetch-catalog";
 import { sendSaurusCatalogFromCache } from "./send-saurus-catalog";
 import { pingConfiguredSaurusScale } from "./ping-saurus-scale";
+import {
+  getCaisseUpdateState,
+  initCaisseUpdate,
+  installCaisseUpdate,
+  startCaisseUpdateChecks,
+  triggerCaisseUpdateCheck,
+} from "./caisse-update";
 
 const CASHIER_WIDTH = 1024;
 const CASHIER_HEIGHT = 768;
@@ -168,6 +175,8 @@ app.whenReady().then(async () => {
     await prefetchCatalog();
     createCustomerWindow();
     applyWindowMode("caisse");
+    void triggerCaisseUpdateCheck();
+    startCaisseUpdateChecks();
   });
 
   ipcMain.handle("caisse:setWindowMode", (_event, mode: unknown) => {
@@ -222,7 +231,20 @@ app.whenReady().then(async () => {
     app.quit();
   });
 
+  ipcMain.handle("caisse:getUpdateState", () => getCaisseUpdateState());
+
+  ipcMain.handle("caisse:checkForUpdate", async () => {
+    await triggerCaisseUpdateCheck();
+    return getCaisseUpdateState();
+  });
+
+  ipcMain.handle("caisse:installUpdate", () => installCaisseUpdate());
+
   createCashierWindow(identityReady ? "caisse" : "setup");
+  initCaisseUpdate(() => cashierWindow);
+  if (identityReady) {
+    startCaisseUpdateChecks();
+  }
   createCustomerWindow();
 
   ipcMain.on("cart:update", (_event, payload: unknown) => {

@@ -24,6 +24,8 @@ node_modules/
 apps/caisse/out/
 apps/caisse/release/
 apps/caisse/dist-win/
+apps/caisse/dist-win-*/
+apps/caisse/.dist-output
 apps/caisse-agent/dist/
 packages/*/dist/
 

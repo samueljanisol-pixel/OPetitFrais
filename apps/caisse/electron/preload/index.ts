@@ -52,6 +52,18 @@ export type CaisseIdentityStatus = {
 
 export type CaisseWindowMode = "setup" | "caisse";
 
+export type CaisseUpdatePhase = "idle" | "checking" | "downloading" | "ready" | "error";
+
+export type CaisseUpdateState = {
+  phase: CaisseUpdatePhase;
+  currentVersion: string;
+  latestVersion: string | null;
+  updateAvailable: boolean;
+  progressPercent: number | null;
+  error: string | null;
+  installerReady: boolean;
+};
+
 export type PingSaurusScaleResult = {
   configured: boolean;
   ok: boolean;
@@ -91,6 +103,17 @@ contextBridge.exposeInMainWorld("caisseApi", {
     ipcRenderer.invoke("caisse:pingSaurusScale"),
   listPrinters: (): Promise<string[]> => ipcRenderer.invoke("caisse:listPrinters"),
   quitApp: (): Promise<void> => ipcRenderer.invoke("caisse:quitApp"),
+  getUpdateState: (): Promise<CaisseUpdateState> => ipcRenderer.invoke("caisse:getUpdateState"),
+  checkForUpdate: (): Promise<CaisseUpdateState> => ipcRenderer.invoke("caisse:checkForUpdate"),
+  installUpdate: (): Promise<{ ok: true } | { ok: false; error: string }> =>
+    ipcRenderer.invoke("caisse:installUpdate"),
+  onUpdateState: (handler: (state: CaisseUpdateState) => void) => {
+    const listener = (_: Electron.IpcRendererEvent, payload: CaisseUpdateState) => {
+      handler(payload);
+    };
+    ipcRenderer.on("caisse:update-state", listener);
+    return () => ipcRenderer.removeListener("caisse:update-state", listener);
+  },
   broadcastCart: (payload: CartBroadcast) => {
     ipcRenderer.send("cart:update", payload);
   },

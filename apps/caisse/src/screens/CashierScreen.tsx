@@ -67,6 +67,7 @@ import HoldCartDialog from "../components/HoldCartDialog";
 import MenuDialog from "../components/MenuDialog";
 import SettingsDialog from "../components/SettingsDialog";
 import CashierStatusBar from "../components/CashierStatusBar";
+import CaisseVersionBadge from "../components/CaisseVersionBadge";
 import { nextTicketNumber } from "../lib/ticket-counter";
 import {
   hasLastTicketEscPos,
@@ -1099,7 +1100,8 @@ export default function CashierScreen() {
                   bgcolor: "#fafafa",
                 }}
               >
-                <Box sx={{ flexShrink: 0, minWidth: 0 }}>
+                <Box sx={{ flexShrink: 0, minWidth: 0, display: "flex", alignItems: "center", gap: 1 }}>
+                  <CaisseVersionBadge />
                   <CashierStatusBar backofficeUrl={backofficeUrl} />
                 </Box>
                 <Box

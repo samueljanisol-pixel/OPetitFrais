@@ -9,7 +9,7 @@
  *   npm run upload:caisse-release
  *   npm run upload:caisse-release -- path/to/custom-setup.exe
  */
-import { readFileSync, existsSync, statSync } from "node:fs";
+import { readFileSync, existsSync, statSync, readdirSync } from "node:fs";
 import path from "node:path";
 import {
   CAISSE_DIST_DIR_NAME,
@@ -52,15 +52,40 @@ function resolveInstallerPath(cliPath: string | undefined): string {
     return abs;
   }
 
-  const releaseDir = path.join(process.cwd(), "apps", "caisse", CAISSE_DIST_DIR_NAME);
-  const legacyReleaseDir = path.join(process.cwd(), "apps", "caisse", "release");
-  const candidates = [
-    path.join(releaseDir, CAISSE_RELEASE_DOWNLOAD_NAME),
-    path.join(releaseDir, "OPetitFrais Caisse Setup 0.1.0.exe"),
-    path.join(legacyReleaseDir, CAISSE_RELEASE_DOWNLOAD_NAME),
-    path.join(legacyReleaseDir, "OPetitFrais Caisse Setup 0.1.0.exe"),
+  const caisseRoot = path.join(process.cwd(), "apps", "caisse");
+  const markerPath = path.join(caisseRoot, ".dist-output");
+  let distDirs = [path.join(caisseRoot, CAISSE_DIST_DIR_NAME)];
+
+  if (existsSync(markerPath)) {
+    const marked = readFileSync(markerPath, "utf8").trim();
+    if (marked) {
+      distDirs.unshift(path.join(caisseRoot, marked));
+    }
+  }
+
+  for (const entry of readdirSync(caisseRoot, { withFileTypes: true })) {
+    if (entry.isDirectory() && /^dist-win-\d+$/.test(entry.name)) {
+      distDirs.push(path.join(caisseRoot, entry.name));
+    }
+  }
+
+  distDirs = [...new Set(distDirs)];
+
+  const legacyReleaseDir = path.join(caisseRoot, "release");
+  const fileNames = [
+    CAISSE_RELEASE_DOWNLOAD_NAME,
+    "OPetitFrais Caisse Setup 0.1.0.exe",
   ];
-  for (const candidate of candidates) {
+
+  for (const releaseDir of distDirs) {
+    for (const fileName of fileNames) {
+      const candidate = path.join(releaseDir, fileName);
+      if (existsSync(candidate)) return candidate;
+    }
+  }
+
+  for (const fileName of fileNames) {
+    const candidate = path.join(legacyReleaseDir, fileName);
     if (existsSync(candidate)) return candidate;
   }
 

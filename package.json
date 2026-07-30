@@ -19,7 +19,8 @@
     "dev:caisse-agent": "npm run dev -w @opf/caisse-agent",
     "dev:caisse": "npm run build:caisse-core && npm run dev -w @opf/caisse",
     "dist:caisse": "npm run build:caisse-core && npm run dist -w @opf/caisse",
-    "upload:caisse-release": "tsx scripts/upload-caisse-release.ts"
+    "upload:caisse-release": "tsx scripts/upload-caisse-release.ts",
+    "release:caisse": "tsx scripts/release-caisse.ts"
   },
   "dependencies": {
     "@emotion/cache": "^11.14.0",

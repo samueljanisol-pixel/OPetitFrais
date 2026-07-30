@@ -6,6 +6,7 @@ import type {
   CaisseIdentityConfig,
   CaisseIdentityStatus,
   CaisseRuntimeConfig,
+  CaisseUpdateState,
   CaisseWindowMode,
   InitialCatalogPayload,
   PingSaurusScaleResult,
@@ -40,6 +41,10 @@ declare global {
       pingSaurusScale: () => Promise<PingSaurusScaleResult>;
       listPrinters: () => Promise<string[]>;
       quitApp: () => Promise<void>;
+      getUpdateState: () => Promise<CaisseUpdateState>;
+      checkForUpdate: () => Promise<CaisseUpdateState>;
+      installUpdate: () => Promise<{ ok: true } | { ok: false; error: string }>;
+      onUpdateState: (handler: (state: CaisseUpdateState) => void) => () => void;
       broadcastCart: (payload: CartBroadcast) => void;
       onCartUpdate: (handler: (payload: CartBroadcast) => void) => () => void;
     };
