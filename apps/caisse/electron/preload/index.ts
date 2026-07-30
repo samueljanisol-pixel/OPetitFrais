@@ -102,6 +102,8 @@ contextBridge.exposeInMainWorld("caisseApi", {
   pingSaurusScale: (): Promise<PingSaurusScaleResult> =>
     ipcRenderer.invoke("caisse:pingSaurusScale"),
   listPrinters: (): Promise<string[]> => ipcRenderer.invoke("caisse:listPrinters"),
+  listSerialPorts: (): Promise<Array<{ path: string; manufacturer: string | null }>> =>
+    ipcRenderer.invoke("caisse:listSerialPorts"),
   quitApp: (): Promise<void> => ipcRenderer.invoke("caisse:quitApp"),
   getUpdateState: (): Promise<CaisseUpdateState> => ipcRenderer.invoke("caisse:getUpdateState"),
   checkForUpdate: (): Promise<CaisseUpdateState> => ipcRenderer.invoke("caisse:checkForUpdate"),

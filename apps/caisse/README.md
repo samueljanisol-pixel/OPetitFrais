@@ -278,7 +278,39 @@ La config matérielle est persistée dans `caisse.config.json` (userData Electro
 
 ## Balance USB
 
-L'agent détecte automatiquement le port **CH340** (wch.cn) ou lit `scalePort` dans `caisse.config.json`. Variable d'environnement `OPF_SCALE_PORT` prioritaire si définie.
+### Dépannage — port COM invisible dans Paramètres
+
+| Symptôme | Cause | Action |
+|----------|--------|--------|
+| Liste COM vide, imprimantes visibles | **Agent caisse non démarré** | L’exe seul ne parle pas à l’Arduino : l’**agent** (`caisse-agent`, port **4711**) doit tourner en permanence sur le poste |
+| Port visible dans Gestionnaire de périphériques mais pas dans la caisse (≤ 0.1.5) | Liste COM uniquement via l’agent | Mettre à jour la caisse (prochaine version lit aussi les ports Windows directement) |
+| Balance reste à 0 après choix du COM | Agent arrêté ou mauvais port | `curl http://127.0.0.1:4711/health` doit répondre `ok:true` |
+
+**Vérifier l’agent sur le poste magasin :**
+
+```powershell
+curl.exe -s http://127.0.0.1:4711/health
+curl.exe -s http://127.0.0.1:4711/serial/ports
+```
+
+Si `health` échoue → installer Node.js 20+, copier le projet, `npm install`, puis :
+
+```powershell
+cd D:\OPF\o-petit-frais
+npm run dev:caisse-agent
+```
+
+(À terme : service Windows au démarrage du poste.)
+
+**Contournement immédiat** — éditer `%APPDATA%\OPetitFrais Caisse\caisse.config.json` :
+
+```json
+"scalePort": "COM3"
+```
+
+(remplacer par le numéro vu dans le Gestionnaire de périphériques), puis démarrer l’agent.
+
+L’agent détecte automatiquement le port **CH340** (wch.cn) ou lit `scalePort` dans `caisse.config.json`. Variable d’environnement `OPF_SCALE_PORT` prioritaire si définie.
 
 ## Balance SAURUS (réseau)
 

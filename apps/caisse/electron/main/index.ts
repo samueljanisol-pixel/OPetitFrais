@@ -13,6 +13,7 @@ import {
   getCachedCatalog,
   prefetchCatalog,
 } from "./fetch-catalog";
+import { listWindowsSerialPorts } from "./list-serial-ports-win";
 import { sendSaurusCatalogFromCache } from "./send-saurus-catalog";
 import { pingConfiguredSaurusScale } from "./ping-saurus-scale";
 import {
@@ -256,6 +257,8 @@ app.whenReady().then(async () => {
       return [] as string[];
     }
   });
+
+  ipcMain.handle("caisse:listSerialPorts", async () => listWindowsSerialPorts());
 
   ipcMain.handle("caisse:quitApp", () => {
     app.quit();

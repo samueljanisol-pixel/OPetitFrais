@@ -40,6 +40,7 @@ declare global {
       sendSaurusCatalog: () => Promise<SendSaurusCatalogResult>;
       pingSaurusScale: () => Promise<PingSaurusScaleResult>;
       listPrinters: () => Promise<string[]>;
+      listSerialPorts: () => Promise<Array<{ path: string; manufacturer: string | null }>>;
       quitApp: () => Promise<void>;
       getUpdateState: () => Promise<CaisseUpdateState>;
       checkForUpdate: () => Promise<CaisseUpdateState>;

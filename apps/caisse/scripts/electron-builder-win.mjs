@@ -5,9 +5,7 @@ import { fileURLToPath } from "node:url";
 
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 const marker = path.join(root, ".dist-output");
-const pkg = JSON.parse(readFileSync(path.join(root, "package.json"), "utf8")) as {
-  version?: string;
-};
+const pkg = JSON.parse(readFileSync(path.join(root, "package.json"), "utf8"));
 const version = typeof pkg.version === "string" ? pkg.version.trim() : "0.0.0";
 
 let outputDir = "dist-win";

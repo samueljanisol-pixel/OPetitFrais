@@ -16,6 +16,7 @@ import {
 import FormDialog from "./FormDialog";
 import {
   getCaisseRuntimeConfig,
+  isCaisseAgentReachable,
   listScalePortOptions,
   listTicketPrinterOptions,
   saveCaisseHardwareConfig,
@@ -40,6 +41,7 @@ export default function SettingsDialog({ open, onClose, onSaved }: Props) {
   const [ticketPrinter, setTicketPrinter] = useState(NO_PRINTER_VALUE);
   const [ports, setPorts] = useState<Array<{ path: string; manufacturer: string | null }>>([]);
   const [printers, setPrinters] = useState<string[]>([]);
+  const [agentOnline, setAgentOnline] = useState<boolean | null>(null);
 
   useEffect(() => {
     if (!open) return;
@@ -51,17 +53,20 @@ export default function SettingsDialog({ open, onClose, onSaved }: Props) {
     void (async () => {
       try {
         const configPromise = getCaisseRuntimeConfig();
+        const agentPromise = withTimeout(isCaisseAgentReachable(), 2_500, false);
         const portsPromise = withTimeout(listScalePortOptions(), 6_000, [] as Array<{ path: string; manufacturer: string | null }>);
         const printersPromise = withTimeout(listTicketPrinterOptions(), 6_000, [] as string[]);
 
-        const [config, portOptions, printerOptions] = await Promise.all([
+        const [config, agentOk, portOptions, printerOptions] = await Promise.all([
           configPromise,
+          agentPromise,
           portsPromise,
           printersPromise,
         ]);
 
         if (cancelled) return;
 
+        setAgentOnline(agentOk);
         setPorts(portOptions);
         setPrinters(printerOptions);
 
@@ -120,10 +125,19 @@ export default function SettingsDialog({ open, onClose, onSaved }: Props) {
       <DialogContent sx={{ display: "flex", flexDirection: "column", gap: 2, pt: 0.5 }}>
         {error ? <Alert severity="error">{error}</Alert> : null}
 
-        {!loading && ports.length === 0 && printers.length === 0 ? (
+        {!loading && agentOnline === false ? (
+          <Alert severity="warning">
+            <strong>Agent caisse non démarré</strong> — la balance et l&apos;impression ticket passent par
+            l&apos;agent local (port 4711). Installez Node.js, lancez{" "}
+            <code>npm run dev:caisse-agent</code> sur ce poste, ou configurez-le en service Windows.
+            Vous pouvez quand même choisir le port COM ci-dessous (liste Windows).
+          </Alert>
+        ) : null}
+
+        {!loading && ports.length === 0 ? (
           <Alert severity="info">
-            Agent caisse non détecté — les listes COM / imprimante peuvent être vides. Lancez{" "}
-            <code>npm run dev:caisse-agent</code> si besoin.
+            Aucun port COM détecté. Vérifiez le câble USB, le pilote CH340 (wch.cn) dans le Gestionnaire de
+            périphériques, puis rouvrez Paramètres.
           </Alert>
         ) : null}
 

@@ -68,32 +68,34 @@ export async function saveCaisseHardwareConfig(
     cachedConfig = await window.caisseApi.saveHardwareConfig(partial);
   }
 
-  const agentResult = await applyHardwareConfigOnAgent({
-    scalePort: partial.scalePort,
-    ticketPrinter: partial.ticketPrinter,
-  });
+  try {
+    const agentResult = await applyHardwareConfigOnAgent({
+      scalePort: partial.scalePort,
+      ticketPrinter: partial.ticketPrinter,
+    });
+    if (cachedConfig) {
+      cachedConfig = {
+        ...cachedConfig,
+        scalePort: agentResult.scalePort,
+        saurusScaleIp:
+          partial.saurusScaleIp !== undefined ? partial.saurusScaleIp.trim() : cachedConfig.saurusScaleIp,
+        ticketPrinter: agentResult.ticketPrinter,
+      };
+    }
+  } catch {
+    if (cachedConfig) {
+      cachedConfig = {
+        ...cachedConfig,
+        scalePort: partial.scalePort?.trim() ?? cachedConfig.scalePort,
+        saurusScaleIp:
+          partial.saurusScaleIp !== undefined ? partial.saurusScaleIp.trim() : cachedConfig.saurusScaleIp,
+        ticketPrinter: partial.ticketPrinter?.trim() ?? cachedConfig.ticketPrinter,
+      };
+    }
+  }
+
   if (!cachedConfig) {
-    cachedConfig = {
-      backofficeUrl: (import.meta.env.VITE_OPF_BACKOFFICE_URL ?? "http://localhost:3000").replace(
-        /\/$/,
-        "",
-      ),
-      caisseToken: import.meta.env.VITE_OPF_CAISSE_TOKEN ?? "",
-      scalePort: agentResult.scalePort,
-      saurusScaleIp: partial.saurusScaleIp?.trim() ?? "",
-      ticketPrinter: agentResult.ticketPrinter,
-      magasinCode: "00",
-      caisseCode: "01",
-      posteId: "",
-    };
-  } else {
-    cachedConfig = {
-      ...cachedConfig,
-      scalePort: agentResult.scalePort,
-      saurusScaleIp:
-        partial.saurusScaleIp !== undefined ? partial.saurusScaleIp.trim() : cachedConfig.saurusScaleIp,
-      ticketPrinter: agentResult.ticketPrinter,
-    };
+    throw new Error("Enregistrement config indisponible");
   }
 
   return cachedConfig;
@@ -102,7 +104,28 @@ export async function saveCaisseHardwareConfig(
 export type { SerialPortOption };
 
 export async function listScalePortOptions(): Promise<SerialPortOption[]> {
-  return fetchSerialPorts();
+  const agentPorts = await fetchSerialPorts();
+  if (agentPorts.length > 0) {
+    return agentPorts;
+  }
+
+  if (window.caisseApi?.listSerialPorts) {
+    const electronPorts = await withTimeout(window.caisseApi.listSerialPorts(), 6_000, [] as SerialPortOption[]);
+    if (electronPorts.length > 0) {
+      return electronPorts;
+    }
+  }
+
+  return [];
+}
+
+export async function isCaisseAgentReachable(): Promise<boolean> {
+  try {
+    const res = await withTimeout(fetch("http://127.0.0.1:4711/health"), 2_000, null);
+    return res?.ok === true;
+  } catch {
+    return false;
+  }
 }
 
 export async function listTicketPrinterOptions(): Promise<string[]> {
