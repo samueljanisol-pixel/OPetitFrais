@@ -28,12 +28,29 @@ export type CaisseRuntimeConfig = {
   ticketPrinter: string;
   magasinCode: string;
   caisseCode: string;
+  posteId: string;
 };
 
 export type CaisseHardwareConfig = Pick<
   CaisseRuntimeConfig,
   "scalePort" | "ticketPrinter" | "saurusScaleIp"
 >;
+
+export type CaisseIdentityConfig = Pick<
+  CaisseRuntimeConfig,
+  "backofficeUrl" | "caisseToken" | "magasinCode" | "caisseCode" | "posteId"
+>;
+
+export type CaisseIdentityStatus = {
+  complete: boolean;
+  missing: string[];
+  configPath: string;
+  configFileExists: boolean;
+  draft: Partial<CaisseIdentityConfig>;
+  isTestMagasin: boolean;
+};
+
+export type CaisseWindowMode = "setup" | "caisse";
 
 export type PingSaurusScaleResult = {
   configured: boolean;
@@ -55,6 +72,13 @@ export type SendSaurusCatalogResult =
 
 contextBridge.exposeInMainWorld("caisseApi", {
   getConfig: (): Promise<CaisseRuntimeConfig> => ipcRenderer.invoke("caisse:getConfig"),
+  getIdentityStatus: (): Promise<CaisseIdentityStatus> =>
+    ipcRenderer.invoke("caisse:getIdentityStatus"),
+  saveIdentityConfig: (identity: CaisseIdentityConfig): Promise<CaisseRuntimeConfig> =>
+    ipcRenderer.invoke("caisse:saveIdentityConfig", identity),
+  notifyIdentityReady: (): Promise<void> => ipcRenderer.invoke("caisse:notifyIdentityReady"),
+  setWindowMode: (mode: CaisseWindowMode): Promise<void> =>
+    ipcRenderer.invoke("caisse:setWindowMode", mode),
   getInitialCatalog: (): Promise<InitialCatalogPayload | null> =>
     ipcRenderer.invoke("caisse:getInitialCatalog"),
   refreshCatalogCache: (): Promise<InitialCatalogPayload> =>

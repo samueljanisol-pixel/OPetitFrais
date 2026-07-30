@@ -1,8 +1,10 @@
 {
-  "backofficeUrl": "http://localhost:3000",
+  "backofficeUrl": "https://opetitfrais.janisol.ma",
+  "caisseToken": "VOTRE_CAISSSE_TICKET_TOKEN",
+  "magasinCode": "1",
+  "caisseCode": "1",
+  "posteId": "00000000-0000-4000-8000-000000000001",
   "scalePort": "COM9",
   "saurusScaleIp": "192.168.0.87",
-  "ticketPrinter": "",
-  "magasinCode": "00",
-  "caisseCode": "01"
+  "ticketPrinter": ""
 }

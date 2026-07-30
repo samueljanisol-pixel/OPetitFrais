@@ -1,4 +1,4 @@
-import type { CaisseHardwareConfig, CaisseRuntimeConfig } from "../../electron/preload/index";
+import type { CaisseHardwareConfig, CaisseIdentityConfig, CaisseRuntimeConfig } from "../../electron/preload/index";
 import {
   applyHardwareConfigOnAgent,
   fetchAgentHardwareConfig,
@@ -33,8 +33,19 @@ export async function getCaisseRuntimeConfig(): Promise<CaisseRuntimeConfig> {
     ticketPrinter: agentConfig.ticketPrinter,
     magasinCode: "00",
     caisseCode: "01",
+    posteId: "",
   };
   return cachedConfig;
+}
+
+export async function saveCaisseIdentityConfig(
+  identity: CaisseIdentityConfig,
+): Promise<CaisseRuntimeConfig> {
+  if (window.caisseApi?.saveIdentityConfig) {
+    cachedConfig = await window.caisseApi.saveIdentityConfig(identity);
+    return cachedConfig;
+  }
+  throw new Error("Enregistrement identité indisponible");
 }
 
 export async function syncHardwareConfigToAgent(): Promise<void> {
@@ -72,6 +83,7 @@ export async function saveCaisseHardwareConfig(
       ticketPrinter: agentResult.ticketPrinter,
       magasinCode: "00",
       caisseCode: "01",
+      posteId: "",
     };
   } else {
     cachedConfig = {

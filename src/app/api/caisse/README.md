@@ -205,6 +205,37 @@ https://opetitfrais.janisol.ma/api/caisse/release/download?token=VOTRE_CAISSSE_T
 
 ---
 
+## Enregistrement poste caisse
+
+Même token `CAISSE_TICKET_TOKEN`.
+
+```
+POST /api/caisse/poste/register?token=…
+```
+
+Corps JSON :
+
+```json
+{
+  "posteId": "uuid-v4",
+  "magasinCode": "1",
+  "caisseCode": "2",
+  "hostname": "poste-m02",
+  "appVersion": "0.1.0"
+}
+```
+
+| Règle | Détail |
+|-------|--------|
+| `caisseCode` | Entier **> 0** |
+| `magasinCode` | `0` = magasin test (plusieurs postes autorisés) |
+| Unicité | Un seul `(magasin, caisse)` en prod (hors magasin 0) |
+| `posteId` | UUID stable par machine — ré-enregistrement autorisé pour le même ID |
+
+Table Supabase : `caisse_postes` (migration `20260730160000_caisse_postes.sql`).
+
+---
+
 ## Clients caisse (Electron)
 
 ```

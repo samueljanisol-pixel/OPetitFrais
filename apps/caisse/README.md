@@ -72,23 +72,37 @@ L’installateur caisse **ne inclut pas** l’agent balance/impression. Sur le p
 3. `npm install` puis `npm run dev:caisse-agent` (ou service Windows à configurer)
 4. Créer `%ProgramData%\OPetitFrais\config.json` (ports COM, imprimante) — voir agent README
 
-### 4. Config caisse sur le poste
+### 4. Configuration du poste (premier lancement)
 
-Après installation, fichier config Electron (userData) — copier depuis `caisse.config.example.json` :
+Au **premier démarrage**, si `caisse.config.json` est incomplet, une fenêtre de configuration s’affiche **à la place de la caisse** :
+
+| Champ | Règle |
+|-------|--------|
+| URL backoffice | Ex. `https://opetitfrais.janisol.ma` |
+| Token caisse | Même secret que `CAISSE_TICKET_TOKEN` |
+| Numéro magasin | `0` = mode test (hors statistiques) |
+| Numéro caisse | Entier **> 0**, unique par magasin |
+
+Chaque poste reçoit un **`posteId`** (UUID) enregistré côté serveur (`POST /api/caisse/poste/register`). Deux postes ne peuvent pas partager le même numéro de caisse pour un magasin donné.
+
+Fichier prod : `%APPDATA%\OPetitFrais Caisse\caisse.config.json` (créé automatiquement à la validation).
+
+Exemple complet — voir `caisse.config.example.json` :
 
 ```json
 {
   "backofficeUrl": "https://opetitfrais.janisol.ma",
   "caisseToken": "MÊME_TOKEN_QUE_CAISSSE_TICKET_TOKEN",
+  "magasinCode": "01",
+  "caisseCode": "01",
+  "posteId": "uuid-généré-automatiquement",
   "scalePort": "COM9",
   "saurusScaleIp": "192.168.0.87",
-  "ticketPrinter": "Nom imprimante ticket",
-  "magasinCode": "00",
-  "caisseCode": "01"
+  "ticketPrinter": "Nom imprimante ticket"
 }
 ```
 
-Emplacement prod : `%APPDATA%\@opf\caisse\caisse.config.json` (ou via **Menu → Paramètres** une fois l’app lancée).
+Les paramètres matériels (balance, imprimante) restent modifiables via **Menu → Paramètres** une fois la caisse ouverte.
 
 ## Structure
 
@@ -96,7 +110,9 @@ Emplacement prod : `%APPDATA%\@opf\caisse\caisse.config.json` (ou via **Menu →
 |---------|------|
 | `electron/main` | Fenêtres caissier + client, IPC |
 | `electron/preload` | Pont sécurisé renderer ↔ main |
-| `src/screens/CashierScreen.tsx` | UI principale |
+| `src/screens/CashierGate.tsx` | Blocage caisse si config identité incomplète |
+| `src/components/SetupDialog.tsx` | Configuration initiale poste (URL, token, magasin, caisse) |
+| `src/screens/CashierScreen.tsx` | UI principale caisse |
 | `src/screens/CustomerScreen.tsx` | Affichage client |
 | `src/components/PaymentDialog.tsx` | Modal paiement (monnaie visuelle, modes avec icônes) |
 | `src/components/CashMonnaieGrid.tsx` | Grille billets/pièces (disposition caisse) |

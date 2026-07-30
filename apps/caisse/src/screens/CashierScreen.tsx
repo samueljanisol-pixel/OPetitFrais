@@ -74,6 +74,7 @@ import {
   saveLastTicketEscPosBase64,
 } from "../lib/last-ticket";
 import { getCaisseRuntimeConfig, syncHardwareConfigToAgent } from "../lib/hardware-config";
+import { isTestMagasin } from "../lib/caisse-identity";
 import {
   createHoldId,
   loadHeldCarts,
@@ -727,6 +728,11 @@ export default function CashierScreen() {
 
   return (
     <Box sx={{ width: 1024, height: 768, display: "flex", flexDirection: "column", overflow: "hidden" }}>
+      {isTestMagasin(magasin) ? (
+        <Alert severity="warning" sx={{ borderRadius: 0, py: 0.25, flexShrink: 0 }}>
+          Mode test (magasin 0) — ventes non comptabilisées dans les statistiques
+        </Alert>
+      ) : null}
       <Box sx={{ display: "flex", flex: 1, minHeight: 0 }}>
         <Box sx={{ flex: 1, display: "flex", flexDirection: "column", minWidth: 0 }}>
           <Box

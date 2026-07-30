@@ -20,6 +20,10 @@ type ApiCatalogResponse = {
 
 let cachedConfig: CaisseRuntimeConfig | null = null;
 
+export function invalidateCaisseCatalogConfigCache(): void {
+  cachedConfig = null;
+}
+
 export async function getCaisseConfig(): Promise<CaisseRuntimeConfig> {
   if (cachedConfig) return cachedConfig;
 
@@ -38,6 +42,7 @@ export async function getCaisseConfig(): Promise<CaisseRuntimeConfig> {
     ticketPrinter: "",
     magasinCode: "00",
     caisseCode: "01",
+    posteId: "",
   };
   return cachedConfig;
 }

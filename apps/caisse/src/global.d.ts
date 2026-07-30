@@ -3,7 +3,10 @@
 import type {
   CartBroadcast,
   CaisseHardwareConfig,
+  CaisseIdentityConfig,
+  CaisseIdentityStatus,
   CaisseRuntimeConfig,
+  CaisseWindowMode,
   InitialCatalogPayload,
   PingSaurusScaleResult,
   SendSaurusCatalogResult,
@@ -26,6 +29,10 @@ declare global {
   interface Window {
     caisseApi?: {
       getConfig: () => Promise<CaisseRuntimeConfig>;
+      getIdentityStatus: () => Promise<CaisseIdentityStatus>;
+      saveIdentityConfig: (identity: CaisseIdentityConfig) => Promise<CaisseRuntimeConfig>;
+      notifyIdentityReady: () => Promise<void>;
+      setWindowMode: (mode: CaisseWindowMode) => Promise<void>;
       getInitialCatalog: () => Promise<InitialCatalogPayload | null>;
       refreshCatalogCache: () => Promise<InitialCatalogPayload>;
       saveHardwareConfig: (partial: CaisseHardwareConfig) => Promise<CaisseRuntimeConfig>;

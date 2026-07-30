@@ -1,6 +1,12 @@
 import { app, BrowserWindow, ipcMain, Menu, screen } from "electron";
 import { join } from "path";
-import { loadRuntimeConfig, saveHardwareConfig } from "./load-config";
+import {
+  getIdentityConfigStatus,
+  loadRuntimeConfig,
+  saveHardwareConfig,
+  saveIdentityConfig,
+  type CaisseIdentityConfig,
+} from "./load-config";
 import {
   clearCachedCatalog,
   getCachedCatalog,
@@ -11,6 +17,8 @@ import { pingConfiguredSaurusScale } from "./ping-saurus-scale";
 
 const CASHIER_WIDTH = 1024;
 const CASHIER_HEIGHT = 768;
+const SETUP_WIDTH = 440;
+const SETUP_HEIGHT = 560;
 
 const isDev = !app.isPackaged;
 
@@ -23,6 +31,7 @@ const KIOSK_WINDOW_OPTIONS = {
 
 let cashierWindow: BrowserWindow | null = null;
 let customerWindow: BrowserWindow | null = null;
+let identityReady = false;
 
 /** Écran client : tout affichage autre que le principal (aucun si un seul écran). */
 function getCustomerDisplay(): Electron.Display | null {
@@ -44,15 +53,36 @@ function sendCartToCustomer(payload: unknown): void {
   }
 }
 
-function createCashierWindow(): void {
+function applyWindowMode(mode: "setup" | "caisse"): void {
+  if (!cashierWindow || cashierWindow.isDestroyed()) return;
+
+  if (mode === "setup") {
+    cashierWindow.setMinimumSize(SETUP_WIDTH, SETUP_HEIGHT);
+    cashierWindow.setMaximumSize(SETUP_WIDTH, SETUP_HEIGHT);
+    cashierWindow.setSize(SETUP_WIDTH, SETUP_HEIGHT);
+    cashierWindow.setResizable(false);
+    cashierWindow.center();
+    return;
+  }
+
+  cashierWindow.setMinimumSize(CASHIER_WIDTH, CASHIER_HEIGHT);
+  cashierWindow.setMaximumSize(CASHIER_WIDTH, CASHIER_HEIGHT);
+  cashierWindow.setSize(CASHIER_WIDTH, CASHIER_HEIGHT);
+  cashierWindow.setResizable(false);
+  cashierWindow.center();
+}
+
+function createCashierWindow(initialMode: "setup" | "caisse"): void {
+  const isSetup = initialMode === "setup";
+
   cashierWindow = new BrowserWindow({
     ...KIOSK_WINDOW_OPTIONS,
-    width: CASHIER_WIDTH,
-    height: CASHIER_HEIGHT,
-    minWidth: CASHIER_WIDTH,
-    minHeight: CASHIER_HEIGHT,
-    maxWidth: CASHIER_WIDTH,
-    maxHeight: CASHIER_HEIGHT,
+    width: isSetup ? SETUP_WIDTH : CASHIER_WIDTH,
+    height: isSetup ? SETUP_HEIGHT : CASHIER_HEIGHT,
+    minWidth: isSetup ? SETUP_WIDTH : CASHIER_WIDTH,
+    minHeight: isSetup ? SETUP_HEIGHT : CASHIER_HEIGHT,
+    maxWidth: isSetup ? SETUP_WIDTH : CASHIER_WIDTH,
+    maxHeight: isSetup ? SETUP_HEIGHT : CASHIER_HEIGHT,
     resizable: false,
     title: "O'petit frais — Caisse",
     webPreferences: {
@@ -74,8 +104,11 @@ function createCashierWindow(): void {
 }
 
 function createCustomerWindow(): void {
+  if (!identityReady) return;
+
   const target = getCustomerDisplay();
   if (!target) return;
+  if (customerWindow && !customerWindow.isDestroyed()) return;
 
   customerWindow = new BrowserWindow({
     ...KIOSK_WINDOW_OPTIONS,
@@ -114,9 +147,34 @@ function createCustomerWindow(): void {
 app.whenReady().then(async () => {
   Menu.setApplicationMenu(null);
 
-  await prefetchCatalog();
+  const identityStatus = getIdentityConfigStatus();
+  identityReady = identityStatus.complete;
+
+  if (identityReady) {
+    await prefetchCatalog();
+  }
 
   ipcMain.handle("caisse:getConfig", () => loadRuntimeConfig());
+
+  ipcMain.handle("caisse:getIdentityStatus", () => getIdentityConfigStatus());
+
+  ipcMain.handle("caisse:saveIdentityConfig", (_event, identity: CaisseIdentityConfig) => {
+    return saveIdentityConfig(identity);
+  });
+
+  ipcMain.handle("caisse:notifyIdentityReady", async () => {
+    identityReady = true;
+    clearCachedCatalog();
+    await prefetchCatalog();
+    createCustomerWindow();
+    applyWindowMode("caisse");
+  });
+
+  ipcMain.handle("caisse:setWindowMode", (_event, mode: unknown) => {
+    if (mode === "setup" || mode === "caisse") {
+      applyWindowMode(mode);
+    }
+  });
 
   ipcMain.handle("caisse:getInitialCatalog", () => getCachedCatalog());
 
@@ -164,7 +222,7 @@ app.whenReady().then(async () => {
     app.quit();
   });
 
-  createCashierWindow();
+  createCashierWindow(identityReady ? "caisse" : "setup");
   createCustomerWindow();
 
   ipcMain.on("cart:update", (_event, payload: unknown) => {
@@ -173,7 +231,9 @@ app.whenReady().then(async () => {
 
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) {
-      createCashierWindow();
+      const status = getIdentityConfigStatus();
+      identityReady = status.complete;
+      createCashierWindow(status.complete ? "caisse" : "setup");
       createCustomerWindow();
     }
   });

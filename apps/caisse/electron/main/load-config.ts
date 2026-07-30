@@ -1,6 +1,14 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "fs";
 import { dirname, join } from "path";
 import { app } from "electron";
+import {
+  evaluateIdentityFromRaw,
+  formatCaisseCode,
+  formatMagasinCode,
+  validateIdentityDraft,
+  type CaisseIdentityFields,
+  type CaisseIdentityStatus,
+} from "../../shared/caisse-identity";
 
 export type CaisseRuntimeConfig = {
   backofficeUrl: string;
@@ -10,6 +18,7 @@ export type CaisseRuntimeConfig = {
   ticketPrinter: string;
   magasinCode: string;
   caisseCode: string;
+  posteId: string;
 };
 
 export type CaisseHardwareConfig = Pick<
@@ -17,14 +26,15 @@ export type CaisseHardwareConfig = Pick<
   "scalePort" | "ticketPrinter" | "saurusScaleIp"
 >;
 
-const DEFAULTS: CaisseRuntimeConfig = {
-  backofficeUrl: "http://localhost:3000",
-  caisseToken: "",
+export type CaisseIdentityConfig = Pick<
+  CaisseRuntimeConfig,
+  "backofficeUrl" | "caisseToken" | "magasinCode" | "caisseCode" | "posteId"
+>;
+
+const HARDWARE_DEFAULTS = {
   scalePort: "",
   saurusScaleIp: "",
   ticketPrinter: "",
-  magasinCode: "00",
-  caisseCode: "01",
 };
 
 function parseEnvFile(content: string): Record<string, string> {
@@ -77,23 +87,20 @@ function envLocalPaths(): string[] {
   ];
 }
 
-function readJsonConfig(path: string): Partial<CaisseRuntimeConfig> | null {
+function readJsonFile(path: string): Record<string, unknown> | null {
   if (!existsSync(path)) return null;
   try {
-    const raw = JSON.parse(readFileSync(path, "utf8")) as Record<string, unknown>;
-    return {
-      backofficeUrl:
-        typeof raw.backofficeUrl === "string" ? raw.backofficeUrl : undefined,
-      caisseToken: typeof raw.caisseToken === "string" ? raw.caisseToken : undefined,
-      scalePort: typeof raw.scalePort === "string" ? raw.scalePort : undefined,
-      saurusScaleIp: typeof raw.saurusScaleIp === "string" ? raw.saurusScaleIp : undefined,
-      ticketPrinter: typeof raw.ticketPrinter === "string" ? raw.ticketPrinter : undefined,
-      magasinCode: typeof raw.magasinCode === "string" ? raw.magasinCode : undefined,
-      caisseCode: typeof raw.caisseCode === "string" ? raw.caisseCode : undefined,
-    };
+    return JSON.parse(readFileSync(path, "utf8")) as Record<string, unknown>;
   } catch {
     return null;
   }
+}
+
+function findExistingConfigPath(): string | null {
+  for (const path of configPaths()) {
+    if (existsSync(path)) return path;
+  }
+  return null;
 }
 
 export function getWritableConfigPath(): string {
@@ -104,54 +111,105 @@ export function getWritableConfigPath(): string {
   }
 }
 
-export function loadRuntimeConfig(): CaisseRuntimeConfig {
-  let config: CaisseRuntimeConfig = { ...DEFAULTS };
+function readPartialFromRaw(raw: Record<string, unknown> | null): Partial<CaisseRuntimeConfig> {
+  if (!raw) return {};
+  return {
+    backofficeUrl:
+      typeof raw.backofficeUrl === "string" ? raw.backofficeUrl : undefined,
+    caisseToken: typeof raw.caisseToken === "string" ? raw.caisseToken : undefined,
+    scalePort: typeof raw.scalePort === "string" ? raw.scalePort : undefined,
+    saurusScaleIp: typeof raw.saurusScaleIp === "string" ? raw.saurusScaleIp : undefined,
+    ticketPrinter: typeof raw.ticketPrinter === "string" ? raw.ticketPrinter : undefined,
+    magasinCode: typeof raw.magasinCode === "string" ? raw.magasinCode : undefined,
+    caisseCode: typeof raw.caisseCode === "string" ? raw.caisseCode : undefined,
+    posteId: typeof raw.posteId === "string" ? raw.posteId : undefined,
+  };
+}
 
-  for (const path of configPaths()) {
-    const partial = readJsonConfig(path);
-    if (!partial) continue;
-    config = {
-      backofficeUrl: partial.backofficeUrl?.trim() || config.backofficeUrl,
-      caisseToken: partial.caisseToken?.trim() || config.caisseToken,
-      scalePort: partial.scalePort?.trim() || config.scalePort,
-      saurusScaleIp: partial.saurusScaleIp?.trim() || config.saurusScaleIp,
-      ticketPrinter: partial.ticketPrinter?.trim() || config.ticketPrinter,
-      magasinCode: partial.magasinCode?.trim() || config.magasinCode,
-      caisseCode: partial.caisseCode?.trim() || config.caisseCode,
-    };
-    break;
-  }
+export function getIdentityConfigStatus(): CaisseIdentityStatus {
+  const existingPath = findExistingConfigPath();
+  const configPath = existingPath ?? getWritableConfigPath();
+  const raw = existingPath ? readJsonFile(existingPath) : null;
+  return evaluateIdentityFromRaw(raw, configPath, existingPath != null);
+}
 
-  if (!config.caisseToken) {
-    for (const path of envLocalPaths()) {
-      if (!existsSync(path)) continue;
-      try {
-        const env = parseEnvFile(readFileSync(path, "utf8"));
-        const token = env.CAISSE_TICKET_TOKEN?.trim();
-        if (token) {
-          config.caisseToken = token;
-          break;
-        }
-      } catch {
-        /* ignore */
-      }
+function devTokenFallback(): string {
+  if (app.isPackaged) return "";
+  for (const path of envLocalPaths()) {
+    if (!existsSync(path)) continue;
+    try {
+      const env = parseEnvFile(readFileSync(path, "utf8"));
+      const token = env.CAISSE_TICKET_TOKEN?.trim();
+      if (token) return token;
+    } catch {
+      /* ignore */
     }
   }
+  return "";
+}
 
-  config.backofficeUrl = config.backofficeUrl.replace(/\/$/, "");
+export function loadRuntimeConfig(): CaisseRuntimeConfig {
+  const existingPath = findExistingConfigPath();
+  const raw = existingPath ? readJsonFile(existingPath) : null;
+  const partial = readPartialFromRaw(raw);
+
+  let caisseToken = partial.caisseToken?.trim() ?? "";
+  if (!caisseToken) {
+    caisseToken = devTokenFallback();
+  }
+
+  const magasinFormatted = formatMagasinCode(partial.magasinCode?.trim() ?? "");
+  const caisseFormatted = formatCaisseCode(partial.caisseCode?.trim() ?? "");
+
+  const config: CaisseRuntimeConfig = {
+    backofficeUrl: (partial.backofficeUrl?.trim() || "http://localhost:3000").replace(/\/$/, ""),
+    caisseToken,
+    scalePort: partial.scalePort?.trim() || HARDWARE_DEFAULTS.scalePort,
+    saurusScaleIp: partial.saurusScaleIp?.trim() || HARDWARE_DEFAULTS.saurusScaleIp,
+    ticketPrinter: partial.ticketPrinter?.trim() || HARDWARE_DEFAULTS.ticketPrinter,
+    magasinCode: magasinFormatted ?? "00",
+    caisseCode: caisseFormatted ?? "01",
+    posteId: partial.posteId?.trim() ?? "",
+  };
+
   return config;
 }
 
-export function saveHardwareConfig(partial: CaisseHardwareConfig): CaisseRuntimeConfig {
-  const path = getWritableConfigPath();
+function writeConfigFile(path: string, current: Record<string, unknown>): CaisseRuntimeConfig {
   const dir = dirname(path);
   if (!existsSync(dir)) {
     mkdirSync(dir, { recursive: true });
   }
+  writeFileSync(path, `${JSON.stringify(current, null, 2)}\n`, "utf8");
+  return loadRuntimeConfig();
+}
 
-  const current = existsSync(path)
-    ? ((JSON.parse(readFileSync(path, "utf8")) as Record<string, unknown>) ?? {})
-    : {};
+function readOrCreateConfigRecord(path: string): Record<string, unknown> {
+  const existing = readJsonFile(path);
+  return existing ?? {};
+}
+
+export function saveIdentityConfig(identity: CaisseIdentityFields): CaisseRuntimeConfig {
+  const validated = validateIdentityDraft(identity);
+  if (!validated.ok) {
+    throw new Error(validated.error);
+  }
+
+  const path = getWritableConfigPath();
+  const current = readOrCreateConfigRecord(path);
+
+  current.backofficeUrl = validated.value.backofficeUrl;
+  current.caisseToken = validated.value.caisseToken;
+  current.magasinCode = validated.value.magasinCode;
+  current.caisseCode = validated.value.caisseCode;
+  current.posteId = validated.value.posteId;
+
+  return writeConfigFile(path, current);
+}
+
+export function saveHardwareConfig(partial: CaisseHardwareConfig): CaisseRuntimeConfig {
+  const path = getWritableConfigPath();
+  const current = readOrCreateConfigRecord(path);
 
   if (partial.scalePort !== undefined) {
     current.scalePort = partial.scalePort.trim();
@@ -163,6 +221,5 @@ export function saveHardwareConfig(partial: CaisseHardwareConfig): CaisseRuntime
     current.ticketPrinter = partial.ticketPrinter.trim();
   }
 
-  writeFileSync(path, `${JSON.stringify(current, null, 2)}\n`, "utf8");
-  return loadRuntimeConfig();
+  return writeConfigFile(path, current);
 }
