@@ -9,7 +9,7 @@
   "scripts": {
     "dev": "next dev --webpack",
     "dev:turbo": "next dev",
-    "build": "next build",
+    "build": "npm run build:caisse-core && next build",
     "start": "next start",
     "lint": "eslint",
     "icons:pwa": "tsx scripts/generate-pwa-icons.ts",
@@ -23,6 +23,7 @@
   },
   "dependencies": {
     "@emotion/cache": "^11.14.0",
+    "@opf/caisse-core": "*",
     "@emotion/react": "^11.14.0",
     "@emotion/styled": "^11.14.1",
     "@fontsource/noto-sans-arabic": "^5.3.0",
