@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { authorizeCaisseTicket } from "@/lib/caisse/authorize-caisse-ticket";
+import { getCaisseAppVersion } from "@/lib/caisse/caisse-app-version";
 import {
   caisseReleasePublicUrl,
   streamCaisseReleaseFromFtp,
 } from "@/lib/caisse/caisse-release-ftp";
+import { caisseReleaseDownloadName } from "@/lib/caisse/caisse-release-filename";
 import {
-  CAISSE_RELEASE_DOWNLOAD_NAME,
   getLocalCaisseInstallerPath,
   resolveCaisseReleaseDownload,
   streamLocalCaisseRelease,
@@ -23,11 +24,11 @@ const CORS_HEADERS = {
   "Access-Control-Allow-Headers": "Authorization, x-caisse-ticket-token, Content-Type",
 };
 
-function attachmentHeaders(sizeBytes?: number): HeadersInit {
+function attachmentHeaders(filename: string, sizeBytes?: number): HeadersInit {
   const headers: Record<string, string> = {
     ...CORS_HEADERS,
     "Content-Type": "application/octet-stream",
-    "Content-Disposition": `attachment; filename="${CAISSE_RELEASE_DOWNLOAD_NAME}"`,
+    "Content-Disposition": `attachment; filename="${filename}"`,
     "Cache-Control": "no-store",
   };
   if (sizeBytes != null && sizeBytes > 0) {
@@ -55,6 +56,9 @@ export async function GET(req: NextRequest) {
     req.headers.get("x-caisse-ticket-token")?.trim() ||
     "";
 
+  const version = getCaisseAppVersion();
+  const filename = caisseReleaseDownloadName(version);
+
   const localPath = await getLocalCaisseInstallerPath();
   if (localPath) {
     const streamed = await streamLocalCaisseRelease(localPath);
@@ -65,7 +69,7 @@ export async function GET(req: NextRequest) {
       );
     }
     return new NextResponse(streamed.stream, {
-      headers: attachmentHeaders(streamed.sizeBytes),
+      headers: attachmentHeaders(filename, streamed.sizeBytes),
     });
   }
 
@@ -74,10 +78,11 @@ export async function GET(req: NextRequest) {
     return NextResponse.redirect(publicUrl, { headers: CORS_HEADERS });
   }
 
-  const ftpStreamed = await streamCaisseReleaseFromFtp();
+  const ftpStreamed = await streamCaisseReleaseFromFtp(version);
   if (!("error" in ftpStreamed)) {
+    const ftpFilename = ftpStreamed.remotePath.split("/").pop() ?? filename;
     return new NextResponse(ftpStreamed.stream, {
-      headers: attachmentHeaders(ftpStreamed.sizeBytes),
+      headers: attachmentHeaders(ftpFilename, ftpStreamed.sizeBytes),
     });
   }
 

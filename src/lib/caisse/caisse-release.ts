@@ -1,14 +1,20 @@
-import { createReadStream, promises as fs } from "node:fs";
+import { createReadStream, existsSync, readFileSync, readdirSync, promises as fs } from "node:fs";
 import path from "node:path";
 import { Readable } from "node:stream";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/server";
+import { getCaisseAppVersion } from "./caisse-app-version";
 import {
   caisseReleasePublicUrl,
   ftpCaisseReleaseExists,
   ftpCaisseReleaseSizeBytes,
   isFtpReleaseConfigured,
 } from "./caisse-release-ftp";
-import { getCaisseAppVersion } from "./caisse-app-version";
+import {
+  caisseReleaseDownloadName,
+  caisseReleaseInstallerCandidates,
+  caisseReleaseInstallerFileName,
+  LEGACY_CAISSE_RELEASE_INSTALLER,
+} from "./caisse-release-filename";
 
 export const CAISSE_RELEASE_BUCKET = "caisse-releases";
 
@@ -19,8 +25,7 @@ export const CAISSE_DIST_DIR_NAME = "dist-win";
 export const CAISSE_RELEASE_STORAGE_PATH =
   process.env.CAISSE_RELEASE_STORAGE_PATH?.trim() || "windows/latest/setup.exe";
 
-export const CAISSE_RELEASE_DOWNLOAD_NAME =
-  process.env.CAISSE_RELEASE_DOWNLOAD_NAME?.trim() || "OPetitFrais-Caisse-Setup.exe";
+export { caisseReleaseDownloadName, caisseReleaseInstallerFileName, LEGACY_CAISSE_RELEASE_INSTALLER };
 
 const SIGNED_URL_TTL_SEC = 60 * 60;
 
@@ -39,19 +44,81 @@ function releaseVersion(): string {
   return getCaisseAppVersion();
 }
 
+function listCaisseDistDirs(caisseRoot: string): string[] {
+  const markerPath = path.join(caisseRoot, ".dist-output");
+  const dirs: string[] = [];
+
+  if (existsSync(markerPath)) {
+    const marked = readFileSync(markerPath, "utf8").trim();
+    if (marked) dirs.push(path.join(caisseRoot, marked));
+  }
+
+  dirs.push(path.join(caisseRoot, CAISSE_DIST_DIR_NAME));
+
+  try {
+    for (const entry of readdirSync(caisseRoot, { withFileTypes: true })) {
+      if (entry.isDirectory() && /^dist-win-\d+$/.test(entry.name)) {
+        dirs.push(path.join(caisseRoot, entry.name));
+      }
+    }
+  } catch {
+    /* ignore */
+  }
+
+  return [...new Set(dirs)];
+}
+
+function findVersionedInstallerInDir(dir: string): string | null {
+  try {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      if (!entry.isFile()) continue;
+      if (/^OPetitFrais-Caisse-Setup-\d+\.\d+\.\d+\.exe$/i.test(entry.name)) {
+        return path.join(dir, entry.name);
+      }
+    }
+  } catch {
+    /* ignore */
+  }
+  return null;
+}
+
+export function findBuiltCaisseInstallerPathSync(preferredVersion?: string): string | null {
+  const caisseRoot = path.join(process.cwd(), "apps", "caisse");
+  const legacyReleaseDir = path.join(caisseRoot, "release");
+  const names = caisseReleaseInstallerCandidates(preferredVersion);
+
+  for (const releaseDir of listCaisseDistDirs(caisseRoot)) {
+    const versioned = findVersionedInstallerInDir(releaseDir);
+    if (versioned) return versioned;
+
+    for (const fileName of names) {
+      const candidate = path.join(releaseDir, fileName);
+      if (existsSync(candidate)) return candidate;
+    }
+  }
+
+  for (const fileName of names) {
+    const candidate = path.join(legacyReleaseDir, fileName);
+    if (existsSync(candidate)) return candidate;
+  }
+
+  return null;
+}
+
 export async function getLocalCaisseInstallerPath(): Promise<string | null> {
   const configured = process.env.CAISSE_RELEASE_INSTALLER_PATH?.trim();
   if (configured) return configured;
 
+  const sync = findBuiltCaisseInstallerPathSync();
+  if (sync) return sync;
+
   const releaseDir = path.join(process.cwd(), "apps", "caisse", CAISSE_DIST_DIR_NAME);
   const legacyReleaseDir = path.join(process.cwd(), "apps", "caisse", "release");
-  const candidates = [
-    path.join(releaseDir, "OPetitFrais-Caisse-Setup.exe"),
-    path.join(releaseDir, "OPetitFrais Caisse Setup 0.1.0.exe"),
-    path.join(legacyReleaseDir, "OPetitFrais-Caisse-Setup.exe"),
-    path.join(legacyReleaseDir, "OPetitFrais Caisse Setup 0.1.0.exe"),
-  ];
-  for (const candidate of candidates) {
+  const candidates = caisseReleaseInstallerCandidates();
+  for (const candidate of [
+    ...candidates.map((name) => path.join(releaseDir, name)),
+    ...candidates.map((name) => path.join(legacyReleaseDir, name)),
+  ]) {
     try {
       await fs.access(candidate);
       return candidate;
@@ -72,7 +139,7 @@ export async function resolveCaisseReleaseDownload(
   token: string,
 ): Promise<CaisseReleaseInfo | { error: string; status: number }> {
   const version = releaseVersion();
-  const filename = CAISSE_RELEASE_DOWNLOAD_NAME;
+  const filename = caisseReleaseDownloadName(version);
   const downloadUrl = apiDownloadUrl(origin, token);
 
   const localPath = await getLocalCaisseInstallerPath();
@@ -96,13 +163,13 @@ export async function resolveCaisseReleaseDownload(
 
   const publicUrl = caisseReleasePublicUrl();
   if (isFtpReleaseConfigured() || publicUrl) {
-    const exists = await ftpCaisseReleaseExists();
-    if (exists) {
-      return {
-        version,
-        filename,
-        source: publicUrl ? "ftp-public" : "ftp",
-        sizeBytes: await ftpCaisseReleaseSizeBytes(),
+      const exists = await ftpCaisseReleaseExists(version);
+      if (exists) {
+        return {
+          version,
+          filename,
+          source: publicUrl ? "ftp-public" : "ftp",
+          sizeBytes: await ftpCaisseReleaseSizeBytes(version),
         downloadUrl,
         expiresAt: null,
       };

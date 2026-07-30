@@ -31,7 +31,7 @@ npm install
 npm run dist:caisse
 ```
 
-Fichier produit : `apps/caisse/dist-win/OPetitFrais-Caisse-Setup.exe`
+Fichier produit : `apps/caisse/dist-win/OPetitFrais-Caisse-Setup-{version}.exe` (ex. `OPetitFrais-Caisse-Setup-0.1.4.exe`, version = `apps/caisse/package.json`).
 
 Fermez la caisse (`npm run preview`) et l’explorateur Windows sur ce dossier avant de relancer `npm run dist:caisse`.
 
@@ -53,7 +53,7 @@ Ouvrir ce lien **sur le poste caisse** (même réseau LAN que le PC de dev).
 npm run upload:caisse-release
 ```
 
-Prérequis : variables `FTP_HOST`, `FTP_USER`, `FTP_PASSWORD` dans `.env.local` (même FTP que la sync photos). L’installateur est déposé dans `/POS/OPetitFrais-Caisse-Setup.exe`.
+Prérequis : variables `FTP_HOST`, `FTP_USER`, `FTP_PASSWORD` dans `.env.local` (même FTP que la sync photos). L’installateur est déposé dans `/POS/OPetitFrais-Caisse-Setup-{version}.exe` (nom dérivé de la version caisse).
 
 Lien sur le poste magasin :
 
@@ -110,20 +110,22 @@ En bas à gauche de la caisse (barre d’état) :
 
 | Affichage | Signification |
 |-----------|----------------|
-| `v0.1.0` | Version installée |
+| `v0.1.0` | Version installée — **cliquer** pour vérifier manuellement les mises à jour |
+| `v0.1.0 · À jour` | Dernière version (retour 3 s après vérification manuelle) |
 | `v0.1.0 · MAJ 42%` | Téléchargement en cours |
-| `v0.1.0 · MAJ prête` | Installateur téléchargé — **cliquer** pour installer et redémarrer |
+| `v0.1.0 · MAJ prête` | Installateur téléchargé — **cliquer** sur « MAJ prête » pour installer et redémarrer |
 
 **Fonctionnement (poste packagé uniquement)** :
 
 1. Au démarrage puis toutes les 4 h, la caisse interroge `GET /api/caisse/release?token=…`
-2. Si la version serveur est plus récente → téléchargement automatique (~83 Mo) en arrière-plan
+2. Si la version serveur est plus récente → téléchargement automatique (~83 Mo) en arrière-plan (`OPetitFrais-Caisse-Setup-{version}.exe`)
 3. Une fois prêt, le caissier clique sur « MAJ prête » → installateur NSIS silencieux (`/S`) puis fermeture de la caisse
 
 **Publier une nouvelle version** (une seule commande) :
 
 ```powershell
-npm run release:caisse -- patch   # 0.1.0 → 0.1.1 + build + upload FTP
+npm run release:caisse -- patch   # ferme caisse/preview, bump, build, upload FTP
+```
 npm run release:caisse -- minor   # 0.1.0 → 0.2.0
 npm run release:caisse -- 0.2.0   # version explicite
 npm run release:caisse            # sans bump (rebuild + upload version actuelle)
@@ -135,6 +137,8 @@ La version servie par l’API (`GET /api/caisse/release`) est lue depuis **`apps
 
 | Dossier | Rôle |
 |---------|------|
+| `build/icon-source.png` | Logo pomme (source icône app) |
+| `build/icon.png` | Icône Windows fond transparent (généré) |
 | `electron/main` | Fenêtres caissier + client, IPC |
 | `electron/preload` | Pont sécurisé renderer ↔ main |
 | `src/screens/CashierGate.tsx` | Blocage caisse si config identité incomplète |

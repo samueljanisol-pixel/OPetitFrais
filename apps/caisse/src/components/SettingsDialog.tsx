@@ -20,6 +20,7 @@ import {
   listTicketPrinterOptions,
   saveCaisseHardwareConfig,
 } from "../lib/hardware-config";
+import { withTimeout } from "../lib/fetch-timeout";
 
 const AUTO_SCALE_VALUE = "__auto__";
 const NO_PRINTER_VALUE = "";
@@ -49,19 +50,33 @@ export default function SettingsDialog({ open, onClose, onSaved }: Props) {
 
     void (async () => {
       try {
+        const configPromise = getCaisseRuntimeConfig();
+        const portsPromise = withTimeout(listScalePortOptions(), 6_000, [] as Array<{ path: string; manufacturer: string | null }>);
+        const printersPromise = withTimeout(listTicketPrinterOptions(), 6_000, [] as string[]);
+
         const [config, portOptions, printerOptions] = await Promise.all([
-          getCaisseRuntimeConfig(),
-          listScalePortOptions(),
-          listTicketPrinterOptions(),
+          configPromise,
+          portsPromise,
+          printersPromise,
         ]);
 
         if (cancelled) return;
 
         setPorts(portOptions);
         setPrinters(printerOptions);
-        setScalePort(config.scalePort.trim().length > 0 ? config.scalePort : AUTO_SCALE_VALUE);
+
+        const savedScale = config.scalePort.trim();
+        const scaleValues = new Set([AUTO_SCALE_VALUE, ...portOptions.map((p) => p.path)]);
+        setScalePort(scaleValues.has(savedScale) && savedScale.length > 0 ? savedScale : AUTO_SCALE_VALUE);
+
         setSaurusScaleIp(config.saurusScaleIp.trim());
-        setTicketPrinter(config.ticketPrinter.trim());
+
+        const savedPrinter = config.ticketPrinter.trim();
+        setTicketPrinter(
+          savedPrinter.length > 0 && printerOptions.includes(savedPrinter)
+            ? savedPrinter
+            : NO_PRINTER_VALUE,
+        );
       } catch (e) {
         if (!cancelled) {
           setError(e instanceof Error ? e.message : "Impossible de charger les paramètres");
@@ -104,6 +119,13 @@ export default function SettingsDialog({ open, onClose, onSaved }: Props) {
       <DialogTitle sx={{ fontWeight: 800 }}>Paramètres</DialogTitle>
       <DialogContent sx={{ display: "flex", flexDirection: "column", gap: 2, pt: 0.5 }}>
         {error ? <Alert severity="error">{error}</Alert> : null}
+
+        {!loading && ports.length === 0 && printers.length === 0 ? (
+          <Alert severity="info">
+            Agent caisse non détecté — les listes COM / imprimante peuvent être vides. Lancez{" "}
+            <code>npm run dev:caisse-agent</code> si besoin.
+          </Alert>
+        ) : null}
 
         {loading ? (
           <Box sx={{ display: "flex", justifyContent: "center", py: 3 }}>

@@ -181,9 +181,9 @@ Même token `CAISSE_TICKET_TOKEN` que le catalogue.
 | `GET /api/caisse/release?token=…` | JSON : version, taille, `downloadUrl` |
 | `GET /api/caisse/release/download?token=…` | Téléchargement direct (flux FTP ou fichier local) |
 
-**Production** : installateur hébergé sur le FTP Janisol (`/POS/OPetitFrais-Caisse-Setup.exe`), publié via `npm run upload:caisse-release` après `npm run dist:caisse`. L’API lit le fichier depuis le FTP et le sert au client (token requis).
+**Production** : installateur hébergé sur le FTP Janisol (`/POS/OPetitFrais-Caisse-Setup-{version}.exe`, ex. `OPetitFrais-Caisse-Setup-0.1.4.exe`), publié via `npm run upload:caisse-release` après `npm run dist:caisse`. L’API lit le fichier depuis le FTP (fallback sur l’ancien nom sans version) et le sert au client (token requis).
 
-**Développement local** : si `apps/caisse/dist-win/OPetitFrais-Caisse-Setup.exe` existe, le backoffice sert le fichier sans FTP.
+**Développement local** : si `apps/caisse/dist-win/OPetitFrais-Caisse-Setup-{version}.exe` existe, le backoffice sert le fichier sans FTP.
 
 Variables :
 
@@ -191,11 +191,10 @@ Variables :
 |----------|------|
 | `FTP_HOST`, `FTP_USER`, `FTP_PASSWORD` | Accès FTP Janisol (déjà utilisés pour sync photos) |
 | `CAISSE_RELEASE_FTP_DIR` | Dossier FTP (défaut `/POS`) |
-| `CAISSE_RELEASE_FTP_FILE` | Nom du fichier sur le FTP (défaut `OPetitFrais-Caisse-Setup.exe`) |
+| `CAISSE_RELEASE_FTP_FILE` | Nom du fichier sur le FTP (défaut `OPetitFrais-Caisse-Setup-{version}.exe`) |
 | `CAISSE_RELEASE_PUBLIC_URL` | Optionnel : redirection HTTPS directe au lieu du flux FTP côté API |
 | `CAISSE_RELEASE_INSTALLER_PATH` | Chemin absolu local (dev / override) |
-| `CAISSE_RELEASE_DOWNLOAD_NAME` | Nom du fichier au téléchargement |
-| `CAISSE_RELEASE_VERSION` | Override optionnel (sinon `apps/caisse/package.json`) |
+| `CAISSE_RELEASE_DOWNLOAD_NAME` | Override nom au téléchargement (sinon dérivé de la version caisse) |
 
 Exemple de lien pour un poste magasin :
 

@@ -9,16 +9,14 @@
  *   npm run upload:caisse-release
  *   npm run upload:caisse-release -- path/to/custom-setup.exe
  */
-import { readFileSync, existsSync, statSync, readdirSync } from "node:fs";
+import { readFileSync, existsSync, statSync } from "node:fs";
 import path from "node:path";
-import {
-  CAISSE_DIST_DIR_NAME,
-  CAISSE_RELEASE_DOWNLOAD_NAME,
-} from "../src/lib/caisse/caisse-release";
+import { findBuiltCaisseInstallerPathSync } from "../src/lib/caisse/caisse-release";
 import {
   caisseReleaseFtpRemotePath,
   uploadCaisseReleaseToFtp,
 } from "../src/lib/caisse/caisse-release-ftp";
+import { getCaisseAppVersion } from "../src/lib/caisse/caisse-app-version";
 
 function loadEnvLocal(): void {
   const envPath = path.join(process.cwd(), ".env.local");
@@ -43,6 +41,13 @@ function loadEnvLocal(): void {
   }
 }
 
+function versionFromInstallerPath(installerPath: string): string {
+  const base = path.basename(installerPath);
+  const match = base.match(/^OPetitFrais-Caisse-Setup-(\d+\.\d+\.\d+)\.exe$/i);
+  if (match?.[1]) return match[1];
+  return getCaisseAppVersion();
+}
+
 function resolveInstallerPath(cliPath: string | undefined): string {
   if (cliPath?.trim()) {
     const abs = path.resolve(cliPath.trim());
@@ -52,42 +57,8 @@ function resolveInstallerPath(cliPath: string | undefined): string {
     return abs;
   }
 
-  const caisseRoot = path.join(process.cwd(), "apps", "caisse");
-  const markerPath = path.join(caisseRoot, ".dist-output");
-  let distDirs = [path.join(caisseRoot, CAISSE_DIST_DIR_NAME)];
-
-  if (existsSync(markerPath)) {
-    const marked = readFileSync(markerPath, "utf8").trim();
-    if (marked) {
-      distDirs.unshift(path.join(caisseRoot, marked));
-    }
-  }
-
-  for (const entry of readdirSync(caisseRoot, { withFileTypes: true })) {
-    if (entry.isDirectory() && /^dist-win-\d+$/.test(entry.name)) {
-      distDirs.push(path.join(caisseRoot, entry.name));
-    }
-  }
-
-  distDirs = [...new Set(distDirs)];
-
-  const legacyReleaseDir = path.join(caisseRoot, "release");
-  const fileNames = [
-    CAISSE_RELEASE_DOWNLOAD_NAME,
-    "OPetitFrais Caisse Setup 0.1.0.exe",
-  ];
-
-  for (const releaseDir of distDirs) {
-    for (const fileName of fileNames) {
-      const candidate = path.join(releaseDir, fileName);
-      if (existsSync(candidate)) return candidate;
-    }
-  }
-
-  for (const fileName of fileNames) {
-    const candidate = path.join(legacyReleaseDir, fileName);
-    if (existsSync(candidate)) return candidate;
-  }
+  const built = findBuiltCaisseInstallerPathSync();
+  if (built) return built;
 
   throw new Error(
     "Installateur introuvable. Lancez d'abord : npm run dist:caisse",
@@ -99,13 +70,14 @@ async function main(): Promise<void> {
 
   const cliPath = process.argv[2];
   const installerPath = resolveInstallerPath(cliPath);
+  const version = versionFromInstallerPath(installerPath);
   const fileSize = statSync(installerPath).size;
   const mb = (fileSize / (1024 * 1024)).toFixed(1);
-  const remotePath = caisseReleaseFtpRemotePath();
+  const remotePath = caisseReleaseFtpRemotePath(version);
 
   console.log(`Upload ${installerPath} (${mb} Mo) → FTP ${remotePath}`);
 
-  await uploadCaisseReleaseToFtp(installerPath);
+  await uploadCaisseReleaseToFtp(installerPath, version);
 
   console.log("OK — installateur publié sur le FTP.");
   console.log("");

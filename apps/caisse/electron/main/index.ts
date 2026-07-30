@@ -1,4 +1,5 @@
-import { app, BrowserWindow, ipcMain, Menu, screen } from "electron";
+import { app, BrowserWindow, ipcMain, Menu, nativeImage, screen } from "electron";
+import { existsSync } from "fs";
 import { join } from "path";
 import {
   getIdentityConfigStatus,
@@ -28,6 +29,25 @@ const SETUP_WIDTH = 440;
 const SETUP_HEIGHT = 560;
 
 const isDev = !app.isPackaged;
+
+function appIconPath(): string | undefined {
+  const candidates = [
+    join(__dirname, "../../build/icon.png"),
+    join(process.cwd(), "apps", "caisse", "build", "icon.png"),
+    join(process.cwd(), "build", "icon.png"),
+  ];
+  for (const candidate of candidates) {
+    if (existsSync(candidate)) return candidate;
+  }
+  return undefined;
+}
+
+function loadAppIcon(): Electron.NativeImage | undefined {
+  const path = appIconPath();
+  if (!path) return undefined;
+  const image = nativeImage.createFromPath(path);
+  return image.isEmpty() ? undefined : image;
+}
 
 /** Fenêtre caisse plein écran utilisable — sans barre de titre ni menu OS. */
 const KIOSK_WINDOW_OPTIONS = {
@@ -81,9 +101,11 @@ function applyWindowMode(mode: "setup" | "caisse"): void {
 
 function createCashierWindow(initialMode: "setup" | "caisse"): void {
   const isSetup = initialMode === "setup";
+  const icon = loadAppIcon();
 
   cashierWindow = new BrowserWindow({
     ...KIOSK_WINDOW_OPTIONS,
+    ...(icon ? { icon } : {}),
     width: isSetup ? SETUP_WIDTH : CASHIER_WIDTH,
     height: isSetup ? SETUP_HEIGHT : CASHIER_HEIGHT,
     minWidth: isSetup ? SETUP_WIDTH : CASHIER_WIDTH,
@@ -117,8 +139,11 @@ function createCustomerWindow(): void {
   if (!target) return;
   if (customerWindow && !customerWindow.isDestroyed()) return;
 
+  const icon = loadAppIcon();
+
   customerWindow = new BrowserWindow({
     ...KIOSK_WINDOW_OPTIONS,
+    ...(icon ? { icon } : {}),
     x: target.bounds.x,
     y: target.bounds.y,
     width: target.bounds.width,
@@ -220,7 +245,12 @@ app.whenReady().then(async () => {
       return [] as string[];
     }
     try {
-      const printers = await cashierWindow.webContents.getPrintersAsync();
+      const printers = await Promise.race([
+        cashierWindow.webContents.getPrintersAsync(),
+        new Promise<Electron.PrinterInfo[]>((resolve) => {
+          setTimeout(() => resolve([]), 6_000);
+        }),
+      ]);
       return printers.map((p) => p.name).sort((a, b) => a.localeCompare(b, "fr"));
     } catch {
       return [] as string[];

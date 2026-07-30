@@ -1,11 +1,8 @@
 import { useEffect, useState } from "react";
-import {
-  Box,
-  Paper,
-  Typography,
-} from "@mui/material";
+import { Box, Paper, Typography } from "@mui/material";
 import { formatMoneyDh, formatMoneyFr } from "@opf/caisse-core";
 import type { CartBroadcast } from "../../electron/preload/index";
+import logoOpetitFrais from "../assets/logo-opetit-frais.png";
 
 const CUSTOMER_SCREEN_SX = {
   width: "100vw",
@@ -14,6 +11,24 @@ const CUSTOMER_SCREEN_SX = {
   boxSizing: "border-box",
   overflow: "hidden",
 } as const;
+
+function CustomerLogo({ maxHeight }: { maxHeight: number }) {
+  return (
+    <Box
+      component="img"
+      src={logoOpetitFrais}
+      alt="O'petit frais — Fruits & Légumes"
+      sx={{
+        maxHeight,
+        maxWidth: "min(92vw, 520px)",
+        width: "auto",
+        height: "auto",
+        objectFit: "contain",
+        display: "block",
+      }}
+    />
+  );
+}
 
 export default function CustomerScreen() {
   const [data, setData] = useState<CartBroadcast>({
@@ -52,14 +67,7 @@ export default function CustomerScreen() {
         <Typography variant="h3" sx={{ fontFamily: "cursive" }}>
           Bienvenue
         </Typography>
-        <Box sx={{ textAlign: "center" }}>
-          <Typography variant="h4" color="primary.main" sx={{ fontWeight: 700 }}>
-            O&apos;petit frais
-          </Typography>
-          <Typography variant="h6" color="error.main" sx={{ letterSpacing: 2 }}>
-            FRUITS &amp; LÉGUMES
-          </Typography>
-        </Box>
+        <CustomerLogo maxHeight={140} />
         <Typography variant="body1" sx={{ position: "absolute", bottom: 16 }}>
           {clock}
         </Typography>
@@ -76,13 +84,8 @@ export default function CustomerScreen() {
         flexDirection: "column",
       }}
     >
-      <Box sx={{ textAlign: "center", mb: 1, flexShrink: 0 }}>
-        <Typography variant="h5" color="primary.main" sx={{ fontWeight: 700 }}>
-          O&apos;petit frais
-        </Typography>
-        <Typography variant="caption" color="error.main">
-          FRUITS &amp; LÉGUMES
-        </Typography>
+      <Box sx={{ display: "flex", justifyContent: "center", mb: 1, flexShrink: 0 }}>
+        <CustomerLogo maxHeight={56} />
       </Box>
 
       <Paper sx={{ flex: 1, minHeight: 0, overflow: "auto", p: 1 }}>

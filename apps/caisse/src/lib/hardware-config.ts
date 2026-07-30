@@ -6,6 +6,7 @@ import {
   fetchPrinters as fetchAgentPrinters,
   type SerialPortOption,
 } from "./agent";
+import { withTimeout } from "./fetch-timeout";
 
 let cachedConfig: CaisseRuntimeConfig | null = null;
 
@@ -106,7 +107,7 @@ export async function listScalePortOptions(): Promise<SerialPortOption[]> {
 
 export async function listTicketPrinterOptions(): Promise<string[]> {
   if (window.caisseApi?.listPrinters) {
-    const electronPrinters = await window.caisseApi.listPrinters();
+    const electronPrinters = await withTimeout(window.caisseApi.listPrinters(), 6_000, [] as string[]);
     if (electronPrinters.length > 0) {
       return electronPrinters;
     }

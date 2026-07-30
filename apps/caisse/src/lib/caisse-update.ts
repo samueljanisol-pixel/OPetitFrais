@@ -31,6 +31,13 @@ export function useCaisseUpdate(): CaisseUpdateState {
   return state;
 }
 
+export async function checkForUpdate(): Promise<CaisseUpdateState> {
+  if (!window.caisseApi?.checkForUpdate) {
+    return DEFAULT_STATE;
+  }
+  return window.caisseApi.checkForUpdate();
+}
+
 export async function installCaisseUpdate(): Promise<{ ok: true } | { ok: false; error: string }> {
   if (!window.caisseApi?.installUpdate) {
     return { ok: false, error: "Mise à jour indisponible" };

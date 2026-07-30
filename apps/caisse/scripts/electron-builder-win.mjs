@@ -5,6 +5,10 @@ import { fileURLToPath } from "node:url";
 
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 const marker = path.join(root, ".dist-output");
+const pkg = JSON.parse(readFileSync(path.join(root, "package.json"), "utf8")) as {
+  version?: string;
+};
+const version = typeof pkg.version === "string" ? pkg.version.trim() : "0.0.0";
 
 let outputDir = "dist-win";
 try {
@@ -26,5 +30,6 @@ if (result.status !== 0) {
   process.exit(result.status ?? 1);
 }
 
+const installerName = `OPetitFrais-Caisse-Setup-${version}.exe`;
 console.log("");
-console.log(`Installateur : ${path.join(root, outputDir, "OPetitFrais-Caisse-Setup.exe")}`);
+console.log(`Installateur : ${path.join(root, outputDir, installerName)}`);

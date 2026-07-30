@@ -1,52 +1,16 @@
-import { execSync, spawnSync } from "node:child_process";
-import { existsSync, rmSync, writeFileSync } from "node:fs";
+import { execSync } from "node:child_process";
+import { existsSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { killElectronOnly, sleep } from "./stop-caisse-processes.mjs";
 
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 const distDir = path.join(root, "dist-win");
 const outputMarker = path.join(root, ".dist-output");
 
-const PROCESS_IMAGES = [
-  "electron.exe",
-  "OPetitFrais Caisse.exe",
-  "OPetitFrais-Caisse.exe",
-];
-
-function sleep(ms) {
-  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
-}
-
-function killCaisseProcesses() {
-  for (const image of PROCESS_IMAGES) {
-    try {
-      execSync(`taskkill /F /IM "${image}" /T`, { stdio: "ignore" });
-    } catch {
-      /* not running */
-    }
-  }
-
-  if (process.platform !== "win32") return;
-
-  const ps = [
-    "Get-CimInstance Win32_Process | Where-Object {",
-    "  $_.ExecutablePath -and (",
-    "    $_.ExecutablePath -like '*\\\\dist-win\\\\*' -or",
-    "    $_.ExecutablePath -like '*\\\\apps\\\\caisse\\\\*'",
-    "  ) -and $_.Name -match 'electron|OPetitFrais|caisse'",
-    "} | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }",
-  ].join(" ");
-
-  try {
-    execSync(`powershell -NoProfile -Command "${ps}"`, { stdio: "ignore" });
-  } catch {
-    /* ignore */
-  }
-}
-
 function tryRemoveDir(dir) {
   try {
-    rmSync(dir, { recursive: true, force: true, maxRetries: 3, retryDelay: 500 });
+    rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 400 });
     return !existsSync(dir);
   } catch {
     return false;
@@ -74,31 +38,43 @@ function robocopyEmpty(dir) {
   }
 }
 
-function cleanDistDir() {
-  if (!existsSync(distDir)) return true;
+function cleanDir(dir) {
+  if (!existsSync(dir)) return true;
 
-  killCaisseProcesses();
-
-  for (let attempt = 1; attempt <= 5; attempt += 1) {
-    if (tryRemoveDir(distDir)) return true;
-    if (attempt < 5) sleep(800);
+  for (let attempt = 1; attempt <= 6; attempt += 1) {
+    if (tryRemoveDir(dir)) return true;
+    if (attempt === 3) killElectronOnly();
+    if (attempt < 6) sleep(700);
   }
 
-  killCaisseProcesses();
-  if (robocopyEmpty(distDir)) return true;
+  killElectronOnly();
+  if (robocopyEmpty(dir)) return true;
 
-  return !existsSync(distDir);
+  return !existsSync(dir);
+}
+
+function cleanAllDistOutputs() {
+  killElectronOnly({ label: "predist" });
+
+  for (const entry of readdirSync(root, { withFileTypes: true })) {
+    if (!entry.isDirectory()) continue;
+    if (entry.name === "dist-win" || /^dist-win-\d+$/.test(entry.name)) {
+      cleanDir(path.join(root, entry.name));
+    }
+  }
 }
 
 function pickOutputDir() {
-  if (cleanDistDir()) {
+  cleanAllDistOutputs();
+
+  if (!existsSync(distDir)) {
     return "dist-win";
   }
 
   const fallback = `dist-win-${Date.now()}`;
   console.warn("");
-  console.warn(`[predist] ${distDir} est verrouillé (caisse ouverte, explorateur, antivirus).`);
-  console.warn(`[predist] Build dans ${fallback}/ — fermez les apps puis supprimez dist-win à la main.`);
+  console.warn(`[predist] ${distDir} reste verrouillé — build dans ${fallback}/`);
+  console.warn("[predist] Fermez l'explorateur Windows sur dist-win puis supprimez le dossier.");
   console.warn("");
   return fallback;
 }

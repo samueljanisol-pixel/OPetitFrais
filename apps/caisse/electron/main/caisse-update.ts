@@ -32,7 +32,10 @@ type PendingMeta = {
 };
 
 const CHECK_INTERVAL_MS = 4 * 60 * 60 * 1000;
-const INSTALLER_NAME = "OPetitFrais-Caisse-Setup.exe";
+
+function installerFileName(version: string): string {
+  return `OPetitFrais-Caisse-Setup-${version.trim()}.exe`;
+}
 
 let getMainWindow: (() => BrowserWindow | null) | null = null;
 let checkTimer: ReturnType<typeof setInterval> | null = null;
@@ -52,8 +55,8 @@ function pendingMetaPath(): string {
   return join(app.getPath("temp"), "opf-caisse-update.json");
 }
 
-function installerPath(): string {
-  return join(app.getPath("temp"), INSTALLER_NAME);
+function installerPath(version: string): string {
+  return join(app.getPath("temp"), installerFileName(version));
 }
 
 function parseVersionParts(version: string): number[] {
@@ -258,7 +261,7 @@ async function runUpdateCheck(): Promise<void> {
     });
 
     downloadInFlight = true;
-    const dest = installerPath();
+    const dest = installerPath(release.version);
     try {
       await fs.unlink(dest);
     } catch {

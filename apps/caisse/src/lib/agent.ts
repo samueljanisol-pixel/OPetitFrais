@@ -1,6 +1,8 @@
 import type { CaisseHardwareConfig } from "../../electron/preload/index";
+import { fetchWithTimeout } from "./fetch-timeout";
 
 const AGENT_BASE = "http://127.0.0.1:4711";
+const AGENT_TIMEOUT_MS = 5_000;
 
 export type WeightResponse = {
   weightKg: number;
@@ -24,7 +26,7 @@ function parseWeightPayload(json: Record<string, unknown>): WeightResponse {
 
 export async function fetchWeight(): Promise<WeightResponse> {
   try {
-    const res = await fetch(`${AGENT_BASE}/weight`);
+    const res = await fetchWithTimeout(`${AGENT_BASE}/weight`, undefined, AGENT_TIMEOUT_MS);
     if (!res.ok) {
       return { weightKg: 0, weightGrams: 0, stable: false, source: "error", connected: false };
     }
@@ -70,7 +72,7 @@ export type AgentHardwareConfig = {
 
 export async function fetchAgentHardwareConfig(): Promise<AgentHardwareConfig> {
   try {
-    const res = await fetch(`${AGENT_BASE}/config/hardware`);
+    const res = await fetchWithTimeout(`${AGENT_BASE}/config/hardware`, undefined, AGENT_TIMEOUT_MS);
     if (!res.ok) {
       return { scalePort: "", ticketPrinter: "" };
     }
@@ -114,7 +116,7 @@ export type SerialPortOption = {
 
 export async function fetchSerialPorts(): Promise<SerialPortOption[]> {
   try {
-    const res = await fetch(`${AGENT_BASE}/serial/ports`);
+    const res = await fetchWithTimeout(`${AGENT_BASE}/serial/ports`, undefined, AGENT_TIMEOUT_MS);
     if (!res.ok) return [];
     const json = (await res.json()) as { ports?: Array<Record<string, unknown>> };
     return (json.ports ?? [])
@@ -130,7 +132,7 @@ export async function fetchSerialPorts(): Promise<SerialPortOption[]> {
 
 export async function fetchPrinters(): Promise<string[]> {
   try {
-    const res = await fetch(`${AGENT_BASE}/printers`);
+    const res = await fetchWithTimeout(`${AGENT_BASE}/printers`, undefined, AGENT_TIMEOUT_MS);
     if (!res.ok) return [];
     const json = (await res.json()) as { printers?: unknown };
     if (!Array.isArray(json.printers)) return [];

@@ -1,14 +1,15 @@
 import { Client } from "basic-ftp";
 import { PassThrough } from "node:stream";
 import { Readable } from "node:stream";
-
-const DEFAULT_RELEASE_FILENAME = "OPetitFrais-Caisse-Setup.exe";
+import { getCaisseAppVersion } from "./caisse-app-version";
+import {
+  caisseReleaseInstallerCandidates,
+  caisseReleaseInstallerFileName,
+  LEGACY_CAISSE_RELEASE_INSTALLER,
+} from "./caisse-release-filename";
 
 export const CAISSE_RELEASE_FTP_REMOTE_DIR =
   process.env.CAISSE_RELEASE_FTP_DIR?.trim() || "/POS";
-
-export const CAISSE_RELEASE_FTP_REMOTE_FILE =
-  process.env.CAISSE_RELEASE_FTP_FILE?.trim() || DEFAULT_RELEASE_FILENAME;
 
 /** URL HTTPS publique optionnelle (redirection directe, sans relire le FTP). */
 export function caisseReleasePublicUrl(): string | null {
@@ -16,9 +17,19 @@ export function caisseReleasePublicUrl(): string | null {
   return raw && raw.length > 0 ? raw : null;
 }
 
-export function caisseReleaseFtpRemotePath(): string {
+export function caisseReleaseFtpRemoteFileName(version?: string): string {
+  const configured = process.env.CAISSE_RELEASE_FTP_FILE?.trim();
+  if (configured) return configured;
+  return caisseReleaseInstallerFileName(version ?? getCaisseAppVersion());
+}
+
+export function caisseReleaseFtpRemotePath(version?: string): string {
   const dir = CAISSE_RELEASE_FTP_REMOTE_DIR.replace(/\/+$/, "") || "/POS";
-  return `${dir}/${CAISSE_RELEASE_FTP_REMOTE_FILE}`;
+  return `${dir}/${caisseReleaseFtpRemoteFileName(version)}`;
+}
+
+function ftpRemoteCandidates(version?: string): string[] {
+  return caisseReleaseInstallerCandidates(version);
 }
 
 type FtpCredentials = {
@@ -59,61 +70,98 @@ async function withFtpClient<T>(fn: (client: Client) => Promise<T>): Promise<T> 
   }
 }
 
-export async function ftpCaisseReleaseSizeBytes(): Promise<number | null> {
-  if (!isFtpReleaseConfigured()) return null;
-  const remotePath = caisseReleaseFtpRemotePath();
+type FtpReleaseMatch = {
+  remotePath: string;
+  sizeBytes: number | null;
+};
 
-  try {
-    return await withFtpClient(async (client) => {
+async function resolveFtpReleaseMatch(version?: string): Promise<FtpReleaseMatch | null> {
+  if (!isFtpReleaseConfigured()) return null;
+
+  const remoteDir = CAISSE_RELEASE_FTP_REMOTE_DIR.replace(/\/+$/, "") || "/POS";
+  const candidates = ftpRemoteCandidates(version);
+
+  return withFtpClient(async (client) => {
+    for (const fileName of candidates) {
+      const remotePath = `${remoteDir}/${fileName}`;
       try {
-        return await client.size(remotePath);
+        const size = await client.size(remotePath);
+        if (typeof size === "number" && size > 0) {
+          return { remotePath, sizeBytes: size };
+        }
       } catch {
-        const dir = CAISSE_RELEASE_FTP_REMOTE_DIR.replace(/\/+$/, "") || "/POS";
-        const listed = await client.list(dir);
-        const entry = listed.find((f) => f.name === CAISSE_RELEASE_FTP_REMOTE_FILE);
-        return entry?.size ?? null;
+        /* try next */
       }
-    });
+    }
+
+    try {
+      const listed = await client.list(remoteDir);
+      const versioned = listed.find((f) =>
+        /^OPetitFrais-Caisse-Setup-\d+\.\d+\.\d+\.exe$/i.test(f.name),
+      );
+      if (versioned && versioned.size > 0) {
+        return {
+          remotePath: `${remoteDir}/${versioned.name}`,
+          sizeBytes: versioned.size,
+        };
+      }
+    } catch {
+      /* ignore */
+    }
+
+    return null;
+  });
+}
+
+export async function ftpCaisseReleaseSizeBytes(version?: string): Promise<number | null> {
+  try {
+    const match = await resolveFtpReleaseMatch(version);
+    return match?.sizeBytes ?? null;
   } catch {
     return null;
   }
 }
 
-export async function ftpCaisseReleaseExists(): Promise<boolean> {
-  const size = await ftpCaisseReleaseSizeBytes();
+export async function ftpCaisseReleaseExists(version?: string): Promise<boolean> {
+  const size = await ftpCaisseReleaseSizeBytes(version);
   return typeof size === "number" && size > 0;
 }
 
-export async function uploadCaisseReleaseToFtp(localPath: string): Promise<void> {
-  const remotePath = caisseReleaseFtpRemotePath();
+export async function uploadCaisseReleaseToFtp(
+  localPath: string,
+  version?: string,
+): Promise<string> {
+  const remotePath = caisseReleaseFtpRemotePath(version);
   const remoteDir = CAISSE_RELEASE_FTP_REMOTE_DIR.replace(/\/+$/, "") || "/POS";
 
   await withFtpClient(async (client) => {
     await client.ensureDir(remoteDir);
     await client.uploadFrom(localPath, remotePath);
   });
+
+  return remotePath;
 }
 
-export async function streamCaisseReleaseFromFtp(): Promise<
-  { stream: ReadableStream<Uint8Array>; sizeBytes: number } | { error: string }
+export async function streamCaisseReleaseFromFtp(
+  version?: string,
+): Promise<
+  { stream: ReadableStream<Uint8Array>; sizeBytes: number; remotePath: string } | { error: string }
 > {
   if (!isFtpReleaseConfigured()) {
     return { error: "FTP non configuré sur le serveur" };
   }
 
-  const remotePath = caisseReleaseFtpRemotePath();
+  const match = await resolveFtpReleaseMatch(version);
+  if (!match) {
+    return { error: "Installateur caisse introuvable sur le FTP" };
+  }
+
   const creds = getFtpReleaseCredentials();
   if (!creds) {
     return { error: "FTP non configuré sur le serveur" };
   }
 
-  let sizeBytes = 0;
-  try {
-    sizeBytes = (await ftpCaisseReleaseSizeBytes()) ?? 0;
-  } catch {
-    sizeBytes = 0;
-  }
-
+  const sizeBytes = match.sizeBytes ?? 0;
   const client = new Client(300_000);
   const pass = new PassThrough();
 
@@ -125,7 +173,7 @@ export async function streamCaisseReleaseFromFtp(): Promise<
       secure: false,
     });
 
-    const downloadPromise = client.downloadTo(pass, remotePath);
+    const downloadPromise = client.downloadTo(pass, match.remotePath);
 
     pass.on("error", () => {
       client.close();
@@ -143,10 +191,12 @@ export async function streamCaisseReleaseFromFtp(): Promise<
       });
 
     const webStream = Readable.toWeb(pass) as ReadableStream<Uint8Array>;
-    return { stream: webStream, sizeBytes };
+    return { stream: webStream, sizeBytes, remotePath: match.remotePath };
   } catch (e) {
     client.close();
     const msg = e instanceof Error ? e.message : "Téléchargement FTP impossible";
     return { error: msg };
   }
 }
+
+export { LEGACY_CAISSE_RELEASE_INSTALLER };

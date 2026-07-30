@@ -13,6 +13,7 @@ import { readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
 const CAISSE_PKG = path.join(process.cwd(), "apps", "caisse", "package.json");
+const STOP_SCRIPT = path.join(process.cwd(), "apps", "caisse", "scripts", "stop-caisse-processes.mjs");
 
 type SemverParts = { major: number; minor: number; patch: number };
 
@@ -69,14 +70,25 @@ function writeCaisseVersion(version: string): void {
   writeFileSync(CAISSE_PKG, `${JSON.stringify(pkg, null, 2)}\n`, "utf8");
 }
 
-function run(command: string): void {
-  execSync(command, { stdio: "inherit", cwd: process.cwd(), env: process.env });
+function run(command: string, env?: NodeJS.ProcessEnv): void {
+  execSync(command, {
+    stdio: "inherit",
+    cwd: process.cwd(),
+    env: { ...process.env, ...env },
+  });
+}
+
+function stopCaisseBeforeRelease(): void {
+  console.log("→ Fermeture caisse / preview / Electron…");
+  execSync(`node "${STOP_SCRIPT}"`, { stdio: "inherit", cwd: process.cwd() });
 }
 
 function main(): void {
   const bumpArg = process.argv[2];
   const current = readCaisseVersion();
   const next = resolveNextVersion(current, bumpArg);
+
+  stopCaisseBeforeRelease();
 
   if (next !== current) {
     writeCaisseVersion(next);
@@ -87,7 +99,7 @@ function main(): void {
 
   console.log("");
   console.log("→ Build installateur Windows…");
-  run("npm run dist:caisse");
+  run("npm run dist:caisse", { OPF_RELEASE_BUILD: "1" });
 
   console.log("");
   console.log("→ Upload FTP /POS…");
