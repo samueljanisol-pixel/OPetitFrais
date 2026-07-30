@@ -50,10 +50,6 @@
       "package.json"
     ],
     "asar": true,
-    "asarUnpack": [
-      "**/node_modules/serialport/**",
-      "**/node_modules/@serialport/**"
-    ],
     "npmRebuild": true,
     "win": {
       "icon": "build/icon.png",
