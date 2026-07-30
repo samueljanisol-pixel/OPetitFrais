@@ -1,5 +1,6 @@
 import { createReadStream, promises as fs } from "node:fs";
 import path from "node:path";
+import { Readable } from "node:stream";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/server";
 
 export const CAISSE_RELEASE_BUCKET = "caisse-releases";
@@ -130,7 +131,7 @@ export async function streamLocalCaisseRelease(
   try {
     const stat = await fs.stat(filePath);
     const nodeStream = createReadStream(filePath);
-    const webStream = ReadableStream.from(nodeStream);
+    const webStream = Readable.toWeb(nodeStream) as ReadableStream<Uint8Array>;
     return { stream: webStream, sizeBytes: stat.size };
   } catch {
     return { error: "Fichier installateur introuvable sur le serveur" };
