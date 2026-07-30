@@ -1,4 +1,5 @@
 {
+  "installCommand": "npm install --include-workspace-root --workspace=@opf/caisse-core",
   "crons": [
     {
       "path": "/api/automated-tasks/tick",
