@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { requireAnyApiPermission } from "@/lib/auth/require-permission-api";
+import { isUserAdministrator } from "@/lib/auth/require-administrator-api";
+import { isLotConsolidationEditable } from "@/lib/commandes-fournisseur/lot-status-achat";
 import { normalizeProductPackagingId } from "@/lib/commandes-fournisseur/commande-ligne-key";
 
 type Ctx = { params: Promise<{ id: string }> };
@@ -53,8 +55,10 @@ export async function PATCH(req: Request, ctx: Ctx) {
   const keys = new Set((keysRaw as string[]) ?? []);
   const canAchat = keys.has("commandes_fournisseur.achat");
   const canConsolid = keys.has("commandes_fournisseur.consolidation");
+  const isAdmin = await isUserAdministrator(supabase, gate.userId);
+  const consolidEditable = isLotConsolidationEditable(lotStatus, isAdmin);
 
-  if (canConsolid && lotStatus === "brouillon") {
+  if (canConsolid && consolidEditable) {
     // ok
   } else if (canAchat && (lotStatus === "prete" || lotStatus === "achat_en_cours")) {
     // ok
@@ -72,9 +76,9 @@ export async function PATCH(req: Request, ctx: Ctx) {
         { status: 400 },
       );
     }
-    if (lotStatus !== "brouillon" || !canConsolid) {
+    if (!consolidEditable || !canConsolid) {
       return NextResponse.json(
-        { error: "Création de ligne commentaire réservée à la consolidation (lot brouillon)" },
+        { error: "Création de ligne commentaire réservée à la consolidation (lot éditable)" },
         { status: 409 },
       );
     }

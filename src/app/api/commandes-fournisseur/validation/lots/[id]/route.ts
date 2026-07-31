@@ -479,6 +479,13 @@ export async function PATCH(req: Request, ctx: Ctx) {
   }
 
   if (body.whatsappSent !== undefined) {
+    const isAdmin = await isUserAdministrator(supabase, gate.userId);
+    if (!isAdmin) {
+      return NextResponse.json(
+        { error: "Envoi WhatsApp : réservé à l'administrateur" },
+        { status: 403 },
+      );
+    }
     const payload = body.whatsappSent;
     if (!payload || typeof payload.vendeurKey !== "string" || payload.vendeurKey.trim().length === 0) {
       return NextResponse.json({ error: "whatsappSent invalide" }, { status: 400 });

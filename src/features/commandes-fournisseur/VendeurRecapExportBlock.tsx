@@ -48,6 +48,8 @@ type Props = {
   whatsAppSent?: boolean;
   whatsAppSentLabel?: string;
   onWhatsAppSent?: () => void | Promise<void>;
+  /** Bouton WhatsApp + coche « déjà envoyé » (réservé administrateur en validation). */
+  showWhatsApp?: boolean;
   /** Persiste l’image commande (PNG) côté serveur pour l’achat vendeur. */
   onPersistCommandeImage?: (file: File) => void | Promise<void>;
 };
@@ -139,6 +141,7 @@ export default function VendeurRecapExportBlock({
   whatsAppSentLabel = "WhatsApp déjà ouvert",
   onWhatsAppSent,
   onPersistCommandeImage,
+  showWhatsApp = true,
 }: Props) {
   const tc = useTranslations("backoffice.commandes.common");
   const captureRef = useRef<HTMLDivElement>(null);
@@ -291,8 +294,8 @@ export default function VendeurRecapExportBlock({
       disabled={rowsEmpty}
       exportLabel={tc("exportImage")}
       whatsAppLabel={tc("sendWhatsApp")}
-      whatsAppHref={whatsAppPhoneOk ? whatsAppHref : null}
-      whatsAppSent={whatsAppSent}
+      whatsAppHref={showWhatsApp && whatsAppPhoneOk ? whatsAppHref : null}
+      whatsAppSent={showWhatsApp && whatsAppSent}
       whatsAppSentLabel={tc("whatsAppAlreadySent")}
       onExport={() => void onExport()}
       onWhatsAppClick={onWhatsAppClick}

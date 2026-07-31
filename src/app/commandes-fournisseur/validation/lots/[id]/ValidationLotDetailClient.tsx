@@ -1016,7 +1016,7 @@ export default function ValidationLotDetailClient({ lotId }: { lotId: string }) 
   const vendeurCommentEditable =
     isLotConsolidationEditable(lot.status, isAdministrator) || isLotPretOrAchatEnCours(lot.status);
   const showRecap = isLotPrevalidationOrPretOrAchatEnCours(lot.status);
-  const whatsAppEnabled = isLotPretOrAchatEnCours(lot.status);
+  const whatsAppEnabled = isLotPretOrAchatEnCours(lot.status) && isAdministrator;
   const matrixGroupByEffective: MatrixGroupBy =
     isLotPretOrAchatEnCours(lot.status) ||
     (lot.status === LOT_STATUS_PREVALIDATION && !isAdministrator)
@@ -1101,6 +1101,7 @@ export default function ValidationLotDetailClient({ lotId }: { lotId: string }) 
               lotComment={lotCommentDraft}
               noCategoryLabel={tCommandesCommon("noCategory")}
               productCountLabel={tStatus("productCount", { count: recapLignes.length })}
+              showWhatsAppDriver={whatsAppEnabled}
             />
           ) : null}
         </div>
@@ -1518,9 +1519,10 @@ export default function ValidationLotDetailClient({ lotId }: { lotId: string }) 
           vendeurCommentEditable={vendeurCommentEditable}
           onVendeurCommentDraftChange={onVendeurCommentDraftChange}
           onVendeurCommentSave={onVendeurCommentBlur}
-          vendeurWhatsAppSent={vendeurWhatsAppSent}
+          vendeurWhatsAppSent={whatsAppEnabled ? vendeurWhatsAppSent : {}}
           onVendeurWhatsAppSent={whatsAppEnabled ? markVendeurWhatsAppSent : undefined}
           onPersistVendeurCommandeImage={whatsAppEnabled ? persistVendeurCommandeImage : undefined}
+          showWhatsApp={whatsAppEnabled}
         />
       ) : null}
 

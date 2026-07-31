@@ -48,6 +48,8 @@ type Props = {
   lotComment?: string | null;
   noCategoryLabel: string;
   productCountLabel: string;
+  /** WhatsApp chauffeur (réservé administrateur en validation). */
+  showWhatsAppDriver?: boolean;
 };
 
 function CapturePane({
@@ -220,6 +222,7 @@ export default function LotConsolidationExportPanel({
   commandeDateLabel,
   commandeDateSlug,
   lotComment,
+  showWhatsAppDriver = true,
 }: Props) {
   const t = useTranslations("backoffice.commandes.validation.lotDetail.consolidationExport");
   const tc = useTranslations("backoffice.commandes.common");
@@ -541,7 +544,7 @@ export default function LotConsolidationExportPanel({
             {exportingVendeur ? tc("loadingEllipsis") : t("exportByVendor")}
           </Button>
         ) : null}
-        {whatsAppHref ? (
+        {showWhatsAppDriver && whatsAppHref ? (
           <Button
             variant="contained"
             size="small"
@@ -557,7 +560,7 @@ export default function LotConsolidationExportPanel({
           >
             {whatsAppBusy ? tc("loadingEllipsis") : t("sendWhatsAppDriver")}
           </Button>
-        ) : (
+        ) : showWhatsAppDriver ? (
           <Button
             variant="outlined"
             size="small"
@@ -568,9 +571,9 @@ export default function LotConsolidationExportPanel({
           >
             {t("sendWhatsAppDriver")}
           </Button>
-        )}
+        ) : null}
       </div>
-      {chauffeur && chauffeurPhone ? (
+      {showWhatsAppDriver && chauffeur && chauffeurPhone ? (
         <Typography variant="caption" color="text.secondary" className="!mt-1 block">
           {t("driverConfigured", { name: chauffeur.displayName, phone: chauffeurPhone })}
         </Typography>
@@ -580,12 +583,12 @@ export default function LotConsolidationExportPanel({
           {exportErr}
         </Typography>
       ) : null}
-      {!phoneOk && chauffeurPhone.length > 0 ? (
+      {showWhatsAppDriver && !phoneOk && chauffeurPhone.length > 0 ? (
         <Typography variant="caption" color="warning.main" className="!mt-1 block">
           {t("driverPhoneInvalid")}
         </Typography>
       ) : null}
-      {!chauffeurLoading && !chauffeurPhone ? (
+      {showWhatsAppDriver && !chauffeurLoading && !chauffeurPhone ? (
         <Typography variant="caption" color="text.secondary" className="!mt-1 block">
           {t("driverNotConfigured")}{" "}
           <AppLink href="/parametres" className="text-emerald-700 underline">

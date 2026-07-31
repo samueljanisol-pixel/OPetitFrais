@@ -42,9 +42,9 @@ Si le **commentaire du lot** est déjà rempli, un dialogue permet de **Ajouter 
 
 Cycle consolidation : **`brouillon`** → **`prevalidation`** (gestionnaire) → **`prete`** (administrateur) → **`achat_en_cours`** → **`terminee`**.
 
-- **Gestionnaire** : en brouillon, le bouton **Soumettre en prévalidation** remplace l’ancien « Marquer prêt pour l’achat ». Le lot devient **lecture seule** pour le gestionnaire ; le **récap par vendeur** et les **exports** sont visibles (sans WhatsApp ni photo achat).
-- **Administrateur** (`roles.slug === administrateur`) : peut **modifier la consolidation** en prévalidation comme en brouillon (matrice, vendeurs, commentaires, ajout produit), puis **Marquer prêt pour l’achat** (`PATCH` `{ status: "prete" }`, fige les besoins et assigne les vendeurs). Peut aussi passer **directement** brouillon → prêt, ou **revenir en saisie** depuis la prévalidation (`PATCH` `{ status: "brouillon" }`, admin seul).
-- Migration : `20260731220000_lot_status_prevalidation.sql` (CHECK statut, libellé, RLS commentaires vendeur et sync magasin).
+- **Gestionnaire** : en brouillon, le bouton **Soumettre en prévalidation** remplace l’ancien « Marquer prêt pour l’achat ». Le lot devient **lecture seule** pour le gestionnaire ; le **récap par vendeur** et les **exports PNG** sont visibles (sans WhatsApp ni photo achat).
+- **Administrateur** (`roles.slug === administrateur`) : peut **modifier la consolidation** en prévalidation comme en brouillon (matrice, vendeurs, commentaires, ajout produit), puis **Marquer prêt pour l’achat** (`PATCH` `{ status: "prete" }`, fige les besoins et assigne les vendeurs). Peut aussi passer **directement** brouillon → prêt, ou **revenir en saisie** depuis la prévalidation (`PATCH` `{ status: "brouillon" }`, admin seul). **WhatsApp vendeur / chauffeur** et coche « déjà envoyé » : **administrateur uniquement** (lot prêt ou achat en cours).
+- Migration : `20260731220000_lot_status_prevalidation.sql` (CHECK statut, libellé, RLS commentaires vendeur et sync magasin). Complément commentaires de ligne : `20260731223000_lot_prevalidation_line_comment_rls.sql`.
 
 ## Lot prêt — lecture seule et retour brouillon
 

@@ -229,6 +229,7 @@
       },
       "commande_fournisseur_lot": {
         "brouillon": "مسودة",
+        "prevalidation": "تحقق مسبق",
         "prete": "جاهزة",
         "achat_en_cours": "الشرا جاري",
         "terminee": "كملات"

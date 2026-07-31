@@ -229,6 +229,7 @@
       },
       "commande_fournisseur_lot": {
         "brouillon": "Brouillon",
+        "prevalidation": "Prévalidation",
         "prete": "Prête",
         "achat_en_cours": "Achat en cours",
         "terminee": "Terminée"

@@ -45,6 +45,7 @@ type Props = {
   vendeurWhatsAppSent?: Record<string, boolean>;
   onVendeurWhatsAppSent?: (vendeurKey: string) => void | Promise<void>;
   onPersistVendeurCommandeImage?: (vendeurKey: string, file: File) => void | Promise<void>;
+  showWhatsApp?: boolean;
 };
 
 function vendeurForGroup(vendeurs: VendeurRef[], vendeurKey: string): VendeurRef | undefined {
@@ -92,6 +93,7 @@ export default function ValidationLotVendeurRecap({
   vendeurWhatsAppSent = {},
   onVendeurWhatsAppSent,
   onPersistVendeurCommandeImage,
+  showWhatsApp = true,
 }: Props) {
   const t = useTranslations("backoffice.commandes.validation.lotDetail");
   const magasinColumns = useMemo(() => buildMagasinMxColumnsFromLot(lot), [lot]);
@@ -163,12 +165,15 @@ export default function ValidationLotVendeurRecap({
               footerComment={g.commentaire?.trim() ? g.commentaire : null}
               footerCommentLabel={footerCommentLabel}
               commentField={commentField}
-              whatsAppSent={vendeurWhatsAppSent[g.vendeurKey] === true}
+              whatsAppSent={showWhatsApp && vendeurWhatsAppSent[g.vendeurKey] === true}
+              showWhatsApp={showWhatsApp}
               onWhatsAppSent={
-                onVendeurWhatsAppSent ? () => onVendeurWhatsAppSent(g.vendeurKey) : undefined
+                showWhatsApp && onVendeurWhatsAppSent
+                  ? () => onVendeurWhatsAppSent(g.vendeurKey)
+                  : undefined
               }
               onPersistCommandeImage={
-                onPersistVendeurCommandeImage
+                showWhatsApp && onPersistVendeurCommandeImage
                   ? (file) => onPersistVendeurCommandeImage(g.vendeurKey, file)
                   : undefined
               }
