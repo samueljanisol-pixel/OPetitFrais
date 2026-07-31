@@ -4,12 +4,18 @@ export type CatalogProduct = {
   id: string;
   code: string;
   salesName: string;
+  /** Nom de vente arabe (optionnel). */
+  salesNameAr?: string | null;
   price: number;
   salesUnit: SalesUnitKind;
   categoryId: string;
   categoryLabel: string;
+  /** Libellé catégorie arabe (optionnel). */
+  categoryLabelAr?: string | null;
   subcategoryId: string | null;
   subcategoryLabel: string | null;
+  /** Libellé sous-catégorie arabe (optionnel). */
+  subcategoryLabelAr?: string | null;
   isBio: boolean;
   photoUrl: string | null;
   active: boolean;

@@ -164,7 +164,7 @@ Conservé pour tests navigateur uniquement. Non recommandé en caisse.
 GET /api/caisse/catalog?token=…
 ```
 
-Réponse JSON : `{ ok, products[], categories[], fetchedAt }` — produits actifs avec prix, UdV, catégorie, photo.
+Réponse JSON : `{ ok, products[], categories[], fetchedAt }` — produits actifs avec prix, UdV, catégorie, photo, noms arabes (`salesNameAr`, `categoryLabelAr`, `subcategoryLabelAr` si renseignés en base).
 
 **Exclus du catalogue caisse** : catégorie `emballages_consommables` (emballages et consommables — gérés hors grille caisse).
 

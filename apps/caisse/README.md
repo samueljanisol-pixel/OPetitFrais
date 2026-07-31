@@ -2,7 +2,7 @@
 
 Application caisse Windows **1024×768** + écran client **plein écran sur le 2ᵉ moniteur** (si présent), inspirée WinDev.
 
-Fenêtres **sans barre de titre ni menu** (mode kiosque Electron). Fermeture : Alt+F4.
+Fenêtres **sans barre de titre ni menu** (mode kiosque Electron). Fermeture : **Menu → Fermer caisse**, **Alt+F4** ou clic droit sur l’icône barre des tâches — **confirmation demandée** dans tous les cas.
 
 **Écran client** : ouvert uniquement s'il existe un second écran (autre que le principal). Sinon, seule la fenêtre caissier s'affiche.
 
@@ -109,7 +109,10 @@ Les paramètres matériels (balance, imprimante) restent modifiables via **Menu 
 
 ### 5. Mises à jour automatiques
 
-En bas à gauche de la caisse (barre d’état) :
+En bas à gauche de la caisse (barre d’état, 2 lignes) :
+
+- **Ligne du haut** : voyants **Internet**, **Serveur API**, **balance SAURUS**
+- **Ligne du bas** : version + statut MAJ (à gauche) · **date/heure** (gras, à droite)
 
 | Affichage | Signification |
 |-----------|----------------|
@@ -151,6 +154,7 @@ La version servie par l’API (`GET /api/caisse/release`) est lue depuis **`apps
 | `electron/main/caisse-update.ts` | Téléchargement / installation installateur |
 | `src/screens/CashierScreen.tsx` | UI principale caisse |
 | `src/screens/CustomerScreen.tsx` | Affichage client |
+| `src/components/LastPaymentSummaryCard.tsx` | Rappel dernier paiement (zone panier) |
 | `src/components/PaymentDialog.tsx` | Modal paiement (monnaie visuelle, modes avec icônes) |
 | `src/components/CashMonnaieGrid.tsx` | Grille billets/pièces (disposition caisse) |
 | `src/lib/payment-monnaie.ts` | Images billets/pièces, disposition grille et modes de paiement |
@@ -160,6 +164,7 @@ La version servie par l’API (`GET /api/caisse/release`) est lue depuis **`apps
 | `src/components/SettingsDialog.tsx` | Paramètres balance COM, IP SAURUS, imprimante ticket |
 | `electron/main/saurus-scale/` | Protocole UDP LB1 (catalogue PLU) |
 | `src/lib/hardware-config.ts` | Lecture / enregistrement config matérielle |
+| `src/components/VignetteProductName.tsx` | Nom produit vignette — taille auto sans ellipsis |
 | `src/components/ProductQtyDialog.tsx` | Saisie quantité / poids (ajout appui long ou modification ligne panier), boutons **+** / **−** |
 | `src/components/RoundNumpad.tsx` | Clavier numérique rond réutilisable |
 | `src/components/RoundActionButton.tsx` | Bouton rond d'action (colonne à droite du clavier) |
@@ -202,7 +207,7 @@ Au démarrage, le catalogue est **préchargé** côté Electron avant l’affich
 
 Onglets catégories (ordre fixe) : **Légume**, **Fruit**, **Frigo**, **Herbes**, **Epice**, **Divers** — puis les autres catégories éventuelles.
 
-Grille produits : **8×6 par page** (48 produits), navigation **Page précédente / suivante** — pas de défilement vertical. **Appui long** sur une vignette ou **clic sur une ligne panier** : même dialogue `ProductQtyDialog` (photo, clavier, **+** / **−** pour le signe, prix modifiable en édition).
+Grille produits : **8×6 par page** (48 produits), navigation **Page précédente / suivante** — pas de défilement vertical. Nom produit en bas de vignette : police **réduite automatiquement** pour afficher tout le libellé (sans « … »). **Appui long** sur une vignette ou **clic sur une ligne panier** : même dialogue `ProductQtyDialog` (photo, clavier, **+** / **−** pour le signe, prix modifiable en édition).
 
 Colonne droite (panier, balance, clavier) : **300 px** de large. **Total panier** arrondi au **0,5 DH** le plus proche (`roundMoneyHalf` dans `@opf/caisse-core`).
 
@@ -231,7 +236,7 @@ Bouton **Client** : liste des clients actifs, création et modification (FormDia
 
 Table Supabase `caisse_client` (réseau commun). Client système seed : **1 - LIVRAISON**.
 
-Le client sélectionné est associé au panier ; obligatoire pour le mode paiement **Crédit**.
+Le client sélectionné est associé au panier ; obligatoire pour le mode paiement **Crédit**. Après **validation du paiement** ou **suppression du panier**, le client est **réinitialisé** (sans client).
 
 ## Paiement
 
@@ -241,6 +246,7 @@ Modal **Paiement** : fenêtre large (`md`), hauteur ~**viewport − 48 px**. Ban
 - **Espèces** : grille billets/pièces ; chaque clic additionne avec le **détail des monnaies** en petit. Re-clic sur le bouton **Espèces** : **remplace** la ligne (efface le détail) avec le total panier ou le reste à payer.
 - **Clavier rond** : saisie libre sur le mode actif. Ligne sélectionnée : montant affiché au clavier ; **1ʳᵉ touche = nouvelle saisie** ; **OK remplace** la ligne puis **efface** le clavier.
 - Chaque ligne peut être retirée individuellement (×). Total paiement et monnaie à rendre en bas.
+- Après validation du paiement, un encart **Dernier ticket** rappelle **date/heure**, total panier, encaissé, mode(s) de paiement et monnaie rendue ; il disparaît dès qu’un produit est ajouté au panier.
 
 ## Ticket de caisse (ESC/POS 80 mm)
 
@@ -254,7 +260,7 @@ En-tête ticket : **logo O'petit frais** (raster ESC/POS). Regénérer le logo :
 
 Montants avec **virgule** décimale (`12,50`). Génération : `buildSaleTicketEscPos` dans `@opf/caisse-core`.
 
-**Impression** : bouton **Valider** (pas « Valider sans ticket ») — le ticket est sauvegardé localement puis envoyé à l’agent (`POST /print`). L’agent doit tourner (`npm run dev:caisse-agent`) et une **imprimante ticket** doit être choisie dans **Menu → Paramètres**. En cas d’échec d’impression, le ticket reste disponible via **Imprimer dernier ticket**.
+**Impression** : à la validation du paiement (**avec ou sans ticket**), la caisse envoie d’abord **`ESC p 0`** (ouverture tiroir, comme WinDev `iEscape(ESC+"p0")`), puis le ticket si demandé. L’imprimante ticket doit être configurée dans **Menu → Paramètres** (tiroir connecté à l’imprimante). En cas d’échec d’impression, le ticket reste disponible via **Imprimer dernier ticket**.
 
 ## Clavier code et actions rapides
 
@@ -271,13 +277,13 @@ Bouton **Menu** (colonne droite) :
 
 - **Actualiser les prix** — recharge le catalogue depuis Supabase (`/api/caisse/catalog`).
 - **Envoyer prix balance SAURUS** — envoi UDP du catalogue PLU vers la balance réseau (LB1, port 5001).
-- **Imprimer dernier ticket** — réimprime le dernier ticket de vente (activé après un paiement avec impression).
+- **Imprimer dernier ticket** — réimprime le dernier ticket de vente (activé après un paiement avec impression) ; date/heure du ticket affichée en petit sous le bouton.
 - **Paramètres** — port **COM** balance, **IP balance SAURUS**, **imprimante ticket** (`caisse.config.json`).
 - **Fermer caisse** — quitte l’application Electron (confirmation demandée).
 
 Colonne droite (panier) : logo **O'petit frais** sur fond blanc + bouton **Menu** en haut à droite ; **Client**, **Attente**, **Supprimer panier** (icône) ; clavier avec colonne **Retour** + **Paiement**.
 
-Barre du bas (colonne produits) : **internet** + **serveur API** + **balance SAURUS** (pastilles vert/rouge) + **date** à gauche, pagination au centre, switch **Imprimer prix** à droite. **Balance** + bouton **T** à droite de la rangée catégories — poids en police **7 segments** (`formatBalanceWeightKgFr` : **2 décimales** si &lt; 0, **3 décimales** de 0 à 10 kg, **2 décimales** ≥ 10 kg), fond **rouge** si poids négatif, **Kg** fixe à droite.
+Barre du bas (colonne produits) : **voyants + version/date** à gauche, **pagination** au centre, **switches sur 2 lignes** à droite (`1-9/A-Z` + `FR/AR`, puis `Imprimer prix`) — hauteur compacte d’origine. **Balance** + bouton **T** à droite de la rangée catégories — poids en police **7 segments** (`formatBalanceWeightKgFrFixed` : **2 décimales** si &lt; 0, **3 décimales** de 0 à 10 kg, **2 décimales** ≥ 10 kg, **zéros affichés**), fond **rouge** si poids négatif, **Kg** fixe à droite.
 
 La config matérielle est persistée dans `caisse.config.json` (userData Electron en prod) et synchronisée avec l’agent via `POST /config/hardware`. Chaque impression envoie aussi le nom d’imprimante choisi dans les paramètres. Changer le port COM reconnecte la balance automatiquement.
 

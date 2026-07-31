@@ -6,12 +6,15 @@ export type CaisseCatalogProduct = {
   id: string;
   code: string;
   salesName: string;
+  salesNameAr: string | null;
   price: number;
   salesUnit: SalesUnitKind;
   categoryId: string;
   categoryLabel: string;
+  categoryLabelAr: string | null;
   subcategoryId: string | null;
   subcategoryLabel: string | null;
+  subcategoryLabelAr: string | null;
   isBio: boolean;
   photoUrl: string | null;
   active: boolean;
@@ -20,6 +23,7 @@ export type CaisseCatalogProduct = {
 export type CaisseCatalogCategory = {
   id: string;
   label: string;
+  labelAr: string | null;
   sortOrder: number;
 };
 
@@ -32,21 +36,23 @@ export type CaisseCatalogPayload = {
 const CAISSE_EXCLUDED_CATEGORY_CODES = ["emballages_consommables"] as const;
 
 const CAISSE_PRODUCT_SELECT = `
-  id, code, name, sales_name, price, image_path, active, category_id, subcategory_id,
-  ref_category(id, code, label, sort_order),
-  ref_subcategory(id, label),
+  id, code, name, name_ar, sales_name, sales_name_ar, price, image_path, active, category_id, subcategory_id,
+  ref_category(id, code, label, label_ar, sort_order),
+  ref_subcategory(id, label, label_ar),
   ref_sales_unit(code)
 `;
 
-type RefCategoryRow = { id: string; code: string; label: string; sort_order: number };
-type RefSubcategoryRow = { id: string; label: string };
+type RefCategoryRow = { id: string; code: string; label: string; label_ar?: string | null; sort_order: number };
+type RefSubcategoryRow = { id: string; label: string; label_ar?: string | null };
 type RefSalesUnitRow = { code: string | null };
 
 type ProductRow = {
   id: string;
   code: string;
   name: string | null;
+  name_ar: string | null;
   sales_name: string | null;
+  sales_name_ar: string | null;
   price: number | null;
   image_path: string | null;
   active: boolean;
@@ -76,6 +82,20 @@ function caisseProductName(row: Pick<ProductRow, "code" | "name" | "sales_name">
   const logistic = row.name?.trim();
   if (logistic) return logistic;
   return sales ?? code;
+}
+
+function caisseProductNameAr(
+  row: Pick<ProductRow, "name_ar" | "sales_name_ar">,
+): string | null {
+  const salesAr = row.sales_name_ar?.trim();
+  if (salesAr) return salesAr;
+  const nameAr = row.name_ar?.trim();
+  return nameAr || null;
+}
+
+function refLabelAr(raw: string | null | undefined): string | null {
+  const ar = raw?.trim();
+  return ar ? ar : null;
 }
 
 function detectBio(subLabel: string | null, salesName: string): boolean {
@@ -128,6 +148,7 @@ export async function loadCaisseCatalog(): Promise<{
       categoryMap.set(cat.id, {
         id: cat.id,
         label: cat.label,
+        labelAr: refLabelAr(cat.label_ar),
         sortOrder: cat.sort_order ?? 9999,
       });
     }
@@ -136,12 +157,15 @@ export async function loadCaisseCatalog(): Promise<{
       id: row.id,
       code: row.code.trim(),
       salesName,
+      salesNameAr: caisseProductNameAr(row),
       price: typeof row.price === "number" ? row.price : 0,
       salesUnit: mapSalesUnit(salesUnitRow?.code),
       categoryId: cat.id,
       categoryLabel: cat.label,
+      categoryLabelAr: refLabelAr(cat.label_ar),
       subcategoryId: sub?.id ?? row.subcategory_id,
       subcategoryLabel: subLabel,
+      subcategoryLabelAr: sub ? refLabelAr(sub.label_ar) : null,
       isBio: detectBio(subLabel, salesName),
       photoUrl: productPhotoPublicUrl(supabase, row.image_path),
       active: row.active,

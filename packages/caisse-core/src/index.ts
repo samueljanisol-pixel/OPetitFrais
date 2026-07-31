@@ -4,3 +4,4 @@ export * from "./format/money.js";
 export * from "./format/bytes.js";
 export * from "./cart/cart.js";
 export * from "./tickets/escpos.js";
+export { escPosOpenCashDrawer } from "./tickets/escpos-commands.js";

@@ -1,6 +1,121 @@
-import type { CatalogProduct, SalesUnitKind } from "@opf/caisse-core";
+import type { CartLine, CatalogProduct } from "@opf/caisse-core";
+export type { CatalogCategoryMeta } from "../../shared/catalog-normalize";
+export { normalizeCatalogProduct, normalizeCatalogProducts } from "../../shared/catalog-normalize";
 
 export const ALL_SUBCATEGORY = "Tous";
+export const ALL_SUBCATEGORY_AR = "الكل";
+
+export type CaisseDisplayLocale = "fr" | "ar";
+
+export function catalogProductDisplayName(
+  product: Pick<CatalogProduct, "salesName" | "salesNameAr">,
+  locale: CaisseDisplayLocale,
+): string {
+  if (locale === "ar") {
+    const ar = product.salesNameAr?.trim();
+    if (ar) return ar;
+  }
+  return product.salesName;
+}
+
+export function buildCatalogDisplayMaps(catalog: readonly CatalogProduct[]): {
+  categoryAr: Map<string, string>;
+  subcategoryAr: Map<string, string>;
+} {
+  const categoryAr = new Map<string, string>();
+  const subcategoryAr = new Map<string, string>();
+
+  for (const product of catalog) {
+    const categoryArLabel = product.categoryLabelAr?.trim();
+    if (categoryArLabel) {
+      categoryAr.set(product.categoryLabel, categoryArLabel);
+    }
+
+    const subcategoryLabel = product.subcategoryLabel?.trim();
+    const subcategoryArLabel = product.subcategoryLabelAr?.trim();
+    if (subcategoryLabel && subcategoryArLabel) {
+      subcategoryAr.set(`${product.categoryLabel}\0${subcategoryLabel}`, subcategoryArLabel);
+    }
+  }
+
+  return { categoryAr, subcategoryAr };
+}
+
+export function catalogCategoryDisplayLabel(
+  categoryLabelFr: string,
+  locale: CaisseDisplayLocale,
+  maps?: { categoryAr: Map<string, string> },
+): string {
+  if (locale === "fr") return categoryLabelFr;
+  return maps?.categoryAr.get(categoryLabelFr) ?? categoryLabelFr;
+}
+
+export function catalogSubcategoryDisplayLabel(
+  categoryLabelFr: string,
+  subcategoryLabelFr: string,
+  locale: CaisseDisplayLocale,
+  maps?: { subcategoryAr: Map<string, string> },
+): string {
+  if (subcategoryLabelFr === ALL_SUBCATEGORY) {
+    return locale === "ar" ? ALL_SUBCATEGORY_AR : ALL_SUBCATEGORY;
+  }
+  if (locale === "fr") return subcategoryLabelFr;
+  return maps?.subcategoryAr.get(`${categoryLabelFr}\0${subcategoryLabelFr}`) ?? subcategoryLabelFr;
+}
+
+export function cartLineDisplayName(
+  line: CartLine,
+  catalog: readonly CatalogProduct[],
+  locale: CaisseDisplayLocale,
+): string {
+  const product = catalog.find((p) => p.id === line.productId);
+  if (product) return catalogProductDisplayName(product, locale);
+  return line.productName;
+}
+
+export type ProductSortMode = "code" | "alpha";
+
+export function defaultProductSortMode(subcategoryLabel: string): ProductSortMode {
+  return subcategoryLabel === ALL_SUBCATEGORY ? "code" : "alpha";
+}
+
+function compareProductCodes(a: string, b: string): number {
+  const trimA = a.trim();
+  const trimB = b.trim();
+  if (/^\d+$/.test(trimA) && /^\d+$/.test(trimB)) {
+    const numA = Number(trimA);
+    const numB = Number(trimB);
+    if (Number.isFinite(numA) && Number.isFinite(numB)) return numA - numB;
+  }
+  return trimA.localeCompare(trimB, "fr", { numeric: true, sensitivity: "base" });
+}
+
+export function sortCatalogProducts(
+  products: readonly CatalogProduct[],
+  mode: ProductSortMode,
+  locale: CaisseDisplayLocale,
+): CatalogProduct[] {
+  const sorted = [...products];
+  if (mode === "code") {
+    sorted.sort((a, b) => compareProductCodes(a.code, b.code));
+    return sorted;
+  }
+
+  const collator = new Intl.Collator(locale === "ar" ? "ar" : "fr", {
+    sensitivity: "base",
+    numeric: true,
+    ignorePunctuation: true,
+  });
+  sorted.sort((a, b) => {
+    const byName = collator.compare(
+      catalogProductDisplayName(a, locale),
+      catalogProductDisplayName(b, locale),
+    );
+    if (byName !== 0) return byName;
+    return compareProductCodes(a.code, b.code);
+  });
+  return sorted;
+}
 
 /** Ordre des onglets caisse : Légume → Fruit → Frigo → Herbes → Epice → Divers. */
 const CAISSE_CATEGORY_TAB_RANK: Record<string, number> = {
@@ -90,59 +205,6 @@ export function resolveProductByCode(
   });
 }
 
-export function normalizeCatalogProduct(raw: unknown): CatalogProduct | null {
-  if (raw == null || typeof raw !== "object") return null;
-  const p = raw as Record<string, unknown>;
-  const id = typeof p.id === "string" ? p.id : "";
-  const code = typeof p.code === "string" ? p.code.trim() : "";
-  const salesNameRaw =
-    typeof p.salesName === "string"
-      ? p.salesName.trim()
-      : typeof p.sales_name === "string"
-        ? p.sales_name.trim()
-        : "";
-  const nameRaw =
-    typeof p.name === "string" ? p.name.trim() : "";
-  const salesName =
-    salesNameRaw && salesNameRaw !== code
-      ? salesNameRaw
-      : nameRaw || salesNameRaw || code;
-  if (!id || !code || !salesName) return null;
-
-  const salesUnit: SalesUnitKind = p.salesUnit === "unit" ? "unit" : "kg";
-  const categoryLabel =
-    typeof p.categoryLabel === "string" && p.categoryLabel.trim().length > 0
-      ? p.categoryLabel.trim()
-      : "Divers";
-  const categoryId = typeof p.categoryId === "string" ? p.categoryId : categoryLabel;
-
-  return {
-    id,
-    code,
-    salesName,
-    price: typeof p.price === "number" && Number.isFinite(p.price) ? p.price : 0,
-    salesUnit,
-    categoryId,
-    categoryLabel,
-    subcategoryId: typeof p.subcategoryId === "string" ? p.subcategoryId : null,
-    subcategoryLabel:
-      typeof p.subcategoryLabel === "string" ? p.subcategoryLabel : null,
-    isBio: p.isBio === true,
-    photoUrl: typeof p.photoUrl === "string" ? p.photoUrl : null,
-    active: p.active === true,
-  };
-}
-
 export function activeCatalogProducts(catalog: readonly CatalogProduct[]): CatalogProduct[] {
   return catalog.filter((p) => p.active);
-}
-
-export function normalizeCatalogProducts(raw: unknown): CatalogProduct[] {
-  if (!Array.isArray(raw)) return [];
-  const items: CatalogProduct[] = [];
-  for (const entry of raw) {
-    const product = normalizeCatalogProduct(entry);
-    if (product?.active) items.push(product);
-  }
-  return items;
 }

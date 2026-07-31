@@ -27,13 +27,14 @@ import {
   buildPriceLabelEscPos,
   buildSaleTicketEscPos,
   bytesToBase64,
+  escPosOpenCashDrawer,
   cartTotals,
   clearCart,
   createEmptyCart,
   formatDecimalFr,
-  formatMoneyDh,
+  formatMoneyDhFixed,
   formatMoneyFr,
-  formatBalanceWeightKgFr,
+  formatBalanceWeightKgFrFixed,
   formatWeightKgFr,
   mergeLineIntoCart,
   removeLine,
@@ -46,12 +47,23 @@ import {
 import {
   activeCatalogProducts,
   ALL_SUBCATEGORY,
+  buildCatalogDisplayMaps,
+  cartLineDisplayName,
+  catalogCategoryDisplayLabel,
+  catalogProductDisplayName,
+  catalogSubcategoryDisplayLabel,
   categoryTabsFromCatalog,
+  defaultProductSortMode,
   productsForCategoryAndSubcategory,
   resolveProductByCode,
+  sortCatalogProducts,
   subcategoryTabsFromCatalog,
+  type CaisseDisplayLocale,
+  type ProductSortMode,
 } from "../data/catalog-helpers";
-import { fetchCatalogFromApi, isCatalogApiConfigured } from "../lib/catalog";
+import { countCatalogArabicLabels } from "../../shared/catalog-normalize";
+import { fetchCatalogFromApi, isCatalogApiConfigured, type CatalogCategoryMeta } from "../lib/catalog";
+import { loadDisplayLocale, saveDisplayLocale } from "../lib/display-locale";
 import { fetchWeight, printEscPosBase64, reconnectScale, sendTare, subscribeWeight } from "../lib/agent";
 import { playAddProductBeep, playAddProductErrorBeep } from "../lib/sounds";
 import {
@@ -61,21 +73,24 @@ import {
   saveCachedCart,
 } from "../lib/cart-cache";
 import PaymentDialog from "../components/PaymentDialog";
+import VignetteProductName from "../components/VignetteProductName";
+import LastPaymentSummaryCard, {
+  type LastPaymentSummary,
+} from "../components/LastPaymentSummaryCard";
 import ClientSelectDialog from "../components/ClientSelectDialog";
 import ProductQtyDialog from "../components/ProductQtyDialog";
 import HoldCartDialog from "../components/HoldCartDialog";
 import MenuDialog from "../components/MenuDialog";
 import SettingsDialog from "../components/SettingsDialog";
 import CashierStatusBar from "../components/CashierStatusBar";
-import CaisseVersionBadge from "../components/CaisseVersionBadge";
 import { nextTicketNumber } from "../lib/ticket-counter";
 import {
   hasLastTicketEscPos,
   loadLastTicketEscPosBase64,
+  loadLastTicketPaidAt,
   saveLastTicketEscPosBase64,
 } from "../lib/last-ticket";
 import { getCaisseRuntimeConfig, syncHardwareConfigToAgent } from "../lib/hardware-config";
-import { isTestMagasin } from "../lib/caisse-identity";
 import {
   createHoldId,
   loadHeldCarts,
@@ -98,16 +113,22 @@ const CATEGORY_ROW_HEIGHT_PX = 38;
 
 const PRODUCT_LONG_PRESS_MS = 550;
 
+const arabicDisplaySx = {
+  direction: "rtl" as const,
+  fontFamily: '"Segoe UI", Tahoma, "Noto Sans Arabic", sans-serif',
+};
+
 type CartAddEntry = {
   lineId: string;
   qtyAdded: number;
 };
 
-export default function CashierScreen() {
+export default function CashierScreen({ onRequestQuit }: { onRequestQuit: () => void }) {
   const [magasin, setMagasin] = useState(DEFAULT_MAGASIN);
   const [caisseCode, setCaisseCode] = useState(DEFAULT_CAISSE);
   const [ticketPrinter, setTicketPrinter] = useState("");
   const [catalog, setCatalog] = useState<CatalogProduct[]>([]);
+  const [categoryMeta, setCategoryMeta] = useState<CatalogCategoryMeta[]>([]);
   const [catalogReady, setCatalogReady] = useState(false);
   const [catalogLoading, setCatalogLoading] = useState(true);
   const [cart, setCart] = useState<CartState>(() => createEmptyCart());
@@ -118,6 +139,8 @@ export default function CashierScreen() {
   const [weightStable, setWeightStable] = useState(false);
   const [weightSource, setWeightSource] = useState("offline");
   const [printPriceMode, setPrintPriceMode] = useState(false);
+  const [displayLocale, setDisplayLocale] = useState<CaisseDisplayLocale>(() => loadDisplayLocale());
+  const [productSortMode, setProductSortMode] = useState<ProductSortMode>("code");
   const [codeBuffer, setCodeBuffer] = useState("");
   const [paymentOpen, setPaymentOpen] = useState(false);
   const [clientDialogOpen, setClientDialogOpen] = useState(false);
@@ -126,7 +149,6 @@ export default function CashierScreen() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [saurusSending, setSaurusSending] = useState(false);
-  const [quitConfirmOpen, setQuitConfirmOpen] = useState(false);
   const [backofficeUrl, setBackofficeUrl] = useState<string | null>(null);
   const [heldCarts, setHeldCarts] = useState<HeldCartEntry[]>([]);
   const [selectedLineId, setSelectedLineId] = useState<string | null>(null);
@@ -137,6 +159,8 @@ export default function CashierScreen() {
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
   const [lastTicketAvailable, setLastTicketAvailable] = useState(() => hasLastTicketEscPos());
+  const [lastTicketPaidAt, setLastTicketPaidAt] = useState<Date | null>(() => loadLastTicketPaidAt());
+  const [lastPaymentSummary, setLastPaymentSummary] = useState<LastPaymentSummary | null>(null);
   const productTouchMoved = useRef(false);
   const productLongPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const productLongPressTriggered = useRef(false);
@@ -184,6 +208,17 @@ export default function CashierScreen() {
   };
 
   const activeCatalog = useMemo(() => activeCatalogProducts(catalog), [catalog]);
+
+  const catalogDisplayMaps = useMemo(() => {
+    const maps = buildCatalogDisplayMaps(activeCatalog);
+    for (const entry of categoryMeta) {
+      if (entry.labelAr) {
+        maps.categoryAr.set(entry.label, entry.labelAr);
+      }
+    }
+    return maps;
+  }, [activeCatalog, categoryMeta]);
+
   const categoryTabs = useMemo(() => categoryTabsFromCatalog(activeCatalog), [activeCatalog]);
   const subcategoryTabs = useMemo(
     () => subcategoryTabsFromCatalog(activeCatalog, category),
@@ -218,10 +253,18 @@ export default function CashierScreen() {
       ? subcategory
       : ALL_SUBCATEGORY;
 
-  const products = useMemo(
-    () => productsForCategoryAndSubcategory(activeCatalog, category, effectiveSubcategory),
-    [activeCatalog, category, effectiveSubcategory],
-  );
+  useEffect(() => {
+    setProductSortMode(defaultProductSortMode(effectiveSubcategory));
+  }, [effectiveSubcategory]);
+
+  const products = useMemo(() => {
+    const filtered = productsForCategoryAndSubcategory(
+      activeCatalog,
+      category,
+      effectiveSubcategory,
+    );
+    return sortCatalogProducts(filtered, productSortMode, displayLocale);
+  }, [activeCatalog, category, effectiveSubcategory, productSortMode, displayLocale]);
 
   const productPageCount = useMemo(
     () => Math.max(1, Math.ceil(products.length / PRODUCTS_PER_PAGE)),
@@ -250,10 +293,19 @@ export default function CashierScreen() {
     });
   }, [cart.lines, categoryTabs]);
 
-  const cartDisplayRows = useMemo(
-    () => cartRowsWithCategories(sortedCartLines),
-    [sortedCartLines],
-  );
+  const cartDisplayRows = useMemo(() => {
+    const rows = cartRowsWithCategories(sortedCartLines);
+    if (displayLocale === "fr") return rows;
+    return rows.map((row) => {
+      if (row.type !== "category") return row;
+      return {
+        ...row,
+        label: catalogCategoryDisplayLabel(row.label, displayLocale, catalogDisplayMaps),
+      };
+    });
+  }, [sortedCartLines, displayLocale, catalogDisplayMaps]);
+
+  const showArabicLabels = displayLocale === "ar";
 
   const { total, lineCount } = cartTotals(cart);
 
@@ -367,35 +419,27 @@ export default function CashierScreen() {
   const loadCatalog = useCallback(async (options?: { showInfo?: boolean }) => {
     setCatalogLoading(true);
     try {
-      let rawProducts: CatalogProduct[] = [];
-
-      if (window.caisseApi?.refreshCatalogCache && options?.showInfo) {
-        const cached = await window.caisseApi.refreshCatalogCache();
-        if (cached.products.length > 0) {
-          rawProducts = cached.products;
+      const result = await fetchCatalogFromApi();
+      if (result.products.length > 0) {
+        const active = activeCatalogProducts(result.products);
+        const tabs = categoryTabsFromCatalog(active);
+        setCatalog(active);
+        setCategoryMeta(result.categoryMeta);
+        setCategory((prev) => (tabs.includes(prev) ? prev : tabs[0] ?? ""));
+        setCatalogReady(true);
+        if (options?.showInfo) {
+          const ar = countCatalogArabicLabels(active);
+          setInfo(
+            `${active.length} produits importés${ar.products > 0 ? ` (${ar.products} noms ar)` : ""}`,
+          );
         }
+        return;
       }
 
-      if (rawProducts.length === 0) {
-        const result = await fetchCatalogFromApi();
-        if (result.products.length > 0) {
-          rawProducts = result.products;
-        } else {
-          if (result.error && (await isCatalogApiConfigured())) {
-            setError(`Catalogue : ${result.error}`);
-          } else if (result.error) {
-            setError(result.error);
-          }
-        }
-      }
-
-      const active = activeCatalogProducts(rawProducts);
-      const tabs = categoryTabsFromCatalog(active);
-      setCatalog(active);
-      setCategory((prev) => (tabs.includes(prev) ? prev : tabs[0] ?? ""));
-      setCatalogReady(true);
-      if (options?.showInfo) {
-        setInfo(`${active.length} produits importés`);
+      if (result.error && (await isCatalogApiConfigured())) {
+        setError(`Catalogue : ${result.error}`);
+      } else if (result.error) {
+        setError(result.error);
       }
     } finally {
       setCatalogLoading(false);
@@ -403,25 +447,7 @@ export default function CashierScreen() {
   }, []);
 
   useEffect(() => {
-    void (async () => {
-      setCatalogLoading(true);
-      try {
-        const initial = await window.caisseApi?.getInitialCatalog?.();
-        if (initial && initial.products.length > 0) {
-          const active = activeCatalogProducts(initial.products);
-          const tabs = categoryTabsFromCatalog(active);
-          setCatalog(active);
-          setCategory(tabs[0] ?? "");
-          setCatalogReady(true);
-          return;
-        }
-        await loadCatalog();
-      } catch {
-        await loadCatalog();
-      } finally {
-        setCatalogLoading(false);
-      }
-    })();
+    void loadCatalog();
   }, [loadCatalog]);
 
   const broadcast = useCallback(
@@ -458,7 +484,7 @@ export default function CashierScreen() {
 
   const scaleConnected = weightSource === "serial";
   const weightNegative = weightKg < 0;
-  const balanceWeightLabel = formatBalanceWeightKgFr(weightKg);
+  const balanceWeightLabel = formatBalanceWeightKgFrFixed(weightKg);
 
   const handleReconnectScale = async () => {
     const w = await reconnectScale();
@@ -546,6 +572,7 @@ export default function CashierScreen() {
         setError(cartError);
         playAddProductErrorBeep();
       } else if (addedToCart && addedLineMeta) {
+        setLastPaymentSummary(null);
         setAddHistory((prev) => [...prev, addedLineMeta!]);
         playAddProductBeep();
       }
@@ -584,8 +611,28 @@ export default function CashierScreen() {
     printTicket: boolean;
     isDelivery: boolean;
     payments: Array<{ label: string; amount: number }>;
+    totalPaid: number;
     change: number;
   }) => {
+    const paidAt = new Date();
+    setLastPaymentSummary({
+      paidAt,
+      total,
+      totalPaid: opts.totalPaid,
+      change: opts.change,
+      payments: opts.payments.map((p) => ({ label: p.label, amount: p.amount })),
+    });
+
+    if (ticketPrinter.trim().length > 0) {
+      const drawerResult = await printEscPosBase64(
+        bytesToBase64(escPosOpenCashDrawer()),
+        { ticketPrinter },
+      );
+      if (!drawerResult.ok) {
+        setError(drawerResult.error);
+      }
+    }
+
     if (opts.printTicket) {
       try {
         const ticketNumber = nextTicketNumber(magasin, caisseCode);
@@ -593,7 +640,7 @@ export default function CashierScreen() {
           magasinCode: magasin,
           caisseCode: caisseCode,
           ticketNumber,
-          soldAt: new Date(),
+          soldAt: paidAt,
           lines: cart.lines,
           total,
           articleCount: lineCount,
@@ -602,8 +649,9 @@ export default function CashierScreen() {
           change: opts.change,
         });
         const base64 = bytesToBase64(buf);
-        saveLastTicketEscPosBase64(base64);
+        saveLastTicketEscPosBase64(base64, paidAt);
         setLastTicketAvailable(true);
+        setLastTicketPaidAt(paidAt);
         const printResult = await printEscPosBase64(base64, { ticketPrinter });
         if (!printResult.ok) {
           setError(printResult.error);
@@ -664,9 +712,11 @@ export default function CashierScreen() {
   };
 
   const confirmClearCart = () => {
+    setLastPaymentSummary(null);
     setCart(clearCart(cart));
     clearCachedCart(magasin, caisseCode);
     clearAddHistory();
+    broadcast(createEmptyCart(), true);
     setClearCartConfirmOpen(false);
   };
 
@@ -729,11 +779,6 @@ export default function CashierScreen() {
 
   return (
     <Box sx={{ width: 1024, height: 768, display: "flex", flexDirection: "column", overflow: "hidden" }}>
-      {isTestMagasin(magasin) ? (
-        <Alert severity="warning" sx={{ borderRadius: 0, py: 0.25, flexShrink: 0 }}>
-          Mode test (magasin 0) — ventes non comptabilisées dans les statistiques
-        </Alert>
-      ) : null}
       <Box sx={{ display: "flex", flex: 1, minHeight: 0 }}>
         <Box sx={{ flex: 1, display: "flex", flexDirection: "column", minWidth: 0 }}>
           <Box
@@ -777,7 +822,7 @@ export default function CashierScreen() {
                   whiteSpace: "nowrap",
                 }}
               >
-                {c}
+                {catalogCategoryDisplayLabel(c, displayLocale, catalogDisplayMaps)}
               </Button>
             ))
               : null}
@@ -929,7 +974,7 @@ export default function CashierScreen() {
                     minHeight: 36,
                   }}
                 >
-                  {sc}
+                  {catalogSubcategoryDisplayLabel(category, sc, displayLocale, catalogDisplayMaps)}
                 </Button>
               ))}
             </Box>
@@ -1012,7 +1057,7 @@ export default function CashierScreen() {
                         <Box
                           component="img"
                           src={p.photoUrl}
-                          alt={p.salesName}
+                          alt={catalogProductDisplayName(p, displayLocale)}
                           sx={{
                             width: "92%",
                             height: "92%",
@@ -1055,30 +1100,16 @@ export default function CashierScreen() {
                         zIndex: 1,
                         px: 0.35,
                         py: 0.15,
-                        display: "flex",
-                        alignItems: "flex-end",
-                        justifyContent: "center",
-                        textAlign: "center",
+                        height: "32%",
+                        minHeight: 26,
+                        maxHeight: 42,
                         bgcolor: "rgba(255,255,255,0.88)",
                       }}
                     >
-                      <Typography
-                        variant="caption"
-                        component="div"
-                        sx={{
-                          fontSize: 11,
-                          fontWeight: 700,
-                          lineHeight: 1.15,
-                          width: "100%",
-                          overflow: "hidden",
-                          textOverflow: "ellipsis",
-                          display: "-webkit-box",
-                          WebkitLineClamp: 2,
-                          WebkitBoxOrient: "vertical",
-                        }}
-                      >
-                        {p.salesName}
-                      </Typography>
+                      <VignetteProductName
+                        text={catalogProductDisplayName(p, displayLocale)}
+                        sx={showArabicLabels ? arabicDisplaySx : undefined}
+                      />
                     </Box>
                     </Paper>
                   ))}
@@ -1100,18 +1131,18 @@ export default function CashierScreen() {
                   bgcolor: "#fafafa",
                 }}
               >
-                <Box sx={{ flexShrink: 0, minWidth: 0, display: "flex", alignItems: "center", gap: 1 }}>
-                  <CaisseVersionBadge />
+                <Box sx={{ width: 248, flexShrink: 0, display: "flex", alignItems: "center" }}>
                   <CashierStatusBar backofficeUrl={backofficeUrl} />
                 </Box>
+
                 <Box
                   sx={{
                     flex: 1,
+                    minWidth: 0,
                     display: "flex",
                     alignItems: "center",
                     justifyContent: "center",
-                    gap: 1,
-                    minWidth: 0,
+                    gap: 0.75,
                   }}
                 >
                   {products.length > 0 ? (
@@ -1124,7 +1155,16 @@ export default function CashierScreen() {
                       >
                         <ChevronLeftIcon />
                       </IconButton>
-                      <Typography sx={{ fontWeight: 700, fontSize: 14, minWidth: 88, textAlign: "center" }}>
+                      <Typography
+                        sx={{
+                          fontWeight: 700,
+                          fontSize: 14,
+                          minWidth: 88,
+                          textAlign: "center",
+                          fontVariantNumeric: "tabular-nums",
+                          whiteSpace: "nowrap",
+                        }}
+                      >
                         Page {Math.min(productPage, productPageCount - 1) + 1} / {productPageCount}
                       </Typography>
                       <IconButton
@@ -1140,13 +1180,113 @@ export default function CashierScreen() {
                     </>
                   ) : null}
                 </Box>
-                <FormControlLabel
-                  sx={{ m: 0, flexShrink: 0 }}
-                  control={
-                    <Switch size="small" checked={printPriceMode} onChange={(_, v) => setPrintPriceMode(v)} />
-                  }
-                  label={<Typography variant="caption">Imprimer prix</Typography>}
-                />
+
+                <Box
+                  sx={{
+                    flexShrink: 0,
+                    display: "flex",
+                    flexDirection: "column",
+                    justifyContent: "center",
+                    gap: 0,
+                    lineHeight: 1,
+                  }}
+                >
+                  <Box sx={{ display: "flex", alignItems: "center", gap: 1.25 }}>
+                    <Box sx={{ display: "flex", alignItems: "center", gap: 0.25 }}>
+                      <Typography
+                        variant="caption"
+                        sx={{
+                          fontSize: 10,
+                          fontWeight: productSortMode === "code" ? 800 : 500,
+                          color: productSortMode === "code" ? "text.primary" : "text.secondary",
+                          fontVariantNumeric: "tabular-nums",
+                        }}
+                      >
+                        1-9
+                      </Typography>
+                      <Switch
+                        size="small"
+                        checked={productSortMode === "alpha"}
+                        onChange={(_, checked) => {
+                          setProductSortMode(checked ? "alpha" : "code");
+                          setProductPage(0);
+                        }}
+                        inputProps={{ "aria-label": "Tri alphabétique des produits" }}
+                        sx={{ my: -0.5 }}
+                      />
+                      <Typography
+                        variant="caption"
+                        sx={{
+                          fontSize: 10,
+                          fontWeight: productSortMode === "alpha" ? 800 : 500,
+                          color: productSortMode === "alpha" ? "text.primary" : "text.secondary",
+                        }}
+                      >
+                        A-Z
+                      </Typography>
+                    </Box>
+
+                    <Box sx={{ display: "flex", alignItems: "center", gap: 0.25 }}>
+                      <Typography
+                        variant="caption"
+                        sx={{
+                          fontSize: 10,
+                          fontWeight: displayLocale === "fr" ? 800 : 500,
+                          color: displayLocale === "fr" ? "text.primary" : "text.secondary",
+                        }}
+                      >
+                        FR
+                      </Typography>
+                      <Switch
+                        size="small"
+                        checked={displayLocale === "ar"}
+                        onChange={(_, checked) => {
+                          const next: CaisseDisplayLocale = checked ? "ar" : "fr";
+                          setDisplayLocale(next);
+                          saveDisplayLocale(next);
+                          if (checked) {
+                            const ar = countCatalogArabicLabels(activeCatalog);
+                            if (ar.products === 0) {
+                              setError(
+                                "Aucun nom arabe dans le catalogue — Menu → Actualiser les prix, ou vérifiez les champs arabes en backoffice.",
+                              );
+                            }
+                          }
+                        }}
+                        inputProps={{ "aria-label": "Afficher les noms en arabe" }}
+                        sx={{ my: -0.5 }}
+                      />
+                      <Typography
+                        variant="caption"
+                        sx={{
+                          fontSize: 10,
+                          fontWeight: displayLocale === "ar" ? 800 : 500,
+                          color: displayLocale === "ar" ? "text.primary" : "text.secondary",
+                        }}
+                      >
+                        AR
+                      </Typography>
+                    </Box>
+                  </Box>
+
+                  <FormControlLabel
+                    sx={{
+                      m: 0,
+                      mr: 0,
+                      height: 22,
+                      "& .MuiFormControlLabel-label": { fontSize: 10, lineHeight: 1.2 },
+                    }}
+                    control={
+                      <Switch
+                        size="small"
+                        checked={printPriceMode}
+                        onChange={(_, v) => setPrintPriceMode(v)}
+                        sx={{ my: -0.5 }}
+                      />
+                    }
+                    label="Imprimer prix"
+                  />
+                </Box>
               </Box>
             ) : null}
           </Box>
@@ -1186,6 +1326,7 @@ export default function CashierScreen() {
               variant="outlined"
               onClick={() => {
                 setLastTicketAvailable(hasLastTicketEscPos());
+                setLastTicketPaidAt(loadLastTicketPaidAt());
                 setMenuOpen(true);
               }}
               sx={{ ...compactActionBtnSx, minWidth: 56, flexShrink: 0 }}
@@ -1300,6 +1441,9 @@ export default function CashierScreen() {
             }}
           >
             <Box sx={{ flex: 1, overflow: "auto", px: 0.5, py: 0.5, minHeight: 0 }}>
+            {lastPaymentSummary && lineCount === 0 ? (
+              <LastPaymentSummaryCard summary={lastPaymentSummary} />
+            ) : null}
             {cartDisplayRows.map((row) => {
               if (row.type === "category") {
                 return (
@@ -1313,8 +1457,9 @@ export default function CashierScreen() {
                       mt: 0.25,
                       bgcolor: "#ddd",
                       borderRadius: 0.5,
-                      textTransform: "uppercase",
-                      letterSpacing: 0.5,
+                      textTransform: showArabicLabels ? "none" : "uppercase",
+                      letterSpacing: showArabicLabels ? 0 : 0.5,
+                      ...(showArabicLabels ? arabicDisplaySx : null),
                     }}
                   >
                     {row.label}
@@ -1359,18 +1504,19 @@ export default function CashierScreen() {
                     <Typography
                       variant="caption"
                       sx={{
-                        fontSize: 11,
-                        fontWeight: 700,
-                        minWidth: 0,
-                        lineHeight: 1.2,
-                        overflow: "hidden",
-                        textOverflow: "ellipsis",
-                        whiteSpace: "nowrap",
-                        pr: 0.25,
-                      }}
-                    >
-                      {line.productName}
-                    </Typography>
+                      fontSize: 11,
+                      fontWeight: 700,
+                      minWidth: 0,
+                      lineHeight: 1.2,
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      whiteSpace: "nowrap",
+                      pr: 0.25,
+                      ...(showArabicLabels ? arabicDisplaySx : null),
+                    }}
+                  >
+                    {cartLineDisplayName(line, activeCatalog, displayLocale)}
+                  </Typography>
                     <Typography
                       variant="caption"
                       sx={{
@@ -1463,7 +1609,7 @@ export default function CashierScreen() {
                   whiteSpace: "nowrap",
                 }}
               >
-                {formatMoneyDh(total)}
+                {formatMoneyDhFixed(total)}
               </Typography>
             </Paper>
           </Box>
@@ -1494,6 +1640,8 @@ export default function CashierScreen() {
           mode="edit"
           line={selectedLine}
           photoUrl={selectedLinePhotoUrl}
+          displayLocale={displayLocale}
+          catalog={activeCatalog}
           onClose={() => setLineEditOpen(false)}
           onSave={handleLineSave}
           onDelete={handleLineDelete}
@@ -1505,6 +1653,7 @@ export default function CashierScreen() {
           open={manualQtyOpen}
           mode="add"
           product={manualQtyProduct}
+          displayLocale={displayLocale}
           onClose={() => {
             setManualQtyOpen(false);
             setManualQtyProduct(null);
@@ -1531,6 +1680,7 @@ export default function CashierScreen() {
         catalogLoading={catalogLoading}
         saurusSending={saurusSending}
         lastTicketAvailable={lastTicketAvailable}
+        lastTicketPaidAt={lastTicketPaidAt}
         onClose={() => setMenuOpen(false)}
         onRefreshPrices={() => void loadCatalog({ showInfo: true })}
         onSendSaurusPrices={() => void handleSendSaurusPrices()}
@@ -1538,29 +1688,9 @@ export default function CashierScreen() {
         onOpenSettings={() => setSettingsOpen(true)}
         onQuitApp={() => {
           setMenuOpen(false);
-          setQuitConfirmOpen(true);
+          onRequestQuit();
         }}
       />
-
-      <Dialog open={quitConfirmOpen} onClose={() => setQuitConfirmOpen(false)} maxWidth="xs" fullWidth>
-        <DialogTitle>Fermer la caisse ?</DialogTitle>
-        <DialogContent>
-          <Typography variant="body2">Le logiciel va se fermer. Confirmer la fermeture ?</Typography>
-        </DialogContent>
-        <DialogActions sx={{ px: 2, pb: 1.5 }}>
-          <Button onClick={() => setQuitConfirmOpen(false)}>Annuler</Button>
-          <Button
-            variant="contained"
-            color="error"
-            onClick={() => {
-              setQuitConfirmOpen(false);
-              void window.caisseApi?.quitApp();
-            }}
-          >
-            Fermer caisse
-          </Button>
-        </DialogActions>
-      </Dialog>
 
       <SettingsDialog
         open={settingsOpen}

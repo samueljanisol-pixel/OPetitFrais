@@ -76,8 +76,10 @@ export default function CaisseVersionBadge() {
           display: "flex",
           alignItems: "center",
           gap: 0.35,
-          flexShrink: 0,
+          flex: 1,
+          flexShrink: 1,
           minWidth: 0,
+          flexWrap: "nowrap",
         }}
       >
         {canInstall ? (

@@ -24,6 +24,7 @@ import {
   triggerCaisseUpdateCheck,
 } from "./caisse-update";
 import { startEmbeddedCaisseAgent, stopEmbeddedCaisseAgent } from "./embedded-agent";
+import { markQuitAllowed, shouldPreventWindowClose } from "./quit-control";
 
 const CASHIER_WIDTH = 1024;
 const CASHIER_HEIGHT = 768;
@@ -129,6 +130,12 @@ function createCashierWindow(initialMode: "setup" | "caisse"): void {
     cashierWindow.loadFile(join(__dirname, "../renderer/index.html"));
   }
 
+  cashierWindow.on("close", (event) => {
+    if (!shouldPreventWindowClose()) return;
+    event.preventDefault();
+    cashierWindow?.webContents.send("caisse:request-quit-confirm");
+  });
+
   cashierWindow.on("closed", () => {
     cashierWindow = null;
   });
@@ -218,7 +225,7 @@ app.whenReady().then(async () => {
 
   ipcMain.handle("caisse:refreshCatalogCache", async () => {
     clearCachedCatalog();
-    return prefetchCatalog();
+    return prefetchCatalog(true);
   });
 
   ipcMain.handle(
@@ -264,6 +271,7 @@ app.whenReady().then(async () => {
   ipcMain.handle("caisse:listSerialPorts", async () => listWindowsSerialPorts());
 
   ipcMain.handle("caisse:quitApp", () => {
+    markQuitAllowed();
     app.quit();
   });
 

@@ -19,9 +19,10 @@ type Props = {
   open: boolean;
   status: CaisseIdentityStatus | null;
   onComplete: () => void;
+  onRequestQuit: () => void;
 };
 
-export default function SetupDialog({ open, status, onComplete }: Props) {
+export default function SetupDialog({ open, status, onComplete, onRequestQuit }: Props) {
   const [backofficeUrl, setBackofficeUrl] = useState("");
   const [caisseToken, setCaisseToken] = useState("");
   const [magasinCode, setMagasinCode] = useState("");
@@ -158,7 +159,7 @@ export default function SetupDialog({ open, status, onComplete }: Props) {
         </Button>
         <Button
           color="inherit"
-          onClick={() => void window.caisseApi?.quitApp()}
+          onClick={onRequestQuit}
           disabled={saving}
           fullWidth
         >

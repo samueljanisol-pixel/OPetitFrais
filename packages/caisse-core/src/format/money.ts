@@ -21,8 +21,17 @@ export function formatMoneyFr(value: number): string {
   return formatDecimalFr(value, 2);
 }
 
+/** Montant avec toujours 2 décimales (12 → 12,00 ; 12,5 → 12,50). */
+export function formatMoneyFrFixed(value: number): string {
+  return value.toFixed(2).replace(".", ",");
+}
+
 export function formatMoneyDh(value: number): string {
   return `${formatMoneyFr(value)} DH`;
+}
+
+export function formatMoneyDhFixed(value: number): string {
+  return `${formatMoneyFrFixed(value)} DH`;
 }
 
 export function formatWeightKgFr(value: number): string {
@@ -34,4 +43,10 @@ export function formatWeightKgFr(value: number): string {
 export function formatBalanceWeightKgFr(value: number): string {
   const decimals = value < 0 ? 2 : value < 10 ? 3 : 2;
   return formatDecimalFr(value, decimals);
+}
+
+/** Balance avec décimales fixes (0,000 / 0,00 selon la plage). */
+export function formatBalanceWeightKgFrFixed(value: number): string {
+  const decimals = value < 0 ? 2 : value < 10 ? 3 : 2;
+  return value.toFixed(decimals).replace(".", ",");
 }

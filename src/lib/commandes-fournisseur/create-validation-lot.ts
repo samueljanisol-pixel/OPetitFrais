@@ -137,7 +137,7 @@ export async function createValidationLot(
   }
 
   const productIds = [...new Set(lineKeys.map((k) => byLineKey.get(k)!.productId))];
-  const vendeurByProduct = await vendeurIdsByProductIds(supabase, productIds, supplierId);
+  const vendeurByProduct = await vendeurIdsByProductIds(writeSupabase, productIds, supplierId);
 
   const toInsertLignes = dedupeLotLigneInserts(
     lineKeys.map((key) => {

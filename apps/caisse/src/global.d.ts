@@ -42,6 +42,7 @@ declare global {
       listPrinters: () => Promise<string[]>;
       listSerialPorts: () => Promise<Array<{ path: string; manufacturer: string | null }>>;
       quitApp: () => Promise<void>;
+      onRequestQuitConfirm: (handler: () => void) => () => void;
       getUpdateState: () => Promise<CaisseUpdateState>;
       checkForUpdate: () => Promise<CaisseUpdateState>;
       installUpdate: () => Promise<{ ok: true } | { ok: false; error: string }>;

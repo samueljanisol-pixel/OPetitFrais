@@ -19,6 +19,16 @@ import {
 } from "@opf/caisse-core";
 import FormDialog from "./FormDialog";
 import RoundNumpad from "./RoundNumpad";
+import {
+  cartLineDisplayName,
+  catalogProductDisplayName,
+  type CaisseDisplayLocale,
+} from "../data/catalog-helpers";
+
+const arabicDisplaySx = {
+  direction: "rtl" as const,
+  fontFamily: '"Segoe UI", Tahoma, "Noto Sans Arabic", sans-serif',
+};
 
 type EditField = "qty" | "price";
 
@@ -36,6 +46,8 @@ type EditProps = {
 type Props = {
   open: boolean;
   onClose: () => void;
+  displayLocale?: CaisseDisplayLocale;
+  catalog?: readonly CatalogProduct[];
 } & (AddProps | EditProps) &
   (
     | { mode: "add"; onConfirm: (qty: number) => void }
@@ -47,9 +59,13 @@ function parseBuffer(buffer: string): number {
 }
 
 export default function ProductQtyDialog(props: Props) {
-  const { open, onClose, mode } = props;
+  const { open, onClose, mode, displayLocale = "fr", catalog = [] } = props;
 
-  const productName = mode === "add" ? props.product.salesName : props.line.productName;
+  const productName =
+    mode === "add"
+      ? catalogProductDisplayName(props.product, displayLocale)
+      : cartLineDisplayName(props.line, catalog, displayLocale);
+  const showArabicLabels = displayLocale === "ar";
   const productCode = mode === "add" ? props.product.code : props.line.productCode;
   const salesUnit: SalesUnitKind = mode === "add" ? props.product.salesUnit : props.line.salesUnit;
   const listUnitPrice = mode === "add" ? props.product.price : props.line.unitPrice;
@@ -167,6 +183,7 @@ export default function ProductQtyDialog(props: Props) {
           WebkitLineClamp: 2,
           WebkitBoxOrient: "vertical",
           overflow: "hidden",
+          ...(showArabicLabels ? arabicDisplaySx : null),
         }}
       >
         {productName}

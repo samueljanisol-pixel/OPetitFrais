@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Box, Paper, Typography } from "@mui/material";
-import { formatMoneyDh, formatMoneyFr } from "@opf/caisse-core";
+import { formatMoneyDhFixed, formatMoneyFr } from "@opf/caisse-core";
 import type { CartBroadcast } from "../../electron/preload/index";
 import logoOpetitFrais from "../assets/logo-opetit-frais.png";
 
@@ -121,7 +121,7 @@ export default function CustomerScreen() {
           <Typography variant="body2">{data.lineCount} article(s)</Typography>
         </Box>
         <Typography variant="h4" sx={{ fontWeight: 700 }}>
-          {formatMoneyDh(data.total)}
+          {formatMoneyDhFixed(data.total)}
         </Typography>
       </Paper>
 

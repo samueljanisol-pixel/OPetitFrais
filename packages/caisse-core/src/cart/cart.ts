@@ -128,7 +128,7 @@ export function updateCartLine(
 }
 
 export function clearCart(cart: CartState): CartState {
-  return { ...cart, lines: [] };
+  return { lines: [], clientId: null, clientName: null };
 }
 
 export function setClient(

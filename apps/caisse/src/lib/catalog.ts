@@ -1,10 +1,17 @@
 import type { CatalogProduct } from "@opf/caisse-core";
 import type { CaisseRuntimeConfig } from "../../electron/preload/index";
-import { normalizeCatalogProducts } from "../data/catalog-helpers";
+import {
+  normalizeCatalogProducts,
+  normalizeCategoryMeta,
+  type CatalogCategoryMeta,
+} from "../../shared/catalog-normalize";
+
+export type { CatalogCategoryMeta };
 
 export type CatalogFetchResult = {
   products: CatalogProduct[];
   categories: string[];
+  categoryMeta: CatalogCategoryMeta[];
   source: "api" | "mock";
   error: string | null;
   fetchedAt: string | null;
@@ -12,8 +19,8 @@ export type CatalogFetchResult = {
 
 type ApiCatalogResponse = {
   ok: boolean;
-  products?: CatalogProduct[];
-  categories?: Array<{ id: string; label: string; sortOrder: number }>;
+  products?: unknown;
+  categories?: unknown;
   fetchedAt?: string;
   error?: string;
 };
@@ -52,14 +59,18 @@ export async function isCatalogApiConfigured(): Promise<boolean> {
   return config.caisseToken.trim().length > 0;
 }
 
-export async function fetchCatalogFromApi(): Promise<CatalogFetchResult> {
+async function fetchCatalogPayloadFromApi(): Promise<{
+  products: CatalogProduct[];
+  categoryMeta: CatalogCategoryMeta[];
+  error: string | null;
+  fetchedAt: string | null;
+}> {
   const config = await getCaisseConfig();
 
   if (!config.caisseToken.trim()) {
     return {
       products: [],
-      categories: [],
-      source: "mock",
+      categoryMeta: [],
       error: "Token caisse introuvable (caisse.config.json ou .env.local)",
       fetchedAt: null,
     };
@@ -73,34 +84,27 @@ export async function fetchCatalogFromApi(): Promise<CatalogFetchResult> {
     if (!res.ok || !json.ok || !json.products) {
       return {
         products: [],
-        categories: [],
-        source: "mock",
+        categoryMeta: [],
         error: json.error ?? `HTTP ${res.status}`,
         fetchedAt: null,
       };
     }
 
     const products = normalizeCatalogProducts(json.products);
+    const categoryMeta = normalizeCategoryMeta(json.categories);
 
     if (products.length === 0) {
       return {
         products: [],
-        categories: [],
-        source: "mock",
+        categoryMeta: [],
         error: "Catalogue vide ou données invalides",
         fetchedAt: null,
       };
     }
 
-    const categories = (json.categories ?? [])
-      .slice()
-      .sort((a, b) => a.sortOrder - b.sortOrder || a.label.localeCompare(b.label, "fr"))
-      .map((c) => c.label);
-
     return {
       products,
-      categories,
-      source: "api",
+      categoryMeta,
       error: null,
       fetchedAt: json.fetchedAt ?? new Date().toISOString(),
     };
@@ -108,10 +112,59 @@ export async function fetchCatalogFromApi(): Promise<CatalogFetchResult> {
     const msg = e instanceof Error ? e.message : "Erreur réseau";
     return {
       products: [],
-      categories: [],
-      source: "mock",
+      categoryMeta: [],
       error: msg,
       fetchedAt: null,
     };
   }
+}
+
+export async function fetchCatalogFromApi(): Promise<CatalogFetchResult> {
+  if (window.caisseApi?.refreshCatalogCache) {
+    const cached = await window.caisseApi.refreshCatalogCache();
+    const products = normalizeCatalogProducts(cached.products);
+    const categoryMeta = normalizeCategoryMeta(cached.categories);
+
+    if (products.length > 0) {
+      const categories = categoryMeta
+        .slice()
+        .sort((a, b) => a.sortOrder - b.sortOrder || a.label.localeCompare(b.label, "fr"))
+        .map((c) => c.label);
+
+      return {
+        products,
+        categories,
+        categoryMeta,
+        source: "api",
+        error: null,
+        fetchedAt: new Date().toISOString(),
+      };
+    }
+
+    if (cached.error) {
+      return {
+        products: [],
+        categories: [],
+        categoryMeta: [],
+        source: "mock",
+        error: cached.error,
+        fetchedAt: null,
+      };
+    }
+  }
+
+  const payload = await fetchCatalogPayloadFromApi();
+  const categories = payload.categoryMeta
+    .slice()
+    .sort((a, b) => a.sortOrder - b.sortOrder || a.label.localeCompare(b.label, "fr"))
+    .map((c) => c.label);
+
+  return {
+    products: payload.products,
+    categories,
+    categoryMeta: payload.categoryMeta,
+    source: payload.products.length > 0 ? "api" : "mock",
+    error: payload.error,
+    fetchedAt: payload.fetchedAt,
+  };
 }

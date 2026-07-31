@@ -1,8 +1,14 @@
 import type { CatalogProduct } from "@opf/caisse-core";
 import { loadRuntimeConfig } from "./load-config";
+import {
+  normalizeCatalogProducts,
+  normalizeCategoryMeta,
+  type CatalogCategoryMeta,
+} from "../../shared/catalog-normalize";
 
 export type InitialCatalogPayload = {
   products: CatalogProduct[];
+  categories: CatalogCategoryMeta[];
   error: string | null;
 };
 
@@ -10,17 +16,19 @@ let cachedCatalog: InitialCatalogPayload | null = null;
 
 type ApiCatalogResponse = {
   ok: boolean;
-  products?: CatalogProduct[];
+  products?: unknown;
+  categories?: unknown;
   error?: string;
 };
 
-export async function prefetchCatalog(): Promise<InitialCatalogPayload> {
-  if (cachedCatalog) return cachedCatalog;
+export async function prefetchCatalog(force = false): Promise<InitialCatalogPayload> {
+  if (!force && cachedCatalog) return cachedCatalog;
 
   const config = loadRuntimeConfig();
   if (!config.caisseToken.trim()) {
     cachedCatalog = {
       products: [],
+      categories: [],
       error: "Token caisse introuvable (caisse.config.json ou .env.local)",
     };
     return cachedCatalog;
@@ -31,19 +39,32 @@ export async function prefetchCatalog(): Promise<InitialCatalogPayload> {
     const res = await fetch(url);
     const json = (await res.json()) as ApiCatalogResponse;
 
-    if (!res.ok || !json.ok || !json.products || json.products.length === 0) {
+    if (!res.ok || !json.ok || !json.products) {
       cachedCatalog = {
         products: [],
+        categories: [],
         error: json.error ?? `HTTP ${res.status}`,
       };
       return cachedCatalog;
     }
 
-    cachedCatalog = { products: json.products, error: null };
+    const products = normalizeCatalogProducts(json.products);
+    const categories = normalizeCategoryMeta(json.categories);
+
+    if (products.length === 0) {
+      cachedCatalog = {
+        products: [],
+        categories: [],
+        error: json.error ?? "Catalogue vide ou données invalides",
+      };
+      return cachedCatalog;
+    }
+
+    cachedCatalog = { products, categories, error: null };
     return cachedCatalog;
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Erreur réseau";
-    cachedCatalog = { products: [], error: msg };
+    cachedCatalog = { products: [], categories: [], error: msg };
     return cachedCatalog;
   }
 }

@@ -3,6 +3,12 @@ import type { CatalogProduct } from "@opf/caisse-core";
 
 export type InitialCatalogPayload = {
   products: CatalogProduct[];
+  categories: Array<{
+    id: string;
+    label: string;
+    labelAr: string | null;
+    sortOrder: number;
+  }>;
   error: string | null;
 };
 
@@ -105,6 +111,13 @@ contextBridge.exposeInMainWorld("caisseApi", {
   listSerialPorts: (): Promise<Array<{ path: string; manufacturer: string | null }>> =>
     ipcRenderer.invoke("caisse:listSerialPorts"),
   quitApp: (): Promise<void> => ipcRenderer.invoke("caisse:quitApp"),
+  onRequestQuitConfirm: (handler: () => void) => {
+    const listener = () => {
+      handler();
+    };
+    ipcRenderer.on("caisse:request-quit-confirm", listener);
+    return () => ipcRenderer.removeListener("caisse:request-quit-confirm", listener);
+  },
   getUpdateState: (): Promise<CaisseUpdateState> => ipcRenderer.invoke("caisse:getUpdateState"),
   checkForUpdate: (): Promise<CaisseUpdateState> => ipcRenderer.invoke("caisse:checkForUpdate"),
   installUpdate: (): Promise<{ ok: true } | { ok: false; error: string }> =>

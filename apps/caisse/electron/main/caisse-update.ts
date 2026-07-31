@@ -6,6 +6,7 @@ import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { app, type BrowserWindow } from "electron";
 import { loadRuntimeConfig } from "./load-config";
+import { markQuitAllowed } from "./quit-control";
 
 const execFileAsync = promisify(execFile);
 
@@ -398,6 +399,7 @@ export async function installCaisseUpdate(): Promise<{ ok: true } | { ok: false;
     await spawnInstaller(pending.filePath);
 
     setTimeout(() => {
+      markQuitAllowed();
       app.quit();
     }, 1500);
 

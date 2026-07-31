@@ -164,9 +164,9 @@ Fournisseur seed `ref_supplier.code = emballages_consommables` (`commande_active
 
 ## Vendeur produit → achat
 
-Si **`product.vendeur_id`** est renseigné (fiche produit, même fournisseur) :
+Si **`product.vendeur_id`** est renseigné (fiche produit) et que le marchand appartient au **fournisseur du lot** :
 
-- À la **création du lot** (consolidation) et à l’**ajout d’un produit** (validation / achat), la ligne lot reçoit ce `vendeur_id`.
+- À la **création du lot** (consolidation) et à l’**ajout d’un produit** (validation / achat), la ligne lot reçoit ce `vendeur_id` — **même si le fournisseur principal** (`product.supplier_id`) **est un autre** (produit commandable via `product_supplier`, ex. Marché en fournisseur secondaire).
 - Au passage **brouillon → prêt**, les lignes encore sans vendeur sont complétées depuis le produit.
 - En **achat**, le produit apparaît directement dans le tableau du vendeur (repli UI sur `product.vendeur_id` si la ligne n’a pas encore été persistée).
 - Si l’on **attribue / change le vendeur** d’une ligne en achat (`PATCH` `ligneUpdates[].vendeur_id`), `product.vendeur_id` est mis à jour avec ce vendeur (dernier vendeur connu ; ne se vide pas si on retire le vendeur de la ligne).

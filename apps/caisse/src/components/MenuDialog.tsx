@@ -5,18 +5,22 @@ import {
   DialogActions,
   DialogContent,
   DialogTitle,
+  Typography,
+  Box,
 } from "@mui/material";
 import SyncIcon from "@mui/icons-material/Sync";
 import SettingsOutlinedIcon from "@mui/icons-material/SettingsOutlined";
 import PowerSettingsNewIcon from "@mui/icons-material/PowerSettingsNew";
 import ReceiptLongOutlinedIcon from "@mui/icons-material/ReceiptLongOutlined";
 import ScaleOutlinedIcon from "@mui/icons-material/ScaleOutlined";
+import { formatCashierClock } from "../lib/status-bar";
 
 type Props = {
   open: boolean;
   catalogLoading?: boolean;
   saurusSending?: boolean;
   lastTicketAvailable?: boolean;
+  lastTicketPaidAt?: Date | null;
   onClose: () => void;
   onRefreshPrices: () => void;
   onSendSaurusPrices: () => void;
@@ -30,6 +34,7 @@ export default function MenuDialog({
   catalogLoading = false,
   saurusSending = false,
   lastTicketAvailable = false,
+  lastTicketPaidAt = null,
   onClose,
   onRefreshPrices,
   onSendSaurusPrices,
@@ -68,19 +73,38 @@ export default function MenuDialog({
         >
           Envoyer prix balance SAURUS
         </Button>
-        <Button
-          variant="outlined"
-          size="large"
-          startIcon={<ReceiptLongOutlinedIcon />}
-          disabled={!lastTicketAvailable}
-          onClick={() => {
-            onReprintLastTicket();
-            onClose();
-          }}
-          sx={{ justifyContent: "flex-start", py: 1.25, fontWeight: 700 }}
-        >
-          Imprimer dernier ticket
-        </Button>
+        <Box>
+          <Button
+            variant="outlined"
+            size="large"
+            fullWidth
+            startIcon={<ReceiptLongOutlinedIcon />}
+            disabled={!lastTicketAvailable}
+            onClick={() => {
+              onReprintLastTicket();
+              onClose();
+            }}
+            sx={{ justifyContent: "flex-start", py: 1.25, fontWeight: 700 }}
+          >
+            Imprimer dernier ticket
+          </Button>
+          {lastTicketAvailable && lastTicketPaidAt ? (
+            <Typography
+              variant="caption"
+              sx={{
+                display: "block",
+                mt: 0.35,
+                pl: 0.5,
+                fontSize: 10,
+                lineHeight: 1.2,
+                fontVariantNumeric: "tabular-nums",
+                color: "text.secondary",
+              }}
+            >
+              {formatCashierClock(lastTicketPaidAt)}
+            </Typography>
+          ) : null}
+        </Box>
         <Button
           variant="outlined"
           size="large"

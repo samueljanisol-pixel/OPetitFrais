@@ -95,7 +95,7 @@ export async function applyLotLigneVendeurUpdates(
   return null;
 }
 
-/** Vendeur produit si défini et cohérent avec le fournisseur du lot / produit. */
+/** Vendeur produit si défini et le marchand appartient au fournisseur du lot. */
 export async function vendeurIdForProduct(
   supabase: SupabaseClient,
   productId: string,
@@ -103,17 +103,13 @@ export async function vendeurIdForProduct(
 ): Promise<string | null> {
   const { data: product, error: pe } = await supabase
     .from("product")
-    .select("vendeur_id, supplier_id")
+    .select("vendeur_id")
     .eq("id", productId)
     .maybeSingle();
   if (pe || !product) {
     return null;
   }
-  const row = product as { vendeur_id?: string | null; supplier_id: string };
-  if (row.supplier_id !== supplierId) {
-    return null;
-  }
-  const vid = row.vendeur_id?.trim();
+  const vid = (product as { vendeur_id?: string | null }).vendeur_id?.trim();
   if (!vid) {
     return null;
   }
@@ -140,17 +136,14 @@ export async function vendeurIdsByProductIds(
   }
   const { data: products, error: pe } = await supabase
     .from("product")
-    .select("id, vendeur_id, supplier_id")
+    .select("id, vendeur_id")
     .in("id", productIds);
   if (pe || !products) {
     return out;
   }
   const candidateIds: string[] = [];
   for (const p of products) {
-    const row = p as { id: string; vendeur_id?: string | null; supplier_id: string };
-    if (row.supplier_id !== supplierId) {
-      continue;
-    }
+    const row = p as { id: string; vendeur_id?: string | null };
     const vid = row.vendeur_id?.trim();
     if (vid) {
       candidateIds.push(vid);
@@ -169,10 +162,7 @@ export async function vendeurIdsByProductIds(
   }
   const validVendeur = new Set((vendeurs as { id: string }[]).map((v) => v.id));
   for (const p of products) {
-    const row = p as { id: string; vendeur_id?: string | null; supplier_id: string };
-    if (row.supplier_id !== supplierId) {
-      continue;
-    }
+    const row = p as { id: string; vendeur_id?: string | null };
     const vid = row.vendeur_id?.trim();
     if (vid && validVendeur.has(vid)) {
       out.set(row.id, vid);
@@ -237,13 +227,12 @@ export async function setProductLastVendeur(
 
   const { data: product, error: pe } = await supabase
     .from("product")
-    .select("id, supplier_id, vendeur_id")
+    .select("id, vendeur_id")
     .eq("id", productId)
     .maybeSingle();
   if (pe) return pe.message;
   if (!product) return null;
-  const row = product as { id: string; supplier_id: string; vendeur_id?: string | null };
-  if (row.supplier_id !== opts.supplierId) return null;
+  const row = product as { id: string; vendeur_id?: string | null };
 
   const { data: vendeur, error: ve } = await supabase
     .from("ref_supplier_vendeur")
@@ -259,8 +248,7 @@ export async function setProductLastVendeur(
   const { error: ue } = await supabase
     .from("product")
     .update({ vendeur_id: vendeurId })
-    .eq("id", productId)
-    .eq("supplier_id", opts.supplierId);
+    .eq("id", productId);
   if (ue) return ue.message;
   return null;
 }

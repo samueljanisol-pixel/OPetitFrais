@@ -13,6 +13,7 @@ import CloseOutlinedIcon from "@mui/icons-material/CloseOutlined";
 import { useMemo, useRef, useState } from "react";
 import {
   formatMoneyDh,
+  formatMoneyDhFixed,
   formatMoneyFr,
   roundMoney,
   type PaymentMode,
@@ -628,7 +629,7 @@ export default function PaymentDialog({ open, totalDue, clientId, onClose, onVal
               color: "#fff",
             }}
           >
-            {formatMoneyDh(totalDue)}
+            {formatMoneyDhFixed(totalDue)}
           </Typography>
         </Box>
       </DialogTitle>

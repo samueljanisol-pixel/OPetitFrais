@@ -40,6 +40,11 @@ export function escPosFeedLines(count: number): Uint8Array {
   return new Uint8Array([ESC, 0x64, n]);
 }
 
+/** Ouvre le tiroir caisse (connecté à l'imprimante ticket) — WinDev : ESC + "p0". */
+export function escPosOpenCashDrawer(): Uint8Array {
+  return new Uint8Array([ESC, 0x70, 0x00, 0x19, 0xfa]);
+}
+
 /** Ligne centree (ESC a 1) + retour alignement gauche. */
 export function escPosLineCenter(text: string): Uint8Array {
   return concatBytes([
