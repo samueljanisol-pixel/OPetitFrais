@@ -1,4 +1,8 @@
 import { concatBytes } from "../format/bytes.js";
+import {
+  escPosSetAbsoluteHorizontalPosition,
+  escPosSetAbsoluteVerticalPosition,
+} from "./escpos-commands.js";
 
 const GS = 0x1d;
 const ESC = 0x1b;
@@ -33,6 +37,35 @@ export function escPosRasterBitmap(
   return concatBytes([
     new Uint8Array([GS, 0x76, 0x30, 0x00, xL, xH, yL, yH]),
     raster,
+  ]);
+}
+
+/** Raster aligné à gauche (ESC a 0) puis retour alignement gauche. */
+export function escPosLeftAlignedRaster(
+  raster: Uint8Array,
+  widthPx: number,
+  heightPx: number,
+): Uint8Array {
+  return concatBytes([
+    new Uint8Array([ESC, 0x61, 0x00]),
+    escPosRasterBitmap(raster, widthPx, heightPx),
+    new Uint8Array([0x0a]),
+  ]);
+}
+
+/** Raster à une position absolue (mode page). */
+export function escPosRasterAt(
+  xDots: number,
+  yDots: number,
+  raster: Uint8Array,
+  widthPx: number,
+  heightPx: number,
+): Uint8Array {
+  return concatBytes([
+    new Uint8Array([ESC, 0x61, 0x00]),
+    escPosSetAbsoluteVerticalPosition(yDots),
+    escPosSetAbsoluteHorizontalPosition(xDots),
+    escPosRasterBitmap(raster, widthPx, heightPx),
   ]);
 }
 

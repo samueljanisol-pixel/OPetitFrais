@@ -109,7 +109,7 @@ const PRODUCT_GRID_ROWS = 6;
 const PRODUCTS_PER_PAGE = PRODUCT_GRID_COLS * PRODUCT_GRID_ROWS;
 
 const CASHIER_SIDEBAR_WIDTH_PX = 300;
-const CATEGORY_ROW_HEIGHT_PX = 38;
+const CATEGORY_ROW_HEIGHT_PX = 40;
 
 const PRODUCT_LONG_PRESS_MS = 550;
 
@@ -527,7 +527,7 @@ export default function CashierScreen({ onRequestQuit }: { onRequestQuit: () => 
           return;
         }
         const buf = buildPriceLabelEscPos({
-          productName: product.salesName,
+          productName: catalogProductDisplayName(product, displayLocale),
           price: product.price,
           salesUnit: product.salesUnit,
         });
@@ -813,13 +813,14 @@ export default function CashierScreen({ onRequestQuit }: { onRequestQuit: () => 
                 sx={{
                   flex: "1 1 0",
                   minWidth: 0,
-                  fontSize: 13,
+                  fontSize: showArabicLabels ? 17 : 16,
                   fontWeight: 700,
                   px: 0.75,
                   py: 0,
                   height: CATEGORY_ROW_HEIGHT_PX,
                   minHeight: CATEGORY_ROW_HEIGHT_PX,
                   whiteSpace: "nowrap",
+                  ...(showArabicLabels ? arabicDisplaySx : null),
                 }}
               >
                 {catalogCategoryDisplayLabel(c, displayLocale, catalogDisplayMaps)}
@@ -967,7 +968,7 @@ export default function CashierScreen({ onRequestQuit }: { onRequestQuit: () => 
                   onClick={() => setSubcategory(sc)}
                   sx={{
                     minWidth: 56,
-                    fontSize: 13,
+                    fontSize: 14,
                     fontWeight: 600,
                     px: 1.5,
                     py: 0.35,
@@ -1108,6 +1109,8 @@ export default function CashierScreen({ onRequestQuit }: { onRequestQuit: () => 
                     >
                       <VignetteProductName
                         text={catalogProductDisplayName(p, displayLocale)}
+                        maxFontSize={showArabicLabels ? 14 : 11}
+                        minFontSize={showArabicLabels ? 8 : 6.5}
                         sx={showArabicLabels ? arabicDisplaySx : undefined}
                       />
                     </Box>
@@ -1450,7 +1453,7 @@ export default function CashierScreen({ onRequestQuit }: { onRequestQuit: () => 
                   <Typography
                     key={row.key}
                     sx={{
-                      fontSize: 10,
+                      fontSize: showArabicLabels ? 14 : 12,
                       fontWeight: 700,
                       px: 0.5,
                       py: 0.35,
@@ -1504,7 +1507,7 @@ export default function CashierScreen({ onRequestQuit }: { onRequestQuit: () => 
                     <Typography
                       variant="caption"
                       sx={{
-                      fontSize: 11,
+                      fontSize: showArabicLabels ? 13 : 11,
                       fontWeight: 700,
                       minWidth: 0,
                       lineHeight: 1.2,

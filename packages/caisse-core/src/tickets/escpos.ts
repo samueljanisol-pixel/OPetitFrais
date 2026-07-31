@@ -1,20 +1,38 @@
 import type { CartLine } from "../types.js";
 import { concatBytes } from "../format/bytes.js";
-import { formatMoneyFr } from "../format/money.js";
 import { escPosCode128BarcodeFullWidth, escPosResetPrintModes } from "./code128.js";
 import {
   escPosBlankLine,
   escPosCut,
+  escPosEnterPageMode,
   escPosFeedLines,
   escPosInit,
   escPosLine,
   escPosLineCenter,
   escPosLineCenterLatin,
+  escPosPrintPageModeData,
   escPosSelectCodePage1252,
+  escPosSetPageArea,
+  escPosSetPrintDirection,
+  escPosStyledLine,
+  escPosStyledLineSegments,
+  escPosStyledSegmentsAt,
+  escPosStyledTextAt,
   escPosTicketTotalLine,
   sanitizeTicketAscii,
 } from "./escpos-commands.js";
-import { escPosCenteredRaster } from "./escpos-raster.js";
+import {
+  mmToEscPosDots,
+  PRICE_LABEL_DOUBLE_LINE_DOTS,
+  PRICE_LABEL_HEIGHT_MM,
+  PRICE_LABEL_MARGIN_DOTS,
+  PRICE_LABEL_NAME_WIDTH,
+  PRICE_LABEL_WIDTH_MM,
+  priceLabelUnitLabel,
+  splitPriceLabelAmount,
+  wrapTicketWords,
+} from "./price-label-format.js";
+import { escPosCenteredRaster, escPosRasterAt } from "./escpos-raster.js";
 import {
   OPF_LOGO_HEIGHT,
   OPF_LOGO_RASTER,
@@ -148,15 +166,83 @@ export type PriceLabelInput = {
   productName: string;
   price: number;
   salesUnit: "kg" | "unit";
+  /** Desactiver le logo pre-genere (tests). */
+  skipLogo?: boolean;
 };
 
-/** Etiquette prix ~4 cm (80 mm). */
+/** Etiquette prix 80 mm × 40 cm — nom haut, prix gros, logo bas-gauche + unité. */
 export function buildPriceLabelEscPos(input: PriceLabelInput): Uint8Array {
-  const unit = input.salesUnit === "kg" ? "DH/Kg" : "DH/Unite";
-  return concatBytes([
+  const paperWidthDots = mmToEscPosDots(PRICE_LABEL_WIDTH_MM);
+  const labelHeightDots = mmToEscPosDots(PRICE_LABEL_HEIGHT_MM);
+  const margin = PRICE_LABEL_MARGIN_DOTS;
+  const unitLabel = priceLabelUnitLabel(input.salesUnit);
+  const { main: priceMain, decimals: priceDecimals } = splitPriceLabelAmount(input.price);
+  const nameLines = wrapTicketWords(input.productName, PRICE_LABEL_NAME_WIDTH);
+
+  const chunks: Uint8Array[] = [
     escPosInit(),
-    escPosLine(padCenter(sanitizeTicketAscii(input.productName.slice(0, 32)))),
-    escPosLine(padCenter(`${formatMoneyFr(input.price)} ${unit}`)),
-    escPosCut(),
-  ]);
+    escPosEnterPageMode(),
+    escPosSetPageArea(0, 0, paperWidthDots, labelHeightDots),
+    escPosSetPrintDirection(0),
+  ];
+
+  let y = margin;
+
+  for (const nameLine of nameLines) {
+    chunks.push(
+      escPosStyledTextAt(
+        margin,
+        y,
+        nameLine,
+        { bold: true, doubleHeight: true },
+        { newline: false },
+      ),
+    );
+    y += PRICE_LABEL_DOUBLE_LINE_DOTS;
+  }
+
+  y += margin;
+  chunks.push(
+    escPosStyledSegmentsAt(
+      margin,
+      y,
+      [
+        {
+          text: priceMain,
+          style: { bold: true, doubleWidth: true, doubleHeight: true },
+        },
+        ...(priceDecimals
+          ? [{ text: priceDecimals, style: { bold: true } }]
+          : []),
+      ],
+      { center: true },
+      { newline: false },
+    ),
+  );
+
+  const logoY = labelHeightDots - OPF_LOGO_HEIGHT - margin;
+  const unitX = margin + OPF_LOGO_WIDTH + 24;
+  const unitY = logoY + Math.max(0, Math.floor((OPF_LOGO_HEIGHT - PRICE_LABEL_DOUBLE_LINE_DOTS) / 2));
+
+  if (!input.skipLogo) {
+    chunks.push(
+      escPosRasterAt(margin, logoY, OPF_LOGO_RASTER, OPF_LOGO_WIDTH, OPF_LOGO_HEIGHT),
+    );
+  }
+
+  chunks.push(escPosSelectCodePage1252());
+  chunks.push(
+    escPosStyledTextAt(
+      unitX,
+      unitY,
+      unitLabel,
+      { bold: true, doubleHeight: true },
+      { latin: true, newline: false },
+    ),
+  );
+
+  chunks.push(escPosPrintPageModeData());
+  chunks.push(escPosFeedLines(4), escPosCut());
+
+  return concatBytes(chunks);
 }

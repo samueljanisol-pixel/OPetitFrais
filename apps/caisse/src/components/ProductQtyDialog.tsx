@@ -176,7 +176,7 @@ export default function ProductQtyDialog(props: Props) {
       <DialogTitle
         sx={{
           pb: 0.5,
-          fontSize: 16,
+          fontSize: showArabicLabels ? 18 : 16,
           fontWeight: 800,
           minHeight: 48,
           display: "-webkit-box",

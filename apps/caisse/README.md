@@ -260,6 +260,18 @@ En-tête ticket : **logo O'petit frais** (raster ESC/POS). Regénérer le logo :
 
 Montants avec **virgule** décimale (`12,50`). Génération : `buildSaleTicketEscPos` dans `@opf/caisse-core`.
 
+## Étiquette prix (mode Imprimer prix)
+
+Modèle ESC/POS **80 mm × 40 cm** (mode page) — **coupe papier** après avance :
+
+1. **Haut** — nom produit sur **toute la largeur** (64 col., gras, double hauteur, aligné à gauche).
+2. **Sous le nom** — prix en **gros** : partie entière + virgule en double largeur/hauteur, centimes en plus petit.
+3. **Bas** — **logo** en bas à gauche ; à droite du logo : **Prix au Kg** ou **Prix à l'unité** (accents CP1252).
+
+Pas de traits séparateurs ni de pied « O'petit frais » (le logo suffit).
+
+Génération : `buildPriceLabelEscPos` dans `@opf/caisse-core`. Le nom imprimé suit la locale affichée (FR/AR) ; caractères non ASCII remplacés pour l’imprimante thermique.
+
 **Impression** : à la validation du paiement (**avec ou sans ticket**), la caisse envoie d’abord **`ESC p 0`** (ouverture tiroir, comme WinDev `iEscape(ESC+"p0")`), puis le ticket si demandé. L’imprimante ticket doit être configurée dans **Menu → Paramètres** (tiroir connecté à l’imprimante). En cas d’échec d’impression, le ticket reste disponible via **Imprimer dernier ticket**.
 
 ## Clavier code et actions rapides
@@ -283,7 +295,7 @@ Bouton **Menu** (colonne droite) :
 
 Colonne droite (panier) : logo **O'petit frais** sur fond blanc + bouton **Menu** en haut à droite ; **Client**, **Attente**, **Supprimer panier** (icône) ; clavier avec colonne **Retour** + **Paiement**.
 
-Barre du bas (colonne produits) : **voyants + version/date** à gauche, **pagination** au centre, **switches sur 2 lignes** à droite (`1-9/A-Z` + `FR/AR`, puis `Imprimer prix`) — hauteur compacte d’origine. **Balance** + bouton **T** à droite de la rangée catégories — poids en police **7 segments** (`formatBalanceWeightKgFrFixed` : **2 décimales** si &lt; 0, **3 décimales** de 0 à 10 kg, **2 décimales** ≥ 10 kg, **zéros affichés**), fond **rouge** si poids négatif, **Kg** fixe à droite.
+Barre du bas (colonne produits) : **voyants + version/date** à gauche, **pagination** au centre, **switches sur 2 lignes** à droite (`1-9/A-Z` + `FR/AR`, puis `Imprimer prix`) — hauteur compacte d’origine. En mode **AR**, les libellés arabes sont affichés en **police plus grande** sur les catégories (17 px), vignettes (14 px max) et panier (13 px) ; sous-catégories identiques au FR (14 px, même police et gras). **Balance** + bouton **T** à droite de la rangée catégories — poids en police **7 segments** (`formatBalanceWeightKgFrFixed` : **2 décimales** si &lt; 0, **3 décimales** de 0 à 10 kg, **2 décimales** ≥ 10 kg, **zéros affichés**), fond **rouge** si poids négatif, **Kg** fixe à droite.
 
 La config matérielle est persistée dans `caisse.config.json` (userData Electron en prod) et synchronisée avec l’agent via `POST /config/hardware`. Chaque impression envoie aussi le nom d’imprimante choisi dans les paramètres. Changer le port COM reconnecte la balance automatiquement.
 
