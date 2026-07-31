@@ -125,9 +125,16 @@ En bas à gauche de la caisse (barre d’état, 2 lignes) :
 
 1. Au démarrage puis toutes les 4 h, la caisse interroge `GET /api/caisse/release?token=…`
 2. Si la version serveur est plus récente → téléchargement automatique (~83 Mo) en arrière-plan (`OPetitFrais-Caisse-Setup-{version}.exe`)
-3. Une fois prêt, le caissier clique sur « MAJ prête » → installateur NSIS silencieux (`/S`) puis fermeture de la caisse
+3. **Au lancement**, si une MAJ est déjà téléchargée → dialogue **« Mise à jour disponible »** (**Plus tard** / **Installer**) avant l’ouverture de la caisse
+4. Clic sur **« MAJ prête »** ou validation au lancement → écran **« Mise à jour en cours »** (sans autre confirmation), installateur NSIS silencieux (`/S`) en arrière-plan, puis fermeture de la caisse
 
-En cas d’échec (caisse se ferme sans installation) : consulter `%APPDATA%\OPetitFrais Caisse\caisse-update.log`, ou lancer manuellement l’installateur dans `%TEMP%\OPetitFrais-Caisse-Setup-{version}.exe`.
+En cas d’échec (caisse se ferme sans installation, ou **NSIS Error : installer integrity check has failed**) :
+
+1. Supprimer le fichier corrompu : `%TEMP%\OPetitFrais-Caisse-Setup-{version}.exe` et `%TEMP%\opf-caisse-update.json`
+2. Relancer la caisse — elle retéléchargera l’installateur (taille + signature NSIS vérifiées)
+3. Consulter `%APPDATA%\OPetitFrais Caisse\caisse-update.log` pour le détail
+
+Cause fréquente : **téléchargement incomplet** (~83 Mo attendus). La caisse rejette désormais un exe dont la taille ne correspond pas à celle annoncée par l’API ou sans signature NSIS valide.
 
 **Publier une nouvelle version** (une seule commande) :
 

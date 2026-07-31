@@ -1,5 +1,5 @@
 import { execFile, spawn } from "node:child_process";
-import { createWriteStream, existsSync, promises as fs, statSync } from "node:fs";
+import { closeSync, createWriteStream, existsSync, openSync, promises as fs, readSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { Readable } from "node:stream";
@@ -10,7 +10,7 @@ import { markQuitAllowed } from "./quit-control";
 
 const execFileAsync = promisify(execFile);
 
-export type CaisseUpdatePhase = "idle" | "checking" | "downloading" | "ready" | "error";
+export type CaisseUpdatePhase = "idle" | "checking" | "downloading" | "ready" | "installing" | "error";
 
 export type CaisseUpdateState = {
   phase: CaisseUpdatePhase;
@@ -33,6 +33,7 @@ type ReleaseApiResponse = {
 type PendingMeta = {
   version: string;
   filePath: string;
+  sizeBytes?: number | null;
 };
 
 const CHECK_INTERVAL_MS = 4 * 60 * 60 * 1000;
@@ -143,6 +144,76 @@ async function clearPendingMeta(): Promise<void> {
   }
 }
 
+async function removePendingInstaller(meta: PendingMeta): Promise<void> {
+  await clearPendingMeta();
+  try {
+    await fs.unlink(meta.filePath);
+  } catch {
+    /* ignore */
+  }
+}
+
+function readInstallerHead(filePath: string, length: number): Buffer {
+  const fd = openSync(filePath, "r");
+  try {
+    const buf = Buffer.alloc(length);
+    const bytesRead = readSync(fd, buf, 0, length, 0);
+    return buf.subarray(0, bytesRead);
+  } finally {
+    closeSync(fd);
+  }
+}
+
+/** Vérifie taille attendue + en-tête PE + signature NSIS (évite exe tronqués / corrompus). */
+function validateInstallerFile(
+  filePath: string,
+  expectedSizeBytes: number | null | undefined,
+): { ok: true; sizeBytes: number } | { ok: false; reason: string } {
+  if (!existsSync(filePath)) {
+    return { ok: false, reason: "fichier installateur absent" };
+  }
+
+  const sizeBytes = statSync(filePath).size;
+  if (sizeBytes < MIN_INSTALLER_BYTES) {
+    return { ok: false, reason: `installateur trop petit (${sizeBytes} octets)` };
+  }
+
+  const expected = expectedSizeBytes ?? 0;
+  if (expected > 0 && sizeBytes !== expected) {
+    return {
+      ok: false,
+      reason: `taille incorrecte (${sizeBytes} / ${expected} octets attendus)`,
+    };
+  }
+
+  const head = readInstallerHead(filePath, 2);
+  if (head.length < 2 || head[0] !== 0x4d || head[1] !== 0x5a) {
+    return { ok: false, reason: "fichier exe invalide (en-tête PE manquant)" };
+  }
+
+  const prefix = readInstallerHead(filePath, 1024 * 1024);
+  const isNsis =
+    prefix.includes(Buffer.from("Nullsoft")) || prefix.includes(Buffer.from("!nsis"));
+  if (!isNsis) {
+    return { ok: false, reason: "installateur NSIS invalide ou incomplet" };
+  }
+
+  return { ok: true, sizeBytes };
+}
+
+async function invalidatePendingInstaller(
+  meta: PendingMeta,
+  reason: string,
+  expectedSizeBytes?: number | null,
+): Promise<void> {
+  await logUpdate(
+    `installateur rejeté (${reason}) — ${meta.filePath}${
+      expectedSizeBytes ? ` (attendu ${expectedSizeBytes} o)` : ""
+    }`,
+  );
+  await removePendingInstaller(meta);
+}
+
 async function fetchReleaseInfo(): Promise<
   { ok: true; version: string; downloadUrl: string; sizeBytes: number | null } | { ok: false; error: string }
 > {
@@ -208,8 +279,32 @@ async function downloadInstaller(
   await pipeline(nodeStream, createWriteStream(dest));
 
   const stat = statSync(dest);
-  if (stat.size < MIN_INSTALLER_BYTES) {
-    throw new Error(`Installateur incomplet (${stat.size} octets)`);
+  if (sizeBytes && sizeBytes > 0 && stat.size !== sizeBytes) {
+    try {
+      await fs.unlink(dest);
+    } catch {
+      /* ignore */
+    }
+    throw new Error(`Téléchargement incomplet (${stat.size} / ${sizeBytes} octets)`);
+  }
+
+  if (total > 0 && stat.size !== total) {
+    try {
+      await fs.unlink(dest);
+    } catch {
+      /* ignore */
+    }
+    throw new Error(`Téléchargement incomplet (${stat.size} / ${total} octets)`);
+  }
+
+  const validated = validateInstallerFile(dest, sizeBytes ?? (total > 0 ? total : null));
+  if (!validated.ok) {
+    try {
+      await fs.unlink(dest);
+    } catch {
+      /* ignore */
+    }
+    throw new Error(validated.reason);
   }
 }
 
@@ -244,15 +339,20 @@ async function runUpdateCheck(): Promise<void> {
 
     const pending = await readPendingMeta();
     if (pending && pending.version === release.version) {
-      setState({
-        phase: "ready",
-        latestVersion: release.version,
-        updateAvailable: true,
-        installerReady: true,
-        progressPercent: 100,
-        error: null,
-      });
-      return;
+      const expectedSize = release.sizeBytes ?? pending.sizeBytes ?? null;
+      const cached = validateInstallerFile(pending.filePath, expectedSize);
+      if (cached.ok) {
+        setState({
+          phase: "ready",
+          latestVersion: release.version,
+          updateAvailable: true,
+          installerReady: true,
+          progressPercent: 100,
+          error: null,
+        });
+        return;
+      }
+      await invalidatePendingInstaller(pending, cached.reason, expectedSize);
     }
 
     if (!isVersionNewer(release.version, currentVersion)) {
@@ -293,8 +393,16 @@ async function runUpdateCheck(): Promise<void> {
     }
 
     await downloadInstaller(release.downloadUrl, dest, release.sizeBytes);
-    await writePendingMeta({ version: release.version, filePath: dest });
-    await logUpdate(`téléchargé ${dest} (${statSync(dest).size} octets)`);
+    const validated = validateInstallerFile(dest, release.sizeBytes);
+    if (!validated.ok) {
+      throw new Error(validated.reason);
+    }
+    await writePendingMeta({
+      version: release.version,
+      filePath: dest,
+      sizeBytes: validated.sizeBytes,
+    });
+    await logUpdate(`téléchargé ${dest} (${validated.sizeBytes} octets)`);
 
     setState({
       phase: "ready",
@@ -329,13 +437,12 @@ async function unblockWindowsFile(filePath: string): Promise<void> {
   }
 }
 
-function spawnInstallerDirect(installerPath: string): Promise<void> {
+function spawnInstallerDirect(installerPath: string): Promise<number | null> {
   return new Promise((resolve, reject) => {
     const child = spawn(installerPath, ["/S"], {
       detached: true,
       stdio: "ignore",
-      shell: true,
-      windowsHide: false,
+      windowsHide: true,
     });
 
     child.once("error", (err) => {
@@ -343,31 +450,68 @@ function spawnInstallerDirect(installerPath: string): Promise<void> {
     });
 
     child.once("spawn", () => {
+      const pid = child.pid ?? null;
       child.unref();
-      resolve();
+      resolve(pid);
     });
   });
 }
 
-async function spawnInstaller(installerPath: string): Promise<void> {
+async function spawnInstallerViaCmd(installerPath: string): Promise<void> {
+  const comSpec = process.env.ComSpec || "cmd.exe";
+  await new Promise<void>((resolve, reject) => {
+    const child = spawn(comSpec, ["/d", "/s", "/c", "start", '""', "/min", installerPath, "/S"], {
+      detached: true,
+      stdio: "ignore",
+      windowsHide: true,
+    });
+    child.once("error", reject);
+    child.once("close", (code) => {
+      if (code === 0) {
+        child.unref();
+        resolve();
+        return;
+      }
+      reject(new Error(`cmd start a échoué (code ${code ?? "?"})`));
+    });
+  });
+}
+
+async function spawnInstallerViaPowerShell(installerPath: string): Promise<void> {
+  const escaped = installerPath.replace(/'/g, "''");
+  await execFileAsync(
+    "powershell.exe",
+    [
+      "-NoProfile",
+      "-Command",
+      `Start-Process -LiteralPath '${escaped}' -ArgumentList '/S' -WindowStyle Hidden -PassThru | Out-Null`,
+    ],
+    { windowsHide: true, timeout: 15_000 },
+  );
+}
+
+async function spawnInstaller(installerPath: string): Promise<number | null> {
   try {
-    await spawnInstallerDirect(installerPath);
-    return;
+    const pid = await spawnInstallerDirect(installerPath);
+    await logUpdate(`installateur lancé (pid ${pid ?? "?"})`);
+    return pid;
   } catch (directErr) {
-    const escaped = installerPath.replace(/'/g, "''");
-    await execFileAsync(
-      "powershell.exe",
-      [
-        "-NoProfile",
-        "-Command",
-        `Start-Process -LiteralPath '${escaped}' -ArgumentList '/S' -WindowStyle Hidden`,
-      ],
-      { windowsHide: true, timeout: 15_000 },
-    );
-    if (directErr instanceof Error) {
-      await logUpdate(`spawn direct échoué (${directErr.message}) — fallback PowerShell`);
-    }
+    const directMsg = directErr instanceof Error ? directErr.message : String(directErr);
+    await logUpdate(`spawn direct échoué (${directMsg})`);
   }
+
+  try {
+    await spawnInstallerViaCmd(installerPath);
+    await logUpdate("installateur lancé via cmd start");
+    return null;
+  } catch (cmdErr) {
+    const cmdMsg = cmdErr instanceof Error ? cmdErr.message : String(cmdErr);
+    await logUpdate(`cmd start échoué (${cmdMsg})`);
+  }
+
+  await spawnInstallerViaPowerShell(installerPath);
+  await logUpdate("installateur lancé via PowerShell");
+  return null;
 }
 
 export function getCaisseUpdateState(): CaisseUpdateState {
@@ -390,24 +534,38 @@ export async function installCaisseUpdate(): Promise<{ ok: true } | { ok: false;
 
   try {
     const size = statSync(pending.filePath).size;
+    const release = await fetchReleaseInfo();
+    const expectedSize =
+      release.ok && release.sizeBytes ? release.sizeBytes : pending.sizeBytes ?? null;
+    const validated = validateInstallerFile(pending.filePath, expectedSize);
+    if (!validated.ok) {
+      await invalidatePendingInstaller(pending, validated.reason, expectedSize);
+      return { ok: false, error: `${validated.reason} — retéléchargez la MAJ` };
+    }
     if (size < MIN_INSTALLER_BYTES) {
       return { ok: false, error: "Installateur incomplet — retéléchargez la MAJ" };
     }
 
+    setState({
+      phase: "installing",
+      error: null,
+      installerReady: true,
+      progressPercent: 100,
+    });
+    markQuitAllowed();
     await unblockWindowsFile(pending.filePath);
     await logUpdate(`lancement ${pending.filePath} /S (${size} octets)`);
     await spawnInstaller(pending.filePath);
 
     setTimeout(() => {
-      markQuitAllowed();
       app.quit();
-    }, 1500);
+    }, 2500);
 
     return { ok: true };
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Lancement installateur impossible";
     await logUpdate(`échec lancement: ${msg}`);
-    setState({ phase: "error", error: msg, installerReady: true });
+    setState({ phase: "ready", error: msg, installerReady: true });
     return { ok: false, error: msg };
   }
 }
@@ -424,14 +582,26 @@ export function startCaisseUpdateChecks(): void {
   void (async () => {
     const pending = await readPendingMeta();
     if (pending && isVersionNewer(pending.version, app.getVersion())) {
-      setState({
-        phase: "ready",
-        latestVersion: pending.version,
-        updateAvailable: true,
-        installerReady: true,
-        progressPercent: 100,
-        currentVersion: app.getVersion(),
-      });
+      let expectedSize = pending.sizeBytes ?? null;
+      if (expectedSize == null) {
+        const release = await fetchReleaseInfo();
+        if (release.ok) {
+          expectedSize = release.sizeBytes;
+        }
+      }
+      const validated = validateInstallerFile(pending.filePath, expectedSize);
+      if (validated.ok) {
+        setState({
+          phase: "ready",
+          latestVersion: pending.version,
+          updateAvailable: true,
+          installerReady: true,
+          progressPercent: 100,
+          currentVersion: app.getVersion(),
+        });
+      } else {
+        await invalidatePendingInstaller(pending, validated.reason, expectedSize);
+      }
     }
     await runUpdateCheck();
   })();

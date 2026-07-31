@@ -1,17 +1,35 @@
-import { useEffect, useState } from "react";
-import { Box, CircularProgress } from "@mui/material";
+import { useEffect, useState, type ReactNode } from "react";
+import { Box, CircularProgress, Typography } from "@mui/material";
+import SystemUpdateAltOutlinedIcon from "@mui/icons-material/SystemUpdateAltOutlined";
 import CashierScreen from "./CashierScreen";
 import SetupDialog from "../components/SetupDialog";
 import QuitConfirmDialog from "../components/QuitConfirmDialog";
+import UpdateInstallConfirmDialog from "../components/UpdateInstallConfirmDialog";
+import UpdateInProgressScreen from "../components/UpdateInProgressScreen";
 import { invalidateCaisseConfigCache } from "../lib/hardware-config";
 import { invalidateCaisseCatalogConfigCache } from "../lib/catalog";
 import type { CaisseIdentityStatus } from "../lib/caisse-identity";
+import {
+  canInstallCaisseUpdate,
+  isCaisseUpdateInstalling,
+  useCaisseUpdate,
+  useCaisseUpdateInstall,
+} from "../lib/caisse-update";
 
 export default function CashierGate() {
   const [loading, setLoading] = useState(true);
   const [identityReady, setIdentityReady] = useState(false);
   const [identityStatus, setIdentityStatus] = useState<CaisseIdentityStatus | null>(null);
   const [quitConfirmOpen, setQuitConfirmOpen] = useState(false);
+  const [startupUpdateDismissed, setStartupUpdateDismissed] = useState(false);
+  const [startupUpdateOpen, setStartupUpdateOpen] = useState(false);
+
+  const updateState = useCaisseUpdate();
+  const { installing, error, runInstall, clearError } = useCaisseUpdateInstall(updateState);
+  const canInstallUpdate = canInstallCaisseUpdate(updateState);
+  const updateInstalling = isCaisseUpdateInstalling(updateState) || installing;
+  const blockCaisseForUpdate =
+    identityReady && canInstallUpdate && !startupUpdateDismissed && !updateInstalling;
 
   const requestQuitConfirm = () => setQuitConfirmOpen(true);
 
@@ -21,8 +39,16 @@ export default function CashierGate() {
   };
 
   useEffect(() => {
-    return window.caisseApi?.onRequestQuitConfirm?.(requestQuitConfirm);
-  }, []);
+    return window.caisseApi?.onRequestQuitConfirm?.(() => {
+      if (updateInstalling) return;
+      requestQuitConfirm();
+    });
+  }, [updateInstalling]);
+
+  useEffect(() => {
+    if (!identityReady || startupUpdateDismissed || !canInstallUpdate || updateInstalling) return;
+    setStartupUpdateOpen(true);
+  }, [identityReady, startupUpdateDismissed, canInstallUpdate, updateInstalling]);
 
   const refreshIdentity = async () => {
     if (!window.caisseApi?.getIdentityStatus) {
@@ -53,9 +79,29 @@ export default function CashierGate() {
     void refreshIdentity();
   };
 
-  let content: React.ReactNode;
+  const handleStartupUpdateDismiss = () => {
+    clearError();
+    setStartupUpdateOpen(false);
+    setStartupUpdateDismissed(true);
+  };
 
-  if (loading) {
+  const handleStartupUpdateConfirm = () => {
+    setStartupUpdateOpen(false);
+    setStartupUpdateDismissed(true);
+    void runInstall();
+  };
+
+  let content: ReactNode;
+
+  if (updateInstalling) {
+    content = (
+      <UpdateInProgressScreen
+        latestVersion={updateState.latestVersion}
+        currentVersion={updateState.currentVersion}
+        error={error}
+      />
+    );
+  } else if (loading) {
     content = (
       <Box
         sx={{
@@ -91,6 +137,32 @@ export default function CashierGate() {
         />
       </Box>
     );
+  } else if (blockCaisseForUpdate) {
+    content = (
+      <Box
+        sx={{
+          width: "100vw",
+          height: "100vh",
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          justifyContent: "center",
+          gap: 1.5,
+          bgcolor: "#f5f5f5",
+          px: 2,
+        }}
+      >
+        <SystemUpdateAltOutlinedIcon sx={{ fontSize: 48, color: "primary.main" }} />
+        <Typography variant="h6" sx={{ fontWeight: 700, textAlign: "center" }}>
+          Mise à jour prête
+        </Typography>
+        <Typography variant="body2" color="text.secondary" sx={{ textAlign: "center", maxWidth: 360 }}>
+          {updateState.latestVersion
+            ? `La version ${updateState.latestVersion} peut être installée avant l'ouverture de la caisse.`
+            : "Une mise à jour peut être installée avant l'ouverture de la caisse."}
+        </Typography>
+      </Box>
+    );
   } else {
     content = <CashierScreen onRequestQuit={requestQuitConfirm} />;
   }
@@ -99,9 +171,19 @@ export default function CashierGate() {
     <>
       {content}
       <QuitConfirmDialog
-        open={quitConfirmOpen}
+        open={quitConfirmOpen && !updateInstalling}
         onClose={() => setQuitConfirmOpen(false)}
         onConfirm={confirmQuit}
+      />
+      <UpdateInstallConfirmDialog
+        open={startupUpdateOpen && blockCaisseForUpdate}
+        context="startup"
+        dismissLabel="Plus tard"
+        latestVersion={updateState.latestVersion}
+        currentVersion={updateState.currentVersion}
+        error={error}
+        onClose={handleStartupUpdateDismiss}
+        onConfirm={handleStartupUpdateConfirm}
       />
     </>
   );

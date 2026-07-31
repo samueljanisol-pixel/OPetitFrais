@@ -58,7 +58,7 @@ export type CaisseIdentityStatus = {
 
 export type CaisseWindowMode = "setup" | "caisse";
 
-export type CaisseUpdatePhase = "idle" | "checking" | "downloading" | "ready" | "error";
+export type CaisseUpdatePhase = "idle" | "checking" | "downloading" | "ready" | "installing" | "error";
 
 export type CaisseUpdateState = {
   phase: CaisseUpdatePhase;

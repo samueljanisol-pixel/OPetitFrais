@@ -282,7 +282,13 @@ app.whenReady().then(async () => {
     return getCaisseUpdateState();
   });
 
-  ipcMain.handle("caisse:installUpdate", () => installCaisseUpdate());
+  ipcMain.handle("caisse:installUpdate", async () => {
+    if (customerWindow && !customerWindow.isDestroyed()) {
+      customerWindow.destroy();
+      customerWindow = null;
+    }
+    return installCaisseUpdate();
+  });
 
   createCashierWindow(identityReady ? "caisse" : "setup");
   initCaisseUpdate(() => cashierWindow);
