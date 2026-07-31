@@ -38,18 +38,26 @@ Le bouton **Préremplir depuis les commandes** agrège uniquement les commandes 
 
 Si le **commentaire du lot** est déjà rempli, un dialogue permet de **Ajouter sous le texte** (séparation par double saut de ligne) ou de **Remplacer** tout le bloc par la synthèse.
 
+## Prévalidation et passage « prêt pour l’achat »
+
+Cycle consolidation : **`brouillon`** → **`prevalidation`** (gestionnaire) → **`prete`** (administrateur) → **`achat_en_cours`** → **`terminee`**.
+
+- **Gestionnaire** : en brouillon, le bouton **Soumettre en prévalidation** remplace l’ancien « Marquer prêt pour l’achat ». Le lot devient **lecture seule** pour le gestionnaire ; le **récap par vendeur** et les **exports** sont visibles (sans WhatsApp ni photo achat).
+- **Administrateur** (`roles.slug === administrateur`) : peut **modifier la consolidation** en prévalidation comme en brouillon (matrice, vendeurs, commentaires, ajout produit), puis **Marquer prêt pour l’achat** (`PATCH` `{ status: "prete" }`, fige les besoins et assigne les vendeurs). Peut aussi passer **directement** brouillon → prêt, ou **revenir en saisie** depuis la prévalidation (`PATCH` `{ status: "brouillon" }`, admin seul).
+- Migration : `20260731220000_lot_status_prevalidation.sql` (CHECK statut, libellé, RLS commentaires vendeur et sync magasin).
+
 ## Lot prêt — lecture seule et retour brouillon
 
 Lorsque le lot est **prêt pour l’achat** (ou **achat en cours** sans saisie achat commencée), le commentaire du lot est affiché dans un encadré gris (comme les commentaires de commande en lecture seule). Un bouton permet, avec confirmation, de **repasser le lot en brouillon** (`PATCH` … `{ status: "brouillon" }`), ce qui efface `marque_prete_at` et réactive l’édition de la consolidation — **masqué / refusé** dès qu’une saisie achat a commencé (qté/prix/montant/marque sur les lignes ; flag `achatStarted` du GET). Le statut `achat_en_cours` seul (sans saisie) ne bloque plus le retour en saisie.
 
 ### Statut `achat_en_cours`
 
-Cycle : `brouillon` → `prete` → **`achat_en_cours`** → `terminee`.  
+Cycle : `brouillon` → `prevalidation` → `prete` → **`achat_en_cours`** → `terminee`.  
 Dès la première modification d’achat (lignes, frais, produit, clôture vendeur, photo…), le lot passe automatiquement en **Achat en cours** (migration `20260728200000_lot_status_achat_en_cours.sql`). La réouverture d’un lot terminé repasse en `achat_en_cours`.
 
 ### Récapitulatif par vendeur (lot prêt)
 
-Sur `/commandes-fournisseur/validation/lots/[id]`, lorsque le statut est **`prete`** :
+Sur `/commandes-fournisseur/validation/lots/[id]`, lorsque le statut est **`prevalidation`**, **`prete`** ou **`achat_en_cours`** (récap) :
 
 1. **Matrice consolidation** en haut (lecture seule) : colonnes magasins en **codes MXX** (ex. M01).
 2. **Export consolidation** (sous « Revenir en saisie ») : PNG de toute la commande — **par catégorie** et **par vendeur** (si le fournisseur a des marchands), plus **WhatsApp chauffeur**. Format **A4 paysage** : largeurs au texte, quantités centrées, zoom pour tenir sur la page. **Par catégorie** : une catégorie peut **s’étaler sur plusieurs colonnes** (libellé **répété**). **Par vendeur** : **un tableau vendeur n’est jamais coupé** (blocs entiers répartis sur les colonnes). Images **toujours en arabe**. Colonne **Total** absente s’il n’y a qu’**un seul magasin**. **Station** : un seul export (par catégorie). Migration `20260725230000_profiles_phone_chauffeur_setting.sql`.
@@ -68,12 +76,12 @@ Le GET lot validation renvoie aussi `vendeurs` (`ref_supplier_vendeur` du fourni
 
 ## Matrice lot — groupement catégorie ou vendeur
 
-Sur le détail lot validation, un **toggle** permet d’afficher la matrice **par catégorie** (défaut) ou **par vendeur** — **uniquement en statut brouillon**.
+Sur le détail lot validation, un **toggle** permet d’afficher la matrice **par catégorie** (défaut) ou **par vendeur** — en **brouillon** (tous) ou **prévalidation** (administrateur).
 
-- **Lot prêt** : matrice **toujours par catégorie** ; vendeurs, commentaires et export en bas (`ValidationLotVendeurRecap`).
+- **Prévalidation (gestionnaire) / lot prêt** : matrice **par catégorie** en lecture seule ; récap vendeur et exports en bas. **WhatsApp** et **photo achat** uniquement à partir de **`prete`**.
 
 - **Par catégorie** : lignes triées comme au récap commande (`ref_category.sort_order`, libellé, nom produit) ; en-tête bandeau vert par famille (ex. Fruit, « Sans catégorie »).
-- **Par vendeur** : en-tête par marchand (`vendeur_id` ou nom fournisseur si aucun vendeur) avec **champ commentaire vendeur** (sauvegarde au blur, statuts lot `brouillon` ou `prete`). Colonne **Vendeur** avec liste déroulante pour **attribuer ou changer** le marchand d’un produit (lot `brouillon` uniquement) ; met à jour `commande_fournisseur_lot_ligne.vendeur_id` et le dernier vendeur sur la fiche produit. API : `PATCH` `{ ligneUpdates: [{ lotLigneId, vendeur_id }] }` ; `PATCH` `{ vendeurCommentaire: { vendeurKey, commentaire } }` ; GET renvoie `vendeurCommentaires`.
+- **Par vendeur** : en-tête par marchand (`vendeur_id` ou nom fournisseur si aucun vendeur) avec **champ commentaire vendeur** (sauvegarde au blur, statuts lot `brouillon`, `prevalidation` (admin), `prete`). Colonne **Vendeur** avec liste déroulante pour **attribuer ou changer** le marchand d’un produit (consolidation éditable : brouillon ou prévalidation admin) ; met à jour `commande_fournisseur_lot_ligne.vendeur_id` et le dernier vendeur sur la fiche produit. API : `PATCH` `{ status: "prevalidation" }` (gestionnaire) ; `PATCH` `{ status: "prete" }` (admin) ; `PATCH` `{ ligneUpdates: [{ lotLigneId, vendeur_id }] }` ; `PATCH` `{ vendeurCommentaire: { vendeurKey, commentaire } }` ; GET renvoie `vendeurCommentaires`.
 
 Le GET renvoie **`categoryLabel`** par ligne pour le groupement catégorie.
 
@@ -230,7 +238,7 @@ Doc : [`/api/caisse/README.md`](../api/caisse/README.md).
 Les libellés de statut commande / lot s’affichent via `CommandeFournisseurStatusChip` (`src/components/commandes-fournisseur/CommandeFournisseurStatusChip.tsx`) :
 
 - **Commande** : en saisie (warning), validée (info), intégrée (primary), annulée (error)
-- **Lot** : brouillon (warning), prêt (success), achat en cours (info), terminé (primary)
+- **Lot** : brouillon (warning), prévalidation (info), prêt (success), achat en cours (info), terminé (primary)
 
 Les listes **saisie** (commandes), **validation** (lots) et **achat** (lots) partagent le même design de ligne : `ListItemButton` bordé, fournisseur à gauche, **chip statut** à droite, date (et infos secondaires) en dessous.
 

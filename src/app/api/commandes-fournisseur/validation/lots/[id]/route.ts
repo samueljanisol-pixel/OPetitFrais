@@ -16,8 +16,13 @@ import {
 import { packagingIdByProductFromCommandeLignes } from "@/lib/commandes-fournisseur/packaging-from-saisie";
 import { clampQtyToApiRange } from "@/lib/commandes-fournisseur/qty-parse";
 import { syncCommandeLignesFromLotMagasinQty } from "@/lib/commandes-fournisseur/sync-lot-magasin-lignes";
+import { isUserAdministrator } from "@/lib/auth/require-administrator-api";
 import { lotHasAchatProgress, canReopenConsolidationBrouillon } from "@/lib/commandes-fournisseur/lot-achat-progress";
-import { isLotPretOrAchatEnCours } from "@/lib/commandes-fournisseur/lot-status-achat";
+import {
+  isLotPretOrAchatEnCours,
+  isLotConsolidationEditable,
+  LOT_STATUS_PREVALIDATION,
+} from "@/lib/commandes-fournisseur/lot-status-achat";
 import {
   clearVendeurWhatsAppSentForVendeurIds,
 } from "@/lib/commandes-fournisseur/lot-vendeur-whatsapp";
@@ -25,8 +30,8 @@ import {
 type Ctx = { params: Promise<{ id: string }> };
 
 type LotPatchBody = {
-  /** Vers prêt depuis brouillon, ou retour en brouillon depuis prêt (pour rééditer consolidation). */
-  status?: "prete" | "brouillon";
+  /** prevalidation (gestionnaire), prete (admin), brouillon (retour saisie). */
+  status?: "prete" | "brouillon" | "prevalidation";
   setMagasinQte?: { lotLigneId: string; magasinId: string; qte: number };
   removeLotLigneId?: string;
   /** Commentaire général du lot (brouillon uniquement). */
@@ -117,6 +122,68 @@ async function magasinAutorisePourLot(
     }
   }
   return false;
+}
+
+async function assertLotConsolidationEditable(
+  supabase: Awaited<ReturnType<typeof createSupabaseServerClient>>,
+  userId: string,
+  lotStatus: string,
+): Promise<{ ok: true } | { ok: false; response: NextResponse }> {
+  const isAdmin = await isUserAdministrator(supabase, userId);
+  if (isLotConsolidationEditable(lotStatus, isAdmin)) {
+    return { ok: true };
+  }
+  if (lotStatus === LOT_STATUS_PREVALIDATION) {
+    return {
+      ok: false,
+      response: NextResponse.json(
+        { error: "Modification impossible : lot en prévalidation (réservé à l’administrateur)" },
+        { status: 403 },
+      ),
+    };
+  }
+  return {
+    ok: false,
+    response: NextResponse.json({ error: "Modification impossible : lot verrouillé" }, { status: 409 }),
+  };
+}
+
+async function markLotPreteForAchat(
+  supabase: Awaited<ReturnType<typeof createSupabaseServerClient>>,
+  lotId: string,
+): Promise<NextResponse | null> {
+  const { data: lotRow, error: lotRowErr } = await supabase
+    .from("commande_fournisseur_lot")
+    .select("supplier_id")
+    .eq("id", lotId)
+    .maybeSingle();
+  if (lotRowErr || !lotRow) {
+    return NextResponse.json(
+      { error: lotRowErr?.message ?? "Lot introuvable" },
+      { status: lotRowErr ? 500 : 404 },
+    );
+  }
+  const supplierId = (lotRow as { supplier_id: string }).supplier_id;
+
+  const { error: ue } = await supabase
+    .from("commande_fournisseur_lot")
+    .update({ status: "prete", marque_prete_at: new Date().toISOString() })
+    .eq("id", lotId);
+  if (ue) {
+    return NextResponse.json({ error: ue.message }, { status: 500 });
+  }
+
+  const errFreeze = await freezeBesoinEtResetQteAchat(supabase, lotId);
+  if (errFreeze) {
+    return NextResponse.json({ error: errFreeze }, { status: 500 });
+  }
+
+  const errVendeur = await assignProductVendeursToLotLines(supabase, lotId, supplierId);
+  if (errVendeur) {
+    return NextResponse.json({ error: errVendeur }, { status: 500 });
+  }
+
+  return null;
 }
 
 export async function GET(_req: Request, ctx: Ctx) {
@@ -333,7 +400,7 @@ export async function PATCH(req: Request, ctx: Ctx) {
     return NextResponse.json(
       {
         error:
-          "Un seul de : status (prete ou brouillon), setMagasinQte, removeLotLigneId, lotCommentaire, vendeurCommentaire, whatsappSent, ligneUpdates",
+          "Un seul de : status (prevalidation, prete ou brouillon), setMagasinQte, removeLotLigneId, lotCommentaire, vendeurCommentaire, whatsappSent, ligneUpdates",
       },
       { status: 400 },
     );
@@ -363,8 +430,10 @@ export async function PATCH(req: Request, ctx: Ctx) {
     if (reLu || !lotCur) {
       return NextResponse.json({ error: reLu?.message ?? "Introuvable" }, { status: reLu ? 500 : 404 });
     }
-    if ((lotCur as { status: string }).status !== "brouillon") {
-      return NextResponse.json({ error: "Modification impossible : lot non brouillon" }, { status: 409 });
+    const lotStatusLu = (lotCur as { status: string }).status;
+    const editGate = await assertLotConsolidationEditable(supabase, gate.userId, lotStatusLu);
+    if (!editGate.ok) {
+      return editGate.response;
     }
     const supplierId = (lotCur as { supplier_id: string }).supplier_id;
 
@@ -423,8 +492,11 @@ export async function PATCH(req: Request, ctx: Ctx) {
       return NextResponse.json({ error: reWa?.message ?? "Introuvable" }, { status: reWa ? 500 : 404 });
     }
     const lotStatus = (lotCur as { status: string }).status;
-    if (lotStatus !== "brouillon" && !isLotPretOrAchatEnCours(lotStatus)) {
-      return NextResponse.json({ error: "Modification impossible : lot verrouillé" }, { status: 409 });
+    if (!isLotPretOrAchatEnCours(lotStatus)) {
+      return NextResponse.json(
+        { error: "WhatsApp disponible uniquement pour un lot prêt pour l'achat" },
+        { status: 409 },
+      );
     }
     const vendeurKey = payload.vendeurKey.trim();
     const sentAt = new Date().toISOString();
@@ -464,8 +536,13 @@ export async function PATCH(req: Request, ctx: Ctx) {
       return NextResponse.json({ error: reVc?.message ?? "Introuvable" }, { status: reVc ? 500 : 404 });
     }
     const lotStatus = (lotCur as { status: string }).status;
-    if (lotStatus !== "brouillon" && !isLotPretOrAchatEnCours(lotStatus)) {
-      return NextResponse.json({ error: "Modification impossible : lot verrouillé" }, { status: 409 });
+    if (isLotPretOrAchatEnCours(lotStatus)) {
+      // commentaires vendeur après passage « prêt »
+    } else {
+      const editGate = await assertLotConsolidationEditable(supabase, gate.userId, lotStatus);
+      if (!editGate.ok) {
+        return editGate.response;
+      }
     }
     const vendeurKey = payload.vendeurKey.trim();
     const stored =
@@ -534,8 +611,10 @@ export async function PATCH(req: Request, ctx: Ctx) {
     if (re2 || !lotCur) {
       return NextResponse.json({ error: re2?.message ?? "Introuvable" }, { status: re2 ? 500 : 404 });
     }
-    if ((lotCur as { status: string }).status !== "brouillon") {
-      return NextResponse.json({ error: "Modification impossible : lot non brouillon" }, { status: 409 });
+    const lotStatusLc = (lotCur as { status: string }).status;
+    const editGateLc = await assertLotConsolidationEditable(supabase, gate.userId, lotStatusLc);
+    if (!editGateLc.ok) {
+      return editGateLc.response;
     }
     const stored =
       body.lotCommentaire === null
@@ -576,8 +655,10 @@ export async function PATCH(req: Request, ctx: Ctx) {
     if (re2 || !lotCur) {
       return NextResponse.json({ error: re2?.message ?? "Introuvable" }, { status: re2 ? 500 : 404 });
     }
-    if ((lotCur as { status: string }).status !== "brouillon") {
-      return NextResponse.json({ error: "Modification impossible : lot non brouillon" }, { status: 409 });
+    const lotStatusRm = (lotCur as { status: string }).status;
+    const editGateRm = await assertLotConsolidationEditable(supabase, gate.userId, lotStatusRm);
+    if (!editGateRm.ok) {
+      return editGateRm.response;
     }
     const vendeurIdBeforeDelete = (lotRow as { vendeur_id?: string | null }).vendeur_id ?? null;
     const { error: de } = await supabase.from("commande_fournisseur_lot_ligne").delete().eq("id", lotLigneId);
@@ -617,8 +698,10 @@ export async function PATCH(req: Request, ctx: Ctx) {
     if (re2 || !lotCur) {
       return NextResponse.json({ error: re2?.message ?? "Introuvable" }, { status: re2 ? 500 : 404 });
     }
-    if ((lotCur as { status: string }).status !== "brouillon") {
-      return NextResponse.json({ error: "Modification impossible : lot non brouillon" }, { status: 409 });
+    const lotStatusMq = (lotCur as { status: string }).status;
+    const editGateMq = await assertLotConsolidationEditable(supabase, gate.userId, lotStatusMq);
+    if (!editGateMq.ok) {
+      return editGateMq.response;
     }
     const magOk = await magasinAutorisePourLot(supabase, id, magasinId);
     if (!magOk) {
@@ -664,7 +747,7 @@ export async function PATCH(req: Request, ctx: Ctx) {
     }
 
     if (qte > 0) {
-      await syncCommandeLignesFromLotMagasinQty(supabase, id, "brouillon");
+      await syncCommandeLignesFromLotMagasinQty(supabase, id, lotStatusMq);
     }
 
     const errRe = await recomputeQteAchat(supabase, lotLigneId);
@@ -691,46 +774,64 @@ export async function PATCH(req: Request, ctx: Ctx) {
     }
     const st = (cur as { status: string }).status;
 
-    if (body.status === "prete") {
+    if (body.status === "prevalidation") {
       if (st !== "brouillon") {
-        return NextResponse.json({ error: "Seul un lot brouillon peut être marqué prêt" }, { status: 409 });
-      }
-
-      const { data: lotRow, error: lotRowErr } = await supabase
-        .from("commande_fournisseur_lot")
-        .select("supplier_id")
-        .eq("id", id)
-        .maybeSingle();
-      if (lotRowErr || !lotRow) {
         return NextResponse.json(
-          { error: lotRowErr?.message ?? "Lot introuvable" },
-          { status: lotRowErr ? 500 : 404 },
+          { error: "Seul un lot brouillon peut être soumis en prévalidation" },
+          { status: 409 },
         );
       }
-      const supplierId = (lotRow as { supplier_id: string }).supplier_id;
-
       const { error: ue } = await supabase
         .from("commande_fournisseur_lot")
-        .update({ status: "prete", marque_prete_at: new Date().toISOString() })
+        .update({ status: LOT_STATUS_PREVALIDATION })
         .eq("id", id);
       if (ue) {
         return NextResponse.json({ error: ue.message }, { status: 500 });
       }
+      return NextResponse.json({ ok: true });
+    }
 
-      const errFreeze = await freezeBesoinEtResetQteAchat(supabase, id);
-      if (errFreeze) {
-        return NextResponse.json({ error: errFreeze }, { status: 500 });
+    if (body.status === "prete") {
+      const isAdmin = await isUserAdministrator(supabase, gate.userId);
+      if (!isAdmin) {
+        return NextResponse.json(
+          { error: "Marquer prêt pour l'achat : réservé à l'administrateur" },
+          { status: 403 },
+        );
       }
-
-      const errVendeur = await assignProductVendeursToLotLines(supabase, id, supplierId);
-      if (errVendeur) {
-        return NextResponse.json({ error: errVendeur }, { status: 500 });
+      if (st !== "brouillon" && st !== LOT_STATUS_PREVALIDATION) {
+        return NextResponse.json(
+          { error: "Seul un lot brouillon ou en prévalidation peut être marqué prêt" },
+          { status: 409 },
+        );
       }
-
+      const errResp = await markLotPreteForAchat(supabase, id);
+      if (errResp) {
+        return errResp;
+      }
       return NextResponse.json({ ok: true });
     }
 
     if (body.status === "brouillon") {
+      const isAdmin = await isUserAdministrator(supabase, gate.userId);
+
+      if (st === LOT_STATUS_PREVALIDATION) {
+        if (!isAdmin) {
+          return NextResponse.json(
+            { error: "Revenir en saisie depuis la prévalidation : réservé à l'administrateur" },
+            { status: 403 },
+          );
+        }
+        const { error: ue } = await supabase
+          .from("commande_fournisseur_lot")
+          .update({ status: "brouillon", marque_prete_at: null })
+          .eq("id", id);
+        if (ue) {
+          return NextResponse.json({ error: ue.message }, { status: 500 });
+        }
+        return NextResponse.json({ ok: true });
+      }
+
       if (st !== "prete" && st !== "achat_en_cours") {
         return NextResponse.json(
           { error: "Seul un lot « prêt pour l’achat » peut revenir en saisie" },

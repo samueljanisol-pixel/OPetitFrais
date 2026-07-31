@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { createSupabaseServerClient, createSupabaseServiceRoleClient } from "@/lib/supabase/server";
 import { requireApiPermission } from "@/lib/auth/require-permission-api";
+import { isUserAdministrator } from "@/lib/auth/require-administrator-api";
+import { isLotConsolidationEditable } from "@/lib/commandes-fournisseur/lot-status-achat";
 import { findExistingLotLigneId } from "@/lib/commandes-fournisseur/lot-ligne-duplicate-query";
 import { insertLotLignesMerged } from "@/lib/commandes-fournisseur/insert-lot-lignes";
 import { normalizeEntityId, normalizeProductPackagingId } from "@/lib/commandes-fournisseur/commande-ligne-key";
@@ -10,7 +12,7 @@ import { clearVendeurWhatsAppSentForVendeurIds } from "@/lib/commandes-fournisse
 type Ctx = { params: Promise<{ id: string }> };
 
 /**
- * Ajoute un produit au lot brouillon (ligne + qtés par magasin des commandes incluses à 0).
+ * Ajoute un produit au lot en consolidation (brouillon ou prévalidation admin).
  */
 export async function POST(req: Request, ctx: Ctx) {
   const { id: lotId } = await ctx.params;
@@ -54,8 +56,9 @@ export async function POST(req: Request, ctx: Ctx) {
   }
   const lotSupplierId = (lot as { supplier_id: string }).supplier_id;
   const st = (lot as { status: string }).status;
-  if (st !== "brouillon") {
-    return NextResponse.json({ error: "Seul un lot brouillon peut être modifié" }, { status: 409 });
+  const isAdmin = await isUserAdministrator(supabase, gate.userId);
+  if (!isLotConsolidationEditable(st, isAdmin)) {
+    return NextResponse.json({ error: "Modification impossible : lot verrouillé" }, { status: 409 });
   }
 
   const { data: product, error: pe } = await supabase

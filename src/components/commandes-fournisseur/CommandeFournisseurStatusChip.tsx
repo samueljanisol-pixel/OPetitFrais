@@ -27,6 +27,8 @@ function chipColorForStatus(
   switch (status) {
     case "brouillon":
       return "warning";
+    case "prevalidation":
+      return "info";
     case "prete":
       return "success";
     case "achat_en_cours":

@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
+export const LOT_STATUS_PREVALIDATION = "prevalidation" as const;
 export const LOT_STATUS_ACHAT_EN_COURS = "achat_en_cours" as const;
 
 /** Statuts où la saisie / clôture vendeur achat est possible. */
@@ -15,6 +16,22 @@ export function isLotVendeurMediaEditable(status: string): boolean {
 /** Lot encore « ouvert » côté validation (exports WhatsApp, pas brouillon). */
 export function isLotPretOrAchatEnCours(status: string): boolean {
   return status === "prete" || status === "achat_en_cours";
+}
+
+/** Prévalidation ou phase post-prévalidation (récap consolidation). */
+export function isLotPrevalidationOrPretOrAchatEnCours(status: string): boolean {
+  return status === LOT_STATUS_PREVALIDATION || isLotPretOrAchatEnCours(status);
+}
+
+/** Édition matrice consolidation : brouillon (tous) ou prévalidation (administrateur). */
+export function isLotConsolidationEditable(status: string, isAdministrator: boolean): boolean {
+  if (status === "brouillon") {
+    return true;
+  }
+  if (status === LOT_STATUS_PREVALIDATION) {
+    return isAdministrator;
+  }
+  return false;
 }
 
 /**

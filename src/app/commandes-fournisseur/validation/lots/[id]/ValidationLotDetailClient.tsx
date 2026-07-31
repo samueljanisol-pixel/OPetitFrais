@@ -30,7 +30,12 @@ import CommandeFournisseurStatusChip from "@/components/commandes-fournisseur/Co
 import AppLink from "@/components/AppLink";
 import FormDialog from "@/lib/mui/FormDialog";
 import { useSessionPermissions } from "@/lib/auth/useSessionPermissions";
-import { isLotPretOrAchatEnCours } from "@/lib/commandes-fournisseur/lot-status-achat";
+import {
+  isLotPretOrAchatEnCours,
+  isLotConsolidationEditable,
+  isLotPrevalidationOrPretOrAchatEnCours,
+  LOT_STATUS_PREVALIDATION,
+} from "@/lib/commandes-fournisseur/lot-status-achat";
 import { useStatusLabels } from "@/lib/statusLabels/useStatusLabels";
 import {
   buildLotProductDisplayInfoForLocale,
@@ -295,7 +300,7 @@ export default function ValidationLotDetailClient({ lotId }: { lotId: string }) 
   const BackChevronIcon = useBackChevronIcon();
   const genericError = tCommandesErrors("generic");
   const { labelFor } = useStatusLabels();
-  const { loading, can } = useSessionPermissions();
+  const { loading, can, isAdministrator } = useSessionPermissions();
   const [lot, setLot] = useState<Lot | null>(null);
   const [lignes, setLignes] = useState<LotLigne[]>([]);
   const [vendeurs, setVendeurs] = useState<VendeurRef[]>([]);
@@ -459,13 +464,16 @@ export default function ValidationLotDetailClient({ lotId }: { lotId: string }) 
   const commandeDate = useMemo(() => lotCommandeDateInfo(lot), [lot]);
 
   const matrixCategoryColSpan = useMemo(() => {
-    const ed = lot?.status === "brouillon";
+    const ed = lot ? isLotConsolidationEditable(lot.status, isAdministrator) : false;
     const vendorCol = ed && matrixGroupBy === "vendeur" && vendeurs.length > 0 ? 1 : 0;
     return 1 + vendorCol + magasinColumns.length + 2 + (ed ? 1 : 0);
-  }, [lot?.status, magasinColumns.length, matrixGroupBy, vendeurs.length]);
+  }, [lot, isAdministrator, magasinColumns.length, matrixGroupBy, vendeurs.length]);
 
   const showVendorColumn =
-    lot?.status === "brouillon" && matrixGroupBy === "vendeur" && vendeurs.length > 0;
+    lot != null &&
+    isLotConsolidationEditable(lot.status, isAdministrator) &&
+    matrixGroupBy === "vendeur" &&
+    vendeurs.length > 0;
 
   const patchLigneVendeur = useCallback(
     async (lotLigneId: string, vendeur_id: string | null) => {
@@ -583,7 +591,11 @@ export default function ValidationLotDetailClient({ lotId }: { lotId: string }) 
   }, [lot, lotId, router, genericError]);
 
   const executeReopenBrouillon = useCallback(async () => {
-    if (!lot || lot.status !== "prete") {
+    if (!lot || !canReopenBrouillon) {
+      setReopenBrouillonDialogOpen(false);
+      return;
+    }
+    if (lot.status === LOT_STATUS_PREVALIDATION && !isAdministrator) {
       setReopenBrouillonDialogOpen(false);
       return;
     }
@@ -609,10 +621,37 @@ export default function ValidationLotDetailClient({ lotId }: { lotId: string }) 
     } finally {
       setSaving(false);
     }
-  }, [lot, lotId, load, router, genericError]);
+  }, [lot, lotId, load, router, genericError, canReopenBrouillon, isAdministrator]);
+
+  const onPrevalidation = async () => {
+    if (!lot || lot.status !== "brouillon") {
+      return;
+    }
+    setErr(null);
+    setSaving(true);
+    try {
+      const res = await fetch(`/api/commandes-fournisseur/validation/lots/${lotId}`, {
+        method: "PATCH",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: LOT_STATUS_PREVALIDATION }),
+      });
+      const j = (await res.json()) as { error?: string };
+      if (!res.ok) {
+        setErr(j.error ?? genericError);
+        return;
+      }
+      void router.refresh();
+      await load();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : genericError);
+    } finally {
+      setSaving(false);
+    }
+  };
 
   const onPrete = async () => {
-    if (!lot || lot.status !== "brouillon") {
+    if (!lot || (lot.status !== "brouillon" && lot.status !== LOT_STATUS_PREVALIDATION)) {
       return;
     }
     setErr(null);
@@ -640,7 +679,7 @@ export default function ValidationLotDetailClient({ lotId }: { lotId: string }) 
 
   const postLotProduct = useCallback(
     async (productId: string, productPackagingId: string | null) => {
-      if (!lot || lot.status !== "brouillon") {
+      if (!lot || !isLotConsolidationEditable(lot.status, isAdministrator)) {
         return;
       }
       setErr(null);
@@ -667,12 +706,12 @@ export default function ValidationLotDetailClient({ lotId }: { lotId: string }) 
         setSaving(false);
       }
     },
-    [lot, lotId, load, genericError],
+    [lot, lotId, load, genericError, isAdministrator],
   );
 
   const handleProductChosenFromPicker = useCallback(
     (picked: ProductPickRow) => {
-      if (!lot || lot.status !== "brouillon") {
+      if (!lot || !isLotConsolidationEditable(lot.status, isAdministrator)) {
         return;
       }
       const packs = packArray(parcoursShapeFromPickRow(picked).product_packaging);
@@ -683,7 +722,7 @@ export default function ValidationLotDetailClient({ lotId }: { lotId: string }) 
       }
       void postLotProduct(picked.id, null);
     },
-    [lot, postLotProduct],
+    [lot, postLotProduct, isAdministrator],
   );
 
   const handleCondLotDialogConfirm = useCallback(() => {
@@ -703,12 +742,12 @@ export default function ValidationLotDetailClient({ lotId }: { lotId: string }) 
   }, []);
 
   const openDeleteLigneDialog = useCallback((lineId: string, label: string) => {
-    if (!lot || lot.status !== "brouillon") {
+    if (!lot || !isLotConsolidationEditable(lot.status, isAdministrator)) {
       return;
     }
     setPendingDeleteLigne({ id: lineId, productLabel: label });
     setDeleteLigneDialogOpen(true);
-  }, [lot]);
+  }, [lot, isAdministrator]);
 
   const closeDeleteLigneDialog = useCallback(() => {
     setDeleteLigneDialogOpen(false);
@@ -717,7 +756,7 @@ export default function ValidationLotDetailClient({ lotId }: { lotId: string }) 
 
   const executeDeleteLigne = useCallback(async () => {
     const pending = pendingDeleteLigne;
-    if (!pending || !lot || lot.status !== "brouillon") {
+    if (!pending || !lot || !isLotConsolidationEditable(lot.status, isAdministrator)) {
       return;
     }
     const lineId = pending.id;
@@ -745,12 +784,12 @@ export default function ValidationLotDetailClient({ lotId }: { lotId: string }) 
     } finally {
       setRowSaving(null);
     }
-  }, [closeDeleteLigneDialog, clearLocalWhatsAppForVendeurIds, load, lot, lotId, pendingDeleteLigne, lignes, genericError]);
+  }, [closeDeleteLigneDialog, clearLocalWhatsAppForVendeurIds, load, lot, lotId, pendingDeleteLigne, lignes, genericError, isAdministrator]);
 
   const patchLotCommentaire = useCallback(
     async (nextRaw: string) => {
       const lotCur = lot;
-      if (!lotCur || lotCur.status !== "brouillon") {
+      if (!lotCur || !isLotConsolidationEditable(lotCur.status, isAdministrator)) {
         return;
       }
       const stored = nextRaw.trim() === "" ? null : nextRaw.trim();
@@ -781,7 +820,7 @@ export default function ValidationLotDetailClient({ lotId }: { lotId: string }) 
         setLotCommentSaving(false);
       }
     },
-    [lot, lotId, load, genericError],
+    [lot, lotId, load, genericError, isAdministrator],
   );
 
   const markVendeurWhatsAppSent = useCallback(
@@ -858,7 +897,7 @@ export default function ValidationLotDetailClient({ lotId }: { lotId: string }) 
   const patchCommandeCommentaire = useCallback(
     async (commandeId: string, nextRaw: string) => {
       const lotCur = lot;
-      if (!lotCur || lotCur.status !== "brouillon") {
+      if (!lotCur || !isLotConsolidationEditable(lotCur.status, isAdministrator)) {
         return;
       }
       const stored = nextRaw.trim() === "" ? null : nextRaw.trim();
@@ -896,12 +935,12 @@ export default function ValidationLotDetailClient({ lotId }: { lotId: string }) 
         setCmdCommentSavingId(null);
       }
     },
-    [lot, load, genericError],
+    [lot, load, genericError, isAdministrator],
   );
 
   const handlePreremplirLotDepuisCommandes = useCallback(() => {
     const lotCur = lot;
-    if (!lotCur || lotCur.status !== "brouillon") {
+    if (!lotCur || !isLotConsolidationEditable(lotCur.status, isAdministrator)) {
       return;
     }
     const block = buildMergedCommandComments(
@@ -929,6 +968,7 @@ export default function ValidationLotDetailClient({ lotId }: { lotId: string }) 
     patchLotCommentaire,
     tCommandesCommon,
     tCommandesErrors,
+    isAdministrator,
   ]);
 
   const applyMergeLotComment = useCallback(
@@ -972,11 +1012,16 @@ export default function ValidationLotDetailClient({ lotId }: { lotId: string }) 
 
   const rSup = one(lot.ref_supplier as { label?: string } | { label?: string }[]);
   const supplierName = rSup && "label" in rSup && rSup.label ? String(rSup.label) : tCommandesCommon("emDash");
-  const editable = lot.status === "brouillon";
-  const vendeurCommentEditable = lot.status === "brouillon" || isLotPretOrAchatEnCours(lot.status);
-  const matrixGroupByEffective: MatrixGroupBy = isLotPretOrAchatEnCours(lot.status)
-    ? "category"
-    : matrixGroupBy;
+  const editable = isLotConsolidationEditable(lot.status, isAdministrator);
+  const vendeurCommentEditable =
+    isLotConsolidationEditable(lot.status, isAdministrator) || isLotPretOrAchatEnCours(lot.status);
+  const showRecap = isLotPrevalidationOrPretOrAchatEnCours(lot.status);
+  const whatsAppEnabled = isLotPretOrAchatEnCours(lot.status);
+  const matrixGroupByEffective: MatrixGroupBy =
+    isLotPretOrAchatEnCours(lot.status) ||
+    (lot.status === LOT_STATUS_PREVALIDATION && !isAdministrator)
+      ? "category"
+      : matrixGroupBy;
   const matrixDisplayItems = buildMatrixDisplayItems(
     recapLignes,
     matrixGroupByEffective,
@@ -1015,7 +1060,7 @@ export default function ValidationLotDetailClient({ lotId }: { lotId: string }) 
           {tLotDetail("title", { supplier: supplierName })}
         </Typography>
         <div className="flex flex-wrap items-center justify-end gap-2">
-          {canReopenBrouillon ? (
+          {canReopenBrouillon && (lot.status !== LOT_STATUS_PREVALIDATION || isAdministrator) ? (
             <Button
               type="button"
               variant="outlined"
@@ -1043,7 +1088,7 @@ export default function ValidationLotDetailClient({ lotId }: { lotId: string }) 
         <div className="!mb-4" />
       )}
 
-      {isLotPretOrAchatEnCours(lot.status) ? (
+      {showRecap ? (
         <div className="!mb-4 flex flex-col gap-2">
           {lignes.length > 0 ? (
             <LotConsolidationExportPanel
@@ -1093,7 +1138,7 @@ export default function ValidationLotDetailClient({ lotId }: { lotId: string }) 
         </Typography>
       ) : (
         <div className="!mb-6 overflow-x-auto">
-          {lot.status === "brouillon" ? (
+          {editable ? (
             <div className="!mb-2 flex flex-wrap items-center justify-between gap-2">
               <ToggleButtonGroup
                 size="small"
@@ -1461,7 +1506,7 @@ export default function ValidationLotDetailClient({ lotId }: { lotId: string }) 
         </div>
       )}
 
-      {isLotPretOrAchatEnCours(lot.status) && lignes.length > 0 ? (
+      {showRecap && lignes.length > 0 ? (
         <ValidationLotVendeurRecap
           lot={lot}
           supplierLabel={supplierName}
@@ -1474,8 +1519,8 @@ export default function ValidationLotDetailClient({ lotId }: { lotId: string }) 
           onVendeurCommentDraftChange={onVendeurCommentDraftChange}
           onVendeurCommentSave={onVendeurCommentBlur}
           vendeurWhatsAppSent={vendeurWhatsAppSent}
-          onVendeurWhatsAppSent={markVendeurWhatsAppSent}
-          onPersistVendeurCommandeImage={persistVendeurCommandeImage}
+          onVendeurWhatsAppSent={whatsAppEnabled ? markVendeurWhatsAppSent : undefined}
+          onPersistVendeurCommandeImage={whatsAppEnabled ? persistVendeurCommandeImage : undefined}
         />
       ) : null}
 
@@ -1491,6 +1536,33 @@ export default function ValidationLotDetailClient({ lotId }: { lotId: string }) 
           >
             {tLotDetail("cancelLot")}
           </Button>
+          <Button
+            type="button"
+            variant="contained"
+            color="primary"
+            disabled={saving}
+            onClick={() => void onPrevalidation()}
+            sx={{ textTransform: "none" }}
+          >
+            {saving ? tCommandesCommon("loadingEllipsis") : tLotDetail("submitPrevalidation")}
+          </Button>
+          {isAdministrator ? (
+            <Button
+              type="button"
+              variant="contained"
+              color="success"
+              disabled={saving}
+              onClick={() => void onPrete()}
+              sx={{ textTransform: "none" }}
+            >
+              {saving ? tCommandesCommon("loadingEllipsis") : tLotDetail("markReadyForPurchase")}
+            </Button>
+          ) : null}
+        </div>
+      ) : null}
+
+      {lot.status === LOT_STATUS_PREVALIDATION && isAdministrator ? (
+        <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
           <Button
             type="button"
             variant="contained"

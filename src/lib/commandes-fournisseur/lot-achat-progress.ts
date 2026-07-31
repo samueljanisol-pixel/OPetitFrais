@@ -57,6 +57,9 @@ export function canReopenConsolidationBrouillon(
   lotStatus: string,
   lignes: AchatLineProgress[],
 ): boolean {
+  if (lotStatus === "prevalidation") {
+    return true;
+  }
   if (lotStatus !== "prete" && lotStatus !== "achat_en_cours") {
     return false;
   }

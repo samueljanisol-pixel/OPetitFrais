@@ -420,6 +420,7 @@
           "vendorCommentPlaceholder": "Commentaire pour ce vendeur…",
           "vendorCommentExportLabel": "Commentaire",
           "markReadyForPurchase": "Marquer prêt pour l'achat",
+          "submitPrevalidation": "Soumettre en prévalidation",
           "cancelLot": "Annuler le lot",
           "lotCommentSection": "Commentaire du lot",
           "lotCommentPlaceholder": "Commentaire général sur ce lot consolidé…",

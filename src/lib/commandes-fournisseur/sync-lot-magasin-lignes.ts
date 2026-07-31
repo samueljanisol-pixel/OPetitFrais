@@ -58,7 +58,7 @@ export async function syncCommandeLignesFromLotMagasinQty(
   lotId: string,
   lotStatus: string,
 ): Promise<void> {
-  if (lotStatus !== "brouillon") {
+  if (lotStatus !== "brouillon" && lotStatus !== "prevalidation") {
     return;
   }
 
