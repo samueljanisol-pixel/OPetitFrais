@@ -72,7 +72,10 @@ import type {
   RecapLigneInput,
   VendeurRef,
 } from "@/lib/commandes-fournisseur/validation-lot-vendeur-recap";
-import { buildMatrixDisplayItems } from "@/lib/commandes-fournisseur/validation-lot-vendeur-recap";
+import {
+  buildMatrixDisplayItems,
+  vendeurKeyForLigne,
+} from "@/lib/commandes-fournisseur/validation-lot-vendeur-recap";
 
 type ProductE = {
   id: string;
@@ -318,9 +321,35 @@ export default function ValidationLotDetailClient({ lotId }: { lotId: string }) 
   const [lotCommentSaving, setLotCommentSaving] = useState(false);
   const [cmdCommentSavingId, setCmdCommentSavingId] = useState<string | null>(null);
   const [vendeurWhatsAppSent, setVendeurWhatsAppSent] = useState<Record<string, boolean>>({});
-  const [achatStarted, setAchatStarted] = useState(false);
+  const [canReopenBrouillon, setCanReopenBrouillon] = useState(false);
   /** Quantité par cellule au focus : enregistrement seulement si la valeur a changé au blur. */
   const cellFocusBaseline = useRef<Record<string, number>>({});
+
+  const clearLocalWhatsAppForVendeurIds = useCallback(
+    (vendeurIds: Array<string | null | undefined>) => {
+      const keys = new Set(
+        vendeurIds.flatMap((vid) => {
+          const key = vendeurKeyForLigne(vid ?? null);
+          return key.length > 0 ? [key] : [];
+        }),
+      );
+      if (keys.size === 0) {
+        return;
+      }
+      setVendeurWhatsAppSent((prev) => {
+        let changed = false;
+        const next = { ...prev };
+        for (const key of keys) {
+          if (next[key]) {
+            delete next[key];
+            changed = true;
+          }
+        }
+        return changed ? next : prev;
+      });
+    },
+    [],
+  );
 
   const loadRef = useRef<(() => Promise<void>) | null>(null);
 
@@ -350,7 +379,7 @@ export default function ValidationLotDetailClient({ lotId }: { lotId: string }) 
         vendeurs?: VendeurRef[];
         vendeurCommentaires?: Record<string, string | null>;
         vendeurWhatsAppSent?: Record<string, boolean>;
-        achatStarted?: boolean;
+        canReopenBrouillon?: boolean;
         error?: string;
       };
       if (!res.ok) {
@@ -367,7 +396,7 @@ export default function ValidationLotDetailClient({ lotId }: { lotId: string }) 
       }
       applyVendeurCommentDrafts(vc);
       setVendeurWhatsAppSent(j.vendeurWhatsAppSent ?? {});
-      setAchatStarted(j.achatStarted === true);
+      setCanReopenBrouillon(j.canReopenBrouillon === true);
     } catch (e) {
       setErr(e instanceof Error ? e.message : genericError);
     } finally {
@@ -440,6 +469,8 @@ export default function ValidationLotDetailClient({ lotId }: { lotId: string }) 
 
   const patchLigneVendeur = useCallback(
     async (lotLigneId: string, vendeur_id: string | null) => {
+      const prevVendeurId =
+        lignes.find((l) => l.id === lotLigneId)?.vendeur_id ?? null;
       setRowSaving(lotLigneId);
       setErr(null);
       try {
@@ -458,6 +489,7 @@ export default function ValidationLotDetailClient({ lotId }: { lotId: string }) 
         setLignes((prev) =>
           prev.map((l) => (l.id === lotLigneId ? { ...l, vendeur_id } : l)),
         );
+        clearLocalWhatsAppForVendeurIds([prevVendeurId, vendeur_id]);
       } catch (e) {
         setErr(e instanceof Error ? e.message : genericError);
         await load();
@@ -465,11 +497,12 @@ export default function ValidationLotDetailClient({ lotId }: { lotId: string }) 
         setRowSaving(null);
       }
     },
-    [lotId, load, genericError],
+    [lotId, load, genericError, lignes, clearLocalWhatsAppForVendeurIds],
   );
 
   const patchMagasinQte = useCallback(
     async (lotLigneId: string, magasinId: string, qte: number) => {
+      const vendeurId = lignes.find((l) => l.id === lotLigneId)?.vendeur_id ?? null;
       setRowSaving(lotLigneId);
       setErr(null);
       try {
@@ -483,7 +516,9 @@ export default function ValidationLotDetailClient({ lotId }: { lotId: string }) 
         if (!res.ok) {
           setErr(j.error ?? genericError);
           await load();
+          return;
         }
+        clearLocalWhatsAppForVendeurIds([vendeurId]);
       } catch (e) {
         setErr(e instanceof Error ? e.message : genericError);
         await load();
@@ -491,7 +526,7 @@ export default function ValidationLotDetailClient({ lotId }: { lotId: string }) 
         setRowSaving(null);
       }
     },
-    [lotId, load, genericError],
+    [lotId, load, genericError, lignes, clearLocalWhatsAppForVendeurIds],
   );
 
   const updateLocalQte = useCallback(
@@ -701,13 +736,16 @@ export default function ValidationLotDetailClient({ lotId }: { lotId: string }) 
         return;
       }
       closeDeleteLigneDialog();
+      clearLocalWhatsAppForVendeurIds([
+        lignes.find((l) => l.id === lineId)?.vendeur_id ?? null,
+      ]);
       await load();
     } catch (e) {
       setErr(e instanceof Error ? e.message : genericError);
     } finally {
       setRowSaving(null);
     }
-  }, [closeDeleteLigneDialog, load, lot, lotId, pendingDeleteLigne, genericError]);
+  }, [closeDeleteLigneDialog, clearLocalWhatsAppForVendeurIds, load, lot, lotId, pendingDeleteLigne, lignes, genericError]);
 
   const patchLotCommentaire = useCallback(
     async (nextRaw: string) => {
@@ -972,15 +1010,30 @@ export default function ValidationLotDetailClient({ lotId }: { lotId: string }) 
       >
         {tLotDetail("backToList")}
       </Button>
-      <div className="!mb-1 flex items-center justify-between gap-2">
+      <div className="!mb-1 flex flex-wrap items-center justify-between gap-2">
         <Typography variant="h5" sx={{ fontWeight: 600 }} component="h1">
           {tLotDetail("title", { supplier: supplierName })}
         </Typography>
-        <CommandeFournisseurStatusChip
-          domain="commande_fournisseur_lot"
-          status={lot.status}
-          label={labelFor("commande_fournisseur_lot", lot.status)}
-        />
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          {canReopenBrouillon ? (
+            <Button
+              type="button"
+              variant="outlined"
+              color="warning"
+              size="small"
+              disabled={saving}
+              onClick={() => setReopenBrouillonDialogOpen(true)}
+              sx={{ textTransform: "none" }}
+            >
+              {tLotDetail("reopenDraft")}
+            </Button>
+          ) : null}
+          <CommandeFournisseurStatusChip
+            domain="commande_fournisseur_lot"
+            status={lot.status}
+            label={labelFor("commande_fournisseur_lot", lot.status)}
+          />
+        </div>
       </div>
       {readyAtText ? (
         <Typography variant="body2" color="text.secondary" className="!mb-4">
@@ -992,20 +1045,6 @@ export default function ValidationLotDetailClient({ lotId }: { lotId: string }) 
 
       {isLotPretOrAchatEnCours(lot.status) ? (
         <div className="!mb-4 flex flex-col gap-2">
-          {!achatStarted && lot.status === "prete" ? (
-            <div className="flex flex-wrap items-center gap-2">
-              <Button
-                type="button"
-                variant="outlined"
-                color="warning"
-                disabled={saving}
-                onClick={() => setReopenBrouillonDialogOpen(true)}
-                sx={{ textTransform: "none" }}
-              >
-                {tLotDetail("reopenDraft")}
-              </Button>
-            </div>
-          ) : null}
           {lignes.length > 0 ? (
             <LotConsolidationExportPanel
               lignes={recapLignes}

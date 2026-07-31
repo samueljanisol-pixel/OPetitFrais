@@ -16,8 +16,11 @@ import {
 import { packagingIdByProductFromCommandeLignes } from "@/lib/commandes-fournisseur/packaging-from-saisie";
 import { clampQtyToApiRange } from "@/lib/commandes-fournisseur/qty-parse";
 import { syncCommandeLignesFromLotMagasinQty } from "@/lib/commandes-fournisseur/sync-lot-magasin-lignes";
-import { lotHasAchatProgress } from "@/lib/commandes-fournisseur/lot-achat-progress";
+import { lotHasAchatProgress, canReopenConsolidationBrouillon } from "@/lib/commandes-fournisseur/lot-achat-progress";
 import { isLotPretOrAchatEnCours } from "@/lib/commandes-fournisseur/lot-status-achat";
+import {
+  clearVendeurWhatsAppSentForVendeurIds,
+} from "@/lib/commandes-fournisseur/lot-vendeur-whatsapp";
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -283,8 +286,14 @@ export async function GET(_req: Request, ctx: Ctx) {
   if ("error" in progress) {
     return NextResponse.json({ error: progress.error }, { status: 500 });
   }
-  const achatStarted =
-    progress.started || (lot as { status: string }).status === "achat_en_cours";
+  const achatProgressLignes = (lotLignes ?? []).map((row) => ({
+    qte_achat: (row as { qte_achat?: number | null }).qte_achat,
+    prix_achat_unitaire: (row as { prix_achat_unitaire?: number | null }).prix_achat_unitaire,
+    montant_ligne_achat: (row as { montant_ligne_achat?: number | null }).montant_ligne_achat,
+    marque_achete: (row as { marque_achete?: boolean | null }).marque_achete,
+  }));
+  const achatStarted = progress.started;
+  const canReopenBrouillon = canReopenConsolidationBrouillon(lotStatus, achatProgressLignes);
 
   return NextResponse.json({
     lot,
@@ -293,6 +302,7 @@ export async function GET(_req: Request, ctx: Ctx) {
     vendeurCommentaires,
     vendeurWhatsAppSent,
     achatStarted,
+    canReopenBrouillon,
   });
 }
 
@@ -357,6 +367,22 @@ export async function PATCH(req: Request, ctx: Ctx) {
       return NextResponse.json({ error: "Modification impossible : lot non brouillon" }, { status: 409 });
     }
     const supplierId = (lotCur as { supplier_id: string }).supplier_id;
+
+    const lotLigneIds = updates.map((u) => u.lotLigneId);
+    const { data: beforeRows, error: be } = await supabase
+      .from("commande_fournisseur_lot_ligne")
+      .select("id, vendeur_id")
+      .in("id", lotLigneIds);
+    if (be) {
+      return NextResponse.json({ error: be.message }, { status: 500 });
+    }
+    const vendeurBefore = new Map(
+      (beforeRows ?? []).map((r) => [
+        String((r as { id: string }).id),
+        (r as { vendeur_id?: string | null }).vendeur_id ?? null,
+      ]),
+    );
+
     const errVendeur = await applyLotLigneVendeurUpdates(supabase, id, supplierId, updates);
     if (errVendeur) {
       const status =
@@ -370,6 +396,16 @@ export async function PATCH(req: Request, ctx: Ctx) {
             : 500;
       return NextResponse.json({ error: errVendeur }, { status });
     }
+
+    const vendeurIdsToClear = updates.flatMap((u) => [
+      vendeurBefore.get(u.lotLigneId) ?? null,
+      u.vendeur_id,
+    ]);
+    const errWa = await clearVendeurWhatsAppSentForVendeurIds(supabase, id, vendeurIdsToClear);
+    if (errWa) {
+      return NextResponse.json({ error: errWa }, { status: 500 });
+    }
+
     return NextResponse.json({ ok: true });
   }
 
@@ -523,7 +559,7 @@ export async function PATCH(req: Request, ctx: Ctx) {
     const lotLigneId = body.removeLotLigneId;
     const { data: lotRow, error: le1 } = await supabase
       .from("commande_fournisseur_lot_ligne")
-      .select("id, lot_id")
+      .select("id, lot_id, vendeur_id")
       .eq("id", lotLigneId)
       .maybeSingle();
     if (le1) {
@@ -543,9 +579,14 @@ export async function PATCH(req: Request, ctx: Ctx) {
     if ((lotCur as { status: string }).status !== "brouillon") {
       return NextResponse.json({ error: "Modification impossible : lot non brouillon" }, { status: 409 });
     }
+    const vendeurIdBeforeDelete = (lotRow as { vendeur_id?: string | null }).vendeur_id ?? null;
     const { error: de } = await supabase.from("commande_fournisseur_lot_ligne").delete().eq("id", lotLigneId);
     if (de) {
       return NextResponse.json({ error: de.message }, { status: 500 });
+    }
+    const errWa = await clearVendeurWhatsAppSentForVendeurIds(supabase, id, [vendeurIdBeforeDelete]);
+    if (errWa) {
+      return NextResponse.json({ error: errWa }, { status: 500 });
     }
     return NextResponse.json({ ok: true });
   }
@@ -559,7 +600,7 @@ export async function PATCH(req: Request, ctx: Ctx) {
 
     const { data: lotRow, error: le1 } = await supabase
       .from("commande_fournisseur_lot_ligne")
-      .select("id, lot_id")
+      .select("id, lot_id, vendeur_id")
       .eq("id", lotLigneId)
       .maybeSingle();
     if (le1) {
@@ -630,6 +671,12 @@ export async function PATCH(req: Request, ctx: Ctx) {
     if (errRe) {
       return NextResponse.json({ error: errRe }, { status: 500 });
     }
+    const errWa = await clearVendeurWhatsAppSentForVendeurIds(supabase, id, [
+      (lotRow as { vendeur_id?: string | null }).vendeur_id,
+    ]);
+    if (errWa) {
+      return NextResponse.json({ error: errWa }, { status: 500 });
+    }
     return NextResponse.json({ ok: true });
   }
 
@@ -684,7 +731,7 @@ export async function PATCH(req: Request, ctx: Ctx) {
     }
 
     if (body.status === "brouillon") {
-      if (st !== "prete") {
+      if (st !== "prete" && st !== "achat_en_cours") {
         return NextResponse.json(
           { error: "Seul un lot « prêt pour l’achat » peut revenir en saisie" },
           { status: 409 },

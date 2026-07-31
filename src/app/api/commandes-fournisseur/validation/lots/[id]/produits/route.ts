@@ -5,6 +5,7 @@ import { findExistingLotLigneId } from "@/lib/commandes-fournisseur/lot-ligne-du
 import { insertLotLignesMerged } from "@/lib/commandes-fournisseur/insert-lot-lignes";
 import { normalizeEntityId, normalizeProductPackagingId } from "@/lib/commandes-fournisseur/commande-ligne-key";
 import { vendeurIdForProduct } from "@/lib/commandes-fournisseur/product-vendeur";
+import { clearVendeurWhatsAppSentForVendeurIds } from "@/lib/commandes-fournisseur/lot-vendeur-whatsapp";
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -165,6 +166,13 @@ export async function POST(req: Request, ctx: Ctx) {
     if (mi) {
       await supabase.from("commande_fournisseur_lot_ligne").delete().eq("id", lotLigneId);
       return NextResponse.json({ error: mi.message }, { status: 500 });
+    }
+  }
+
+  if (vendeurId) {
+    const errWa = await clearVendeurWhatsAppSentForVendeurIds(supabase, lotId, [vendeurId]);
+    if (errWa) {
+      return NextResponse.json({ error: errWa }, { status: 500 });
     }
   }
 
