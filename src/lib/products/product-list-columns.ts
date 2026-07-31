@@ -24,6 +24,7 @@ export type ProductListColumnKey =
   | 'visible_vitrine'
   | 'allow_unit_in_commande'
   | 'shop_allow_sales_unit'
+  | 'shop_order_units'
   | 'piece_weight_kg'
   | 'shop_favorite_unit_id'
   | 'emballage_id'
@@ -49,10 +50,11 @@ export type ProductListCellKind =
   | 'select'
   | 'image'
   | 'fiche'
+  | 'shop_units'
 
 export type ProductListFieldKey = Exclude<
   ProductListColumnKey,
-  'fiche' | 'image_path' | 'code'
+  'fiche' | 'image_path' | 'code' | 'shop_order_units'
 >
 
 export type ProductListColumnDef = {
@@ -101,6 +103,7 @@ export const PRODUCT_LIST_COLUMNS: ProductListColumnDef[] = [
   { key: 'visible_vitrine', label: 'Visible vitrine', group: 'flags', sortable: true, editable: true, cellKind: 'switch', dbField: 'visible_vitrine', minWidth: 88 },
   { key: 'allow_unit_in_commande', label: 'Saisie à l\'unité (cmd.)', group: 'flags', sortable: false, editable: true, cellKind: 'switch', dbField: 'allow_unit_in_commande', minWidth: 100 },
   { key: 'shop_allow_sales_unit', label: 'UdV boutique', group: 'boutique', sortable: true, editable: true, cellKind: 'switch', dbField: 'shop_allow_sales_unit', minWidth: 88 },
+  { key: 'shop_order_units', label: 'Unités cmd. boutique', group: 'boutique', sortable: false, editable: true, cellKind: 'shop_units', minWidth: 180 },
   { key: 'piece_weight_kg', label: 'Poids pièce (kg)', group: 'boutique', sortable: true, editable: true, cellKind: 'number', dbField: 'piece_weight_kg', minWidth: 110 },
   { key: 'shop_favorite_unit_id', label: 'Favori boutique', group: 'boutique', sortable: true, editable: true, cellKind: 'select', dbField: 'shop_favorite_unit_id', minWidth: 120 },
   { key: 'emballage_id', label: 'Emballage utilisé', group: 'autres', sortable: true, editable: true, cellKind: 'select', dbField: 'emballage_id', minWidth: 120 },
@@ -119,11 +122,11 @@ export const PRODUCT_LIST_COLUMN_BY_KEY: Record<ProductListColumnKey, ProductLis
 export const DEFAULT_VISIBLE_PRODUCT_LIST_COLUMNS: ProductListColumnKey[] = [
   'code',
   'active',
-  'sales_name',
+  'name',
   'price',
   'sales_unit_id',
-  'category_id',
   'supplier_id',
+  'category_id',
   'fiche',
 ]
 
@@ -133,15 +136,17 @@ export const ALL_PRODUCT_LIST_COLUMN_KEYS = PRODUCT_LIST_COLUMNS.map(c => c.key)
 export const FIXED_PRODUCT_LIST_COLUMNS: ProductListColumnKey[] = ['fiche']
 
 export const EDITABLE_PRODUCT_LIST_FIELD_KEYS: ProductListFieldKey[] = PRODUCT_LIST_COLUMNS.filter(
-  c => c.editable && c.key !== 'fiche' && c.key !== 'image_path' && c.key !== 'code',
+  c => c.editable && c.key !== 'fiche' && c.key !== 'image_path' && c.key !== 'code' && c.key !== 'shop_order_units',
 ).map(c => c.key as ProductListFieldKey)
 
-/** Colonnes éditables par défaut dans la liste (toutes celles qui le peuvent). */
+/** Colonnes éditables par défaut dans la liste (toutes celles qui le peuvent, sauf nom logistique). */
 export const DEFAULT_EDITABLE_PRODUCT_LIST_COLUMNS: ProductListColumnKey[] = PRODUCT_LIST_COLUMNS.filter(
-  c => c.editable,
+  c => c.editable && c.key !== 'name',
 ).map(c => c.key)
 
 export type ProductListRow = ProductRow & {
+  /** Unités vitrine cochées (`product_shop_order_unit`). */
+  shop_order_unit_ids?: string[]
   ref_sales_unit: RefRow | null
   ref_order_unit: RefRow | null
   ref_purchase_unit: RefRow | null
@@ -183,6 +188,18 @@ function normalizeVendeurRef(
   return Array.isArray(ref) ? (ref[0] ?? null) : ref
 }
 
+export function productListShopOrderUnitIds(row: ProductListRow): string[] {
+  return row.shop_order_unit_ids ?? []
+}
+
+export function shopOrderUnitLabels(
+  unitIds: string[],
+  shopOrderUnits: RefRow[],
+): string[] {
+  const byId = new Map(shopOrderUnits.map(u => [u.id, u.label]))
+  return unitIds.map(id => byId.get(id) ?? id)
+}
+
 /** Valeur textuelle affichée (lecture seule ou draft initial). */
 export function productListCellDisplayValue(row: ProductListRow, key: ProductListColumnKey): string {
   switch (key) {
@@ -220,7 +237,14 @@ export function productListCellDisplayValue(row: ProductListRow, key: ProductLis
       return refLabel(row.ref_supplier)
     case 'vendeur_id':
       return normalizeVendeurRef(row.ref_supplier_vendeur)?.label ?? '—'
+    case 'shop_order_units': {
+      const ids = productListShopOrderUnitIds(row)
+      return ids.length > 0 ? ids.join(',') : ''
+    }
     case 'shop_favorite_unit_id':
+      if (row.shop_favorite_unit_id == null) {
+        return row.shop_allow_sales_unit !== false ? 'UdV' : '—'
+      }
       return refLabel(row.ref_shop_order_unit)
     case 'emballage_id':
       return row.ref_emballage?.label ?? '—'
@@ -264,6 +288,11 @@ export function compareProductListRows(
   if (key === 'code') return (codeToNum(a.code) - codeToNum(b.code)) * m
   if (key === 'sales_name') {
     return productSalesNameFr(a).localeCompare(productSalesNameFr(b), 'fr', { sensitivity: 'base' }) * m
+  }
+  if (key === 'shop_order_units') {
+    const av = productListShopOrderUnitIds(a).slice().sort().join(',')
+    const bv = productListShopOrderUnitIds(b).slice().sort().join(',')
+    return av.localeCompare(bv, 'fr', { sensitivity: 'base' }) * m
   }
   const def = PRODUCT_LIST_COLUMN_BY_KEY[key]
   if (def.cellKind === 'number') {

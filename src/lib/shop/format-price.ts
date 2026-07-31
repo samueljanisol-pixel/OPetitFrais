@@ -23,6 +23,20 @@ export function formatShopQty(locale: AppLocale, qty: number, unitCode: string):
   });
 }
 
+/** Quantité + libellé unité : « × » uniquement pour les unités vitrine, pas Kg / UdV. */
+export function formatShopQtyWithUnitLabel(
+  qtyFormatted: string,
+  unitLabel: string,
+  shopOrderUnitId: string | null,
+  unitCode: string,
+): string {
+  const unit = unitLabel.trim() || (unitCode === "kg" ? "kg" : "unité");
+  if (unitCode === "kg" || shopOrderUnitId == null) {
+    return `${qtyFormatted} ${unit}`;
+  }
+  return `${qtyFormatted} × ${unit}`;
+}
+
 export function formatShopKgEstimate(locale: AppLocale, kg: number): string {
   const formatted = formatNumber(locale, kg, {
     minimumFractionDigits: kg % 1 !== 0 ? 1 : 0,

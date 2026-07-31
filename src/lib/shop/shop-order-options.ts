@@ -34,24 +34,30 @@ export function resolveShopOrderOptions(product: ShopProduct): ShopOrderOption[]
     });
   }
 
-  const pieceWeight = product.piece_weight_kg != null ? Number(product.piece_weight_kg) : null;
+  const pieceWeight =
+    product.piece_weight_kg != null && Number(product.piece_weight_kg) > 0
+      ? Number(product.piece_weight_kg)
+      : null;
   const units = product.shop_order_units ?? [];
-  if (pieceWeight != null && pieceWeight > 0) {
-    for (const u of units) {
-      const qty = Number(u.piece_qty);
-      if (!(qty > 0)) continue;
-      const equivKg = qty * pieceWeight;
-      options.push({
-        shopOrderUnitId: u.id,
-        label: u.label,
-        labelAr: u.label_ar ?? null,
-        unitCode: "unite",
-        unitPrice: Math.round(equivKg * (Number(product.price) || 0) * 100) / 100,
-        equivKg,
-        isEstimated: true,
-        qtyStep: 1,
-      });
-    }
+  for (const u of units) {
+    const qty = Number(u.piece_qty);
+    if (!(qty > 0)) continue;
+    const equivKg = pieceWeight != null ? qty * pieceWeight : null;
+    const pricePerKg = Number(product.price) || 0;
+    const unitPrice =
+      equivKg != null
+        ? Math.round(equivKg * pricePerKg * 100) / 100
+        : pricePerKg;
+    options.push({
+      shopOrderUnitId: u.id,
+      label: u.label,
+      labelAr: u.label_ar ?? null,
+      unitCode: "unite",
+      unitPrice,
+      equivKg,
+      isEstimated: equivKg != null,
+      qtyStep: 1,
+    });
   }
 
   return options;

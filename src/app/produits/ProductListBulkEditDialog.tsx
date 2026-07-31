@@ -62,7 +62,10 @@ function selectOptionsForBulkField(
         .filter(v => v.supplier_id === sampleRow.supplier_id)
         .map(v => ({ id: v.id, label: v.label }))
     case 'shop_favorite_unit_id':
-      return refs.shopOrderUnits.map(u => ({ id: u.id, label: u.label }))
+      if (!sampleRow) return refs.shopOrderUnits.map(u => ({ id: u.id, label: u.label }))
+      return refs.shopOrderUnits
+        .filter(u => (sampleRow.shop_order_unit_ids ?? []).includes(u.id))
+        .map(u => ({ id: u.id, label: u.label }))
     case 'emballage_id':
       return refs.emballages.map(e => ({
         id: e.id,

@@ -24,7 +24,7 @@ export const PRODUCT_SUPPLIER_PRODUCT_EMBED = "product!product_supplier_product_
 export const PRODUCT_LIST_SELECT = `*, ref_sales_unit(*), ref_category(*), ${PRODUCT_PRIMARY_SUPPLIER_EMBED}(*)`;
 
 /** Liste produits avec embeds pour édition inline (colonnes configurables). */
-export const PRODUCT_LIST_EXTENDED_SELECT = `*, ref_sales_unit(*), ref_order_unit(*), ref_purchase_unit(*), ref_category(*), ref_subcategory(*), ${PRODUCT_PRIMARY_SUPPLIER_EMBED}(*), ref_supplier_vendeur(id, supplier_id, label, sort_order), emballage_ref:${PRODUCT_EMBALLAGE_EMBED}(id, label, type_id, ref_emballage_type(id, label)), etiquette_ref:${PRODUCT_ETIQUETTE_EMBED}(id, label, reference), ${PRODUCT_SHOP_FAVORITE_UNIT_EMBED}(id, code, label, sort_order)`;
+export const PRODUCT_LIST_EXTENDED_SELECT = `*, ref_sales_unit(*), ref_order_unit(*), ref_purchase_unit(*), ref_category(*), ref_subcategory(*), ${PRODUCT_PRIMARY_SUPPLIER_EMBED}(*), ref_supplier_vendeur(id, supplier_id, label, sort_order), emballage_ref:${PRODUCT_EMBALLAGE_EMBED}(id, label, type_id, ref_emballage_type(id, label)), etiquette_ref:${PRODUCT_ETIQUETTE_EMBED}(id, label, reference), ${PRODUCT_SHOP_FAVORITE_UNIT_EMBED}(id, code, label, sort_order), product_shop_order_unit(shop_order_unit_id)`;
 
 export const PRODUCT_FORM_SELECT = `*, ref_sales_unit(*), ref_order_unit(*), ref_purchase_unit(*), ref_category(*), ref_subcategory(*), ${PRODUCT_PRIMARY_SUPPLIER_EMBED}(*)`;
 

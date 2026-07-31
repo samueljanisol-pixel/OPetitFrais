@@ -6,6 +6,9 @@ import {
   Select,
   Switch,
   TextField,
+  Checkbox,
+  Box,
+  Typography,
 } from '@mui/material'
 import AppLink from '@/components/AppLink'
 import ProductPhotoThumb from '@/app/produits/photo/ProductPhotoThumb'
@@ -13,6 +16,8 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import {
   PRODUCT_LIST_COLUMN_BY_KEY,
   productListCellDisplayValue,
+  productListShopOrderUnitIds,
+  shopOrderUnitLabels,
   type ProductListColumnKey,
   type ProductListFieldKey,
   type ProductListRefs,
@@ -32,6 +37,7 @@ type Props = {
   onCommitTextNumber?: () => void
   onCommitSwitch?: (checked: boolean) => void
   onCommitSelect?: (value: string) => void
+  onCommitShopUnits?: (unitIds: string[]) => void
 }
 
 function selectOptionsForField(
@@ -61,7 +67,10 @@ function selectOptionsForField(
         .filter(v => v.supplier_id === row.supplier_id)
         .map(v => ({ id: v.id, label: v.label }))
     case 'shop_favorite_unit_id':
-      return refs.shopOrderUnits.map(u => ({ id: u.id, label: u.label }))
+      return productListShopOrderUnitIds(row)
+        .map(id => refs.shopOrderUnits.find(u => u.id === id))
+        .filter((u): u is NonNullable<typeof u> => u != null)
+        .map(u => ({ id: u.id, label: u.label }))
     case 'emballage_id':
       return refs.emballages.map(e => ({
         id: e.id,
@@ -101,8 +110,51 @@ export default function ProductListCell({
   onCommitTextNumber,
   onCommitSwitch,
   onCommitSelect,
+  onCommitShopUnits,
 }: Props) {
   const def = PRODUCT_LIST_COLUMN_BY_KEY[columnKey]
+
+  if (def.cellKind === 'shop_units') {
+    const checkedIds = new Set(productListShopOrderUnitIds(row))
+    if (!canWrite || !def.editable) {
+      const labels = shopOrderUnitLabels([...checkedIds], refs.shopOrderUnits)
+      return (
+        <span className="text-slate-900">{labels.length > 0 ? labels.join(', ') : '—'}</span>
+      )
+    }
+    return (
+      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.25, minWidth: 140 }}>
+        {refs.shopOrderUnits.map(u => {
+          const checked = checkedIds.has(u.id)
+          return (
+            <Box key={u.id} sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+              <Checkbox
+                size="small"
+                checked={checked}
+                disabled={disabled}
+                onChange={(_, on) => {
+                  const next = new Set(checkedIds)
+                  if (on) next.add(u.id)
+                  else next.delete(u.id)
+                  onCommitShopUnits?.([...next])
+                }}
+                slotProps={{ input: { 'aria-label': `${u.label} — ${row.name}` } }}
+                sx={{ p: 0.25 }}
+              />
+              <Typography variant="caption" component="span" sx={{ lineHeight: 1.2 }}>
+                {u.label}
+              </Typography>
+            </Box>
+          )
+        })}
+        {refs.shopOrderUnits.length === 0 ? (
+          <Typography variant="caption" color="text.secondary">
+            Aucune unité vitrine
+          </Typography>
+        ) : null}
+      </Box>
+    )
+  }
 
   if (def.cellKind === 'fiche') {
     return (
@@ -146,17 +198,22 @@ export default function ProductListCell({
     const value = raw == null || raw === '' ? '' : String(raw)
     const options = selectOptionsForField(field, row, refs)
     const allowEmpty = nullableSelectField(field)
+    const showUdvDefault = field === 'shop_favorite_unit_id' && row.shop_allow_sales_unit !== false
     return (
       <FormControl size="small" sx={{ minWidth: 120, maxWidth: 200 }} disabled={disabled}>
         <Select
           value={value}
-          displayEmpty={allowEmpty}
+          displayEmpty={allowEmpty || showUdvDefault}
           onChange={e => onCommitSelect?.(String(e.target.value))}
           sx={{ fontSize: 14, '& .MuiSelect-select': { py: 0.75 } }}
         >
-          {allowEmpty ? (
+          {showUdvDefault ? (
             <MenuItem value="">
-              {field === 'shop_favorite_unit_id' ? 'UdV (défaut)' : field === 'vendeur_id' ? 'Aucun' : '—'}
+              UdV (défaut)
+            </MenuItem>
+          ) : allowEmpty ? (
+            <MenuItem value="">
+              {field === 'vendeur_id' ? 'Aucun' : '—'}
             </MenuItem>
           ) : null}
           {options.map(o => (

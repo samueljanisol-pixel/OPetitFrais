@@ -53,3 +53,15 @@ export async function syncProductShopOrderUnits(
     if (error) throw new Error(error.message);
   }
 }
+
+export function extractProductShopOrderUnitIds(raw: unknown): string[] {
+  if (raw == null) return [];
+  const links = Array.isArray(raw) ? raw : [raw];
+  const ids: string[] = [];
+  for (const link of links) {
+    if (!link || typeof link !== "object") continue;
+    const id = (link as { shop_order_unit_id?: string }).shop_order_unit_id;
+    if (typeof id === "string" && id.length > 0) ids.push(id);
+  }
+  return ids;
+}

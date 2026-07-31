@@ -1,7 +1,7 @@
 import type { AppLocale } from "@/i18n/config";
 import { formatNumber } from "@/lib/i18n/format";
 import { productDisplayName } from "@/lib/products/product-display-name";
-import { formatShopKgEstimate, formatShopPriceDh } from "@/lib/shop/format-price";
+import { formatShopKgEstimate, formatShopPriceDh, formatShopQtyWithUnitLabel } from "@/lib/shop/format-price";
 import { groupCartLinesByCategory } from "@/lib/shop/group-cart-by-category";
 import type { ShopCartLine, ShopProduct } from "@/lib/shop/types";
 
@@ -17,7 +17,12 @@ function formatQtyLabel(line: ShopCartLine, locale: AppLocale): string {
     maximumFractionDigits: line.unitCode === "kg" ? 2 : 0,
   });
   const unit = line.unitLabel.trim() || (line.unitCode === "kg" ? "kg" : "unité");
-  let label = `${formatted} × ${unit}`;
+  let label = formatShopQtyWithUnitLabel(
+    formatted,
+    unit,
+    line.shopOrderUnitId,
+    line.unitCode,
+  );
   if (line.equivKgAtAdd != null && line.equivKgAtAdd > 0 && line.shopOrderUnitId != null) {
     const totalKg = line.qty * line.equivKgAtAdd;
     const soit = locale === "ar-MA" ? "أي" : "soit";

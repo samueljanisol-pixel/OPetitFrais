@@ -17,7 +17,7 @@ import {
   Typography,
 } from "@mui/material";
 import { useTranslations } from "next-intl";
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { buildOrderText, buildWhatsAppUrl } from "@/lib/shop/format-order-text";
 import { getShopWhatsAppPhone, isShopWhatsAppConfigured } from "@/lib/shop/whatsapp-phone";
 import { addQtyByStep, subtractQtyByStep } from "@/lib/shop/cart-qty";
@@ -26,6 +26,7 @@ import {
   formatShopKgEstimate,
   formatShopPriceDh,
   formatShopQty,
+  formatShopQtyWithUnitLabel,
 } from "@/lib/shop/format-price";
 import { findShopOption, shopOptionLabel } from "@/lib/shop/shop-order-options";
 import { canonicalKgFromQty } from "@/lib/shop/shop-qty-convert";
@@ -34,7 +35,6 @@ import type { AppLocale } from "@/i18n/config";
 import type { ShopCartLine, ShopCategoryGroup, ShopProduct } from "@/lib/shop/types";
 import { buildCategoryMeta, groupCartLinesByCategory } from "@/lib/shop/group-cart-by-category";
 import { cartLineKey } from "@/lib/shop/cart-storage";
-import { useShopRoutes } from "@/lib/shop/useShopRoutes";
 import ShopPaymentSelector from "@/app/shop/ShopPaymentSelector";
 import type { ShopPaymentMethod } from "@/lib/shop/payment-types";
 
@@ -71,7 +71,6 @@ export default function ShopCartPanel({
 }: Props) {
   const t = useTranslations("shop");
   const locale = useAppLocale();
-  const routes = useShopRoutes();
   const [snack, setSnack] = useState<string | null>(null);
 
   const categoryMeta = useMemo(() => buildCategoryMeta(categoryGroups), [categoryGroups]);
@@ -123,6 +122,13 @@ export default function ShopCartPanel({
 
   const formatLineQty = (line: ShopCartLine) => formatShopQty(locale, line.qty, line.unitCode);
 
+  const goChangeFulfillment = useCallback(() => {
+    onClose();
+    window.setTimeout(() => {
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }, 280);
+  }, [onClose]);
+
   return (
     <>
       <Drawer
@@ -145,10 +151,19 @@ export default function ShopCartPanel({
             <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
               {fulfillmentLabel}{" "}
               <Box
-                component="a"
-                href={routes.fulfillmentAnchor}
-                onClick={onClose}
-                sx={{ color: "success.dark", fontWeight: 700, textDecoration: "underline" }}
+                component="button"
+                type="button"
+                onClick={goChangeFulfillment}
+                sx={{
+                  color: "success.dark",
+                  fontWeight: 700,
+                  textDecoration: "underline",
+                  border: "none",
+                  bgcolor: "transparent",
+                  cursor: "pointer",
+                  p: 0,
+                  font: "inherit",
+                }}
               >
                 {t("fulfillment.change")}
               </Box>
@@ -157,10 +172,19 @@ export default function ShopCartPanel({
             <Typography variant="body2" color="warning.dark" sx={{ mb: 1 }}>
               {t("fulfillment.missingInCart")}{" "}
               <Box
-                component="a"
-                href={routes.fulfillmentAnchor}
-                onClick={onClose}
-                sx={{ fontWeight: 700, textDecoration: "underline" }}
+                component="button"
+                type="button"
+                onClick={goChangeFulfillment}
+                sx={{
+                  fontWeight: 700,
+                  textDecoration: "underline",
+                  border: "none",
+                  bgcolor: "transparent",
+                  cursor: "pointer",
+                  p: 0,
+                  font: "inherit",
+                  color: "inherit",
+                }}
               >
                 {t("fulfillment.choose")}
               </Box>
@@ -189,7 +213,12 @@ export default function ShopCartPanel({
                         const option = findShopOption(product, line.shopOrderUnitId);
                         const step = option?.qtyStep ?? 1;
                         const secondaryParts = [
-                          `${formatLineQty(line)} ${line.unitLabel}`,
+                          formatShopQtyWithUnitLabel(
+                            formatLineQty(line),
+                            line.unitLabel,
+                            line.shopOrderUnitId,
+                            line.unitCode,
+                          ),
                           formatShopPriceDh(locale, line.qty * line.priceAtAdd, line.equivKgAtAdd != null),
                         ];
                         if (

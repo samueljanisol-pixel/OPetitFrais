@@ -1,42 +1,11 @@
 "use client";
 
-import { useCallback, useEffect, useLayoutEffect, useState } from "react";
-import type { SessionPayload } from "@/lib/auth/session-types";
+import { useCallback } from "react";
 import { buildSessionDisplayLabel } from "@/lib/auth/display-label";
-import { readSessionSnapshot, writeSessionSnapshot } from "@/lib/auth/session-display-cache";
+import { useSessionContext } from "@/lib/auth/SessionProvider";
 
 export function useSessionPermissions() {
-  const [session, setSession] = useState<SessionPayload | null | undefined>(undefined);
-
-  /** Affichage immédiat après navigation (évite un écran « … » le temps du fetch). */
-  useLayoutEffect(() => {
-    const snap = readSessionSnapshot();
-    if (snap) setSession(snap);
-  }, []);
-
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const res = await fetch("/api/auth/session", { credentials: "include" });
-        const j = (await res.json()) as { session: SessionPayload | null };
-        if (cancelled) return;
-        setSession(j.session);
-        writeSessionSnapshot(j.session);
-        if (j.session?.uiLocale) {
-          document.cookie = `locale=${j.session.uiLocale}; path=/; max-age=${60 * 60 * 24 * 365}; samesite=lax`;
-        }
-      } catch {
-        if (!cancelled) {
-          setSession(null);
-          writeSessionSnapshot(null);
-        }
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  const { session } = useSessionContext();
 
   const loading = session === undefined;
   const isFullAccess = session?.isFullAccess ?? false;

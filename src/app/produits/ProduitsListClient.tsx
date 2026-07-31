@@ -20,6 +20,7 @@ import type { RefRow, RefSubcategoryRow, RefVendeurRow } from '@/lib/products/ty
 import { useRouter } from 'next/navigation'
 import { SHEET_IMPORT_ENABLED, SheetImportBar } from '@/features/sheet-import'
 import { PRODUCT_LIST_EXTENDED_SELECT } from '@/lib/products/product-supabase-select'
+import { extractProductShopOrderUnitIds } from '@/lib/products/product-shop-order-unit'
 import { useSessionPermissions } from '@/lib/auth/useSessionPermissions'
 import { textIncludesFolded } from '@/lib/text/fold-for-search'
 import {
@@ -40,6 +41,7 @@ import {
 import {
   commitProductField,
   commitProductFieldBulk,
+  commitProductShopOrderUnits,
   isDraftDirty,
 } from '@/lib/products/product-field-commit'
 import ProductListCell from '@/app/produits/ProductListCell'
@@ -118,9 +120,17 @@ export default function ProduitsListClient() {
       ((data as Record<string, unknown>[]) ?? []).map(raw => {
         const emballageRef = raw.emballage_ref ?? raw.ref_emballage
         const etiquetteRef = raw.etiquette_ref
-        const { emballage_ref: _e, etiquette_ref: _t, ref_emballage: _r, ...rest } = raw
+        const shopUnitsRaw = raw.product_shop_order_unit
+        const {
+          emballage_ref: _e,
+          etiquette_ref: _t,
+          ref_emballage: _r,
+          product_shop_order_unit: _psou,
+          ...rest
+        } = raw
         return {
           ...(rest as ProductListRow),
+          shop_order_unit_ids: extractProductShopOrderUnitIds(shopUnitsRaw),
           ref_emballage: (Array.isArray(emballageRef) ? emballageRef[0] : emballageRef) as ProductListRow['ref_emballage'],
           ref_etiquette: (Array.isArray(etiquetteRef) ? etiquetteRef[0] : etiquetteRef) as ProductListRow['ref_etiquette'],
         }
@@ -284,6 +294,20 @@ export default function ProduitsListClient() {
     setCellBusyKey(busyKey)
     setError(null)
     const result = await commitProductField(supabase, { row, field, rawValue, refs })
+    setCellBusyKey(null)
+    if (!result.ok) {
+      setError(result.error)
+      return
+    }
+    applyRowUpdate(result.row)
+  }
+
+  const commitShopOrderUnits = async (row: ProductListRow, unitIds: string[]) => {
+    if (!canWriteProducts) return
+    const busyKey = `${row.id}:shop_order_units`
+    setCellBusyKey(busyKey)
+    setError(null)
+    const result = await commitProductShopOrderUnits(supabase, { row, unitIds, refs })
     setCellBusyKey(null)
     if (!result.ok) {
       setError(result.error)
@@ -529,8 +553,10 @@ export default function ProduitsListClient() {
                       const def = PRODUCT_LIST_COLUMN_BY_KEY[colKey]
                       const columnEditable = isProductListColumnEditable(columnPref, colKey)
                       const field =
-                        def.editable && columnEditable ? (colKey as ProductListFieldKey) : null
-                      const busy = field != null && cellBusyKey === `${r.id}:${field}`
+                        def.editable && columnEditable && colKey !== 'shop_order_units'
+                          ? (colKey as ProductListFieldKey)
+                          : null
+                      const busy = columnEditable && cellBusyKey === `${r.id}:${colKey}`
                       return (
                         <td
                           key={colKey}
@@ -539,7 +565,8 @@ export default function ProduitsListClient() {
                             if (
                               columnEditable ||
                               def.cellKind === 'fiche' ||
-                              def.cellKind === 'image'
+                              def.cellKind === 'image' ||
+                              def.cellKind === 'shop_units'
                             ) {
                               e.stopPropagation()
                             }
@@ -571,6 +598,11 @@ export default function ProduitsListClient() {
                             onCommitSelect={
                               field && def.cellKind === 'select'
                                 ? v => void commitField(r, field, v)
+                                : undefined
+                            }
+                            onCommitShopUnits={
+                              columnEditable && def.cellKind === 'shop_units'
+                                ? ids => void commitShopOrderUnits(r, ids)
                                 : undefined
                             }
                           />

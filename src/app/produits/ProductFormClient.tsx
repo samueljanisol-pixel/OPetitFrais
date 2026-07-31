@@ -460,13 +460,6 @@ export default function ProductFormClient({ productId, returnTo = null }: Props)
       setErr('Choisissez au moins l’unité de vente ou une unité de commande vitrine.')
       return
     }
-    if (shopUnitIds.size > 0) {
-      const pw = p.piece_weight_kg != null ? Number(p.piece_weight_kg) : null
-      if (pw == null || !(pw > 0)) {
-        setErr('Le poids d’une pièce (kg) est obligatoire si des unités vitrine sont cochées.')
-        return
-      }
-    }
     const favId = p.shop_favorite_unit_id?.trim() ? p.shop_favorite_unit_id : null
     if (favId == null) {
       if (!allowUdv) {
@@ -1128,7 +1121,7 @@ export default function ProductFormClient({ productId, returnTo = null }: Props)
               }}
               fullWidth
               sx={{ mb: 1.5 }}
-              helperText="Obligatoire si une unité vitrine est cochée (max. 2 décimales)"
+              helperText="Optionnel (max. 2 décimales)"
               slotProps={muiSlotPropsDecimalKeypad}
             />
             <table className="w-full text-sm border border-slate-200 rounded">

@@ -52,12 +52,6 @@ export default function ShopShell({
         </Link>
 
         <Box sx={{ ms: "auto", display: "flex", alignItems: "center", gap: 0.5, minWidth: 0 }}>
-          <Link
-            href={routes.livraison}
-            className="text-sm font-semibold text-emerald-800 hover:underline"
-          >
-            {t("navLivraison")}
-          </Link>
           <LocaleSwitcher variant="login" />
           {!hideCart ? (
           <Box sx={{ ml: 0.5, display: "flex", alignItems: "center", gap: 0.75, minWidth: 0 }}>
@@ -68,7 +62,19 @@ export default function ShopShell({
               onClick={onOpenCart}
               sx={{ flexShrink: 0 }}
             >
-              <Badge badgeContent={cartCount > 0 ? cartCount : null} color="error">
+              <Badge
+                badgeContent={cartCount > 0 ? cartCount : null}
+                color="error"
+                sx={{
+                  "& .MuiBadge-badge": {
+                    minWidth: 16,
+                    height: 16,
+                    fontSize: "0.65rem",
+                    fontWeight: 700,
+                    px: 0.375,
+                  },
+                }}
+              >
                 <ShoppingCartOutlinedIcon fontSize="small" />
               </Badge>
             </IconButton>
@@ -82,37 +88,21 @@ export default function ShopShell({
                   total: formatShopPriceDh(locale, cartTotal, true),
                 })}
                 sx={{
-                  display: "flex",
-                  flexDirection: { xs: "column", sm: "row" },
-                  alignItems: { xs: "flex-end", sm: "center" },
-                  gap: { xs: 0, sm: 0.25 },
-                  maxWidth: { xs: "5.25rem", sm: "none" },
-                  minWidth: 0,
-                  flexShrink: 1,
                   fontWeight: 700,
                   color: "success.dark",
                   fontSize: "0.75rem",
                   lineHeight: 1.2,
                   textAlign: "right",
+                  whiteSpace: "nowrap",
                   border: "none",
                   bgcolor: "transparent",
                   cursor: "pointer",
                   p: 0,
+                  flexShrink: 0,
                   "&:hover": { textDecoration: "underline" },
                 }}
               >
-                <Box component="span" sx={{ whiteSpace: { xs: "normal", sm: "nowrap" } }}>
-                  {t("cartProductCount", { count: cartCount })}
-                </Box>
-                <Box
-                  component="span"
-                  sx={{ display: { xs: "none", sm: "inline" }, whiteSpace: "nowrap" }}
-                >
-                  {" · "}
-                </Box>
-                <Box component="span" sx={{ whiteSpace: "nowrap" }}>
-                  {formatShopPriceDh(locale, cartTotal, true)}
-                </Box>
+                {formatShopPriceDh(locale, cartTotal, true)}
               </Box>
             ) : null}
           </Box>

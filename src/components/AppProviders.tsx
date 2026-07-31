@@ -10,6 +10,7 @@ import { AppRouterCacheProvider } from "@mui/material-nextjs/v16-appRouter";
 import { NextIntlClientProvider } from "next-intl";
 import { isRtl } from "@/i18n/config";
 import { useLocaleClient } from "@/lib/i18n/locale-client";
+import { SessionProvider } from "@/lib/auth/SessionProvider";
 
 export default function AppProviders({ children }: { children: React.ReactNode }) {
   const { locale, messages, timeZone } = useLocaleClient();
@@ -41,10 +42,16 @@ export default function AppProviders({ children }: { children: React.ReactNode }
   if (rtl) {
     return (
       <AppRouterCacheProvider options={{ enableCssLayer: true }}>
-        <CacheProvider value={rtlCache}>{content}</CacheProvider>
+        <SessionProvider>
+          <CacheProvider value={rtlCache}>{content}</CacheProvider>
+        </SessionProvider>
       </AppRouterCacheProvider>
     );
   }
 
-  return <AppRouterCacheProvider options={{ enableCssLayer: true }}>{content}</AppRouterCacheProvider>;
+  return (
+    <AppRouterCacheProvider options={{ enableCssLayer: true }}>
+      <SessionProvider>{content}</SessionProvider>
+    </AppRouterCacheProvider>
+  );
 }

@@ -851,7 +851,7 @@
   "shop": {
     "title": "Commander",
     "subtitle": "Composez votre panier et envoyez-nous votre liste par WhatsApp.",
-    "slogan": "Fraîcheur et Qualité au quotidien",
+    "slogan": "Qualité et Fraîcheur au quotidien",
     "navLivraison": "Livraison",
     "homeTitle": "O' Petit Frais — Commander",
     "cartSummary": "{count, plural, one {# produit · {total}} other {# produits · {total}}}",

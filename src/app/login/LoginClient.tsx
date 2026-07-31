@@ -5,6 +5,7 @@ import { useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import type { SessionPayload } from "@/lib/auth/session-types";
 import { writeSessionSnapshot } from "@/lib/auth/session-display-cache";
+import { notifySessionChanged } from "@/lib/auth/SessionProvider";
 import { authErrorCode } from "@/lib/auth/auth-error-fr";
 import LocaleSwitcher from "@/components/LocaleSwitcher";
 
@@ -58,6 +59,7 @@ export default function LoginClient() {
         const sRes = await fetch("/api/auth/session", { credentials: "include" });
         const sJson = (await sRes.json()) as { session: SessionPayload | null };
         writeSessionSnapshot(sJson.session);
+        notifySessionChanged();
       } catch {
         /* l'en-tête rechargera la session au prochain écran */
       }

@@ -2,6 +2,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import {
   PRODUCT_LIST_COLUMN_BY_KEY,
   productListCellDisplayValue,
+  productListShopOrderUnitIds,
   type ProductListFieldKey,
   type ProductListRefs,
   type ProductListRow,
@@ -12,6 +13,7 @@ import {
   type ProductPricingSnapshot,
 } from '@/lib/products/priceHistory'
 import { syncProductSuppliers } from '@/lib/products/product-supplier'
+import { syncProductShopOrderUnits } from '@/lib/products/product-shop-order-unit'
 import type { RefRow, RefSubcategoryRow, RefVendeurRow } from '@/lib/products/types'
 
 const PRICING_FIELDS: ProductListFieldKey[] = [
@@ -183,6 +185,20 @@ function applySideEffectsToPatch(
       return 'La sous-catégorie doit appartenir à la catégorie du produit.'
     }
   }
+  if (field === 'shop_favorite_unit_id' && patch.shop_favorite_unit_id != null) {
+    const favId = String(patch.shop_favorite_unit_id)
+    const checked = productListShopOrderUnitIds(row)
+    if (!checked.includes(favId)) {
+      return 'Le favori doit être une unité vitrine cochée.'
+    }
+  }
+  if (field === 'shop_favorite_unit_id' && (patch.shop_favorite_unit_id == null || patch.shop_favorite_unit_id === '')) {
+    const allowUdv = row.shop_allow_sales_unit !== false
+    const checked = productListShopOrderUnitIds(row)
+    if (!allowUdv && checked.length === 0) {
+      return 'Choisissez au moins l’UdV boutique ou une unité vitrine.'
+    }
+  }
   return null
 }
 
@@ -265,6 +281,49 @@ export async function commitProductField(
     if (histErr) return { ok: false, error: histErr }
   }
 
+  return { ok: true, row: updated }
+}
+
+function shopOrderUnitIdsEqual(a: string[], b: string[]): boolean {
+  if (a.length !== b.length) return false
+  const sa = [...a].sort()
+  const sb = [...b].sort()
+  return sa.every((id, i) => id === sb[i])
+}
+
+export async function commitProductShopOrderUnits(
+  supabase: SupabaseClient,
+  args: {
+    row: ProductListRow
+    unitIds: string[]
+    refs: ProductListRefs
+  },
+): Promise<CommitProductFieldResult> {
+  const { row, unitIds, refs } = args
+  const unique = [...new Set(unitIds.filter(Boolean))]
+  const current = productListShopOrderUnitIds(row)
+  if (shopOrderUnitIdsEqual(current, unique)) {
+    return { ok: true, row }
+  }
+
+  try {
+    await syncProductShopOrderUnits(supabase, row.id, unique)
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : 'Erreur unités boutique.' }
+  }
+
+  const patch: Record<string, unknown> = { shop_order_unit_ids: unique }
+  const allowUdv = row.shop_allow_sales_unit !== false
+  if (row.shop_favorite_unit_id && !unique.includes(row.shop_favorite_unit_id)) {
+    patch.shop_favorite_unit_id = allowUdv ? null : (unique[0] ?? null)
+    const { error } = await supabase
+      .from('product')
+      .update({ shop_favorite_unit_id: patch.shop_favorite_unit_id as string | null } as never)
+      .eq('id', row.id)
+    if (error) return { ok: false, error: error.message }
+  }
+
+  const updated = enrichRowFromPatch(row, patch, refs)
   return { ok: true, row: updated }
 }
 

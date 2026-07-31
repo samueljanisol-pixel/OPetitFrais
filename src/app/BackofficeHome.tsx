@@ -17,6 +17,7 @@ import StorefrontOutlinedIcon from '@mui/icons-material/StorefrontOutlined'
 import AppLink from '@/components/AppLink'
 import { useSessionPermissions } from '@/lib/auth/useSessionPermissions'
 import { clearSessionSnapshot } from '@/lib/auth/session-display-cache'
+import { notifySessionChanged } from '@/lib/auth/SessionProvider'
 
 export default function BackofficeHome() {
   const router = useRouter()
@@ -71,6 +72,7 @@ export default function BackofficeHome() {
   const logout = async () => {
     await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' })
     clearSessionSnapshot()
+    notifySessionChanged()
     router.replace('/login')
     router.refresh()
   }

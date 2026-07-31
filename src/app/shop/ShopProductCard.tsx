@@ -70,7 +70,7 @@ export default function ShopProductCard({
         sx={{
           position: "relative",
           width: "100%",
-          height: { xs: 72, sm: 80 },
+          height: { xs: 96, sm: 104 },
           flexShrink: 0,
           bgcolor: "grey.50",
           display: "flex",
@@ -81,7 +81,7 @@ export default function ShopProductCard({
       >
         {photoUrl ? (
           <Box sx={{ position: "relative", width: "100%", height: "100%" }}>
-            <Image src={photoUrl} alt="" fill className="object-contain" sizes="(max-width: 600px) 100px, 120px" />
+            <Image src={photoUrl} alt="" fill className="object-contain" sizes="(max-width: 600px) 45vw, 160px" />
           </Box>
         ) : (
           <Typography variant="caption" color="text.secondary" sx={{ fontSize: "0.65rem" }}>
@@ -90,24 +90,37 @@ export default function ShopProductCard({
         )}
       </Box>
 
-      <Box sx={{ flex: 1, display: "flex", flexDirection: "column", px: 0.625, pt: 0.25, pb: 0.625, gap: 0.25 }}>
-        <Typography
-          variant="caption"
+      <Box sx={{ flex: 1, display: "flex", flexDirection: "column", px: 0.875, pt: 0.375, pb: 0.75, gap: 0.375 }}>
+        <Box
           sx={{
-            lineHeight: 1.25,
-            fontWeight: 600,
-            fontSize: "0.8rem",
-            textAlign: "center",
-            display: "-webkit-box",
-            WebkitLineClamp: 2,
-            WebkitBoxOrient: "vertical",
-            overflow: "hidden",
-            minHeight: "2.5em",
-            mt: -0.125,
+            minHeight: "2.75em",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            px: 0.75,
+            py: 0.5,
+            borderRadius: 1,
+            bgcolor: "rgba(236, 253, 245, 0.9)",
           }}
         >
-          {label}
-        </Typography>
+          <Typography
+            variant="caption"
+            sx={{
+              lineHeight: 1.25,
+              fontWeight: 600,
+              fontSize: "0.8rem",
+              textAlign: "center",
+              display: "-webkit-box",
+              WebkitLineClamp: 2,
+              WebkitBoxOrient: "vertical",
+              overflow: "hidden",
+              color: "success.dark",
+              width: "100%",
+            }}
+          >
+            {label}
+          </Typography>
+        </Box>
         <Typography
           variant="caption"
           color="success.dark"

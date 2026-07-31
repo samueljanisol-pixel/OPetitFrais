@@ -7,6 +7,7 @@ import ShoppingCartOutlinedIcon from "@mui/icons-material/ShoppingCartOutlined";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { productPhotoPublicUrl } from "@/lib/products/storage";
 import { useAppLocale } from "@/lib/i18n/useAppFormat";
+import { formatShopPriceDh } from "@/lib/shop/format-price";
 import {
   getProductCartLine,
   readCartFromStorage,
@@ -47,6 +48,8 @@ import ShopFulfillmentSelector from "@/app/shop/ShopFulfillmentSelector";
 import ShopPaymentSelector from "@/app/shop/ShopPaymentSelector";
 import { useShopAnalytics } from "@/lib/shop/useShopAnalytics";
 import type { ShopFulfillmentMode } from "@/lib/shop/livraison-types";
+import { ARABIC_FONT_FAMILY } from "@/lib/fonts/noto-sans-arabic";
+import { shopSloganScript } from "@/lib/fonts/shop-slogan-script";
 
 type Props = {
   initialGroups: ShopCategoryGroup[];
@@ -286,13 +289,19 @@ export default function ShopOrderClient({
         <main className="flex min-h-0 flex-1 flex-col bg-gradient-to-b from-emerald-50/80 to-white pb-28">
           <Box sx={{ px: 2, pt: 2, pb: 1 }}>
             <Typography
-              variant="overline"
+              component="p"
+              className={locale === "ar-MA" ? undefined : shopSloganScript.className}
               sx={{
                 display: "block",
+                textAlign: "center",
                 color: "success.dark",
-                fontWeight: 700,
-                letterSpacing: 0.6,
-                lineHeight: 1.3,
+                fontFamily: locale === "ar-MA" ? ARABIC_FONT_FAMILY : shopSloganScript.style.fontFamily,
+                fontSize: { xs: "1.4rem", sm: "1.55rem" },
+                fontWeight: 600,
+                lineHeight: 1.35,
+                letterSpacing: 0.02,
+                textTransform: "none",
+                mb: 0.25,
               }}
             >
               {t("slogan")}
@@ -354,11 +363,11 @@ export default function ShopOrderClient({
                       sx={{
                         display: "grid",
                         gridTemplateColumns: {
-                          xs: "repeat(3, minmax(0, 1fr))",
-                          sm: "repeat(4, minmax(0, 1fr))",
-                          md: "repeat(5, minmax(0, 1fr))",
+                          xs: "repeat(2, minmax(0, 1fr))",
+                          sm: "repeat(3, minmax(0, 1fr))",
+                          md: "repeat(4, minmax(0, 1fr))",
                         },
-                        gap: 1,
+                        gap: { xs: 1.25, sm: 1.5 },
                       }}
                     >
                       {subgroup.products.map((product) => {
@@ -411,7 +420,8 @@ export default function ShopOrderClient({
               py: 1.25,
             }}
           >
-            {t("viewMyCart")} · {t("cartProductCount", { count: cartCount })}
+            {t("viewMyCart")} · {t("cartProductCount", { count: cartCount })} ·{" "}
+            {formatShopPriceDh(locale, cartTotal, true)}
           </Button>
         </Box>
       ) : null}
