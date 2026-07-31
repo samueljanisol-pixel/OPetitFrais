@@ -8,7 +8,7 @@ Route : `/commandes-fournisseur/saisie/[id]/parcours`
 - **Navigation par catégories** : bandeau horizontal de puces (toutes les catégories du parcours) sous l’en-tête ; clic → saut au premier produit de la catégorie ; la catégorie courante est mise en évidence.
 - Zone produit (photo, quantités) **défilable** si le contenu dépasse la hauteur disponible.
 - Emplacement photo **toujours réservé** (`h-36`, max `6rem`) : sans image, zone vide — le libellé et les quantités ne remontent pas.
-- **Noms produit** : titre **français** toujours visible ; en UI `ar-MA`, nom arabe en sous-titre secondaire sous le FR (`ProductArabicSubtitle` + `underPrimaryTitle` + `reserveSpace`) même si vide.
+- **Noms produit** : titre **français** + nom **arabe** toujours affichés (`alwaysShow`), quelle que soit la locale UI ; arabe en sous-titre secondaire sous le FR (`ProductArabicSubtitle` + `underPrimaryTitle` + `reserveSpace`) même si `name_ar` vide.
 - **Commentaire ligne** : bouton « Commentaire » (icône + libellé) sous le bloc quantités ; pastille si renseigné.
 - Ligne **« Soit … »** (conditionnement) : hauteur réservée même absente (à l’unité ou colis sans conversion).
 - **Croix rouge** à droite du champ qté (position absolue) si qté &gt; 0 : remise à zéro ; le champ reste **centré** entre les ±.

@@ -15,15 +15,18 @@ export default function CommandesFournisseurLandingClient() {
   const BackChevron = useBackChevronIcon();
   const {
     loading,
-    isFullAccess,
-    isAdministrator,
     canCommandesFournisseurSaisie,
     canCommandesFournisseurConsolidation,
     canCommandesFournisseurAchat,
   } = useSessionPermissions();
   const [redirecting, setRedirecting] = useState(true);
 
-  const isHub = Boolean(isFullAccess || isAdministrator);
+  const accessibleSpaces = [
+    canCommandesFournisseurSaisie,
+    canCommandesFournisseurConsolidation,
+    canCommandesFournisseurAchat,
+  ].filter(Boolean).length;
+  const isHub = accessibleSpaces >= 2;
 
   useEffect(() => {
     if (loading) return;
@@ -91,7 +94,7 @@ export default function CommandesFournisseurLandingClient() {
         {t("subtitle")}
       </Typography>
       <div className="flex flex-col gap-3">
-        {canCommandesFournisseurSaisie || isFullAccess ? (
+        {canCommandesFournisseurSaisie ? (
           <Button
             component={AppLink}
             href="/commandes-fournisseur/saisie"
@@ -104,7 +107,7 @@ export default function CommandesFournisseurLandingClient() {
             {t("navSaisie")}
           </Button>
         ) : null}
-        {canCommandesFournisseurConsolidation || isFullAccess ? (
+        {canCommandesFournisseurConsolidation ? (
           <Button
             component={AppLink}
             href="/commandes-fournisseur/validation"
@@ -117,7 +120,7 @@ export default function CommandesFournisseurLandingClient() {
             {t("navValidation")}
           </Button>
         ) : null}
-        {canCommandesFournisseurAchat || isFullAccess ? (
+        {canCommandesFournisseurAchat ? (
           <Button
             component={AppLink}
             href="/commandes-fournisseur/achat"

@@ -618,6 +618,7 @@ export default function ParcoursClient({ commandeId }: { commandeId: string }) {
           nameAr={current.name_ar}
           centered
           underPrimaryTitle
+          alwaysShow
           reserveSpace
           className="!mb-3"
         />

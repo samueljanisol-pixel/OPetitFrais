@@ -12,6 +12,8 @@ type Props = {
   reserveSpace?: boolean;
   /** Parcours : arabe secondaire sous le titre français (plus petit que le titre FR). */
   underPrimaryTitle?: boolean;
+  /** Affiche le nom arabe quelle que soit la locale UI (parcours bilingue). */
+  alwaysShow?: boolean;
   /** Même bloc que le nom français en liste récap. */
   matchNameLine?: boolean;
   variant?: "body2" | "caption" | "subtitle2" | "h6";
@@ -86,19 +88,19 @@ function resolveArabicTypography(
 /** Hauteur d’une ligne arabe parcours (sous-titre sous titre FR). */
 const PARCOURS_ARABIC_SLOT_MIN_HEIGHT = "1.375rem";
 
-/** Ligne de nom en arabe sous le nom français ; masquée hors UI arabe. */
+/** Ligne de nom en arabe sous le nom français ; masquée hors UI arabe sauf si `alwaysShow`. */
 export default function ProductArabicSubtitle({
   nameAr,
   centered,
   reserveSpace,
   underPrimaryTitle,
+  alwaysShow,
   matchNameLine,
   variant = "body2",
   className,
 }: Props) {
   const locale = useLocale();
-  /** Affiché uniquement quand l’interface est en arabe. */
-  if (!locale.toLowerCase().startsWith("ar")) {
+  if (!alwaysShow && !locale.toLowerCase().startsWith("ar")) {
     return null;
   }
 

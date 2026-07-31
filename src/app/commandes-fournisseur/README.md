@@ -1,5 +1,17 @@
 # Commandes fournisseur
 
+## Hub d’accueil (`/commandes-fournisseur`)
+
+Depuis l’accueil backoffice, le bouton **Commandes fournisseur** mène à `/commandes-fournisseur`.
+
+| Permissions (espaces) | Comportement |
+|---|---|
+| **Aucune** des 3 (`saisie`, `consolidation`, `achat`) | Redirection `/access-refuse` |
+| **Une seule** | Redirection directe vers l’espace autorisé (priorité : saisie → validation → achat) |
+| **Deux ou plus** | Page hub avec un bouton par espace autorisé (Saisie, Validation, Achat) |
+
+Les **comptes fournisseurs** (`commandes_fournisseur.comptes`) restent un accès séparé depuis l’accueil, pas depuis ce hub.
+
 ## Commentaires — lot vs commandes (consolidation)
 
 Sur l’écran **détail d’un lot** (`/commandes-fournisseur/validation/lots/[id]`), les données suivent :
