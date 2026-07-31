@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import { Box, Button, Chip, Typography } from "@mui/material";
+import { alpha } from "@mui/material/styles";
 import ShoppingCartOutlinedIcon from "@mui/icons-material/ShoppingCartOutlined";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { productPhotoPublicUrl } from "@/lib/products/storage";
@@ -271,6 +272,16 @@ export default function ShopOrderClient({
   const cartCount = lines.length;
   const cartTotal = lines.reduce((sum, l) => sum + l.qty * l.priceAtAdd, 0);
 
+  const cartCountByCategory = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const line of lines) {
+      const product = productById.get(line.productId);
+      if (!product) continue;
+      counts.set(product.category_id, (counts.get(product.category_id) ?? 0) + 1);
+    }
+    return counts;
+  }, [lines, productById]);
+
   const activeGroup = groups.find((g) => g.categoryId === activeCategoryId) ?? groups[0] ?? null;
 
   if (catalogError) {
@@ -327,11 +338,6 @@ export default function ShopOrderClient({
             <>
               <Box
                 sx={{
-                  display: "flex",
-                  gap: 1,
-                  overflowX: "auto",
-                  px: 2,
-                  py: 1.5,
                   position: "sticky",
                   top: 56,
                   zIndex: 20,
@@ -339,18 +345,83 @@ export default function ShopOrderClient({
                   backdropFilter: "blur(8px)",
                   borderBottom: "1px solid",
                   borderColor: "divider",
+                  px: 2,
+                  py: 1.5,
+                  overflowX: "auto",
+                  scrollbarWidth: "none",
+                  msOverflowStyle: "none",
+                  "&::-webkit-scrollbar": { display: "none" },
                 }}
               >
-                {groups.map((group) => (
-                  <Chip
-                    key={group.categoryId}
-                    label={group.categoryLabel}
-                    color={group.categoryId === activeGroup?.categoryId ? "success" : "default"}
-                    variant={group.categoryId === activeGroup?.categoryId ? "filled" : "outlined"}
-                    onClick={() => setActiveCategoryId(group.categoryId)}
-                    sx={{ flexShrink: 0 }}
-                  />
-                ))}
+                <Box
+                  sx={{
+                    display: "flex",
+                    flexWrap: "nowrap",
+                    justifyContent: "center",
+                    gap: 1,
+                    width: "max-content",
+                    minWidth: "100%",
+                    mx: "auto",
+                  }}
+                >
+                  {groups.map((group) => {
+                    const inCartCount = cartCountByCategory.get(group.categoryId) ?? 0;
+                    const selected = group.categoryId === activeGroup?.categoryId;
+                    return (
+                      <Box
+                        key={group.categoryId}
+                        sx={{
+                          position: "relative",
+                          flexShrink: 0,
+                          display: "inline-flex",
+                        }}
+                      >
+                        <Chip
+                          label={group.categoryLabel}
+                          size="small"
+                          color={selected ? "success" : "default"}
+                          variant={selected ? "filled" : "outlined"}
+                          onClick={() => setActiveCategoryId(group.categoryId)}
+                          sx={{
+                            fontSize: "0.8125rem",
+                            fontWeight: 600,
+                            height: 32,
+                            "& .MuiChip-label": { px: 1.25 },
+                          }}
+                        />
+                        {inCartCount > 0 ? (
+                          <Box
+                            component="span"
+                            aria-hidden
+                            sx={{
+                              position: "absolute",
+                              top: -5,
+                              right: -5,
+                              minWidth: 17,
+                              height: 17,
+                              px: 0.375,
+                              borderRadius: 999,
+                              bgcolor: "rgba(236, 253, 245, 0.98)",
+                              color: "success.dark",
+                              border: "1px solid",
+                              borderColor: "success.light",
+                              fontSize: "0.625rem",
+                              fontWeight: 700,
+                              display: "inline-flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                              lineHeight: 1,
+                              boxShadow: "0 1px 3px rgba(0,0,0,0.08)",
+                              pointerEvents: "none",
+                            }}
+                          >
+                            {inCartCount}
+                          </Box>
+                        ) : null}
+                      </Box>
+                    );
+                  })}
+                </Box>
               </Box>
 
               <Box sx={{ px: 2, py: 2, display: "flex", flexDirection: "column", gap: 3 }}>
@@ -417,7 +488,16 @@ export default function ShopOrderClient({
             sx={{
               textTransform: "none",
               fontWeight: 700,
-              py: 1.25,
+              py: 1,
+              px: 1.5,
+              whiteSpace: "nowrap",
+              fontSize: { xs: "0.78rem", sm: "0.875rem" },
+              bgcolor: (theme) => alpha(theme.palette.success.main, 0.72),
+              backdropFilter: "blur(8px)",
+              boxShadow: "0 4px 12px rgba(0, 0, 0, 0.12)",
+              "&:hover": {
+                bgcolor: (theme) => alpha(theme.palette.success.dark, 0.82),
+              },
             }}
           >
             {t("viewMyCart")} · {t("cartProductCount", { count: cartCount })} ·{" "}

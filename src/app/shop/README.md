@@ -4,7 +4,7 @@ Page publique de commande pour les clients particuliers. Accessible sur le domai
 
 ## Fonctionnement
 
-1. Catalogue produits **actifs** et **visible vitrine** (`active = true`, `visible_vitrine = true`), groupés par catégorie puis sous-catégorie. L’ordre des catégories suit `ref_category.sort_order` (réglable dans Paramètres → Catégories).
+1. Catalogue produits **actifs** et **visible vitrine** (`active = true`, `visible_vitrine = true`), groupés par catégorie puis sous-catégorie. L’ordre des catégories suit `ref_category.sort_order` (réglable dans Paramètres → Catégories). Barre catégories sticky : chips centrés ; pastille compteur panier **en superposition** (coin supérieur droit), sans modifier la taille du chip.
 2. En-tête boutique : slogan **« Qualité et Fraîcheur au quotidien »** + choix **retrait magasin** / **livraison à domicile** (localStorage `opf-shop-fulfillment-v1`, repris dans le message WhatsApp).
 3. Le client ajoute des produits au panier :
    - Options = **UdV** (si autorisée) + **unités de commande vitrine** cochées sur le produit (même sans poids pièce ; dans ce cas pas d’estimation « ~X kg / pièce » ni « soit ~X kg »).
