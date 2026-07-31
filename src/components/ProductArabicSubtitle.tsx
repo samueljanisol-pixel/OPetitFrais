@@ -10,6 +10,8 @@ type Props = {
   centered?: boolean;
   /** Conserve la hauteur du bloc si `name_ar` est vide (parcours : pas de saut de mise en page). */
   reserveSpace?: boolean;
+  /** Parcours : arabe secondaire sous le titre français (plus petit que le titre FR). */
+  underPrimaryTitle?: boolean;
   /** Même bloc que le nom français en liste récap. */
   matchNameLine?: boolean;
   variant?: "body2" | "caption" | "subtitle2" | "h6";
@@ -28,9 +30,21 @@ const MATCH_NAME_LINE_SX = {
 /** Tailles arabe légèrement au-dessus du français à chaque usage. */
 function resolveArabicTypography(
   centered: boolean | undefined,
+  underPrimaryTitle: boolean | undefined,
   matchNameLine: boolean | undefined,
   variant: Props["variant"],
 ): ResolvedArabicType {
+  if (underPrimaryTitle && centered) {
+    return {
+      variant: "body2",
+      color: "text.secondary",
+      sx: {
+        fontWeight: 500,
+        fontSize: "1rem",
+        lineHeight: 1.35,
+      },
+    };
+  }
   if (centered || variant === "h6") {
     return {
       variant: "subtitle1",
@@ -69,14 +83,15 @@ function resolveArabicTypography(
   };
 }
 
-/** Hauteur d’une ligne arabe parcours (subtitle1 centré). */
-const PARCOURS_ARABIC_SLOT_MIN_HEIGHT = "1.6875rem";
+/** Hauteur d’une ligne arabe parcours (sous-titre sous titre FR). */
+const PARCOURS_ARABIC_SLOT_MIN_HEIGHT = "1.375rem";
 
 /** Ligne de nom en arabe sous le nom français ; masquée hors UI arabe. */
 export default function ProductArabicSubtitle({
   nameAr,
   centered,
   reserveSpace,
+  underPrimaryTitle,
   matchNameLine,
   variant = "body2",
   className,
@@ -88,7 +103,7 @@ export default function ProductArabicSubtitle({
   }
 
   const t = typeof nameAr === "string" ? nameAr.trim() : "";
-  const resolved = resolveArabicTypography(centered, matchNameLine, variant);
+  const resolved = resolveArabicTypography(centered, underPrimaryTitle, matchNameLine, variant);
 
   if (!t) {
     if (!reserveSpace) return null;

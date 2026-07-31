@@ -8,7 +8,8 @@ Route : `/commandes-fournisseur/saisie/[id]/parcours`
 - **Navigation par catégories** : bandeau horizontal de puces (toutes les catégories du parcours) sous l’en-tête ; clic → saut au premier produit de la catégorie ; la catégorie courante est mise en évidence.
 - Zone produit (photo, quantités) **défilable** si le contenu dépasse la hauteur disponible.
 - Emplacement photo **toujours réservé** (`h-36`, max `6rem`) : sans image, zone vide — le libellé et les quantités ne remontent pas.
-- Nom arabe (`name_ar`) : slot réservé sous le titre FR (`ProductArabicSubtitle` + `reserveSpace`) même si vide.
+- **Noms produit** : titre **français** toujours visible ; en UI `ar-MA`, nom arabe en sous-titre secondaire sous le FR (`ProductArabicSubtitle` + `underPrimaryTitle` + `reserveSpace`) même si vide.
+- **Commentaire ligne** : bouton « Commentaire » (icône + libellé) sous le bloc quantités ; pastille si renseigné.
 - Ligne **« Soit … »** (conditionnement) : hauteur réservée même absente (à l’unité ou colis sans conversion).
 - **Croix rouge** à droite du champ qté (position absolue) si qté &gt; 0 : remise à zéro ; le champ reste **centré** entre les ±.
 - **À l’unité** : libellé **UdC** (`ref_order_unit`, repli UdV si absent) **centré sous** la rangée ±, comme le libellé colis en conditionnement.
@@ -18,7 +19,6 @@ Route : `/commandes-fournisseur/saisie/[id]/parcours`
 - Bouton **Fiche produit** (visible si permission `produits.read` ou `produits.write`) → `/produits/[productId]?returnTo=…/parcours?productId=…`.
 - Sur la fiche : avec `returnTo` + `commandes_fournisseur.saisie`, gestion des **conditionnements** (ajout / paramètres / retrait) même sans `produits.write`.
 - Brouillon parcours en **sessionStorage** : quantités, routes de conditionnement, **commentaires par produit** et index courant ; fusionné au rechargement (priorité au brouillon sur les lignes non encore enregistrées en base).
-- **Commentaire ligne** : bouton sous le nom produit (même modèle que le récap) ; un commentaire par produit, enregistré sur chaque ligne (unité / colis) lors de **Terminer** ; pastille affichée si renseigné.
 - Retour fiche produit : même produit (`?productId=`), quantités des autres produits conservées.
 - Après **Terminer**, le brouillon session est effacé.
 

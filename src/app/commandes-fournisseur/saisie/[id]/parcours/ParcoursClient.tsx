@@ -11,7 +11,6 @@ import {
   DialogActions,
   DialogContent,
   DialogTitle,
-  IconButton,
   TextField,
   Typography,
 } from "@mui/material";
@@ -610,37 +609,38 @@ export default function ParcoursClient({ commandeId }: { commandeId: string }) {
         <Typography
           variant="h6"
           component="h1"
-          className="!mb-1 !text-base text-center"
-          sx={{ fontWeight: 600 }}
+          className="!mb-1 text-center"
+          sx={{ fontWeight: 600, fontSize: "1.125rem", lineHeight: 1.35 }}
         >
           {current.name}
         </Typography>
         <ProductArabicSubtitle
           nameAr={current.name_ar}
           centered
+          underPrimaryTitle
           reserveSpace
-          className="!mb-2"
+          className="!mb-3"
         />
-        <div className="!mb-3 flex w-full flex-col items-center gap-1">
-          <IconButton
-            type="button"
-            size="small"
-            color={currentLineComment.length > 0 ? "info" : "default"}
-            aria-label={
-              currentLineComment.length > 0 ? tc("editCommentAria") : tc("addCommentAria")
-            }
-            onClick={openCommentDialog}
-            disabled={saving}
-          >
-            <CommentOutlinedIcon fontSize="small" />
-          </IconButton>
-          {currentLineComment.length > 0 ? (
-            <LigneSaisieComments comments={[]} lineComment={currentLineComment} variant="chip" />
-          ) : null}
-        </div>
 
         <div className="flex flex-col gap-3 pb-2">
           {currentBlocks}
+        </div>
+
+        <div className="!mt-2 flex w-full flex-col items-center gap-1 pb-2">
+          <Button
+            type="button"
+            size="small"
+            color={currentLineComment.length > 0 ? "info" : "inherit"}
+            startIcon={<CommentOutlinedIcon fontSize="small" />}
+            onClick={openCommentDialog}
+            disabled={saving}
+            sx={{ textTransform: "none" }}
+          >
+            {tc("comment")}
+          </Button>
+          {currentLineComment.length > 0 ? (
+            <LigneSaisieComments comments={[]} lineComment={currentLineComment} variant="chip" />
+          ) : null}
         </div>
       </div>
 
