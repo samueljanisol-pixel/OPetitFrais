@@ -52,6 +52,17 @@ const BACKOFFICE_PATH_PREFIXES = [
 /** Chemins boutique : sur host backoffice, rediriger vers le domaine shop. */
 const SHOP_ONLY_PATHS = ["/livraison"] as const;
 
+/** Aperçu boutique sur localhost sans fichier hosts (`/shop`, dev uniquement). */
+export function isShopLocalPreviewPath(pathname: string): boolean {
+  if (process.env.NODE_ENV !== "development") return false;
+  return pathname === "/shop" || pathname.startsWith("/shop/");
+}
+
+export function shopLocalPreviewUrl(pathname = "/shop"): string {
+  const path = pathname.startsWith("/") ? pathname : `/${pathname}`;
+  return path;
+}
+
 export function isBackofficeOnlyPath(pathname: string): boolean {
   return BACKOFFICE_PATH_PREFIXES.some((p) => pathname === p || pathname.startsWith(`${p}/`));
 }

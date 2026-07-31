@@ -66,6 +66,8 @@ export type ShopCartLine = {
   priceAtAdd: number;
   /** Pour affichage « soit ~X kg » (unités vitrine). */
   equivKgAtAdd: number | null;
+  /** Masse kg de référence (arrondi UdV ↔ unités pièce sans perte au retour Kg). */
+  canonicalKg?: number | null;
 };
 
 export type ShopCartState = {

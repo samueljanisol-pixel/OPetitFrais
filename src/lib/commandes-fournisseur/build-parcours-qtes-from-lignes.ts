@@ -7,7 +7,12 @@ import {
   type ParcoursProductForQty,
 } from "@/features/commandes-fournisseur/parcours-product-quantity";
 
-type LigneIn = { product_id: string; product_packaging_id: string | null; qte: number };
+type LigneIn = {
+  product_id: string;
+  product_packaging_id: string | null;
+  qte: number;
+  line_comment?: string | null;
+};
 
 export function buildParcoursQtesFromLignes(
   list: ParcoursProductForQty[],
@@ -55,6 +60,18 @@ export function buildParcoursQtesFromLignes(
   }
 
   return { qtes, packRoute };
+}
+
+/** Commentaire par produit (premier `line_comment` non vide parmi les lignes du produit). */
+export function buildParcoursLineCommentsFromLignes(lignes: LigneIn[]): Record<string, string> {
+  const comments: Record<string, string> = {};
+  for (const l of lignes) {
+    const c = typeof l.line_comment === "string" ? l.line_comment.trim() : "";
+    if (c.length > 0 && comments[l.product_id] === undefined) {
+      comments[l.product_id] = c;
+    }
+  }
+  return comments;
 }
 
 export function findParcoursProductIndex(

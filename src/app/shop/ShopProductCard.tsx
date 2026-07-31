@@ -44,7 +44,8 @@ export default function ShopProductCard({
   const options = useMemo(() => resolveShopOrderOptions(product), [product]);
   const option = findShopOption(product, selectedShopOrderUnitId) ?? options[0] ?? null;
   const inCart = qty > 0;
-  const qtyLabel = option ? formatShopQty(locale, qty, option.unitCode) : "0";
+  const qtyNumber = option ? formatShopQty(locale, qty, option.unitCode) : "0";
+  const qtyUnitLabel = option ? shopOptionLabel(option, locale) : "";
   const priceUnitLabel = labelFromRefForLocale(product.ref_sales_unit, locale);
   const pieceWeight =
     product.piece_weight_kg != null && Number(product.piece_weight_kg) > 0
@@ -89,18 +90,20 @@ export default function ShopProductCard({
         )}
       </Box>
 
-      <Box sx={{ flex: 1, display: "flex", flexDirection: "column", p: 0.625, gap: 0.25 }}>
+      <Box sx={{ flex: 1, display: "flex", flexDirection: "column", px: 0.625, pt: 0.25, pb: 0.625, gap: 0.25 }}>
         <Typography
           variant="caption"
           sx={{
-            lineHeight: 1.2,
+            lineHeight: 1.25,
             fontWeight: 600,
-            fontSize: "0.7rem",
+            fontSize: "0.8rem",
+            textAlign: "center",
             display: "-webkit-box",
             WebkitLineClamp: 2,
             WebkitBoxOrient: "vertical",
             overflow: "hidden",
-            minHeight: "2.4em",
+            minHeight: "2.5em",
+            mt: -0.125,
           }}
         >
           {label}
@@ -108,7 +111,7 @@ export default function ShopProductCard({
         <Typography
           variant="caption"
           color="success.dark"
-          sx={{ fontWeight: 700, fontSize: "0.68rem", lineHeight: 1.2 }}
+          sx={{ fontWeight: 700, fontSize: "0.68rem", lineHeight: 1.2, textAlign: "center" }}
         >
           {formatShopPriceWithUnit(locale, product.price, priceUnitLabel)}
         </Typography>
@@ -119,18 +122,30 @@ export default function ShopProductCard({
         ) : null}
 
         {options.length > 1 ? (
-          <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.25, mt: 0.25 }}>
+          <Box
+            sx={{
+              display: "flex",
+              flexWrap: "wrap",
+              justifyContent: "center",
+              gap: 0.5,
+              mt: 0.375,
+            }}
+          >
             {options.map((o) => {
               const selected = o.shopOrderUnitId === selectedShopOrderUnitId;
               return (
                 <Chip
                   key={o.shopOrderUnitId ?? "__udv__"}
                   label={shopOptionLabel(o, locale)}
-                  size="small"
                   color={selected ? "success" : "default"}
                   variant={selected ? "filled" : "outlined"}
                   onClick={() => onSelectUnit(o.shopOrderUnitId)}
-                  sx={{ height: 18, fontSize: "0.58rem", "& .MuiChip-label": { px: 0.5 } }}
+                  sx={{
+                    height: 30,
+                    fontSize: "0.72rem",
+                    fontWeight: 600,
+                    "& .MuiChip-label": { px: 1, py: 0.25 },
+                  }}
                 />
               );
             })}
@@ -140,56 +155,78 @@ export default function ShopProductCard({
         <Box
           sx={{
             mt: "auto",
-            pt: 0.375,
+            pt: 0.5,
             display: "flex",
             alignItems: "center",
-            justifyContent: "space-between",
-            gap: 0.25,
+            justifyContent: "center",
+            gap: 1,
           }}
         >
           <IconButton
-            size="small"
             color="inherit"
             aria-label="-"
             disabled={qty <= 0 || !option}
             onClick={onRemove}
             sx={{
-              width: 26,
-              height: 26,
+              width: 36,
+              height: 36,
               border: "1px solid",
               borderColor: "divider",
               p: 0,
             }}
           >
-            <RemoveIcon sx={{ fontSize: 14 }} />
+            <RemoveIcon sx={{ fontSize: 20 }} />
           </IconButton>
-          <Typography
-            variant="caption"
+          <Box
             sx={{
-              fontVariantNumeric: "tabular-nums",
-              fontWeight: 700,
-              fontSize: "0.75rem",
-              minWidth: "1.5rem",
-              textAlign: "center",
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              justifyContent: "center",
+              minWidth: "2.75rem",
             }}
           >
-            {qtyLabel}
-          </Typography>
+            <Typography
+              variant="caption"
+              sx={{
+                fontVariantNumeric: "tabular-nums",
+                fontWeight: 700,
+                fontSize: "0.85rem",
+                lineHeight: 1.2,
+                textAlign: "center",
+              }}
+            >
+              {qtyNumber}
+            </Typography>
+            {qtyUnitLabel ? (
+              <Typography
+                variant="caption"
+                color="text.secondary"
+                sx={{
+                  fontSize: "0.62rem",
+                  lineHeight: 1.2,
+                  fontWeight: 600,
+                  textAlign: "center",
+                }}
+              >
+                {qtyUnitLabel}
+              </Typography>
+            ) : null}
+          </Box>
           <IconButton
-            size="small"
             color="success"
             aria-label="+"
             disabled={!option}
             onClick={onAdd}
             sx={{
-              width: 26,
-              height: 26,
+              width: 36,
+              height: 36,
               border: "1px solid",
               borderColor: "success.light",
               p: 0,
             }}
           >
-            <AddIcon sx={{ fontSize: 14 }} />
+            <AddIcon sx={{ fontSize: 20 }} />
           </IconButton>
         </Box>
       </Box>

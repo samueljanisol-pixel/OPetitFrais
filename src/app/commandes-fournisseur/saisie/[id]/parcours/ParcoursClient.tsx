@@ -4,11 +4,24 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useTranslations } from "next-intl";
 import Image from "next/image";
-import { Box, Button, Chip, Typography } from "@mui/material";
+import {
+  Box,
+  Button,
+  Chip,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
+  IconButton,
+  TextField,
+  Typography,
+} from "@mui/material";
 import ChevronRightIcon from "@mui/icons-material/ChevronRight";
+import CommentOutlinedIcon from "@mui/icons-material/CommentOutlined";
 import DescriptionOutlinedIcon from "@mui/icons-material/DescriptionOutlined";
 import AppLink from "@/components/AppLink";
+import LigneSaisieComments from "@/components/commandes-fournisseur/LigneSaisieComments";
 import ProductArabicSubtitle from "@/components/ProductArabicSubtitle";
+import FormDialog from "@/lib/mui/FormDialog";
 import {
   type PackRoute,
   type ParcoursProductForQty,
@@ -22,6 +35,7 @@ import {
 } from "@/features/commandes-fournisseur/parcours-product-quantity";
 import { useSessionPermissions } from "@/lib/auth/useSessionPermissions";
 import {
+  buildParcoursLineCommentsFromLignes,
   buildParcoursQtesFromLignes,
   findParcoursProductIndex,
 } from "@/lib/commandes-fournisseur/build-parcours-qtes-from-lignes";
@@ -43,7 +57,12 @@ type Product = ParcoursProductForQty & {
   photoUrl?: string | null;
 };
 
-type LigneIn = { product_id: string; product_packaging_id: string | null; qte: number };
+type LigneIn = {
+  product_id: string;
+  product_packaging_id: string | null;
+  qte: number;
+  line_comment?: string | null;
+};
 
 export default function ParcoursClient({ commandeId }: { commandeId: string }) {
   const router = useRouter();
@@ -61,6 +80,9 @@ export default function ParcoursClient({ commandeId }: { commandeId: string }) {
   const [index, setIndex] = useState(0);
   const [qtes, setQtes] = useState<Record<string, number>>({});
   const [packRoute, setPackRoute] = useState<Record<string, PackRoute>>({});
+  const [lineComments, setLineComments] = useState<Record<string, string>>({});
+  const [commentDialogOpen, setCommentDialogOpen] = useState(false);
+  const [commentDraft, setCommentDraft] = useState("");
   const [commandeSupplierId, setCommandeSupplierId] = useState<string | null>(null);
   const [commandeMagasinId, setCommandeMagasinId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -136,10 +158,11 @@ export default function ParcoursClient({ commandeId }: { commandeId: string }) {
     saveParcoursDraft(commandeId, {
       qtes,
       packRoute,
+      lineComments,
       index: idx,
       focusProductId: pid,
     });
-  }, [commandeId, packRoute, qtes]);
+  }, [commandeId, lineComments, packRoute, qtes]);
 
   const reconcileProductInState = useCallback(
     (updated: Product) => {
@@ -249,11 +272,14 @@ export default function ParcoursClient({ commandeId }: { commandeId: string }) {
         setProducts(list);
 
         const fromDb = buildParcoursQtesFromLignes(list, j1.lignes ?? [], sid);
+        const fromDbComments = buildParcoursLineCommentsFromLignes(j1.lignes ?? []);
         const draft = loadParcoursDraft(commandeId);
         const mergedQ = { ...fromDb.qtes, ...(draft?.qtes ?? {}) };
         const mergedRoute = { ...fromDb.packRoute, ...(draft?.packRoute ?? {}) };
+        const mergedComments = { ...fromDbComments, ...(draft?.lineComments ?? {}) };
         setQtes(mergedQ);
         setPackRoute(mergedRoute);
+        setLineComments(mergedComments);
 
         const urlProductId = searchParams.get("productId")?.trim() || null;
         const focusId = urlProductId || draft?.focusProductId || null;
@@ -300,22 +326,38 @@ export default function ParcoursClient({ commandeId }: { commandeId: string }) {
       productId: string;
       productPackagingId: string | null;
       qte: number;
+      lineComment: string | null;
       horsFournisseur: boolean;
     }[] = [];
     for (const p of products) {
+      const rawComment = lineComments[p.id];
+      const lineComment =
+        typeof rawComment === "string" && rawComment.trim().length > 0 ? rawComment.trim() : null;
       const uq = clampQtyToApiRange(getQ(uKey(p.id)));
       if (uq > 0) {
-        out.push({ productId: p.id, productPackagingId: null, qte: uq, horsFournisseur: false });
+        out.push({
+          productId: p.id,
+          productPackagingId: null,
+          qte: uq,
+          lineComment,
+          horsFournisseur: false,
+        });
       }
       for (const pkg of packArray(p.product_packaging)) {
         const q = clampQtyToApiRange(getQ(pKey(p.id, pkg.id)));
         if (q > 0) {
-          out.push({ productId: p.id, productPackagingId: pkg.id, qte: q, horsFournisseur: false });
+          out.push({
+            productId: p.id,
+            productPackagingId: pkg.id,
+            qte: q,
+            lineComment,
+            horsFournisseur: false,
+          });
         }
       }
     }
     return out;
-  }, [getQ, pKey, products, uKey]);
+  }, [getQ, lineComments, pKey, products, uKey]);
 
   const sendLignes = useCallback(async () => {
     const lignes = buildLignesPayload();
@@ -350,6 +392,50 @@ export default function ParcoursClient({ commandeId }: { commandeId: string }) {
 
   const categoryNav = useMemo(() => buildParcoursCategoryNav(products), [products]);
   const currentCategoryKey = current ? categoryKeyForProduct(current) : "";
+  const currentLineComment =
+    current && typeof lineComments[current.id] === "string" ? lineComments[current.id]!.trim() : "";
+
+  const openCommentDialog = useCallback(() => {
+    if (!current) {
+      return;
+    }
+    setCommentDraft(lineComments[current.id] ?? "");
+    setCommentDialogOpen(true);
+  }, [current, lineComments]);
+
+  const closeCommentDialog = useCallback(() => {
+    setCommentDialogOpen(false);
+    setCommentDraft("");
+  }, []);
+
+  const saveProductComment = useCallback(() => {
+    if (!current) {
+      return;
+    }
+    const trimmed = commentDraft.trim();
+    setLineComments((prev) => {
+      const next = { ...prev };
+      if (trimmed.length > 0) {
+        next[current.id] = trimmed;
+      } else {
+        delete next[current.id];
+      }
+      return next;
+    });
+    closeCommentDialog();
+  }, [closeCommentDialog, commentDraft, current]);
+
+  const deleteProductComment = useCallback(() => {
+    if (!current) {
+      return;
+    }
+    setLineComments((prev) => {
+      const next = { ...prev };
+      delete next[current.id];
+      return next;
+    });
+    closeCommentDialog();
+  }, [closeCommentDialog, current]);
 
   useEffect(() => {
     if (!currentCategoryKey) {
@@ -533,8 +619,25 @@ export default function ParcoursClient({ commandeId }: { commandeId: string }) {
           nameAr={current.name_ar}
           centered
           reserveSpace
-          className="!mb-3"
+          className="!mb-2"
         />
+        <div className="!mb-3 flex w-full flex-col items-center gap-1">
+          <IconButton
+            type="button"
+            size="small"
+            color={currentLineComment.length > 0 ? "info" : "default"}
+            aria-label={
+              currentLineComment.length > 0 ? tc("editCommentAria") : tc("addCommentAria")
+            }
+            onClick={openCommentDialog}
+            disabled={saving}
+          >
+            <CommentOutlinedIcon fontSize="small" />
+          </IconButton>
+          {currentLineComment.length > 0 ? (
+            <LigneSaisieComments comments={[]} lineComment={currentLineComment} variant="chip" />
+          ) : null}
+        </div>
 
         <div className="flex flex-col gap-3 pb-2">
           {currentBlocks}
@@ -586,6 +689,68 @@ export default function ParcoursClient({ commandeId }: { commandeId: string }) {
           {saving ? tc("loadingEllipsis") : t("finish")}
         </Button>
       </Box>
+
+      <FormDialog open={commentDialogOpen} onClose={closeCommentDialog} fullWidth maxWidth="sm">
+        <DialogTitle sx={{ pb: 0.5 }}>
+          {commentDraft.trim().length > 0 || currentLineComment.length > 0
+            ? tc("commentLine")
+            : tc("addComment")}
+        </DialogTitle>
+        <DialogContent>
+          <Typography variant="subtitle2" className="!mb-2 !font-semibold">
+            {current.name}
+          </Typography>
+          <TextField
+            fullWidth
+            multiline
+            minRows={2}
+            maxRows={6}
+            label={tc("comment")}
+            value={commentDraft}
+            onChange={(e) => setCommentDraft(e.target.value)}
+            disabled={saving}
+            placeholder={tc("commentPlaceholder")}
+          />
+        </DialogContent>
+        <DialogActions
+          className="!px-3 !pb-2"
+          sx={{ justifyContent: "space-between", flexWrap: "wrap", gap: 1 }}
+        >
+          {currentLineComment.length > 0 ? (
+            <Button
+              type="button"
+              color="error"
+              disabled={saving}
+              onClick={deleteProductComment}
+              sx={{ textTransform: "none" }}
+            >
+              {tCommon("delete")}
+            </Button>
+          ) : (
+            <span aria-hidden />
+          )}
+          <div className="flex gap-1">
+            <Button
+              type="button"
+              color="inherit"
+              onClick={closeCommentDialog}
+              sx={{ textTransform: "none" }}
+              disabled={saving}
+            >
+              {tCommon("cancel")}
+            </Button>
+            <Button
+              type="button"
+              variant="contained"
+              disabled={saving}
+              onClick={saveProductComment}
+              sx={{ textTransform: "none" }}
+            >
+              {tCommon("save")}
+            </Button>
+          </div>
+        </DialogActions>
+      </FormDialog>
     </main>
   );
 }

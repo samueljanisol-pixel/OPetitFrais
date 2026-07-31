@@ -9,10 +9,11 @@ Page publique de commande pour les clients particuliers. Accessible sur le domai
 3. Le client ajoute des produits au panier :
    - Options = **UdV** (si autorisée) + **unités de commande vitrine** cochées sur le produit (si poids pièce renseigné).
    - Favori produit pré-sélectionné sur la carte.
+   - **Une seule unité par produit** dans le panier : changement Kg ↔ Botte via le **poids de référence** (`piece_weight_kg` × `piece_qty`). La masse kg est mémorisée (`canonicalKg`) : ex. 2,5 Kg → 3 Botte (~1 kg/botte) → retour Kg = **2,5 Kg**.
    - **Kg** (UdV) : pas de 0,5 kg ; autres unités : pas de 1.
    - Prix catalogue affiché **au kg** (UdV) sur la carte ; poids pièce avec `~` ; total panier / WhatsApp estimés (`piece_qty × poids × prix/kg`).
-4. Panier stocké **uniquement en cache navigateur** (`localStorage`, clé `opf-shop-cart-v2`) — lignes clés `(produit, unité vitrine|UdV)`.
-5. Export : copier la liste texte ou ouvrir WhatsApp avec le message pré-rempli (libellé + `soit ~X kg` pour les unités vitrine + mode retrait/livraison).
+4. Panier stocké **uniquement en cache navigateur** (`localStorage`, clé `opf-shop-cart-v2`) — lignes clés `(produit, unité vitrine|UdV)`. Barre fixe : **Voir mon panier · N produits** (WhatsApp depuis le drawer panier uniquement).
+5. Export : copier la liste texte ou ouvrir WhatsApp avec le message pré-rempli (libellé + mode retrait/livraison + **paiement** + total + commentaire optionnel).
 6. Page **`/livraison`** : carte (zone + magasins), vérif GPS / pin, contact boutique (appel / WhatsApp). API `GET /api/shop/livraison`.
 7. **Statistiques anonymes** : heartbeat vers `POST /api/shop/analytics/heartbeat` (visiteur UUID en localStorage). Consultation backoffice : [`/boutique/stats`](../boutique/stats/README.md) (permission `shop.read`).
 
@@ -24,8 +25,9 @@ Page publique de commande pour les clients particuliers. Accessible sur le domai
 | `ShopOrderClient.tsx` | Client : slogan, mode livraison, grille, panier |
 | `ShopFulfillmentSelector.tsx` | Choix retrait / livraison domicile |
 | `ShopShell.tsx` | Header boutique (logo, lien Livraison, langue, panier) |
-| `ShopProductCard.tsx` | Carte produit avec +/- |
-| `ShopCartPanel.tsx` | Drawer panier + export |
+| `ShopProductCard.tsx` | Carte produit : quantité + **unité de vente** sélectionnée, boutons +/- centrés |
+| `ShopPaymentSelector.tsx` | Choix paiement Espèce / Carte Bancaire (panier) |
+| `ShopCartPanel.tsx` | Drawer panier + export ; suppression ligne (icône poubelle) |
 | `../livraison/` | Page carte zone / magasins / contact |
 | `src/lib/shop/*` | Hosts, catalogue, panier, livraison, format export, analytics |
 | `src/app/page.tsx` | Route `/` selon le domaine (shop vs backoffice) |
@@ -51,6 +53,20 @@ Variables d'env communes. Cron existant (`vercel.json`) inchangé.
 
 ## Développement local
 
+### Lien rapide (sans fichier `hosts`)
+
+En dev, la boutique client est aussi accessible sur :
+
+- **http://localhost:3000/shop** — catalogue + panier
+- **http://localhost:3000/shop/livraison** — zone de livraison
+
+Le backoffice reste sur **http://localhost:3000** (accueil staff, auth requise).  
+`http://localhost:3000/livraison` redirige vers `/shop/livraison` en dev.
+
+Routes `/shop/*` désactivées en production (`404`).
+
+### Domaines locaux (comme en prod)
+
 Ajouter dans `C:\Windows\System32\drivers\etc\hosts` :
 
 ```text
@@ -62,7 +78,7 @@ Puis **redémarrer** `npm run dev` :
 
 - `http://opetitfrais.ma:3000` → boutique
 - `http://opetitfrais.janisol.ma:3000` → backoffice
-- `http://localhost:3000` → boutique aussi (host `localhost` reconnu en dev)
+- `http://localhost:3000/shop` → boutique (aperçu dev, sans `hosts`)
 
 **Next.js 16** : l'accès via `opetitfrais.ma` en dev exige `allowedDevOrigins` dans [`next.config.ts`](../../../next.config.ts). Sans cela, le JS client est bloqué (boutons inactifs, erreur WebSocket `webpack-hmr`).
 

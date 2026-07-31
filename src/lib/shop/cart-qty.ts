@@ -26,6 +26,15 @@ export function roundQtyForUnit(qty: number, unitCode: string): number {
   return Math.round(rounded * 100) / 100;
 }
 
+/** @deprecated Préférer convertCanonicalKgToQty / convertLineQtyToOption (shop-qty-convert). */
+export function convertQtyOnUnitChange(qty: number, toUnitCode: string): number {
+  if (qty <= 0) return 0;
+  if (toUnitCode === "kg") {
+    return roundQtyForUnit(qty, "kg");
+  }
+  return Math.max(0, Math.round(qty));
+}
+
 export function addQty(current: number, unitCode: string): number {
   return roundQtyForUnit(current + stepForUnit(unitCode), unitCode);
 }

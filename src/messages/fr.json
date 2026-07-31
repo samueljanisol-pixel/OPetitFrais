@@ -859,6 +859,7 @@
     "cart": "Panier",
     "openCart": "Ouvrir le panier",
     "viewCart": "Voir le panier",
+    "viewMyCart": "Voir mon panier",
     "emptyCart": "Votre panier est vide.",
     "noProducts": "Aucun produit disponible pour le moment.",
     "uncategorized": "Autres",
@@ -868,9 +869,12 @@
     "copyFailed": "Impossible de copier — sélectionnez le texte manuellement",
     "sendWhatsApp": "Envoyer par WhatsApp",
     "clearCart": "Vider le panier",
+    "removeProduct": "Supprimer du panier",
     "close": "Fermer",
     "orderTitle": "Commande O' Petit Frais",
     "estimatedTotal": "Total estimé",
+    "orderCommentLabel": "Commentaire",
+    "orderCommentPlaceholder": "Précisions pour votre commande (optionnel)",
     "fulfillment": {
       "title": "Comment souhaitez-vous être servi ?",
       "pickup": "Retrait en boutique",
@@ -887,6 +891,14 @@
       "orderPickup": "Mode : Retrait en boutique",
       "orderPickupNamed": "Mode : Retrait — {name}",
       "orderHome": "Mode : Livraison à domicile"
+    },
+    "payment": {
+      "title": "Mode de paiement",
+      "cash": "Espèce",
+      "card": "Carte Bancaire",
+      "chooseHint": "Choisissez un mode de paiement.",
+      "orderCash": "Paiement : Espèce",
+      "orderCard": "Paiement : Carte Bancaire"
     },
     "livraison": {
       "title": "Livraison & magasins",

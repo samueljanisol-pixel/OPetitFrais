@@ -8,6 +8,7 @@ import { Badge, Box, IconButton } from "@mui/material";
 import LocaleSwitcher from "@/components/LocaleSwitcher";
 import { formatShopPriceDh } from "@/lib/shop/format-price";
 import { useAppLocale } from "@/lib/i18n/useAppFormat";
+import { useShopRoutes } from "@/lib/shop/useShopRoutes";
 
 type Props = {
   cartCount: number;
@@ -26,6 +27,7 @@ export default function ShopShell({
 }: Props) {
   const t = useTranslations("shop");
   const locale = useAppLocale();
+  const routes = useShopRoutes();
 
   return (
     <div className="flex min-h-full flex-1 flex-col">
@@ -34,7 +36,7 @@ export default function ShopShell({
         role="banner"
       >
         <Link
-          href="/"
+          href={routes.home}
           title={t("homeTitle")}
           aria-label={t("homeTitle")}
           className="relative block h-10 w-[8.5rem] shrink-0 overflow-hidden rounded-lg bg-white"
@@ -51,7 +53,7 @@ export default function ShopShell({
 
         <Box sx={{ ms: "auto", display: "flex", alignItems: "center", gap: 0.5, minWidth: 0 }}>
           <Link
-            href="/livraison"
+            href={routes.livraison}
             className="text-sm font-semibold text-emerald-800 hover:underline"
           >
             {t("navLivraison")}

@@ -4,6 +4,8 @@ import Link from "next/link";
 import { useTranslations } from "next-intl";
 import { Box, ToggleButton, ToggleButtonGroup, Typography } from "@mui/material";
 import type { ShopFulfillmentMode } from "@/lib/shop/livraison-types";
+import { shopChoiceToggleGroupSx } from "@/lib/shop/shop-toggle-group-sx";
+import { useShopRoutes } from "@/lib/shop/useShopRoutes";
 
 type Props = {
   mode: ShopFulfillmentMode | null;
@@ -13,6 +15,7 @@ type Props = {
 
 export default function ShopFulfillmentSelector({ mode, onChange, pickupMagasinName }: Props) {
   const t = useTranslations("shop");
+  const routes = useShopRoutes();
   const pickupLabel = pickupMagasinName?.trim()
     ? t("fulfillment.pickupNamed", { name: pickupMagasinName.trim() })
     : t("fulfillment.pickup");
@@ -40,20 +43,7 @@ export default function ShopFulfillmentSelector({ mode, onChange, pickupMagasinN
         onChange={(_, v: ShopFulfillmentMode | null) => {
           if (v) onChange(v);
         }}
-        sx={{
-          display: "grid",
-          gridTemplateColumns: "1fr 1fr",
-          gap: 1,
-          "& .MuiToggleButtonGroup-grouped": {
-            border: "1px solid !important",
-            borderRadius: "8px !important",
-            textTransform: "none",
-            fontWeight: 600,
-            fontSize: "0.8rem",
-            lineHeight: 1.25,
-            py: 1,
-          },
-        }}
+        sx={shopChoiceToggleGroupSx}
       >
         <ToggleButton value="pickup" color="success">
           {pickupLabel}
@@ -65,7 +55,7 @@ export default function ShopFulfillmentSelector({ mode, onChange, pickupMagasinN
       {mode === "pickup" ? (
         <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 1 }}>
           {t("fulfillment.pickupHint")}{" "}
-          <Link href="/livraison" className="font-semibold text-emerald-700 underline">
+          <Link href={routes.livraison} className="font-semibold text-emerald-700 underline">
             {t("fulfillment.seeStore")}
           </Link>
         </Typography>
@@ -73,7 +63,7 @@ export default function ShopFulfillmentSelector({ mode, onChange, pickupMagasinN
       {mode === "home" ? (
         <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 1 }}>
           {t("fulfillment.homeHint")}{" "}
-          <Link href="/livraison" className="font-semibold text-emerald-700 underline">
+          <Link href={routes.livraison} className="font-semibold text-emerald-700 underline">
             {t("fulfillment.checkZone")}
           </Link>
         </Typography>

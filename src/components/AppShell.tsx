@@ -8,6 +8,7 @@ import AccountCircleOutlinedIcon from "@mui/icons-material/AccountCircleOutlined
 import { useSessionPermissions } from "@/lib/auth/useSessionPermissions";
 import LocaleSwitcher from "@/components/LocaleSwitcher";
 import NotificationBell from "@/components/NotificationBell";
+import { isShopLocalPreviewPath } from "@/lib/shop/hosts";
 
 type AppShellProps = {
   children: React.ReactNode;
@@ -24,7 +25,7 @@ export default function AppShell({ children, shopMode = false }: AppShellProps) 
   const t = useTranslations("backoffice.shell");
   const nameLabel = loading ? t("loading") : displayName || "—";
 
-  if (pathname === "/login" || shopMode) {
+  if (pathname === "/login" || shopMode || (pathname != null && isShopLocalPreviewPath(pathname))) {
     return <>{children}</>;
   }
 

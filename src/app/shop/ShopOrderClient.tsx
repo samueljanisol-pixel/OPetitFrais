@@ -4,17 +4,13 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { useTranslations } from "next-intl";
 import { Box, Button, Chip, Typography } from "@mui/material";
 import ShoppingCartOutlinedIcon from "@mui/icons-material/ShoppingCartOutlined";
-import WhatsAppIcon from "@mui/icons-material/WhatsApp";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { productPhotoPublicUrl } from "@/lib/products/storage";
 import { useAppLocale } from "@/lib/i18n/useAppFormat";
-import { formatShopPriceDh } from "@/lib/shop/format-price";
-import { buildOrderText, buildWhatsAppUrl } from "@/lib/shop/format-order-text";
-import { buildCategoryMeta } from "@/lib/shop/group-cart-by-category";
-import { getShopWhatsAppPhone, isShopWhatsAppConfigured } from "@/lib/shop/whatsapp-phone";
 import {
-  getCartLineQty,
+  getProductCartLine,
   readCartFromStorage,
+  removeProductFromCart,
   upsertCartLine,
   writeCartToStorage,
 } from "@/lib/shop/cart-storage";
@@ -22,18 +18,35 @@ import {
   readFulfillmentFromStorage,
   writeFulfillmentToStorage,
 } from "@/lib/shop/fulfillment-storage";
+import {
+  clearOrderCommentStorage,
+  readOrderCommentFromStorage,
+  writeOrderCommentToStorage,
+} from "@/lib/shop/order-comment-storage";
 import { addQtyByStep, subtractQtyByStep } from "@/lib/shop/cart-qty";
+import {
+  convertCanonicalKgToQty,
+  convertLineQtyToOption,
+  resolveLineCanonicalKg,
+} from "@/lib/shop/shop-qty-convert";
 import {
   favoriteShopOrderUnitId,
   findShopOption,
 } from "@/lib/shop/shop-order-options";
-import type { ShopFulfillmentMode } from "@/lib/shop/livraison-types";
+import {
+  clearPaymentStorage,
+  readPaymentFromStorage,
+  writePaymentToStorage,
+} from "@/lib/shop/payment-storage";
+import type { ShopPaymentMethod } from "@/lib/shop/payment-types";
 import type { ShopCartLine, ShopCategoryGroup, ShopProduct } from "@/lib/shop/types";
 import ShopShell from "@/app/shop/ShopShell";
 import ShopProductCard from "@/app/shop/ShopProductCard";
 import ShopCartPanel, { buildCartLineFromProduct } from "@/app/shop/ShopCartPanel";
 import ShopFulfillmentSelector from "@/app/shop/ShopFulfillmentSelector";
+import ShopPaymentSelector from "@/app/shop/ShopPaymentSelector";
 import { useShopAnalytics } from "@/lib/shop/useShopAnalytics";
+import type { ShopFulfillmentMode } from "@/lib/shop/livraison-types";
 
 type Props = {
   initialGroups: ShopCategoryGroup[];
@@ -51,6 +64,19 @@ function flattenProducts(groups: ShopCategoryGroup[]): ShopProduct[] {
   return products;
 }
 
+function getDisplayedProductQty(
+  lines: ShopCartLine[],
+  product: ShopProduct,
+  selectedUnitId: string | null,
+): number {
+  const line = getProductCartLine(lines, product.id);
+  if (!line) return 0;
+  if (line.shopOrderUnitId === selectedUnitId) return line.qty;
+  const option = findShopOption(product, selectedUnitId);
+  if (!option) return 0;
+  return convertLineQtyToOption(line, product, option);
+}
+
 export default function ShopOrderClient({
   initialGroups,
   catalogError,
@@ -62,6 +88,8 @@ export default function ShopOrderClient({
   const [lines, setLines] = useState<ShopCartLine[]>([]);
   const [cartOpen, setCartOpen] = useState(false);
   const [fulfillmentMode, setFulfillmentMode] = useState<ShopFulfillmentMode | null>(null);
+  const [orderComment, setOrderComment] = useState("");
+  const [paymentMethod, setPaymentMethod] = useState<ShopPaymentMethod | null>(null);
   const [activeCategoryId, setActiveCategoryId] = useState<string | null>(
     initialGroups[0]?.categoryId ?? null,
   );
@@ -81,8 +109,16 @@ export default function ShopOrderClient({
   }, [groups]);
 
   useLayoutEffect(() => {
-    setLines(readCartFromStorage().lines);
+    const cart = readCartFromStorage();
+    setLines(cart.lines);
+    const unitFromCart: Record<string, string | null> = {};
+    for (const line of cart.lines) {
+      unitFromCart[line.productId] = line.shopOrderUnitId;
+    }
+    setSelectedUnitByProduct(unitFromCart);
     setFulfillmentMode(readFulfillmentFromStorage().mode);
+    setOrderComment(readOrderCommentFromStorage());
+    setPaymentMethod(readPaymentFromStorage().method);
     setHydrated(true);
     skipNextWriteRef.current = true;
   }, []);
@@ -95,6 +131,16 @@ export default function ShopOrderClient({
     }
     writeCartToStorage({ lines });
   }, [lines, hydrated]);
+
+  const setOrderCommentPersisted = useCallback((comment: string) => {
+    setOrderComment(comment);
+    writeOrderCommentToStorage(comment);
+  }, []);
+
+  const setPaymentMethodPersisted = useCallback((method: ShopPaymentMethod) => {
+    setPaymentMethod(method);
+    writePaymentToStorage({ method });
+  }, []);
 
   const setMode = useCallback((mode: ShopFulfillmentMode) => {
     setFulfillmentMode(mode);
@@ -113,6 +159,12 @@ export default function ShopOrderClient({
     return null;
   }, [fulfillmentMode, pickupMagasinName, t]);
 
+  const paymentLabel = useMemo(() => {
+    if (paymentMethod === "cash") return t("payment.orderCash");
+    if (paymentMethod === "card") return t("payment.orderCard");
+    return null;
+  }, [paymentMethod, t]);
+
   const getSelectedUnitId = useCallback(
     (product: ShopProduct): string | null => {
       if (Object.prototype.hasOwnProperty.call(selectedUnitByProduct, product.id)) {
@@ -123,13 +175,36 @@ export default function ShopOrderClient({
     [selectedUnitByProduct],
   );
 
+  const selectProductUnit = useCallback(
+    (product: ShopProduct, newUnitId: string | null) => {
+      setSelectedUnitByProduct((prev) => ({ ...prev, [product.id]: newUnitId }));
+      setLines((prev) => {
+        const existing = getProductCartLine(prev, product.id);
+        if (!existing || existing.shopOrderUnitId === newUnitId) return prev;
+
+        const option = findShopOption(product, newUnitId);
+        const without = removeProductFromCart(prev, product.id);
+        if (!option) return without;
+
+        const canonicalKg = resolveLineCanonicalKg(existing, product);
+        const newQty = convertCanonicalKgToQty(canonicalKg, option);
+        if (newQty <= 0) return without;
+
+        const line = buildCartLineFromProduct(product, newUnitId, newQty, locale, canonicalKg);
+        return upsertCartLine(without, line);
+      });
+    },
+    [locale],
+  );
+
   const updateLine = useCallback(
     (productId: string, shopOrderUnitId: string | null, qty: number) => {
       const product = productById.get(productId);
       if (!product) return;
       setLines((prev) => {
+        const without = removeProductFromCart(prev, productId);
         const line = buildCartLineFromProduct(product, shopOrderUnitId, qty, locale);
-        const next = upsertCartLine(prev, line);
+        const next = upsertCartLine(without, line);
         if (qty <= 0 && next.length === 0) {
           setCartOpen(false);
         }
@@ -145,10 +220,18 @@ export default function ShopOrderClient({
       const option = findShopOption(product, unitId);
       if (!option) return;
       setLines((prev) => {
-        const current = getCartLineQty(prev, product.id, unitId);
+        const existing = getProductCartLine(prev, product.id);
+        const without = removeProductFromCart(prev, product.id);
+        let current = 0;
+        if (existing) {
+          current =
+            existing.shopOrderUnitId === unitId
+              ? existing.qty
+              : convertLineQtyToOption(existing, product, option);
+        }
         const nextQty = current > 0 ? addQtyByStep(current, option.qtyStep) : option.qtyStep;
         const line = buildCartLineFromProduct(product, unitId, nextQty, locale);
-        return upsertCartLine(prev, line);
+        return upsertCartLine(without, line);
       });
     },
     [getSelectedUnitId, locale],
@@ -160,14 +243,23 @@ export default function ShopOrderClient({
       const option = findShopOption(product, unitId);
       if (!option) return;
       setLines((prev) => {
-        const current = getCartLineQty(prev, product.id, unitId);
+        const existing = getProductCartLine(prev, product.id);
+        if (!existing) return prev;
+
+        const without = removeProductFromCart(prev, product.id);
+        const current =
+          existing.shopOrderUnitId === unitId
+            ? existing.qty
+            : convertLineQtyToOption(existing, product, option);
         const nextQty = subtractQtyByStep(current, option.qtyStep);
-        const line = buildCartLineFromProduct(product, unitId, nextQty, locale);
-        const next = upsertCartLine(prev, line);
-        if (next.length === 0) {
-          setCartOpen(false);
+        if (nextQty <= 0) {
+          if (without.length === 0) {
+            setCartOpen(false);
+          }
+          return without;
         }
-        return next;
+        const line = buildCartLineFromProduct(product, unitId, nextQty, locale);
+        return upsertCartLine(without, line);
       });
     },
     [getSelectedUnitId, locale],
@@ -175,31 +267,6 @@ export default function ShopOrderClient({
 
   const cartCount = lines.length;
   const cartTotal = lines.reduce((sum, l) => sum + l.qty * l.priceAtAdd, 0);
-
-  const categoryMeta = useMemo(() => buildCategoryMeta(groups), [groups]);
-
-  const orderText = useMemo(
-    () =>
-      buildOrderText(
-        lines,
-        productById,
-        locale,
-        {
-          title: t("orderTitle"),
-          total: t("estimatedTotal"),
-          separator: "──────────────────────",
-          uncategorized: t("uncategorized"),
-          fulfillment: fulfillmentLabel,
-        },
-        categoryMeta,
-      ),
-    [lines, productById, locale, t, categoryMeta, fulfillmentLabel],
-  );
-
-  const whatsAppHref = useMemo(() => {
-    if (!isShopWhatsAppConfigured() || lines.length === 0) return null;
-    return buildWhatsAppUrl(getShopWhatsAppPhone(), orderText);
-  }, [lines.length, orderText]);
 
   const activeGroup = groups.find((g) => g.categoryId === activeCategoryId) ?? groups[0] ?? null;
 
@@ -296,7 +363,7 @@ export default function ShopOrderClient({
                     >
                       {subgroup.products.map((product) => {
                         const unitId = getSelectedUnitId(product);
-                        const qty = getCartLineQty(lines, product.id, unitId);
+                        const qty = getDisplayedProductQty(lines, product, unitId);
                         const photoUrl = productPhotoPublicUrl(supabase, product.image_path);
                         return (
                           <ShopProductCard
@@ -305,9 +372,7 @@ export default function ShopOrderClient({
                             photoUrl={photoUrl}
                             qty={qty}
                             selectedShopOrderUnitId={unitId}
-                            onSelectUnit={(id) =>
-                              setSelectedUnitByProduct((prev) => ({ ...prev, [product.id]: id }))
-                            }
+                            onSelectUnit={(id) => selectProductUnit(product, id)}
                             onAdd={() => addProduct(product)}
                             onRemove={() => removeProduct(product)}
                           />
@@ -330,41 +395,24 @@ export default function ShopOrderClient({
             left: 16,
             right: 16,
             zIndex: 25,
-            display: "flex",
-            gap: 1,
             maxWidth: 480,
             mx: "auto",
           }}
         >
           <Button
-            variant="outlined"
+            variant="contained"
             color="success"
             onClick={() => setCartOpen(true)}
             startIcon={<ShoppingCartOutlinedIcon />}
+            fullWidth
             sx={{
-              flex: whatsAppHref ? "0 1 auto" : 1,
               textTransform: "none",
               fontWeight: 700,
-              bgcolor: "background.paper",
-              whiteSpace: "nowrap",
+              py: 1.25,
             }}
           >
-            {formatShopPriceDh(locale, cartTotal, true)}
+            {t("viewMyCart")} · {t("cartProductCount", { count: cartCount })}
           </Button>
-          {whatsAppHref ? (
-            <Button
-              variant="contained"
-              color="success"
-              component="a"
-              href={whatsAppHref}
-              target="_blank"
-              rel="noopener noreferrer"
-              startIcon={<WhatsAppIcon />}
-              sx={{ flex: 1, textTransform: "none", fontWeight: 700 }}
-            >
-              {t("sendWhatsApp")}
-            </Button>
-          ) : null}
         </Box>
       ) : null}
 
@@ -375,9 +423,18 @@ export default function ShopOrderClient({
         productById={productById}
         categoryGroups={groups}
         fulfillmentLabel={fulfillmentLabel}
+        paymentMethod={paymentMethod}
+        onPaymentChange={setPaymentMethodPersisted}
+        paymentLabel={paymentLabel}
+        orderComment={orderComment}
+        onOrderCommentChange={setOrderCommentPersisted}
         onUpdateLine={updateLine}
         onClear={() => {
           setLines([]);
+          setOrderComment("");
+          clearOrderCommentStorage();
+          setPaymentMethod(null);
+          clearPaymentStorage();
           setCartOpen(false);
         }}
       />

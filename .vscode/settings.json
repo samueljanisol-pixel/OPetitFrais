@@ -1,0 +1,10 @@
+{
+  "npm.exclude": [
+    "**/node_modules/**",
+    "**/.next/**",
+    "**/dist-win/**",
+    "**/dist-win-*/**",
+    "**/out/**",
+    "**/.git/**"
+  ]
+}

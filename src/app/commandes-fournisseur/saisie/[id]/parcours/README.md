@@ -17,7 +17,8 @@ Route : `/commandes-fournisseur/saisie/[id]/parcours`
 
 - Bouton **Fiche produit** (visible si permission `produits.read` ou `produits.write`) → `/produits/[productId]?returnTo=…/parcours?productId=…`.
 - Sur la fiche : avec `returnTo` + `commandes_fournisseur.saisie`, gestion des **conditionnements** (ajout / paramètres / retrait) même sans `produits.write`.
-- Brouillon parcours en **sessionStorage** : quantités et routes de tous les produits + index courant ; fusionné au rechargement (priorité au brouillon sur les lignes non encore enregistrées en base).
+- Brouillon parcours en **sessionStorage** : quantités, routes de conditionnement, **commentaires par produit** et index courant ; fusionné au rechargement (priorité au brouillon sur les lignes non encore enregistrées en base).
+- **Commentaire ligne** : bouton sous le nom produit (même modèle que le récap) ; un commentaire par produit, enregistré sur chaque ligne (unité / colis) lors de **Terminer** ; pastille affichée si renseigné.
 - Retour fiche produit : même produit (`?productId=`), quantités des autres produits conservées.
 - Après **Terminer**, le brouillon session est effacé.
 

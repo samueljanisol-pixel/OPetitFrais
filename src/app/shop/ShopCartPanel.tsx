@@ -2,6 +2,7 @@
 
 import CloseIcon from "@mui/icons-material/Close";
 import ContentCopyOutlinedIcon from "@mui/icons-material/ContentCopyOutlined";
+import DeleteOutlineOutlinedIcon from "@mui/icons-material/DeleteOutlineOutlined";
 import WhatsAppIcon from "@mui/icons-material/WhatsApp";
 import {
   Box,
@@ -12,6 +13,7 @@ import {
   ListItem,
   ListItemText,
   Snackbar,
+  TextField,
   Typography,
 } from "@mui/material";
 import { useTranslations } from "next-intl";
@@ -26,11 +28,15 @@ import {
   formatShopQty,
 } from "@/lib/shop/format-price";
 import { findShopOption, shopOptionLabel } from "@/lib/shop/shop-order-options";
+import { canonicalKgFromQty } from "@/lib/shop/shop-qty-convert";
 import { useAppLocale } from "@/lib/i18n/useAppFormat";
 import type { AppLocale } from "@/i18n/config";
 import type { ShopCartLine, ShopCategoryGroup, ShopProduct } from "@/lib/shop/types";
 import { buildCategoryMeta, groupCartLinesByCategory } from "@/lib/shop/group-cart-by-category";
 import { cartLineKey } from "@/lib/shop/cart-storage";
+import { useShopRoutes } from "@/lib/shop/useShopRoutes";
+import ShopPaymentSelector from "@/app/shop/ShopPaymentSelector";
+import type { ShopPaymentMethod } from "@/lib/shop/payment-types";
 
 type Props = {
   open: boolean;
@@ -39,6 +45,11 @@ type Props = {
   productById: Map<string, ShopProduct>;
   categoryGroups: ShopCategoryGroup[];
   fulfillmentLabel?: string | null;
+  paymentMethod: ShopPaymentMethod | null;
+  onPaymentChange: (method: ShopPaymentMethod) => void;
+  paymentLabel?: string | null;
+  orderComment: string;
+  onOrderCommentChange: (comment: string) => void;
   onUpdateLine: (productId: string, shopOrderUnitId: string | null, qty: number) => void;
   onClear: () => void;
 };
@@ -50,11 +61,17 @@ export default function ShopCartPanel({
   productById,
   categoryGroups,
   fulfillmentLabel = null,
+  paymentMethod,
+  onPaymentChange,
+  paymentLabel = null,
+  orderComment,
+  onOrderCommentChange,
   onUpdateLine,
   onClear,
 }: Props) {
   const t = useTranslations("shop");
   const locale = useAppLocale();
+  const routes = useShopRoutes();
   const [snack, setSnack] = useState<string | null>(null);
 
   const categoryMeta = useMemo(() => buildCategoryMeta(categoryGroups), [categoryGroups]);
@@ -81,10 +98,13 @@ export default function ShopCartPanel({
           separator: "──────────────────────",
           uncategorized: t("uncategorized"),
           fulfillment: fulfillmentLabel,
+          payment: paymentLabel,
+          commentLabel: t("orderCommentLabel"),
+          comment: orderComment,
         },
         categoryMeta,
       ),
-    [lines, productById, locale, t, categoryMeta, fulfillmentLabel],
+    [lines, productById, locale, t, categoryMeta, fulfillmentLabel, paymentLabel, orderComment],
   );
 
   const whatsAppPhone = getShopWhatsAppPhone();
@@ -126,7 +146,7 @@ export default function ShopCartPanel({
               {fulfillmentLabel}{" "}
               <Box
                 component="a"
-                href="/#fulfillment"
+                href={routes.fulfillmentAnchor}
                 onClick={onClose}
                 sx={{ color: "success.dark", fontWeight: 700, textDecoration: "underline" }}
               >
@@ -138,7 +158,7 @@ export default function ShopCartPanel({
               {t("fulfillment.missingInCart")}{" "}
               <Box
                 component="a"
-                href="/#fulfillment"
+                href={routes.fulfillmentAnchor}
                 onClick={onClose}
                 sx={{ fontWeight: 700, textDecoration: "underline" }}
               >
@@ -185,7 +205,7 @@ export default function ShopCartPanel({
                           <ListItem
                             key={cartLineKey(line)}
                             secondaryAction={
-                              <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
+                              <Box sx={{ display: "flex", alignItems: "center", gap: 0.25 }}>
                                 <IconButton
                                   size="small"
                                   aria-label="-"
@@ -218,9 +238,20 @@ export default function ShopCartPanel({
                                 >
                                   +
                                 </IconButton>
+                                <IconButton
+                                  size="small"
+                                  color="error"
+                                  aria-label={t("removeProduct")}
+                                  onClick={() =>
+                                    onUpdateLine(line.productId, line.shopOrderUnitId, 0)
+                                  }
+                                  sx={{ ml: 0.25 }}
+                                >
+                                  <DeleteOutlineOutlinedIcon fontSize="small" />
+                                </IconButton>
                               </Box>
                             }
-                            sx={{ pr: 12 }}
+                            sx={{ pr: 15 }}
                           >
                             <ListItemText
                               primary={productDisplayName(product, locale)}
@@ -234,9 +265,24 @@ export default function ShopCartPanel({
                 ))}
               </Box>
 
-              <Typography variant="subtitle1" sx={{ mt: 2, mb: 1.5, fontWeight: 700 }}>
+              <Typography variant="subtitle1" sx={{ mt: 2, mb: 1, fontWeight: 700 }}>
                 {t("estimatedTotal")} : {formatShopPriceDh(locale, total, true)}
               </Typography>
+
+              <TextField
+                label={t("orderCommentLabel")}
+                placeholder={t("orderCommentPlaceholder")}
+                value={orderComment}
+                onChange={(e) => onOrderCommentChange(e.target.value)}
+                multiline
+                minRows={2}
+                maxRows={4}
+                fullWidth
+                size="small"
+                sx={{ mb: 1.5 }}
+              />
+
+              <ShopPaymentSelector method={paymentMethod} onChange={onPaymentChange} />
 
               <Box sx={{ display: "flex", flexDirection: "column", gap: 1 }}>
                 {whatsAppHref ? (
@@ -287,9 +333,12 @@ export function buildCartLineFromProduct(
   shopOrderUnitId: string | null,
   qty: number,
   locale: AppLocale,
+  canonicalKg?: number | null,
 ): ShopCartLine {
   const option = findShopOption(product, shopOrderUnitId);
   const unitLabel = option ? shopOptionLabel(option, locale) : "";
+  const resolvedCanonicalKg =
+    canonicalKg != null && canonicalKg > 0 ? canonicalKg : canonicalKgFromQty(qty, option);
   return {
     productId: product.id,
     shopOrderUnitId,
@@ -299,5 +348,6 @@ export function buildCartLineFromProduct(
     priceAtAdd: option?.unitPrice ?? product.price,
     equivKgAtAdd:
       shopOrderUnitId != null && option?.equivKg != null ? option.equivKg : null,
+    canonicalKg: resolvedCanonicalKg,
   };
 }

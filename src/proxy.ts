@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 import { canAccessPath } from "@/lib/auth/route-permissions";
-import { backofficeUrl, isBackofficeOnlyPath, isShopHost, isShopOnlyPath, shopPublicUrl } from "@/lib/shop/hosts";
+import { backofficeUrl, isBackofficeOnlyPath, isShopHost, isShopLocalPreviewPath, isShopOnlyPath, shopLocalPreviewUrl, shopPublicUrl } from "@/lib/shop/hosts";
 
 const PUBLIC_PATHS = ["/login", "/api", "/_next", "/favicon.ico", "/manifest.webmanifest", "/sw.js", "/icons", "/icon.png"];
 
@@ -14,6 +14,10 @@ export async function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
   const host = req.headers.get("host") ?? "";
 
+  if (isShopLocalPreviewPath(pathname)) {
+    return NextResponse.next();
+  }
+
   if (isShopHost(host)) {
     if (isBackofficeOnlyPath(pathname)) {
       const target = backofficeUrl(pathname, req.nextUrl.search);
@@ -23,6 +27,11 @@ export async function proxy(req: NextRequest) {
   }
 
   if (isShopOnlyPath(pathname)) {
+    if (process.env.NODE_ENV === "development") {
+      const target = req.nextUrl.clone();
+      target.pathname = shopLocalPreviewUrl("/shop/livraison");
+      return NextResponse.redirect(target);
+    }
     return NextResponse.redirect(shopPublicUrl(pathname));
   }
 

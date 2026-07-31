@@ -32,6 +32,10 @@ export type OrderTextLabels = {
   separator: string;
   uncategorized?: string;
   fulfillment?: string | null;
+  payment?: string | null;
+  /** Libellé « Commentaire : » dans le message exporté. */
+  commentLabel?: string;
+  comment?: string | null;
 };
 
 export type OrderTextCategoryMeta = Map<string, { label: string; sortOrder: number }>;
@@ -109,6 +113,14 @@ export function buildOrderText(
 
   rows.push(labels.separator);
   rows.push(`${labels.total} : ${formatShopPriceDh(locale, total, true)}`);
+  if (labels.payment?.trim()) {
+    rows.push(labels.payment.trim());
+  }
+  const comment = labels.comment?.trim();
+  if (comment) {
+    const prefix = labels.commentLabel?.trim();
+    rows.push(prefix ? `${prefix}: ${comment}` : comment);
+  }
   return rows.join("\n");
 }
 

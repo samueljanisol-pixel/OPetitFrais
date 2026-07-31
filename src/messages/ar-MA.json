@@ -859,6 +859,7 @@
     "cart": "السلة",
     "openCart": "حل السّلة",
     "viewCart": "شوف السّلة",
+    "viewMyCart": "شوف السّلة ديالي",
     "emptyCart": "السلة ديالك خاوية.",
     "noProducts": "ما كاين حتى منتج disponible دابا.",
     "uncategorized": "آخر",
@@ -868,9 +869,12 @@
     "copyFailed": "ما قدرناش ننسخو — نسخ يدوي",
     "sendWhatsApp": "صيفط عبر WhatsApp",
     "clearCart": "خوّي السّلة",
+    "removeProduct": "حذف من السّلة",
     "close": "سد",
     "orderTitle": "كوموند O' Petit Frais",
     "estimatedTotal": "المجموع التقريبي",
+    "orderCommentLabel": "تعليق",
+    "orderCommentPlaceholder": "تفاصيل إضافية على الطلب (اختياري)",
     "fulfillment": {
       "title": "كيفاش بغيتي تتخدم؟",
       "pickup": "سْحاب من المحل",
@@ -887,6 +891,14 @@
       "orderPickup": "الطريقة: سْحاب من المحل",
       "orderPickupNamed": "الطريقة: سْحاب — {name}",
       "orderHome": "الطريقة: توصيل للدار"
+    },
+    "payment": {
+      "title": "طريقة الدفع",
+      "cash": "نقداً",
+      "card": "بطاقة بنكية",
+      "chooseHint": "اختار طريقة الدفع.",
+      "orderCash": "الدفع : نقداً",
+      "orderCard": "الدفع : بطاقة بنكية"
     },
     "livraison": {
       "title": "التوصيل والمحلات",

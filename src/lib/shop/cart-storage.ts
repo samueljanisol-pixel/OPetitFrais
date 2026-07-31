@@ -19,6 +19,8 @@ function parseLine(raw: unknown): ShopCartLine | null {
     l.shopOrderUnitId === null || typeof l.shopOrderUnitId === "string" ? l.shopOrderUnitId : null;
   const equivKgAtAdd =
     l.equivKgAtAdd === null || typeof l.equivKgAtAdd === "number" ? l.equivKgAtAdd : null;
+  const canonicalKg =
+    l.canonicalKg === null || typeof l.canonicalKg === "number" ? l.canonicalKg : null;
   return {
     productId: l.productId,
     shopOrderUnitId,
@@ -27,6 +29,7 @@ function parseLine(raw: unknown): ShopCartLine | null {
     unitLabel: l.unitLabel,
     priceAtAdd: l.priceAtAdd,
     equivKgAtAdd,
+    canonicalKg,
   };
 }
 
@@ -80,4 +83,15 @@ export function getCartLineQty(
       (l) => l.productId === productId && l.shopOrderUnitId === shopOrderUnitId,
     )?.qty ?? 0
   );
+}
+
+export function getProductCartLine(
+  lines: ShopCartLine[],
+  productId: string,
+): ShopCartLine | undefined {
+  return lines.find((l) => l.productId === productId);
+}
+
+export function removeProductFromCart(lines: ShopCartLine[], productId: string): ShopCartLine[] {
+  return lines.filter((l) => l.productId !== productId);
 }

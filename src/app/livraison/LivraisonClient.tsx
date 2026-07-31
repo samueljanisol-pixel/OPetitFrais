@@ -12,6 +12,7 @@ import ShopLivraisonMapDynamic from "@/lib/shop/map/ShopLivraisonMapDynamic";
 import { pointInDeliveryZone } from "@/lib/shop/point-in-polygon";
 import { buildWhatsAppUrl } from "@/lib/shop/format-order-text";
 import type { ShopLivraisonPayload } from "@/lib/shop/livraison-types";
+import { useShopRoutes } from "@/lib/shop/useShopRoutes";
 
 type CheckResult = "inside" | "outside" | null;
 
@@ -21,6 +22,7 @@ type Props = {
 
 export default function LivraisonClient({ initial }: Props) {
   const t = useTranslations("shop");
+  const routes = useShopRoutes();
   const [payload] = useState(initial);
   const [userPoint, setUserPoint] = useState<{ lat: number; lng: number } | null>(null);
   const [check, setCheck] = useState<CheckResult>(null);
@@ -80,7 +82,7 @@ export default function LivraisonClient({ initial }: Props) {
             {t("livraison.subtitle")}
           </Typography>
           <Typography variant="body2" sx={{ mt: 1 }}>
-            <Link href="/" className="font-semibold text-emerald-700 underline">
+            <Link href={routes.home} className="font-semibold text-emerald-700 underline">
               {t("livraison.backCatalog")}
             </Link>
           </Typography>
