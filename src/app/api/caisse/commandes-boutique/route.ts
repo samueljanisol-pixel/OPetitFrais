@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { authorizeCaisseTicket } from "@/lib/caisse/authorize-caisse-ticket";
+import { isTestMagasinCode } from "@/lib/caisse/magasin-code";
 import {
   computeCaisseLockState,
   clearExpiredCaisseLockIfNeeded,
@@ -30,6 +31,8 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "magasin requis" }, { status: 400, headers: CORS_HEADERS });
   }
 
+  const isTestMagasin = isTestMagasinCode(magasinCode);
+
   let supabase;
   try {
     supabase = createSupabaseServiceRoleClient();
@@ -41,16 +44,13 @@ export async function GET(req: NextRequest) {
   }
 
   const { magasinId, error: magErr } = await resolveMagasinIdByCode(supabase, magasinCode);
-  if (magErr) {
-    return NextResponse.json({ error: magErr }, { status: 404, headers: CORS_HEADERS });
-  }
-  if (!magasinId) {
-    return NextResponse.json({ error: "Magasin introuvable" }, { status: 404, headers: CORS_HEADERS });
+  if (!isTestMagasin && (magErr || !magasinId)) {
+    return NextResponse.json({ error: magErr ?? "Magasin introuvable" }, { status: 404, headers: CORS_HEADERS });
   }
 
   const { items, error } = await listCommandesClient(supabase, {
     workflowStatus: "a_passer_caisse",
-    magasinId,
+    magasinId: isTestMagasin ? undefined : magasinId ?? undefined,
   });
 
   if (error) {
@@ -90,5 +90,8 @@ export async function GET(req: NextRequest) {
     });
   }
 
-  return NextResponse.json({ ok: true, commandes }, { headers: CORS_HEADERS });
+  return NextResponse.json(
+    { ok: true, commandes, isTestMagasin },
+    { headers: CORS_HEADERS },
+  );
 }

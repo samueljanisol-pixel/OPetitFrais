@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { magasinCodeLookupCandidates } from "@/lib/caisse/magasin-code";
 import {
   parseWorkflowLines,
   totalFromStoredLines,
@@ -298,16 +299,20 @@ export async function resolveMagasinIdByCode(
   supabase: SupabaseClient,
   magasinCode: string,
 ): Promise<{ magasinId: string | null; error: string | null }> {
-  const code = magasinCode.trim();
-  const { data, error } = await supabase
-    .from("magasins")
-    .select("id")
-    .ilike("code", code)
-    .maybeSingle();
+  const candidates = magasinCodeLookupCandidates(magasinCode);
 
-  if (error) return { magasinId: null, error: error.message };
-  if (!data) return { magasinId: null, error: "Magasin introuvable" };
-  return { magasinId: String(data.id), error: null };
+  for (const code of candidates) {
+    const { data, error } = await supabase
+      .from("magasins")
+      .select("id")
+      .ilike("code", code)
+      .maybeSingle();
+
+    if (error) return { magasinId: null, error: error.message };
+    if (data) return { magasinId: String(data.id), error: null };
+  }
+
+  return { magasinId: null, error: "Magasin introuvable" };
 }
 
 export async function findCommandeByTicketRef(

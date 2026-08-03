@@ -78,6 +78,17 @@ Migration : `supabase/migrations/20260803240000_shop_cart_workflow.sql`, `202608
 - Permissions : `commandes_client.read|validate|prepare|deliver`
 - Rôle `chauffeur`
 
+## Tests caisse (magasin M00)
+
+Migration `20260804010000_magasin_test_m00.sql` : site **M00** (*Magasin test*).
+
+1. À la **validation** d’une commande (`a_valider` → `a_preparer`), choisir le magasin **M00** (pas M01/M02).
+2. Terminer la **préparation** → statut `a_passer_caisse`.
+3. Sur la caisse Electron : **magasin 0** → menu **Commandes boutique** (liste élargie en mode test).
+4. Les tickets générés sont en **M00** : exclus de la sync CA FTP et des statistiques magasin réels.
+
+Constante code : `TEST_COMMANDE_CLIENT_MAGASIN_CODE` dans `src/lib/commandes-client/default-magasin.ts`.
+
 ## Sync avec `/clients`
 
 - Soumission boutique → `workflow_status = nouvelle`

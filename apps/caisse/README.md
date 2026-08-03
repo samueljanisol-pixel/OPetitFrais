@@ -252,6 +252,23 @@ Menu → **Commandes boutique** : liste des commandes `a_passer_caisse` pour le 
 
 **Prérequis backoffice** : les routes `/api/caisse/commandes-boutique/*` doivent être déployées sur l’URL configurée dans `caisse.config.json`. En local : `http://localhost:3000` avec `npm run dev`. En prod : déployer la version du monorepo incluant le module commandes client. Si l’API n’est pas encore en ligne, la caisse affiche une erreur explicite (404) au lieu de « Réseau indisponible ».
 
+### Mode test (magasin 0)
+
+| Poste caisse | Magasin backoffice commande |
+|--------------|----------------------------|
+| **0** (config caisse → `00`) | **M00** — *Magasin test* (à la validation) |
+
+- Caisse **magasin 0** : les ventes ne comptent pas dans les statistiques CA ; tickets **M00CxxTxxx** ; dossier FTP **M00** ignoré par la sync.
+- Liste **Commandes boutique** en magasin 0 : **toutes** les commandes `a_passer_caisse` (tous magasins), pour tester le flux caisse sans filtrer.
+- Pour limiter aux seules commandes test : valider la commande avec le magasin **M00** uniquement.
+
+Parcours test complet :
+
+1. Backoffice : commande boutique → validation → magasin **M00** → préparation → `a_passer_caisse`.
+2. Caisse : magasin **0**, caisse **1** (ou autre).
+3. Menu → **Commandes boutique** → ouvrir la commande → encaissement test (double ticket).
+4. Aucun impact sur le CA des vrais magasins (M01, M02…).
+
 1. **Verrou** poste (30 min) — une commande = un caissier à la fois.
 2. Chargement : **client seul** sur le panier (lignes vides) ; badge **Commande #N** visible.
 3. Le caissier pèse et encaisse normalement.

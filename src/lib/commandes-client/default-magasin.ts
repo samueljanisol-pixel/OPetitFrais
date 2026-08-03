@@ -1,6 +1,9 @@
 /** Magasin par défaut pour les commandes client boutique (validation / préparation). */
 export const DEFAULT_COMMANDE_CLIENT_MAGASIN_CODE = "M02";
 
+/** Magasin à utiliser pour les essais caisse 0 / M00 (hors CA prod). */
+export const TEST_COMMANDE_CLIENT_MAGASIN_CODE = "M00";
+
 export type MagasinOption = { id: string; code: string; nom: string };
 
 export function resolveDefaultMagasinId(
