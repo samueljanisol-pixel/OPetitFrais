@@ -710,7 +710,7 @@ export default function ParametresClient() {
             {canAdminMagasins ? (
               <Box className="mb-4 rounded-lg border border-slate-200 bg-white/90 p-4 shadow-sm">
                 <Typography variant="subtitle1" className="!mb-2 !font-semibold !text-slate-900">
-                  Magasins & caisses
+                  Sites, magasins & caisses
                 </Typography>
                 <MagasinsAdminPanel />
               </Box>

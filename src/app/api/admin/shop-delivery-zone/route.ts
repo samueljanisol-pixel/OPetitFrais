@@ -30,7 +30,7 @@ export async function GET() {
     service.from("shop_delivery_zone").select("id, label, geojson, active, updated_at").eq("active", true).maybeSingle(),
     service.from("ref_app_setting").select("value").eq("key", SHOP_CONTACT_PHONE_SETTING_KEY).maybeSingle(),
     service.from("ref_app_setting").select("value").eq("key", SHOP_PICKUP_MAGASIN_ID_SETTING_KEY).maybeSingle(),
-    service.from("magasins").select("id, code, nom, sort_order").order("sort_order").order("nom"),
+    service.from("magasins").select("id, code, nom, sort_order").eq("type", "magasin").order("sort_order").order("nom"),
   ]);
 
   if (zoneRes.error) {
@@ -139,9 +139,19 @@ export async function PUT(req: Request) {
     if (!id) {
       await service.from("ref_app_setting").delete().eq("key", SHOP_PICKUP_MAGASIN_ID_SETTING_KEY);
     } else {
-      const { data: mag } = await service.from("magasins").select("id").eq("id", id).maybeSingle();
+      const { data: mag } = await service
+        .from("magasins")
+        .select("id, type")
+        .eq("id", id)
+        .maybeSingle();
       if (!mag) {
         return NextResponse.json({ error: "Magasin retrait introuvable" }, { status: 400 });
+      }
+      if (mag.type !== "magasin") {
+        return NextResponse.json(
+          { error: "Le magasin retrait doit être un magasin de vente" },
+          { status: 400 },
+        );
       }
       const { error } = await service.from("ref_app_setting").upsert(
         {

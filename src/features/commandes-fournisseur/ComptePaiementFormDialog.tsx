@@ -1,6 +1,7 @@
 "use client";
 
 import FormDialog from "@/lib/mui/FormDialog";
+import PendingPhotosPicker from "@/features/commandes-fournisseur/PendingPhotosPicker";
 import {
   Alert,
   Button,
@@ -45,6 +46,19 @@ function todayIsoDate(): string {
   return `${y}-${m}-${day}`;
 }
 
+async function uploadPaiementPhotos(paiementId: string, files: File[]): Promise<boolean> {
+  for (const file of files) {
+    const form = new FormData();
+    form.append("file", file);
+    const res = await fetch(
+      `/api/commandes-fournisseur/comptes/paiements/${encodeURIComponent(paiementId)}/photos`,
+      { method: "POST", body: form },
+    );
+    if (!res.ok) return false;
+  }
+  return true;
+}
+
 export default function ComptePaiementFormDialog({
   open,
   accountType,
@@ -60,8 +74,15 @@ export default function ComptePaiementFormDialog({
   const [paymentMethodId, setPaymentMethodId] = useState("");
   const [datePaiement, setDatePaiement] = useState(todayIsoDate());
   const [commentaire, setCommentaire] = useState("");
+  const [pendingPhotoFiles, setPendingPhotoFiles] = useState<File[]>([]);
+  const [pickerKey, setPickerKey] = useState(0);
   const [err, setErr] = useState<string | null>(null);
+  const [warn, setWarn] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+
+  const handlePendingPhotosChange = useCallback((files: File[]) => {
+    setPendingPhotoFiles(files);
+  }, []);
 
   const loadMethods = useCallback(async () => {
     const res = await fetch("/api/ref/payment-methods");
@@ -76,8 +97,11 @@ export default function ComptePaiementFormDialog({
   useEffect(() => {
     if (!open) return;
     setErr(null);
+    setWarn(null);
     setDatePaiement(todayIsoDate());
     setCommentaire("");
+    setPendingPhotoFiles([]);
+    setPickerKey((k) => k + 1);
     void loadMethods();
   }, [open, loadMethods]);
 
@@ -85,6 +109,7 @@ export default function ComptePaiementFormDialog({
     if (!paymentMethodId || achatIds.length === 0) return;
     setSaving(true);
     setErr(null);
+    setWarn(null);
     try {
       const res = await fetch("/api/commandes-fournisseur/comptes/paiements", {
         method: "POST",
@@ -98,11 +123,22 @@ export default function ComptePaiementFormDialog({
           commentaire: commentaire.trim() || null,
         }),
       });
-      const json = (await res.json()) as { error?: string };
+      const json = (await res.json()) as { error?: string; paiementId?: string };
       if (!res.ok) {
         setErr(typeof json.error === "string" ? json.error : tCommon("error"));
         return;
       }
+
+      const paiementId = typeof json.paiementId === "string" ? json.paiementId : "";
+      if (paiementId && pendingPhotoFiles.length > 0) {
+        const photosOk = await uploadPaiementPhotos(paiementId, pendingPhotoFiles);
+        if (!photosOk) {
+          setWarn(t("photosUploadFailed"));
+          onSaved();
+          return;
+        }
+      }
+
       onSaved();
     } catch {
       setErr(tCommon("networkError"));
@@ -125,6 +161,11 @@ export default function ComptePaiementFormDialog({
         {err ? (
           <Alert severity="error" sx={{ mb: 2 }}>
             {err}
+          </Alert>
+        ) : null}
+        {warn ? (
+          <Alert severity="warning" sx={{ mb: 2 }}>
+            {warn}
           </Alert>
         ) : null}
         <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
@@ -161,6 +202,18 @@ export default function ComptePaiementFormDialog({
           label={t("comment")}
           value={commentaire}
           onChange={(e) => setCommentaire(e.target.value)}
+        />
+        <PendingPhotosPicker
+          key={pickerKey}
+          disabled={saving}
+          labels={{
+            title: t("photosTitle"),
+            empty: t("photosEmpty"),
+            camera: t("photoCamera"),
+            gallery: t("photoGallery"),
+            deleteAria: t("photoDeleteAria"),
+          }}
+          onChange={handlePendingPhotosChange}
         />
       </DialogContent>
       <DialogActions>

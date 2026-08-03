@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/server";
 import { requireApiPermission } from "@/lib/auth/require-permission-api";
+import { isMagasinSiteType, type MagasinSiteType } from "@/lib/magasins/types";
 
 export async function GET() {
   const gate = await requireApiPermission("admin.magasins");
@@ -18,7 +19,7 @@ export async function GET() {
   const { data: magasins, error } = await service
     .from("magasins")
     .select(
-      "id, code, nom, sort_order, adresse, ville, lat, lng, google_maps_url, visible_vitrine, created_at, updated_at",
+      "id, code, nom, type, sort_order, adresse, ville, lat, lng, google_maps_url, visible_vitrine, created_at, updated_at",
     )
     .order("sort_order", { ascending: true })
     .order("nom", { ascending: true });
@@ -61,7 +62,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: gate.error }, { status: gate.status });
   }
 
-  let body: { code?: string; nom?: string; sort_order?: number };
+  let body: { code?: string; nom?: string; sort_order?: number; type?: string };
   try {
     body = await req.json();
   } catch {
@@ -74,6 +75,8 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Code et nom requis" }, { status: 400 });
   }
 
+  const type: MagasinSiteType = isMagasinSiteType(body.type) ? body.type : "magasin";
+
   let service;
   try {
     service = createSupabaseServiceRoleClient();
@@ -85,8 +88,8 @@ export async function POST(req: Request) {
 
   const { data: row, error } = await service
     .from("magasins")
-    .insert({ code, nom, sort_order })
-    .select("id, code, nom, sort_order, created_at, updated_at")
+    .insert({ code, nom, sort_order, type })
+    .select("id, code, nom, type, sort_order, created_at, updated_at")
     .single();
 
   if (error) {

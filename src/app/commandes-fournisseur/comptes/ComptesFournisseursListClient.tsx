@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import {
@@ -85,6 +85,58 @@ export default function ComptesFournisseursListClient() {
     void load();
   }, [permLoading, can, load]);
 
+  const groupedAccounts = useMemo(() => {
+    const marche: AccountSummary[] = [];
+    const station: AccountSummary[] = [];
+    for (const a of accounts) {
+      if (a.account_type === "vendeur") marche.push(a);
+      else station.push(a);
+    }
+    return { marche, station };
+  }, [accounts]);
+
+  function renderAccount(a: AccountSummary) {
+    return (
+      <ListItem key={`${a.account_type}-${a.account_id}`} disablePadding sx={{ mb: 1 }}>
+        <ListItemButton
+          component={AppLink}
+          href={accountHref(a)}
+          sx={{
+            borderRadius: 2,
+            border: "1px solid",
+            borderColor: "divider",
+            bgcolor: "background.paper",
+          }}
+        >
+          <ListItemText
+            primary={a.label}
+            secondary={
+              <>
+                {a.parent_supplier_label ? (
+                  <>
+                    {t("parentSupplier", { label: a.parent_supplier_label })}
+                    {" · "}
+                  </>
+                ) : null}
+                {t("reste")} :{" "}
+                <Box
+                  component="span"
+                  sx={{
+                    color: a.reste > 0 ? "warning.main" : "success.main",
+                    fontWeight: 600,
+                  }}
+                >
+                  {formatDh(a.reste)} DH
+                </Box>
+              </>
+            }
+            slotProps={{ primary: { sx: { fontWeight: 600 } } }}
+          />
+        </ListItemButton>
+      </ListItem>
+    );
+  }
+
   if (permLoading || !can("commandes_fournisseur.comptes")) {
     return (
       <main className="mx-auto w-full max-w-lg px-4 py-8">
@@ -125,47 +177,24 @@ export default function ComptesFournisseursListClient() {
           <Typography color="text.secondary">{t("empty")}</Typography>
         </Paper>
       ) : (
-        <List disablePadding>
-          {accounts.map((a) => (
-            <ListItem key={`${a.account_type}-${a.account_id}`} disablePadding sx={{ mb: 1 }}>
-              <ListItemButton
-                component={AppLink}
-                href={accountHref(a)}
-                sx={{
-                  borderRadius: 2,
-                  border: "1px solid",
-                  borderColor: "divider",
-                  bgcolor: "background.paper",
-                }}
-              >
-                <ListItemText
-                  primary={a.label}
-                  secondary={
-                    <>
-                      {a.parent_supplier_label ? (
-                        <>
-                          {t("parentSupplier", { label: a.parent_supplier_label })}
-                          {" · "}
-                        </>
-                      ) : null}
-                      {t("total")} : {formatDh(a.total)} DH · {t("reste")} :{" "}
-                      <Box
-                        component="span"
-                        sx={{
-                          color: a.reste > 0 ? "warning.main" : "success.main",
-                          fontWeight: 600,
-                        }}
-                      >
-                        {formatDh(a.reste)} DH
-                      </Box>
-                    </>
-                  }
-                  slotProps={{ primary: { sx: { fontWeight: 600 } } }}
-                />
-              </ListItemButton>
-            </ListItem>
-          ))}
-        </List>
+        <>
+          {groupedAccounts.marche.length > 0 ? (
+            <Box sx={{ mb: 3 }}>
+              <Typography variant="subtitle2" color="text.secondary" sx={{ mb: 1, fontWeight: 700, letterSpacing: 0.4 }}>
+                {t("sectionMarche")}
+              </Typography>
+              <List disablePadding>{groupedAccounts.marche.map(renderAccount)}</List>
+            </Box>
+          ) : null}
+          {groupedAccounts.station.length > 0 ? (
+            <Box>
+              <Typography variant="subtitle2" color="text.secondary" sx={{ mb: 1, fontWeight: 700, letterSpacing: 0.4 }}>
+                {t("sectionStation")}
+              </Typography>
+              <List disablePadding>{groupedAccounts.station.map(renderAccount)}</List>
+            </Box>
+          ) : null}
+        </>
       )}
     </main>
   );

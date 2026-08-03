@@ -142,6 +142,13 @@ Une commande peut contenir **plusieurs lignes** pour le même `product_id` si le
 
 ### Création de lot (consolidation)
 
+Sur `/commandes-fournisseur/validation`, le bouton **Constituer un lot** applique :
+
+- **Même fournisseur** : refus côté client (message d’erreur) et côté serveur (`createValidationLot` — « Toutes les commandes doivent être du même fournisseur »). Dès qu’une commande est cochée, les autres fournisseurs sont **grisés** (cases désactivées) avec un rappel « Sélection limitée au fournisseur … ».
+- **Un seul magasin** : dialogue de confirmation avant création (le lot ne regroupera qu’un magasin).
+
+La liste des lots sur la même page est scindée en **Lots en cours** (`brouillon`, `prevalidation`, `prete`, `achat_en_cours`) et **Lots terminés** (`terminee`).
+
 À la création, chaque ligne de commande est agrégée par **(produit, conditionnement)** via la fonction SQL `upsert_commande_fournisseur_lot_ligne` (migrations `20260626120000` + correctif `20260626130000_lot_ligne_upsert_rpc_on_conflict.sql`). **Exécuter le correctif dans Supabase SQL Editor** si la constitution de lot échoue encore sur l’index unique.
 
 Ajout manuel au lot (brouillon / achat) : refus uniquement si le **même conditionnement** est déjà présent.
@@ -290,6 +297,7 @@ API : `GET/PATCH …/comptes/achats/[achatId]`, `POST/DELETE …/photos`. RLS : 
 - Un paiement est rattaché au **compte vendeur** (`vendeur_id`) ou **compte station** (`supplier_id`, `vendeur_id` null).
 - Sélection de plusieurs achats **impayés** (orange) du même compte → mode de paiement, date, commentaire.
 - Achats payés en **vert** ; totaux : total, payé, reste à payer.
+- **Photos justificatives** (reçu, virement…) : ajoutables à la création du paiement ou ensuite via « Photos » dans l’historique. Stockage bucket `paiement-photos`, table `fournisseur_paiement_photo`. API : `GET/POST/DELETE /api/commandes-fournisseur/comptes/paiements/[paiementId]/photos`.
 
 ### Réouverture lot
 

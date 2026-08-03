@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { Badge, Button, Fab, Paper, Stack, Tooltip } from '@mui/material'
 import AssessmentOutlinedIcon from '@mui/icons-material/AssessmentOutlined'
+import BadgeOutlinedIcon from '@mui/icons-material/BadgeOutlined'
 import Inventory2OutlinedIcon from '@mui/icons-material/Inventory2Outlined'
 import PriceChangeOutlinedIcon from '@mui/icons-material/PriceChangeOutlined'
 import LocalShippingOutlinedIcon from '@mui/icons-material/LocalShippingOutlined'
@@ -30,6 +31,7 @@ export default function BackofficeHome() {
     canReadShop,
     canReadParametres,
     canReadCharges,
+    canReadSalaries,
     canReadEmballages,
     canCuisineSaisie,
     canCuisineHistorique,
@@ -270,6 +272,29 @@ export default function BackofficeHome() {
                 }}
               >
                 {t('charges')}
+              </Button>
+            ) : null}
+            {canReadSalaries ? (
+              <Button
+                component={AppLink}
+                href="/salaries"
+                variant="contained"
+                color="success"
+                size="large"
+                fullWidth
+                startIcon={<BadgeOutlinedIcon sx={{ fontSize: 28 }} />}
+                sx={{
+                  borderRadius: 2,
+                  textTransform: 'none',
+                  fontWeight: 600,
+                  py: 1.25,
+                  px: 2,
+                  justifyContent: 'flex-start',
+                  gap: 1.25,
+                  '& .MuiButton-startIcon': { mr: 0.5, ml: 0 },
+                }}
+              >
+                {t('salaries')}
               </Button>
             ) : null}
             {canReadEmballages ? (

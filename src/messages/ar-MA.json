@@ -5,6 +5,7 @@
     "back": "رجع",
     "cancel": "إلغاء",
     "save": "سجّل",
+    "saving": "كيتسجّل…",
     "delete": "مسح",
     "close": "سد",
     "add": "زيد",
@@ -35,6 +36,7 @@
       "supplierOrders": "طلبيات المزود",
       "supplierAccounts": "حسابات المزودين",
       "charges": "إدارة التكاليف",
+      "salaries": "الموظفون",
       "packagingManagement": "التغليف والمستهلكات",
       "cuisine": "المطبخ",
       "cuisineHistorique": "تاريخ المطبخ",
@@ -55,7 +57,7 @@
       "activationHint": "منتجات غير مفعّلة تم شراؤها دون تغيير سعر البيع.",
       "activationEmpty": "لا يوجد منتج للتفعيل.",
       "desactSection": "للإلغاء (غير مطلوبة)",
-      "desactHint": "منتجات مفعّلة ومعروضة للمزود وغير موجودة في الطلبية (إغلاق الدفعة).",
+      "desactHint": "منتجات مفعّلة ومعروضة غير موجودة في الطلبية أو بكمية 0، دون شراء منذ أكثر من 5 أيام (إغلاق الدفعة).",
       "desactEmpty": "لا يوجد اقتراح إلغاء.",
       "validateSelection": "تأكيد المحدد",
       "validateRow": "تأكيد",
@@ -191,6 +193,134 @@
         "vendeurRequired": "البائع ضروري",
         "emballageRequired": "المنتج ضروري",
         "closeFailed": "ما قدرناش نسدّو"
+      }
+    },
+    "salaries": {
+      "list": {
+        "title": "الموظفون",
+        "subtitle": "إدارة الموظفين حسب الموقع (متجر، مطبخ…).",
+        "backHome": "الرئيسية",
+        "site": "الموقع",
+        "magasin": "المتجر",
+        "includeDeparted": "إظهار الموظفين السابقين",
+        "planning": "جدول أسبوعي",
+        "add": "إضافة موظف",
+        "empty": "لا يوجد موظف لهذا الموقع.",
+        "noSite": "لا يوجد موقع — أنشئ واحداً من الإعدادات.",
+        "noMagasin": "لا يوجد موقع متاح — تواصل مع المسؤول.",
+        "columnNom": "الاسم",
+        "columnPrenom": "الاسم الشخصي",
+        "columnArrivee": "تاريخ الدخول",
+        "columnStatut": "الحالة",
+        "actif": "نشط",
+        "parti": "غادر"
+      },
+      "form": {
+        "addTitle": "موظف جديد",
+        "nom": "الاسم",
+        "prenom": "الاسم الشخصي",
+        "dateArrivee": "تاريخ الدخول",
+        "notes": "ملاحظات"
+      },
+      "detail": {
+        "backList": "العودة للقائمة",
+        "actif": "نشط",
+        "parti": "غادر",
+        "tabInfo": "المعلومات",
+        "tabDocuments": "الوثائق",
+        "tabPaiements": "المدفوعات",
+        "tabEvenements": "الأحداث",
+        "tabHoraires": "المواعيد",
+        "nom": "الاسم",
+        "prenom": "الاسم الشخصي",
+        "dateArrivee": "تاريخ الدخول",
+        "dateDepart": "تاريخ المغادرة",
+        "site": "الموقع",
+        "notes": "ملاحظات",
+        "setDepart": "تسجيل المغادرة",
+        "departTitle": "تاريخ المغادرة",
+        "confirmDepart": "تأكيد",
+        "reactivate": "إعادة تفعيل الموظف",
+        "addDocument": "إضافة وثيقة",
+        "openDocument": "فتح",
+        "noDocuments": "لا توجد وثائق.",
+        "addPaiement": "إضافة دفعة",
+        "totalSalaires": "الرواتب المدفوعة",
+        "totalAvances": "السلف",
+        "solde": "الرصيد",
+        "kindSalaire": "راتب",
+        "kindAvance": "سلفة",
+        "noPaiements": "لا توجد مدفوعات.",
+        "addEvenement": "إضافة حدث",
+        "noEvenements": "لا توجد أحداث."
+      },
+      "documents": {
+        "uploadTitle": "إضافة وثيقة",
+        "label": "اسم الوثيقة",
+        "chooseFile": "اختيار ملف",
+        "camera": "التقاط صورة",
+        "gallery": "المعرض",
+        "photosSection": "الصور",
+        "filesSection": "الوثائق",
+        "empty": "لا توجد وثائق.",
+        "openDocument": "فتح",
+        "previewTitle": "معاينة"
+      },
+      "paiements": {
+        "addTitle": "دفعة جديدة",
+        "kind": "النوع",
+        "kindSalaire": "راتب",
+        "kindAvance": "سلفة",
+        "montant": "المبلغ (درهم)",
+        "date": "التاريخ",
+        "paymentMethod": "طريقة الدفع",
+        "commentaire": "تعليق",
+        "invalidAmount": "مبلغ غير صالح"
+      },
+      "evenements": {
+        "addTitle": "حدث جديد",
+        "kind": "النوع",
+        "kindMalade": "مرض",
+        "kindConge": "إجازة",
+        "kindAutre": "آخر",
+        "dateDebut": "من",
+        "dateFin": "إلى",
+        "commentaire": "تعليق",
+        "invalidDates": "تاريخ النهاية يجب أن يكون بعد تاريخ البداية"
+      },
+      "horaires": {
+        "hint": "المواعيد المتكررة الافتراضية (لملء الجدول).",
+        "repos": "يوم راحة",
+        "debut": "البداية",
+        "fin": "النهاية"
+      },
+      "planning": {
+        "title": "الجدول الأسبوعي",
+        "backList": "العودة للموظفين",
+        "magasin": "المتجر",
+        "site": "الموقع",
+        "viewMagasin": "عرض الموقع",
+        "viewSalarie": "عرض الموظف",
+        "selectSalarie": "الموظف",
+        "prefillHoraires": "من المواعيد المتكررة",
+        "empty": "لا يوجد موظف للعرض.",
+        "columnEmployee": "الموظف",
+        "kind": {
+          "travail": "عمل",
+          "repos": "راحة",
+          "malade": "مرض",
+          "conge": "إجازة"
+        },
+        "shiftDialog": {
+          "title": "تعديل الفترة",
+          "kind": "الحالة",
+          "kindTravail": "عمل",
+          "kindRepos": "راحة",
+          "kindMalade": "مرض",
+          "kindConge": "إجازة",
+          "debut": "ساعة البداية",
+          "fin": "ساعة النهاية"
+        }
       }
     },
     "accessDenied": {
@@ -396,9 +526,18 @@
           "pendingSection": "طلبيات كتسنا التصديق",
           "pendingEmpty": "ما كاين حتى طلبية مصادق عليها كتسنا.",
           "createLot": "كوّن لوط",
+          "createLotSingleStoreDialog": {
+            "title": "محل واحد مختار",
+            "body": "هاد اللوط غادي يجمع غير المحل « {store} ». بغيتي تكمل؟",
+            "confirm": "كوّن اللوط",
+            "cancel": "إلغاء"
+          },
+          "selectionLockedSupplier": "الاختيار محدود للمزود « {supplier} ».",
           "pendingRow": "{supplier} — {store} — {dateTime} — {productCount}",
           "lotsSection": "لوطات فالخدمة",
-          "lotsEmpty": "ما كاين حتى لوط.",
+          "lotsEmpty": "ما كاين حتى لوط فالخدمة.",
+          "lotsFinishedSection": "لوطات سالات",
+          "lotsFinishedEmpty": "ما كاين حتى لوط سال.",
           "lotRow": "{supplier} — {dateTime}",
           "lotRowWithStatus": "{supplier} — {statusLabel} — {dateTime}"
         },
@@ -596,7 +735,9 @@
           "empty": "ما كاين حتى بائع ولا station.",
           "total": "المجموع",
           "reste": "الباقي للدفع",
-          "parentSupplier": "المورد : {label}"
+          "parentSupplier": "المورد : {label}",
+          "sectionMarche": "السوق",
+          "sectionStation": "Station"
         },
         "detail": {
           "backList": "قائمة الحسابات",
@@ -613,14 +754,27 @@
           "noAchats": "ما كاين حتى مشتريات محاسبية.",
           "paymentsTitle": "سجل المدفوعات",
           "noPayments": "ما كاين حتى مدفوعات مسجّلة.",
-          "achatsCount": "{count, plural, one {مشتريات #} other {مشتريات #}}"
+          "achatsCount": "{count, plural, one {مشتريات #} other {مشتريات #}}",
+          "photosCount": "{count, plural, one {صورة #} other {صور #}}",
+          "managePhotos": "الصور",
+          "photosDialogTitle": "صور الدفع",
+          "photosEmpty": "لا توجد صور.",
+          "photoCamera": "التقاط صورة",
+          "photoGallery": "المعرض",
+          "photoDeleteAria": "حذف الصورة"
         },
         "paymentDialog": {
           "title": "سجّل دفع",
           "summary": "{count, plural, one {مشتريات # محددة} other {مشتريات # محددة}} — {amount} DH",
           "method": "طريقة الدفع",
           "date": "تاريخ الدفع",
-          "comment": "تعليق"
+          "comment": "تعليق",
+          "photosTitle": "صور إثبات",
+          "photosEmpty": "لا صور (اختياري).",
+          "photoCamera": "التقاط صورة",
+          "photoGallery": "المعرض",
+          "photoDeleteAria": "حذف الصورة",
+          "photosUploadFailed": "تم تسجيل الدفع، لكن تعذّر إرسال بعض الصور. يمكنك إضافتها من السجل."
         },
         "achatDetail": {
           "back": "رجوع للحساب",
@@ -712,6 +866,7 @@
         "missingSupplier": "المزود ناقص",
         "chooseSupplier": "اختار مزود",
         "selectAtLeastOneOrder": "اختار طلبية على الأقل",
+        "sameSupplierRequired": "خاص جميع الطلبيات المختارة تكون من نفس المزود",
         "noStoreLinked": "ما كاين حتى محل مربوط بالبروفيل ديالك.",
         "noStoreLinkedShort": "ما كاين حتى محل مربوط.",
         "noOrderCommentsToMerge": "ما كاين حتى تعليق طلبية باش ندمجو.",

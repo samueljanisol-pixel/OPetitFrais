@@ -19,6 +19,8 @@ const rules: RouteRule[] = [
   { match: (p) => p.startsWith("/boutique/stats"), permission: "shop.read" },
   { match: (p) => p.startsWith("/historique-ca") || p.startsWith("/ca") || p.startsWith("/analyse-stats"), permission: "ventes.read" },
   { match: (p) => p.startsWith("/parametres"), permission: "parametres.read" },
+  { match: (p) => p.startsWith("/salaries/planning"), permission: "salaries.read" },
+  { match: (p) => p.startsWith("/salaries"), permission: "salaries.read" },
   { match: (p) => p.startsWith("/charges"), permission: "charges.read" },
   { match: (p) => p.startsWith("/emballages"), permission: "emballages.read" },
   {

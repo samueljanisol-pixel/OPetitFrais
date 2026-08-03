@@ -3,6 +3,9 @@ import { PRODUCT_SUPPLIER_PRODUCT_EMBED } from "@/lib/products/product-supabase-
 
 export const ACTUALISATION_PERMS = ["produits.write", "commandes_fournisseur.achat"] as const;
 
+/** Délai minimum sans commande (qte_achat > 0) avant proposition de désactivation. */
+export const DESACTIVATION_DAYS_WITHOUT_ORDER = 5;
+
 export type ActualisationQueue = "prix" | "activation" | "desactivation";
 
 /** Arrondi au demi supérieur (ex. 10,1 → 10,5 ; 10,51 → 11). */
@@ -163,9 +166,72 @@ export async function activeVitrineProductIdsForSupplier(
   return [...ids];
 }
 
+function cutoffDateForDesactivation(reference = new Date()): Date {
+  const d = new Date(reference);
+  d.setDate(d.getDate() - DESACTIVATION_DAYS_WITHOUT_ORDER);
+  return d;
+}
+
+/** Dernière clôture lot (marque_terminee_at) avec qte_achat > 0, par produit et fournisseur. */
+async function lastPositiveOrderDatesForSupplier(
+  supabase: SupabaseClient,
+  supplierId: string,
+): Promise<Map<string, string> | { error: string }> {
+  const { data: lots, error: lotErr } = await supabase
+    .from("commande_fournisseur_lot")
+    .select("id, marque_terminee_at")
+    .eq("supplier_id", supplierId)
+    .eq("status", "terminee")
+    .not("marque_terminee_at", "is", null);
+  if (lotErr) return { error: lotErr.message };
+
+  const lotDates = new Map<string, string>();
+  for (const lot of lots ?? []) {
+    const id = (lot as { id?: string }).id;
+    const closedAt = (lot as { marque_terminee_at?: string }).marque_terminee_at;
+    if (id && closedAt) lotDates.set(id, closedAt);
+  }
+
+  const lotIds = [...lotDates.keys()];
+  if (lotIds.length === 0) return new Map();
+
+  const { data: lignes, error: le } = await supabase
+    .from("commande_fournisseur_lot_ligne")
+    .select("product_id, lot_id, qte_achat")
+    .in("lot_id", lotIds)
+    .gt("qte_achat", 0);
+  if (le) return { error: le.message };
+
+  const byProduct = new Map<string, string>();
+  for (const row of lignes ?? []) {
+    const pid = (row as { product_id?: string }).product_id;
+    const lid = (row as { lot_id?: string }).lot_id;
+    if (!pid || !lid) continue;
+    const lotDate = lotDates.get(lid);
+    if (!lotDate) continue;
+    const prev = byProduct.get(pid);
+    if (!prev || lotDate > prev) byProduct.set(pid, lotDate);
+  }
+
+  return byProduct;
+}
+
+function hadNoPositiveOrderForDays(
+  productId: string,
+  lastPositiveOrderByProduct: Map<string, string>,
+  createdAtByProduct: Map<string, string>,
+  cutoff: Date,
+): boolean {
+  const reference =
+    lastPositiveOrderByProduct.get(productId) ?? createdAtByProduct.get(productId);
+  if (!reference) return false;
+  return new Date(reference) <= cutoff;
+}
+
 /**
  * À la clôture lot : enfile les produits fournisseur actifs+vitrine non commandés
- * (pas de ligne ou qte_achat = 0), sauf s'ils sont déjà en file prix ou activation.
+ * (pas de ligne ou qte_achat = 0) depuis plus de {@link DESACTIVATION_DAYS_WITHOUT_ORDER} jours,
+ * sauf s'ils sont déjà en file prix ou activation.
  */
 export async function enqueueProductActualisationDesactivationForLot(
   supabase: SupabaseClient,
@@ -211,7 +277,29 @@ export async function enqueueProductActualisationDesactivationForLot(
     if (id) blocked.add(id);
   }
 
-  const toEnqueue = candidates.filter((id) => !commanded.has(id) && !blocked.has(id));
+  const notCommanded = candidates.filter((id) => !commanded.has(id) && !blocked.has(id));
+  if (notCommanded.length === 0) return { ok: true, count: 0 };
+
+  const lastOrders = await lastPositiveOrderDatesForSupplier(supabase, supplierId);
+  if ("error" in lastOrders) return { error: lastOrders.error };
+
+  const { data: productRows, error: pe } = await supabase
+    .from("product")
+    .select("id, created_at")
+    .in("id", notCommanded);
+  if (pe) return { error: pe.message };
+
+  const createdAtByProduct = new Map<string, string>();
+  for (const row of productRows ?? []) {
+    const id = (row as { id?: string }).id;
+    const createdAt = (row as { created_at?: string }).created_at;
+    if (id && createdAt) createdAtByProduct.set(id, createdAt);
+  }
+
+  const cutoff = cutoffDateForDesactivation();
+  const toEnqueue = notCommanded.filter((id) =>
+    hadNoPositiveOrderForDays(id, lastOrders, createdAtByProduct, cutoff),
+  );
   if (toEnqueue.length === 0) return { ok: true, count: 0 };
 
   const now = new Date().toISOString();

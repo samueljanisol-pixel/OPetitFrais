@@ -42,6 +42,7 @@ export async function loadShopLivraisonPayload(
       .from("magasins")
       .select("id, code, nom, adresse, ville, lat, lng, google_maps_url")
       .eq("visible_vitrine", true)
+      .eq("type", "magasin")
       .order("sort_order", { ascending: true })
       .order("nom", { ascending: true }),
     service

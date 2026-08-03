@@ -5,6 +5,7 @@
     "back": "Retour",
     "cancel": "Annuler",
     "save": "Enregistrer",
+    "saving": "Enregistrement…",
     "delete": "Supprimer",
     "close": "Fermer",
     "add": "Ajouter",
@@ -35,6 +36,7 @@
       "supplierOrders": "Commandes fournisseur",
       "supplierAccounts": "Comptes fournisseurs",
       "charges": "Gestion Charges",
+      "salaries": "Salariés",
       "packagingManagement": "Emballages et Consommables",
       "cuisine": "Cuisine",
       "cuisineHistorique": "Historique cuisine",
@@ -55,7 +57,7 @@
       "activationHint": "Produits inactifs achetés sans changement de prix de vente.",
       "activationEmpty": "Aucun produit à activer.",
       "desactSection": "À désactiver (non commandés)",
-      "desactHint": "Produits actifs et vitrine du fournisseur absents de la commande (clôture lot).",
+      "desactHint": "Produits actifs et vitrine absents de la commande ou commandés à 0, sans achat depuis plus de 5 jours (clôture lot).",
       "desactEmpty": "Aucune désactivation proposée.",
       "validateSelection": "Valider la sélection",
       "validateRow": "Valider",
@@ -191,6 +193,134 @@
         "vendeurRequired": "Vendeur requis",
         "emballageRequired": "Article requis",
         "closeFailed": "Clôture impossible"
+      }
+    },
+    "salaries": {
+      "list": {
+        "title": "Salariés",
+        "subtitle": "Gestion du personnel par site (magasin, cuisine…).",
+        "backHome": "Accueil",
+        "site": "Site",
+        "magasin": "Magasin",
+        "includeDeparted": "Inclure les anciens salariés",
+        "planning": "Planning hebdo",
+        "add": "Ajouter un salarié",
+        "empty": "Aucun salarié pour ce site.",
+        "noSite": "Aucun site configuré — créez-en un dans Paramètres.",
+        "noMagasin": "Aucun site accessible — contactez un administrateur.",
+        "columnNom": "Nom",
+        "columnPrenom": "Prénom",
+        "columnArrivee": "Arrivée",
+        "columnStatut": "Statut",
+        "actif": "Actif",
+        "parti": "Parti"
+      },
+      "form": {
+        "addTitle": "Nouveau salarié",
+        "nom": "Nom",
+        "prenom": "Prénom",
+        "dateArrivee": "Date d'arrivée",
+        "notes": "Notes"
+      },
+      "detail": {
+        "backList": "Retour à la liste",
+        "actif": "Actif",
+        "parti": "Parti",
+        "tabInfo": "Informations",
+        "tabDocuments": "Documents",
+        "tabPaiements": "Paiements",
+        "tabEvenements": "Événements",
+        "tabHoraires": "Horaires",
+        "nom": "Nom",
+        "prenom": "Prénom",
+        "dateArrivee": "Date d'arrivée",
+        "dateDepart": "Date de départ",
+        "site": "Site",
+        "notes": "Notes",
+        "setDepart": "Enregistrer un départ",
+        "departTitle": "Date de départ",
+        "confirmDepart": "Confirmer",
+        "reactivate": "Réactiver le salarié",
+        "addDocument": "Ajouter un document",
+        "openDocument": "Ouvrir",
+        "noDocuments": "Aucun document.",
+        "addPaiement": "Ajouter un paiement",
+        "totalSalaires": "Salaires versés",
+        "totalAvances": "Avances",
+        "solde": "Solde",
+        "kindSalaire": "Salaire",
+        "kindAvance": "Avance",
+        "noPaiements": "Aucun paiement.",
+        "addEvenement": "Ajouter un événement",
+        "noEvenements": "Aucun événement."
+      },
+      "documents": {
+        "uploadTitle": "Ajouter un document",
+        "label": "Nom du document",
+        "chooseFile": "Choisir un fichier",
+        "camera": "Prendre une photo",
+        "gallery": "Galerie",
+        "photosSection": "Photos",
+        "filesSection": "Documents",
+        "empty": "Aucun document.",
+        "openDocument": "Ouvrir",
+        "previewTitle": "Aperçu"
+      },
+      "paiements": {
+        "addTitle": "Nouveau paiement",
+        "kind": "Type",
+        "kindSalaire": "Salaire",
+        "kindAvance": "Avance",
+        "montant": "Montant (DH)",
+        "date": "Date",
+        "paymentMethod": "Mode de paiement",
+        "commentaire": "Commentaire",
+        "invalidAmount": "Montant invalide"
+      },
+      "evenements": {
+        "addTitle": "Nouvel événement",
+        "kind": "Type",
+        "kindMalade": "Malade",
+        "kindConge": "Congé",
+        "kindAutre": "Autre",
+        "dateDebut": "Du",
+        "dateFin": "Au",
+        "commentaire": "Commentaire",
+        "invalidDates": "La date de fin doit être après la date de début"
+      },
+      "horaires": {
+        "hint": "Horaires récurrents par défaut (utilisés pour pré-remplir le planning).",
+        "repos": "Jour de repos",
+        "debut": "Début",
+        "fin": "Fin"
+      },
+      "planning": {
+        "title": "Planning hebdomadaire",
+        "backList": "Retour aux salariés",
+        "magasin": "Magasin",
+        "site": "Site",
+        "viewMagasin": "Vue site",
+        "viewSalarie": "Vue salarié",
+        "selectSalarie": "Salarié",
+        "prefillHoraires": "Depuis horaires récurrents",
+        "empty": "Aucun salarié à afficher.",
+        "columnEmployee": "Salarié",
+        "kind": {
+          "travail": "Travail",
+          "repos": "Repos",
+          "malade": "Malade",
+          "conge": "Congé"
+        },
+        "shiftDialog": {
+          "title": "Modifier le créneau",
+          "kind": "Statut",
+          "kindTravail": "Travail",
+          "kindRepos": "Repos",
+          "kindMalade": "Malade",
+          "kindConge": "Congé",
+          "debut": "Heure début",
+          "fin": "Heure fin"
+        }
       }
     },
     "accessDenied": {
@@ -396,9 +526,18 @@
           "pendingSection": "Commandes en attente de validation",
           "pendingEmpty": "Aucune commande validée en attente.",
           "createLot": "Constituer un lot",
+          "createLotSingleStoreDialog": {
+            "title": "Un seul magasin sélectionné",
+            "body": "Ce lot ne regroupera que le magasin « {store} ». Voulez-vous continuer ?",
+            "confirm": "Constituer le lot",
+            "cancel": "Annuler"
+          },
+          "selectionLockedSupplier": "Sélection limitée au fournisseur « {supplier} ».",
           "pendingRow": "{supplier} — {store} — {dateTime} — {productCount}",
           "lotsSection": "Lots en cours",
-          "lotsEmpty": "Aucun lot.",
+          "lotsEmpty": "Aucun lot en cours.",
+          "lotsFinishedSection": "Lots terminés",
+          "lotsFinishedEmpty": "Aucun lot terminé.",
           "lotRow": "{supplier} — {dateTime}",
           "lotRowWithStatus": "{supplier} — {statusLabel} — {dateTime}"
         },
@@ -596,7 +735,9 @@
           "empty": "Aucun vendeur ni station configuré.",
           "total": "Total",
           "reste": "Reste à payer",
-          "parentSupplier": "Fournisseur : {label}"
+          "parentSupplier": "Fournisseur : {label}",
+          "sectionMarche": "Marché",
+          "sectionStation": "Station"
         },
         "detail": {
           "backList": "Liste des comptes",
@@ -613,14 +754,27 @@
           "noAchats": "Aucun achat comptable.",
           "paymentsTitle": "Historique des paiements",
           "noPayments": "Aucun paiement enregistré.",
-          "achatsCount": "{count, plural, one {# achat} other {# achats}}"
+          "achatsCount": "{count, plural, one {# achat} other {# achats}}",
+          "photosCount": "{count, plural, one {# photo} other {# photos}}",
+          "managePhotos": "Photos",
+          "photosDialogTitle": "Photos du paiement",
+          "photosEmpty": "Aucune photo.",
+          "photoCamera": "Prendre une photo",
+          "photoGallery": "Galerie",
+          "photoDeleteAria": "Supprimer la photo"
         },
         "paymentDialog": {
           "title": "Enregistrer un paiement",
           "summary": "{count, plural, one {# achat sélectionné} other {# achats sélectionnés}} — {amount} DH",
           "method": "Mode de paiement",
           "date": "Date du paiement",
-          "comment": "Commentaire"
+          "comment": "Commentaire",
+          "photosTitle": "Photos justificatives",
+          "photosEmpty": "Aucune photo (optionnel).",
+          "photoCamera": "Prendre une photo",
+          "photoGallery": "Galerie",
+          "photoDeleteAria": "Supprimer la photo",
+          "photosUploadFailed": "Paiement enregistré, mais une ou plusieurs photos n'ont pas pu être envoyées. Vous pouvez les ajouter depuis l'historique."
         },
         "achatDetail": {
           "back": "Retour au compte",
@@ -712,6 +866,7 @@
         "missingSupplier": "Fournisseur manquant",
         "chooseSupplier": "Choisissez un fournisseur",
         "selectAtLeastOneOrder": "Sélectionnez au moins une commande",
+        "sameSupplierRequired": "Toutes les commandes sélectionnées doivent être du même fournisseur",
         "noStoreLinked": "Aucun magasin n'est rattaché à votre profil.",
         "noStoreLinkedShort": "Aucun magasin rattaché.",
         "noOrderCommentsToMerge": "Aucun commentaire de commande à intégrer.",

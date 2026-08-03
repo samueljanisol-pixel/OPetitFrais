@@ -38,7 +38,19 @@ Onglet **Zone livraison** :
 - **Numéro boutique** (`ref_app_setting.shop_contact_phone`) pour Appeler / WhatsApp sur `/livraison`
 - **Magasin retrait** (`ref_app_setting.shop_pickup_magasin_id`) — ex. Magasin 2
 
-Adresses / GPS / lien Google Maps / **Visible vitrine** : fiches magasins (onglet Administration → Magasins & caisses).
+Adresses / GPS / lien Google Maps / **Visible vitrine** : fiches **magasins de vente** uniquement (onglet Administration → Sites, magasins & caisses).
+
+## Sites (magasins, cuisine, autres)
+
+Table **`magasins`** — tous les sites de l’organisation (magasins de vente, cuisines, etc.) :
+
+- **`type`** : `magasin` (défaut, vente / CA / caisses / vitrine), `cuisine`, `autre`
+- Onglet **Administration → Sites, magasins & caisses** : création avec choix du type
+- **Ordre d’affichage** : flèches haut / bas sur chaque site et chaque caisse (plus de champ numérique dans le formulaire) ; un nouveau site ou une nouvelle caisse est ajouté(e) en fin de liste
+- Les **caisses** et la **vitrine boutique** ne s’appliquent qu’aux sites de type `magasin`
+- Les cuisines et autres sites servent au **planning salariés**, au **périmètre utilisateurs** (`profile_magasins`), etc.
+
+Migration `20260803200000_magasin_site_type.sql`.
 
 Migration `20260727170000_shop_delivery_zone.sql`. API admin : `/api/admin/shop-delivery-zone`. Voir [`../shop/README.md`](../shop/README.md) et [`../livraison/README.md`](../livraison/README.md).
 

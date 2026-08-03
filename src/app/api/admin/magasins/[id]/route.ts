@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/server";
 import { requireApiPermission } from "@/lib/auth/require-permission-api";
+import { isMagasinSiteType, type MagasinSiteType } from "@/lib/magasins/types";
 
 export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }> }) {
   const gate = await requireApiPermission("admin.magasins");
@@ -19,6 +20,7 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
     lng?: number | null;
     google_maps_url?: string | null;
     visible_vitrine?: boolean;
+    type?: string;
   };
   try {
     body = await req.json();
@@ -51,8 +53,14 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
       typeof body.google_maps_url === "string" ? body.google_maps_url.trim() : "";
     patch.google_maps_url = url || null;
   }
-  if (typeof body.visible_vitrine === "boolean") {
-    patch.visible_vitrine = body.visible_vitrine;
+  if (typeof body.type === "string") {
+    if (!isMagasinSiteType(body.type)) {
+      return NextResponse.json({ error: "Type de site invalide" }, { status: 400 });
+    }
+    patch.type = body.type;
+    if (body.type !== "magasin") {
+      patch.visible_vitrine = false;
+    }
   }
   if (body.lat !== undefined || body.lng !== undefined) {
     const lat = body.lat === null || body.lat === undefined ? null : Number(body.lat);
@@ -72,10 +80,6 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
     }
   }
 
-  if (Object.keys(patch).length === 0) {
-    return NextResponse.json({ error: "Aucun champ à mettre à jour" }, { status: 400 });
-  }
-
   let service;
   try {
     service = createSupabaseServiceRoleClient();
@@ -83,12 +87,32 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
     return NextResponse.json({ error: "Service role non configurée" }, { status: 500 });
   }
 
+  if (typeof body.visible_vitrine === "boolean" && patch.visible_vitrine === undefined) {
+    const { data: current } = await service.from("magasins").select("type").eq("id", id).maybeSingle();
+    if (!current) {
+      return NextResponse.json({ error: "Magasin introuvable" }, { status: 404 });
+    }
+    const currentType = isMagasinSiteType(current.type) ? current.type : "magasin";
+    const effectiveType = (patch.type as MagasinSiteType | undefined) ?? currentType;
+    if (body.visible_vitrine && effectiveType !== "magasin") {
+      return NextResponse.json(
+        { error: "Seuls les magasins de vente peuvent être visibles sur la vitrine" },
+        { status: 400 },
+      );
+    }
+    patch.visible_vitrine = body.visible_vitrine;
+  }
+
+  if (Object.keys(patch).length === 0) {
+    return NextResponse.json({ error: "Aucun champ à mettre à jour" }, { status: 400 });
+  }
+
   const { data: row, error } = await service
     .from("magasins")
     .update(patch)
     .eq("id", id)
     .select(
-      "id, code, nom, sort_order, adresse, ville, lat, lng, google_maps_url, visible_vitrine, created_at, updated_at",
+      "id, code, nom, type, sort_order, adresse, ville, lat, lng, google_maps_url, visible_vitrine, created_at, updated_at",
     )
     .maybeSingle();
 

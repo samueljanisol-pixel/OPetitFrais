@@ -46,6 +46,8 @@ export function useSessionPermissions() {
     canWriteParametres: can("parametres.write"),
     canReadCharges: can("charges.read"),
     canWriteCharges: can("charges.write"),
+    canReadSalaries: can("salaries.read"),
+    canWriteSalaries: can("salaries.write"),
     canReadEmballages: can("emballages.read"),
     canWriteEmballages: can("emballages.write"),
     canAdminUsers: can("admin.utilisateurs"),

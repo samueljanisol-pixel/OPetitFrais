@@ -20,6 +20,7 @@ import {
 } from "@mui/material";
 import AppLink from "@/components/AppLink";
 import ComptePaiementFormDialog from "@/features/commandes-fournisseur/ComptePaiementFormDialog";
+import PaiementPhotosDialog from "@/features/commandes-fournisseur/PaiementPhotosDialog";
 import type { CompteAccountType } from "@/lib/commandes-fournisseur/compte-queries";
 import { useSessionPermissions } from "@/lib/auth/useSessionPermissions";
 import { useAppFormat } from "@/lib/i18n/useAppFormat";
@@ -41,6 +42,7 @@ type PaiementRow = {
   commentaire: string | null;
   montant: number;
   achat_ids: string[];
+  photo_count: number;
 };
 
 type Totals = { total: number; paye: number; reste: number };
@@ -81,6 +83,8 @@ export default function CompteDetailClient({ accountType, accountId }: Props) {
   const [err, setErr] = useState<string | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [paiementOpen, setPaiementOpen] = useState(false);
+  const [photosPaiementId, setPhotosPaiementId] = useState<string | null>(null);
+  const [photosPaymentLabel, setPhotosPaymentLabel] = useState("");
 
   useEffect(() => {
     if (!permLoading && !can("commandes_fournisseur.comptes")) {
@@ -306,16 +310,36 @@ export default function CompteDetailClient({ accountType, accountId }: Props) {
               {paiements.map((p) => (
                 <ListItem key={p.id} disablePadding sx={{ mb: 1 }}>
                   <Paper variant="outlined" sx={{ p: 1.5, width: "100%" }}>
-                    <Typography sx={{ fontWeight: 600 }}>
-                      {formatDh(p.montant)} DH — {p.payment_method_label}
-                    </Typography>
-                    <Typography variant="body2" color="text.secondary">
-                      {p.date_paiement}
-                      {p.commentaire ? ` · ${p.commentaire}` : ""}
-                    </Typography>
-                    <Typography variant="caption" color="text.secondary">
-                      {t("achatsCount", { count: p.achat_ids.length })}
-                    </Typography>
+                    <Box className="flex flex-wrap items-start justify-between gap-2">
+                      <Box sx={{ flex: 1, minWidth: 0 }}>
+                        <Typography sx={{ fontWeight: 600 }}>
+                          {formatDh(p.montant)} DH — {p.payment_method_label}
+                        </Typography>
+                        <Typography variant="body2" color="text.secondary">
+                          {p.date_paiement}
+                          {p.commentaire ? ` · ${p.commentaire}` : ""}
+                        </Typography>
+                        <Typography variant="caption" color="text.secondary">
+                          {t("achatsCount", { count: p.achat_ids.length })}
+                          {p.photo_count > 0
+                            ? ` · ${t("photosCount", { count: p.photo_count })}`
+                            : ""}
+                        </Typography>
+                      </Box>
+                      <Button
+                        size="small"
+                        variant="outlined"
+                        onClick={() => {
+                          setPhotosPaiementId(p.id);
+                          setPhotosPaymentLabel(
+                            `${formatDh(p.montant)} DH — ${p.payment_method_label}`,
+                          );
+                        }}
+                        sx={{ textTransform: "none", flexShrink: 0 }}
+                      >
+                        {t("managePhotos")}
+                      </Button>
+                    </Box>
                   </Paper>
                 </ListItem>
               ))}
@@ -336,6 +360,24 @@ export default function CompteDetailClient({ accountType, accountId }: Props) {
           void load();
         }}
       />
+
+      {photosPaiementId ? (
+        <PaiementPhotosDialog
+          open={photosPaiementId != null}
+          paiementId={photosPaiementId}
+          paymentLabel={photosPaymentLabel}
+          onClose={() => setPhotosPaiementId(null)}
+          onChanged={() => void load()}
+          labels={{
+            title: t("photosDialogTitle"),
+            empty: t("photosEmpty"),
+            camera: t("photoCamera"),
+            gallery: t("photoGallery"),
+            close: tCommon("close"),
+            deleteAria: t("photoDeleteAria"),
+          }}
+        />
+      ) : null}
     </main>
   );
 }

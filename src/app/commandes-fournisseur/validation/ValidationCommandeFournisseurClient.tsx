@@ -6,6 +6,10 @@ import { useTranslations } from "next-intl";
 import {
   Button,
   Checkbox,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
   FormControl,
   FormControlLabel,
   InputLabel,
@@ -86,6 +90,7 @@ export default function ValidationCommandeFournisseurClient() {
   const [saving, setSaving] = useState(false);
   const [filterSupplier, setFilterSupplier] = useState<string>("");
   const [selected, setSelected] = useState<Set<string>>(() => new Set());
+  const [singleStoreConfirmOpen, setSingleStoreConfirmOpen] = useState(false);
   const emDash = tCommon("emDash");
 
   const load = useCallback(async () => {
@@ -143,7 +148,52 @@ export default function ValidationCommandeFournisseurClient() {
     return commandes.filter((c) => c.supplier_id === filterSupplier);
   }, [commandes, filterSupplier]);
 
-  const toggle = (id: string) => {
+  const selectedCommandes = useMemo(
+    () => commandes.filter((c) => selected.has(c.id)),
+    [commandes, selected],
+  );
+
+  const selectedSupplierIds = useMemo(
+    () => new Set(selectedCommandes.map((c) => c.supplier_id)),
+    [selectedCommandes],
+  );
+
+  const selectedMagasinIds = useMemo(
+    () => new Set(selectedCommandes.map((c) => c.magasin_id)),
+    [selectedCommandes],
+  );
+
+  const singleSelectedStoreLabel = useMemo(() => {
+    if (selectedMagasinIds.size !== 1) return emDash;
+    const cmd = selectedCommandes[0];
+    if (!cmd) return emDash;
+    return oneMag(cmd.magasins, emDash);
+  }, [selectedCommandes, selectedMagasinIds.size, emDash]);
+
+  const lockedSupplierId = useMemo(() => {
+    if (selectedCommandes.length === 0) return null;
+    return selectedCommandes[0]!.supplier_id;
+  }, [selectedCommandes]);
+
+  const lockedSupplierLabel = useMemo(() => {
+    if (!lockedSupplierId) return null;
+    return suppliers.find(([id]) => id === lockedSupplierId)?.[1] ?? emDash;
+  }, [lockedSupplierId, suppliers, emDash]);
+
+  const activeLots = useMemo(
+    () => lots.filter((l) => l.status !== "terminee"),
+    [lots],
+  );
+
+  const finishedLots = useMemo(
+    () => lots.filter((l) => l.status === "terminee"),
+    [lots],
+  );
+
+  const toggle = (id: string, supplierId: string) => {
+    if (lockedSupplierId && supplierId !== lockedSupplierId) {
+      return;
+    }
     setSelected((prev) => {
       const n = new Set(prev);
       if (n.has(id)) n.delete(id);
@@ -152,11 +202,7 @@ export default function ValidationCommandeFournisseurClient() {
     });
   };
 
-  const createLot = async () => {
-    if (selected.size === 0) {
-      setErr(te("selectAtLeastOneOrder"));
-      return;
-    }
+  const executeCreateLot = async () => {
     setErr(null);
     setSaving(true);
     try {
@@ -182,12 +228,60 @@ export default function ValidationCommandeFournisseurClient() {
     }
   };
 
+  const handleCreateLotClick = () => {
+    if (selected.size === 0) {
+      setErr(te("selectAtLeastOneOrder"));
+      return;
+    }
+    if (selectedSupplierIds.size > 1) {
+      setErr(te("sameSupplierRequired"));
+      return;
+    }
+    setErr(null);
+    if (selectedMagasinIds.size === 1) {
+      setSingleStoreConfirmOpen(true);
+      return;
+    }
+    void executeCreateLot();
+  };
+
   if (loading) {
     return <p className="px-4 py-6">{tCommon("loading")}</p>;
   }
   if (!can("commandes_fournisseur.consolidation")) {
     return null;
   }
+
+  const renderLotList = (items: LotRow[]) => (
+    <List dense disablePadding>
+      {items.map((l) => (
+        <ListItem key={l.id} disablePadding className="!mb-1">
+          <ListItemButton
+            component={AppLink}
+            href={`/commandes-fournisseur/validation/lots/${l.id}`}
+            sx={{ borderRadius: 2, border: "1px solid", borderColor: "divider" }}
+          >
+            <ListItemText
+              primary={
+                <span className="flex items-center justify-between gap-2">
+                  <span className="min-w-0 truncate">{oneLabel(l.ref_supplier, emDash)}</span>
+                  <CommandeFournisseurStatusChip
+                    domain="commande_fournisseur_lot"
+                    status={l.status}
+                    label={labelFor("commande_fournisseur_lot", l.status)}
+                  />
+                </span>
+              }
+              secondary={formatDateTime(l.created_at)}
+              slotProps={{
+                primary: { component: "div" },
+              }}
+            />
+          </ListItemButton>
+        </ListItem>
+      ))}
+    </List>
+  );
 
   return (
     <main className="mx-auto w-full max-w-lg px-4 py-4">
@@ -253,21 +347,33 @@ export default function ValidationCommandeFournisseurClient() {
                 variant="contained"
                 color="success"
                 disabled={saving || selected.size === 0}
-                onClick={() => void createLot()}
+                onClick={handleCreateLotClick}
                 sx={{ textTransform: "none" }}
               >
                 {saving ? tc("loadingEllipsis") : t("createLot")}
               </Button>
             </div>
+            {lockedSupplierLabel ? (
+              <Typography variant="caption" color="text.secondary" className="!mb-2 block">
+                {t("selectionLockedSupplier", { supplier: lockedSupplierLabel })}
+              </Typography>
+            ) : null}
             <ul className="space-y-2 rounded-lg border border-slate-200 bg-white p-2">
-              {filtered.map((c) => (
-                <li key={c.id} className="flex items-start gap-2 rounded border border-slate-100 p-2">
+              {filtered.map((c) => {
+                const rowDisabled = lockedSupplierId !== null && c.supplier_id !== lockedSupplierId;
+                return (
+                <li
+                  key={c.id}
+                  className={`flex items-start gap-2 rounded border border-slate-100 p-2${rowDisabled ? " opacity-50" : ""}`}
+                >
                   <FormControlLabel
                     className="!m-0"
+                    disabled={rowDisabled}
                     control={
                       <Checkbox
                         checked={selected.has(c.id)}
-                        onChange={() => toggle(c.id)}
+                        onChange={() => toggle(c.id, c.supplier_id)}
+                        disabled={rowDisabled}
                         size="small"
                       />
                     }
@@ -283,7 +389,8 @@ export default function ValidationCommandeFournisseurClient() {
                     }
                   />
                 </li>
-              ))}
+                );
+              })}
             </ul>
           </>
         )}
@@ -297,41 +404,71 @@ export default function ValidationCommandeFournisseurClient() {
           <Typography color="text.secondary" variant="body2">
             {tc("loading")}
           </Typography>
-        ) : lots.length === 0 ? (
+        ) : activeLots.length === 0 ? (
           <Typography color="text.secondary" variant="body2">
             {t("lotsEmpty")}
           </Typography>
         ) : (
-          <List dense disablePadding>
-            {lots.map((l) => (
-              <ListItem key={l.id} disablePadding className="!mb-1">
-                <ListItemButton
-                  component={AppLink}
-                  href={`/commandes-fournisseur/validation/lots/${l.id}`}
-                  sx={{ borderRadius: 2, border: "1px solid", borderColor: "divider" }}
-                >
-                  <ListItemText
-                    primary={
-                      <span className="flex items-center justify-between gap-2">
-                        <span className="min-w-0 truncate">{oneLabel(l.ref_supplier, emDash)}</span>
-                        <CommandeFournisseurStatusChip
-                          domain="commande_fournisseur_lot"
-                          status={l.status}
-                          label={labelFor("commande_fournisseur_lot", l.status)}
-                        />
-                      </span>
-                    }
-                    secondary={formatDateTime(l.created_at)}
-                    slotProps={{
-                      primary: { component: "div" },
-                    }}
-                  />
-                </ListItemButton>
-              </ListItem>
-            ))}
-          </List>
+          renderLotList(activeLots)
         )}
       </section>
+
+      <section className="!mb-6">
+        <Typography variant="subtitle1" className="!mb-2" sx={{ fontWeight: 600 }}>
+          {t("lotsFinishedSection")}
+        </Typography>
+        {loadingData ? (
+          <Typography color="text.secondary" variant="body2">
+            {tc("loading")}
+          </Typography>
+        ) : finishedLots.length === 0 ? (
+          <Typography color="text.secondary" variant="body2">
+            {t("lotsFinishedEmpty")}
+          </Typography>
+        ) : (
+          renderLotList(finishedLots)
+        )}
+      </section>
+
+      <Dialog
+        open={singleStoreConfirmOpen}
+        onClose={() => {
+          if (!saving) setSingleStoreConfirmOpen(false);
+        }}
+        fullWidth
+        maxWidth="sm"
+      >
+        <DialogTitle sx={{ pb: 0.5 }}>{t("createLotSingleStoreDialog.title")}</DialogTitle>
+        <DialogContent>
+          <Typography variant="body2" color="text.secondary">
+            {t("createLotSingleStoreDialog.body", { store: singleSelectedStoreLabel })}
+          </Typography>
+        </DialogContent>
+        <DialogActions className="!px-3 !pb-2">
+          <Button
+            type="button"
+            color="inherit"
+            onClick={() => setSingleStoreConfirmOpen(false)}
+            sx={{ textTransform: "none" }}
+            disabled={saving}
+          >
+            {t("createLotSingleStoreDialog.cancel")}
+          </Button>
+          <Button
+            type="button"
+            variant="contained"
+            color="success"
+            disabled={saving}
+            onClick={() => {
+              setSingleStoreConfirmOpen(false);
+              void executeCreateLot();
+            }}
+            sx={{ textTransform: "none" }}
+          >
+            {saving ? tc("loadingEllipsis") : t("createLotSingleStoreDialog.confirm")}
+          </Button>
+        </DialogActions>
+      </Dialog>
     </main>
   );
 }

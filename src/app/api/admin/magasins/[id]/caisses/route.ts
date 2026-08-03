@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/server";
 import { requireApiPermission } from "@/lib/auth/require-permission-api";
+import { isMagasinSiteType } from "@/lib/magasins/types";
 
 export async function POST(req: Request, ctx: { params: Promise<{ id: string }> }) {
   const gate = await requireApiPermission("admin.magasins");
@@ -35,6 +36,25 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     service = createSupabaseServiceRoleClient();
   } catch {
     return NextResponse.json({ error: "Service role non configurée" }, { status: 500 });
+  }
+
+  const { data: magasin, error: magErr } = await service
+    .from("magasins")
+    .select("type")
+    .eq("id", magasinId)
+    .maybeSingle();
+  if (magErr) {
+    return NextResponse.json({ error: magErr.message }, { status: 500 });
+  }
+  if (!magasin) {
+    return NextResponse.json({ error: "Site introuvable" }, { status: 404 });
+  }
+  const siteType = isMagasinSiteType(magasin.type) ? magasin.type : "magasin";
+  if (siteType !== "magasin") {
+    return NextResponse.json(
+      { error: "Les caisses ne sont disponibles que pour les magasins de vente" },
+      { status: 400 },
+    );
   }
 
   const { data: row, error } = await service

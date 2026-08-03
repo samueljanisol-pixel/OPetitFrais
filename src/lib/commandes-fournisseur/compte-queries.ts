@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { loadPhotoCountsForPaiements } from "@/lib/commandes-fournisseur/paiement-photos";
 
 export type CompteAccountType = "vendeur" | "station";
 
@@ -235,6 +236,9 @@ export async function loadCompteSummaries(
   }
 
   accounts.sort((a, b) => {
+    const typeOrder = (t: CompteAccountType) => (t === "vendeur" ? 0 : 1);
+    const typeCmp = typeOrder(a.account_type) - typeOrder(b.account_type);
+    if (typeCmp !== 0) return typeCmp;
     const pa = a.parent_supplier_label ?? a.label;
     const pb = b.parent_supplier_label ?? b.label;
     const c = pa.localeCompare(pb, "fr", { sensitivity: "base" });
@@ -256,6 +260,7 @@ export type PaiementRow = {
   montant: number;
   created_at: string;
   achat_ids: string[];
+  photo_count: number;
 };
 
 export async function loadPaiementsForAccount(
@@ -296,6 +301,12 @@ export async function loadPaiementsForAccount(
     }
   }
 
+  const photoCountsResult = await loadPhotoCountsForPaiements(supabase, pids);
+  if (!("get" in photoCountsResult)) {
+    return { error: photoCountsResult.error };
+  }
+  const photoCounts = photoCountsResult;
+
   const rows: PaiementRow[] = (paiements ?? []).map((p) => {
     const id = String((p as { id: string }).id);
     const pm = one((p as { ref_payment_method?: unknown }).ref_payment_method);
@@ -314,6 +325,7 @@ export async function loadPaiementsForAccount(
       montant: roundMoney(Number((p as { montant: number }).montant)),
       created_at: String((p as { created_at: string }).created_at),
       achat_ids: achatsByPaiement.get(id) ?? [],
+      photo_count: photoCounts.get(id) ?? 0,
     };
   });
 

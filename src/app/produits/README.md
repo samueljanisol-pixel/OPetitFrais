@@ -6,7 +6,7 @@ File d’attente après achat fournisseur (menu accueil + badge) :
 
 - **Prix à actualiser** (`product_actualisation_prix`) : à la **clôture vendeur**, uniquement si le **prix actuel ≠ prix proposé** (`cost_purchase + fabrication + emballage + marge`, arrondi au **0,5 supérieur**). Validation : `price` / `marge` / `visible_vitrine`, réactive si besoin, historique prix, retire de la file.
 - **À activer** (`product_actualisation_activation`) : produit **inactif** acheté **sans** écart de prix proposé. Switches Actif (défaut on) / Vitrine (défaut off).
-- **À désactiver** (`product_actualisation_desactivation`) : à la **clôture lot**, produits fournisseur `active` + `visible_vitrine` sans ligne ou `qte_achat = 0`. Priorité : prix > activation > désactivation.
+- **À désactiver** (`product_actualisation_desactivation`) : à la **clôture lot**, produits fournisseur `active` + `visible_vitrine` sans ligne ou `qte_achat = 0`, **sans achat (`qte_achat > 0`) depuis plus de 5 jours** (dernière clôture lot terminée, ou `product.created_at` si jamais commandé). Priorité : prix > activation > désactivation.
 - **Sélection** : cases à cocher + **Valider la sélection** / **Ne rien faire** (retire de la file sans modifier le produit) en barre d’outils ou **par ligne** (colonne Actions). Icône édition → fiche produit (`returnTo` = cette page).
 - Formule prix proposé : coûts + marge, **arrondi au 0,5 supérieur** (`roundSalePriceUpToHalf`). Éditer la marge recalcule le prix ; éditer le prix = mode manuel.
 - Permissions : `produits.write` **ou** `commandes_fournisseur.achat`. APIs : `GET /api/produits/actualisation`, `GET …/count`, `POST …/prix|activation|desactivation/validate`, `POST …/dismiss`.
