@@ -15,6 +15,7 @@ import InventoryOutlinedIcon from '@mui/icons-material/InventoryOutlined'
 import RestaurantMenuOutlinedIcon from '@mui/icons-material/RestaurantMenuOutlined'
 import SettingsIcon from '@mui/icons-material/Settings'
 import StorefrontOutlinedIcon from '@mui/icons-material/StorefrontOutlined'
+import PeopleOutlinedIcon from '@mui/icons-material/PeopleOutlined'
 import AppLink from '@/components/AppLink'
 import { useSessionPermissions } from '@/lib/auth/useSessionPermissions'
 import { clearSessionSnapshot } from '@/lib/auth/session-display-cache'
@@ -29,6 +30,10 @@ export default function BackofficeHome() {
     can,
     canReadVentes,
     canReadShop,
+    canReadClients,
+    canReadCommandesClient,
+    canPrepareCommandesClient,
+    canDeliverCommandesClient,
     canReadParametres,
     canReadCharges,
     canReadSalaries,
@@ -203,6 +208,75 @@ export default function BackofficeHome() {
                 }}
               >
                 {t('shopStats')}
+              </Button>
+            ) : null}
+            {canReadClients ? (
+              <Button
+                component={AppLink}
+                href="/clients"
+                variant="contained"
+                color="success"
+                size="large"
+                fullWidth
+                startIcon={<PeopleOutlinedIcon sx={{ fontSize: 28 }} />}
+                sx={{
+                  borderRadius: 2,
+                  textTransform: 'none',
+                  fontWeight: 600,
+                  py: 1.25,
+                  px: 2,
+                  justifyContent: 'flex-start',
+                  gap: 1.25,
+                  '& .MuiButton-startIcon': { mr: 0.5, ml: 0 },
+                }}
+              >
+                {t('clients')}
+              </Button>
+            ) : null}
+            {canReadCommandesClient ? (
+              <Button
+                component={AppLink}
+                href="/commandes-client"
+                variant="contained"
+                color="success"
+                size="large"
+                fullWidth
+                startIcon={<ReceiptLongOutlinedIcon sx={{ fontSize: 28 }} />}
+                sx={{
+                  borderRadius: 2,
+                  textTransform: 'none',
+                  fontWeight: 600,
+                  py: 1.25,
+                  px: 2,
+                  justifyContent: 'flex-start',
+                  gap: 1.25,
+                  '& .MuiButton-startIcon': { mr: 0.5, ml: 0 },
+                }}
+              >
+                {t('commandesClient')}
+              </Button>
+            ) : null}
+            {canPrepareCommandesClient ? (
+              <Button
+                component={AppLink}
+                href="/commandes-client/preparation"
+                variant="outlined"
+                color="success"
+                size="large"
+                fullWidth
+                startIcon={<InventoryOutlinedIcon sx={{ fontSize: 28 }} />}
+                sx={{
+                  borderRadius: 2,
+                  textTransform: 'none',
+                  fontWeight: 600,
+                  py: 1.25,
+                  px: 2,
+                  justifyContent: 'flex-start',
+                  gap: 1.25,
+                  '& .MuiButton-startIcon': { mr: 0.5, ml: 0 },
+                }}
+              >
+                {t('commandesClientPreparation')}
               </Button>
             ) : null}
             {canCommandesFournisseur ? (

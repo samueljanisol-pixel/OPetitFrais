@@ -1,4 +1,5 @@
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { normalizeProfileRole } from "@/lib/auth/normalize-profile-role";
 
 async function resolveGate(
   keys: Set<string>,
@@ -32,8 +33,10 @@ export async function requireApiPermission(key: string): Promise<
     .eq("user_id", user.id)
     .maybeSingle();
 
-  const role = prof?.roles as { is_full_access: boolean } | null | undefined;
-  const isFull = role?.is_full_access ?? false;
+  const role = normalizeProfileRole(
+    prof?.roles as { is_full_access: boolean } | { is_full_access: boolean }[] | null | undefined,
+  );
+  const isFull = role?.is_full_access === true;
 
   const { data: keysRaw, error } = await supabase.rpc("get_my_permission_keys");
   if (error) {
@@ -60,8 +63,10 @@ export async function requireAnyApiPermission(
     .eq("user_id", user.id)
     .maybeSingle();
 
-  const role = prof?.roles as { is_full_access: boolean } | null | undefined;
-  const isFull = role?.is_full_access ?? false;
+  const role = normalizeProfileRole(
+    prof?.roles as { is_full_access: boolean } | { is_full_access: boolean }[] | null | undefined,
+  );
+  const isFull = role?.is_full_access === true;
 
   const { data: keysRaw, error } = await supabase.rpc("get_my_permission_keys");
   if (error) {

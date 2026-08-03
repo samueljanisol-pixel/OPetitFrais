@@ -1,5 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 
+export const CAISSE_API_CORS_HEADERS: Record<string, string> = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "GET, POST, PATCH, OPTIONS",
+  "Access-Control-Allow-Headers": "Authorization, x-caisse-ticket-token, Content-Type",
+};
+
 /**
  * Autorise l’accès ticket caisse via secret partagé WinDev.
  * Accepte `?token=`, `Authorization: Bearer …`, ou `x-caisse-ticket-token`.
@@ -13,7 +19,7 @@ export function authorizeCaisseTicket(
       ok: false,
       response: NextResponse.json(
         { error: "Ticket caisse désactivé : CAISSE_TICKET_TOKEN non défini." },
-        { status: 503 },
+        { status: 503, headers: CAISSE_API_CORS_HEADERS },
       ),
     };
   }
@@ -29,7 +35,10 @@ export function authorizeCaisseTicket(
   if (!token || token !== expected) {
     return {
       ok: false,
-      response: NextResponse.json({ error: "Non autorisé (token invalide)." }, { status: 401 }),
+      response: NextResponse.json(
+        { error: "Non autorisé (token invalide)." },
+        { status: 401, headers: CAISSE_API_CORS_HEADERS },
+      ),
     };
   }
 

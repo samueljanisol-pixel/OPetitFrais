@@ -253,6 +253,24 @@ Solde **Reste à régler** (`balanceDue`) : 0 tant que les ventes crédit ne son
 
 ---
 
+## Commandes boutique (workflow client)
+
+Token identique (`CAISSE_TICKET_TOKEN`). Service role côté serveur.
+
+| Route | Méthode | Description |
+|-------|---------|-------------|
+| `/api/caisse/commandes-boutique` | GET | Liste `a_passer_caisse` + état verrou |
+| `/api/caisse/commandes-boutique/lock` | POST | Verrouiller pour ce poste |
+| `/api/caisse/commandes-boutique/unlock` | POST | Libérer le verrou |
+| `/api/caisse/commandes-boutique/link` | POST | Lier ticket POS (`shop_cart_pos_link`) + transition workflow |
+| `/api/caisse/commandes-boutique/ticket` | GET | 2ᵉ ticket ESC/POS (check-list préparation + code-barres) |
+
+Paramètres communs : `magasinCode`, `caisseCode`, `token`.
+
+Backoffice workflow : [`../../commandes-client/README.md`](../../commandes-client/README.md).
+
+---
+
 ## Config
 
 ```

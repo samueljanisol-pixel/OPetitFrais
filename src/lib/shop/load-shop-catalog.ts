@@ -60,6 +60,67 @@ function extractShopUnits(raw: ProductRow["product_shop_order_unit"]) {
   return units;
 }
 
+function mapProductRow(p: ProductRow): ShopProduct {
+  const { ref_category: _c, ref_subcategory: _s, product_shop_order_unit: links, ...rest } = p;
+  return {
+    ...rest,
+    shop_order_units: extractShopUnits(links),
+  };
+}
+
+function categoryMetaFromRow(
+  p: ProductRow,
+  locale: AppLocale,
+): { id: string; label: string; sortOrder: number } | null {
+  const cat = normalizeRelation(p.ref_category);
+  if (!cat?.id) return null;
+  return {
+    id: cat.id,
+    label: refDisplayLabel(cat, locale),
+    sortOrder: cat.sort_order ?? 9999,
+  };
+}
+
+export async function loadShopProductsByIds(
+  ids: string[],
+  locale: AppLocale,
+): Promise<{
+  products: ShopProduct[];
+  categories: Array<{ id: string; label: string; sortOrder: number }>;
+  error: string | null;
+}> {
+  const uniqueIds = [...new Set(ids.filter((id) => id.length > 0))];
+  if (uniqueIds.length === 0) {
+    return { products: [], categories: [], error: null };
+  }
+
+  let supabase;
+  try {
+    supabase = createSupabaseServiceRoleClient();
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : "Configuration Supabase incomplète";
+    return { products: [], categories: [], error: msg };
+  }
+
+  const { data, error } = await supabase
+    .from("product")
+    .select(SHOP_PRODUCT_SELECT)
+    .in("id", uniqueIds);
+
+  if (error) return { products: [], categories: [], error: error.message };
+
+  const products: ShopProduct[] = [];
+  const categoryById = new Map<string, { id: string; label: string; sortOrder: number }>();
+
+  for (const raw of (data ?? []) as ProductRow[]) {
+    products.push(mapProductRow(raw));
+    const meta = categoryMetaFromRow(raw, locale);
+    if (meta) categoryById.set(meta.id, meta);
+  }
+
+  return { products, categories: [...categoryById.values()], error: null };
+}
+
 export async function loadShopCatalog(
   locale: AppLocale,
   uncategorizedLabel: string,
@@ -116,11 +177,7 @@ export async function loadShopCatalog(
       categoryGroup.subgroups.push(subgroup);
     }
 
-    const { ref_category: _c, ref_subcategory: _s, product_shop_order_unit: links, ...rest } = p;
-    const product: ShopProduct = {
-      ...rest,
-      shop_order_units: extractShopUnits(links),
-    };
+    const product: ShopProduct = mapProductRow(p);
     subgroup.products.push(product);
   }
 

@@ -61,5 +61,11 @@ export function useSessionPermissions() {
     canCuisineSaisie: can("cuisine.saisie"),
     canCuisineHistorique: can("cuisine.historique"),
     canReadShop: can("shop.read"),
+    canReadClients: can("clients.read"),
+    canWriteClients: can("clients.write"),
+    canReadCommandesClient: can("commandes_client.read"),
+    canValidateCommandesClient: can("commandes_client.validate"),
+    canPrepareCommandesClient: can("commandes_client.prepare"),
+    canDeliverCommandesClient: can("commandes_client.deliver"),
   };
 }

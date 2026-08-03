@@ -6,16 +6,19 @@ import { Box, Button, Chip, Typography } from "@mui/material";
 import { alpha } from "@mui/material/styles";
 import ShoppingCartOutlinedIcon from "@mui/icons-material/ShoppingCartOutlined";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
+import { productDisplayName } from "@/lib/products/product-display-name";
 import { productPhotoPublicUrl } from "@/lib/products/storage";
 import { useAppLocale } from "@/lib/i18n/useAppFormat";
 import { formatShopPriceDh } from "@/lib/shop/format-price";
 import {
+  cartLineKey,
   getProductCartLine,
   readCartFromStorage,
   removeProductFromCart,
   upsertCartLine,
   writeCartToStorage,
 } from "@/lib/shop/cart-storage";
+import { pruneCartLinesByProductIds } from "@/lib/shop/cart-prune";
 import {
   readFulfillmentFromStorage,
   writeFulfillmentToStorage,
@@ -45,12 +48,23 @@ import type { ShopCartLine, ShopCategoryGroup, ShopProduct } from "@/lib/shop/ty
 import ShopShell from "@/app/shop/ShopShell";
 import ShopProductCard from "@/app/shop/ShopProductCard";
 import ShopCartPanel, { buildCartLineFromProduct } from "@/app/shop/ShopCartPanel";
-import ShopFulfillmentSelector from "@/app/shop/ShopFulfillmentSelector";
-import ShopPaymentSelector from "@/app/shop/ShopPaymentSelector";
+import ShopCommentDialog from "@/app/shop/ShopCommentDialog";
+import {
+  clearCartSessionStorage,
+  readCartSessionFromStorage,
+  writeCartSessionToStorage,
+} from "@/lib/shop/cart-session-storage";
+import { syncShopCartToServer } from "@/lib/shop/cart-sync-client";
+import { getOrCreateShopVisitorKey } from "@/lib/shop/analytics-client";
 import { useShopAnalytics } from "@/lib/shop/useShopAnalytics";
 import type { ShopFulfillmentMode } from "@/lib/shop/livraison-types";
 import { ARABIC_FONT_FAMILY } from "@/lib/fonts/noto-sans-arabic";
 import { shopSloganScript } from "@/lib/fonts/shop-slogan-script";
+
+type CommentDialogTarget = {
+  productId: string;
+  shopOrderUnitId: string | null;
+};
 
 type Props = {
   initialGroups: ShopCategoryGroup[];
@@ -94,6 +108,8 @@ export default function ShopOrderClient({
   const [fulfillmentMode, setFulfillmentMode] = useState<ShopFulfillmentMode | null>(null);
   const [orderComment, setOrderComment] = useState("");
   const [paymentMethod, setPaymentMethod] = useState<ShopPaymentMethod | null>(null);
+  const [cartNumber, setCartNumber] = useState<number | null>(null);
+  const [cartId, setCartId] = useState<string | null>(null);
   const [activeCategoryId, setActiveCategoryId] = useState<string | null>(
     initialGroups[0]?.categoryId ?? null,
   );
@@ -102,6 +118,8 @@ export default function ShopOrderClient({
     {},
   );
   const skipNextWriteRef = useRef(true);
+  const syncTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [commentDialog, setCommentDialog] = useState<CommentDialogTarget | null>(null);
 
   const supabase = useMemo(() => createSupabaseBrowserClient(), []);
   const productById = useMemo(() => {
@@ -112,20 +130,49 @@ export default function ShopOrderClient({
     return map;
   }, [groups]);
 
+  const productPhotoUrlById = useMemo(() => {
+    const map = new Map<string, string | null>();
+    for (const [id, product] of productById) {
+      map.set(id, productPhotoPublicUrl(supabase, product.image_path));
+    }
+    return map;
+  }, [productById, supabase]);
+
+  const applyServerCartLines = useCallback((serverLines: ShopCartLine[]) => {
+    setLines((current) => {
+      const unchanged =
+        current.length === serverLines.length &&
+        current.every((line, index) => cartLineKey(line) === cartLineKey(serverLines[index]!));
+      if (unchanged) return current;
+      skipNextWriteRef.current = true;
+      return serverLines;
+    });
+  }, []);
+
   useLayoutEffect(() => {
+    const validProductIds = new Set(flattenProducts(groups).map((product) => product.id));
     const cart = readCartFromStorage();
-    setLines(cart.lines);
+    const pruned = pruneCartLinesByProductIds(cart.lines, validProductIds);
+    setLines(pruned);
+    if (pruned.length !== cart.lines.length) {
+      writeCartToStorage({ lines: pruned });
+    }
     const unitFromCart: Record<string, string | null> = {};
-    for (const line of cart.lines) {
+    for (const line of pruned) {
       unitFromCart[line.productId] = line.shopOrderUnitId;
     }
     setSelectedUnitByProduct(unitFromCart);
     setFulfillmentMode(readFulfillmentFromStorage().mode);
     setOrderComment(readOrderCommentFromStorage());
     setPaymentMethod(readPaymentFromStorage().method);
+    const session = readCartSessionFromStorage();
+    if (session) {
+      setCartId(session.cartId);
+      setCartNumber(session.cartNumber);
+    }
     setHydrated(true);
     skipNextWriteRef.current = true;
-  }, []);
+  }, [groups]);
 
   useEffect(() => {
     if (!hydrated) return;
@@ -135,6 +182,50 @@ export default function ShopOrderClient({
     }
     writeCartToStorage({ lines });
   }, [lines, hydrated]);
+
+  useEffect(() => {
+    if (!hydrated) return;
+
+    if (syncTimerRef.current) clearTimeout(syncTimerRef.current);
+
+    if (lines.length === 0) return;
+
+    syncTimerRef.current = setTimeout(() => {
+      const visitorKey = getOrCreateShopVisitorKey();
+      if (!visitorKey) return;
+
+      const payload = {
+        visitorKey,
+        lines,
+        fulfillmentMode,
+        paymentMethod,
+        orderComment,
+      };
+
+      if (cartId) {
+        void syncShopCartToServer({ action: "sync", cartId, ...payload }).then((result) => {
+          if (!result) return;
+          setCartId(result.cartId);
+          setCartNumber(result.cartNumber);
+          writeCartSessionToStorage({ cartId: result.cartId, cartNumber: result.cartNumber });
+          applyServerCartLines(result.lines);
+        });
+        return;
+      }
+
+      void syncShopCartToServer({ action: "create", ...payload }).then((result) => {
+        if (!result) return;
+        setCartId(result.cartId);
+        setCartNumber(result.cartNumber);
+        writeCartSessionToStorage({ cartId: result.cartId, cartNumber: result.cartNumber });
+        applyServerCartLines(result.lines);
+      });
+    }, 600);
+
+    return () => {
+      if (syncTimerRef.current) clearTimeout(syncTimerRef.current);
+    };
+  }, [lines, fulfillmentMode, paymentMethod, orderComment, cartId, hydrated, applyServerCartLines]);
 
   const setOrderCommentPersisted = useCallback((comment: string) => {
     setOrderComment(comment);
@@ -150,6 +241,13 @@ export default function ShopOrderClient({
     setFulfillmentMode(mode);
     writeFulfillmentToStorage({ mode });
   }, []);
+
+  const submitOrder = useCallback(async () => {
+    const visitorKey = getOrCreateShopVisitorKey();
+    if (!visitorKey || !cartId) return;
+    const result = await syncShopCartToServer({ action: "submit", visitorKey, cartId });
+    if (result) applyServerCartLines(result.lines);
+  }, [cartId, applyServerCartLines]);
 
   useShopAnalytics({ lines, hydrated });
 
@@ -206,8 +304,16 @@ export default function ShopOrderClient({
       const product = productById.get(productId);
       if (!product) return;
       setLines((prev) => {
+        const existing = getProductCartLine(prev, productId);
         const without = removeProductFromCart(prev, productId);
-        const line = buildCartLineFromProduct(product, shopOrderUnitId, qty, locale);
+        const line = buildCartLineFromProduct(
+          product,
+          shopOrderUnitId,
+          qty,
+          locale,
+          undefined,
+          existing?.comment,
+        );
         const next = upsertCartLine(without, line);
         if (qty <= 0 && next.length === 0) {
           setCartOpen(false);
@@ -216,6 +322,68 @@ export default function ShopOrderClient({
       });
     },
     [productById, locale],
+  );
+
+  const updateLineComment = useCallback(
+    (productId: string, shopOrderUnitId: string | null, comment: string) => {
+      setLines((prev) => {
+        const idx = prev.findIndex(
+          (l) => l.productId === productId && l.shopOrderUnitId === shopOrderUnitId,
+        );
+        if (idx < 0) return prev;
+        const next = [...prev];
+        next[idx] = { ...next[idx], comment };
+        return next;
+      });
+    },
+    [],
+  );
+
+  const openLineComment = useCallback((productId: string, shopOrderUnitId: string | null) => {
+    setCommentDialog({ productId, shopOrderUnitId });
+  }, []);
+
+  const clearProductFromCart = useCallback(
+    (product: ShopProduct) => {
+      const line = getProductCartLine(lines, product.id);
+      if (!line) return;
+      updateLine(product.id, line.shopOrderUnitId, 0);
+    },
+    [lines, updateLine],
+  );
+
+  const openProductComment = useCallback(
+    (product: ShopProduct) => {
+      const line = getProductCartLine(lines, product.id);
+      if (!line) return;
+      openLineComment(product.id, line.shopOrderUnitId);
+    },
+    [lines, openLineComment],
+  );
+
+  const commentDialogMeta = useMemo(() => {
+    if (!commentDialog) return null;
+    const product = productById.get(commentDialog.productId);
+    const line = lines.find(
+      (l) =>
+        l.productId === commentDialog.productId &&
+        l.shopOrderUnitId === commentDialog.shopOrderUnitId,
+    );
+    return {
+      title: t("lineCommentDialogTitle"),
+      subtitle: product ? productDisplayName(product, locale) : null,
+      label: t("lineCommentLabel"),
+      placeholder: t("lineCommentPlaceholder"),
+      value: line?.comment ?? "",
+    };
+  }, [commentDialog, lines, productById, locale, t]);
+
+  const saveCommentDialog = useCallback(
+    (value: string) => {
+      if (!commentDialog) return;
+      updateLineComment(commentDialog.productId, commentDialog.shopOrderUnitId, value);
+    },
+    [commentDialog, updateLineComment],
   );
 
   const addProduct = useCallback(
@@ -323,11 +491,6 @@ export default function ShopOrderClient({
             <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
               {t("subtitle")}
             </Typography>
-            <ShopFulfillmentSelector
-              mode={fulfillmentMode}
-              onChange={setMode}
-              pickupMagasinName={pickupMagasinName}
-            />
           </Box>
 
           {groups.length === 0 ? (
@@ -444,6 +607,7 @@ export default function ShopOrderClient({
                       {subgroup.products.map((product) => {
                         const unitId = getSelectedUnitId(product);
                         const qty = getDisplayedProductQty(lines, product, unitId);
+                        const cartLine = getProductCartLine(lines, product.id);
                         const photoUrl = productPhotoPublicUrl(supabase, product.image_path);
                         return (
                           <ShopProductCard
@@ -452,9 +616,12 @@ export default function ShopOrderClient({
                             photoUrl={photoUrl}
                             qty={qty}
                             selectedShopOrderUnitId={unitId}
+                            lineComment={cartLine?.comment}
                             onSelectUnit={(id) => selectProductUnit(product, id)}
                             onAdd={() => addProduct(product)}
                             onRemove={() => removeProduct(product)}
+                            onClearProduct={() => clearProductFromCart(product)}
+                            onOpenComment={() => openProductComment(product)}
                           />
                         );
                       })}
@@ -509,25 +676,58 @@ export default function ShopOrderClient({
       <ShopCartPanel
         open={cartOpen}
         onClose={() => setCartOpen(false)}
+        cartNumber={cartNumber}
         lines={lines}
         productById={productById}
+        productPhotoUrlById={productPhotoUrlById}
         categoryGroups={groups}
+        fulfillmentMode={fulfillmentMode}
+        onFulfillmentChange={setMode}
+        pickupMagasinName={pickupMagasinName}
         fulfillmentLabel={fulfillmentLabel}
         paymentMethod={paymentMethod}
         onPaymentChange={setPaymentMethodPersisted}
         paymentLabel={paymentLabel}
         orderComment={orderComment}
         onOrderCommentChange={setOrderCommentPersisted}
+        onOpenLineComment={openLineComment}
         onUpdateLine={updateLine}
         onClear={() => {
+          const visitorKey = getOrCreateShopVisitorKey();
+          if (cartId && visitorKey) {
+            void syncShopCartToServer({
+              action: "clear",
+              visitorKey,
+              cartId,
+            });
+          }
           setLines([]);
           setOrderComment("");
           clearOrderCommentStorage();
           setPaymentMethod(null);
           clearPaymentStorage();
+          setFulfillmentMode(null);
+          writeFulfillmentToStorage({ mode: null });
+          setCartId(null);
+          setCartNumber(null);
+          clearCartSessionStorage();
           setCartOpen(false);
         }}
+        onSubmitOrder={submitOrder}
       />
+
+      {commentDialogMeta ? (
+        <ShopCommentDialog
+          open={commentDialog != null}
+          title={commentDialogMeta.title}
+          subtitle={commentDialogMeta.subtitle}
+          value={commentDialogMeta.value}
+          label={commentDialogMeta.label}
+          placeholder={commentDialogMeta.placeholder}
+          onClose={() => setCommentDialog(null)}
+          onSave={saveCommentDialog}
+        />
+      ) : null}
     </>
   );
 }

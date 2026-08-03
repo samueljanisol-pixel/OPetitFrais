@@ -68,6 +68,8 @@ export type ShopCartLine = {
   equivKgAtAdd: number | null;
   /** Masse kg de référence (arrondi UdV ↔ unités pièce sans perte au retour Kg). */
   canonicalKg?: number | null;
+  /** Commentaire optionnel sur la ligne (ex. « bien mûr »). */
+  comment?: string;
 };
 
 export type ShopCartState = {

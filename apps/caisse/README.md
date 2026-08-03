@@ -200,6 +200,7 @@ Package partagé [`@opf/caisse-core`](../../packages/caisse-core) :
 - [x] Panier groupé par catégorie + cache local (restauration après crash)
 - [x] Paniers en attente (mise en attente, rappel, persistance locale)
 - [x] Annulation des ajouts (pile LIFO, bouton rond à droite du clavier)
+- [x] **Commandes boutique** — Menu → liste commandes `a_passer_caisse`, verrou poste, client seul au panier, double impression ticket, lien POS
 - [ ] Sync Supabase / catalogue réel (Phase 2)
 - [ ] Parseur scan code-barres (plus tard)
 - [ ] Auth caissier
@@ -244,6 +245,21 @@ Bouton **Client** : liste des clients actifs, création et modification (FormDia
 Table Supabase `caisse_client` (réseau commun). Client système seed : **1 - LIVRAISON**.
 
 Le client sélectionné est associé au panier ; obligatoire pour le mode paiement **Crédit**. Après **validation du paiement** ou **suppression du panier**, le client est **réinitialisé** (sans client).
+
+## Commandes boutique
+
+Menu → **Commandes boutique** : liste des commandes `a_passer_caisse` pour le magasin/caisse configurés.
+
+**Prérequis backoffice** : les routes `/api/caisse/commandes-boutique/*` doivent être déployées sur l’URL configurée dans `caisse.config.json`. En local : `http://localhost:3000` avec `npm run dev`. En prod : déployer la version du monorepo incluant le module commandes client. Si l’API n’est pas encore en ligne, la caisse affiche une erreur explicite (404) au lieu de « Réseau indisponible ».
+
+1. **Verrou** poste (30 min) — une commande = un caissier à la fois.
+2. Chargement : **client seul** sur le panier (lignes vides) ; badge **Commande #N** visible.
+3. Le caissier pèse et encaisse normalement.
+4. **Double impression** obligatoire (ticket vente + ticket commande boutique) — pas de « Valider sans ticket ».
+5. Crédit client **pré-rempli** mais modifiable ; switch **Livraison** activé si commande livraison.
+6. À la validation : lien API `shop_cart_pos_link` + passage statut `livraison` / `retrait`.
+
+Fichiers : `src/lib/commandes-boutique.ts`, `src/components/CommandesBoutiqueDialog.tsx`, `PaymentDialog` (`linkedShopOrder`).
 
 ## Paiement
 

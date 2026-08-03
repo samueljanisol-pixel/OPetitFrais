@@ -17,3 +17,13 @@ export function nextTicketNumber(magasinCode: string, caisseCode: string): numbe
   window.localStorage.setItem(key, String(next));
   return next;
 }
+
+export function formatTicketReference(
+  magasinCode: string,
+  caisseCode: string,
+  ticketNumber: number,
+): string {
+  const m = magasinCode.replace(/\D/g, "").padStart(2, "0").slice(-2);
+  const c = caisseCode.replace(/\D/g, "").padStart(2, "0").slice(-2);
+  return `M${m}C${c}T${ticketNumber}`;
+}

@@ -1,5 +1,7 @@
 "use client";
 
+import Image from "next/image";
+import ChatBubbleOutlineOutlinedIcon from "@mui/icons-material/ChatBubbleOutlineOutlined";
 import CloseIcon from "@mui/icons-material/Close";
 import ContentCopyOutlinedIcon from "@mui/icons-material/ContentCopyOutlined";
 import DeleteOutlineOutlinedIcon from "@mui/icons-material/DeleteOutlineOutlined";
@@ -7,6 +9,11 @@ import WhatsAppIcon from "@mui/icons-material/WhatsApp";
 import {
   Box,
   Button,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogContentText,
+  DialogTitle,
   Drawer,
   IconButton,
   List,
@@ -36,42 +43,60 @@ import type { ShopCartLine, ShopCategoryGroup, ShopProduct } from "@/lib/shop/ty
 import { buildCategoryMeta, groupCartLinesByCategory } from "@/lib/shop/group-cart-by-category";
 import { cartLineKey } from "@/lib/shop/cart-storage";
 import ShopPaymentSelector from "@/app/shop/ShopPaymentSelector";
+import ShopFulfillmentSelector from "@/app/shop/ShopFulfillmentSelector";
+import ShopLineCommentBubble from "@/app/shop/ShopLineCommentBubble";
 import type { ShopPaymentMethod } from "@/lib/shop/payment-types";
+import type { ShopFulfillmentMode } from "@/lib/shop/livraison-types";
 
 type Props = {
   open: boolean;
   onClose: () => void;
+  cartNumber: number | null;
   lines: ShopCartLine[];
   productById: Map<string, ShopProduct>;
+  productPhotoUrlById: Map<string, string | null>;
   categoryGroups: ShopCategoryGroup[];
+  fulfillmentMode: ShopFulfillmentMode | null;
+  onFulfillmentChange: (mode: ShopFulfillmentMode) => void;
+  pickupMagasinName: string | null;
   fulfillmentLabel?: string | null;
   paymentMethod: ShopPaymentMethod | null;
   onPaymentChange: (method: ShopPaymentMethod) => void;
   paymentLabel?: string | null;
   orderComment: string;
   onOrderCommentChange: (comment: string) => void;
+  onOpenLineComment: (productId: string, shopOrderUnitId: string | null) => void;
   onUpdateLine: (productId: string, shopOrderUnitId: string | null, qty: number) => void;
   onClear: () => void;
+  onSubmitOrder?: () => void | Promise<void>;
 };
 
 export default function ShopCartPanel({
   open,
   onClose,
+  cartNumber,
   lines,
   productById,
+  productPhotoUrlById,
   categoryGroups,
+  fulfillmentMode,
+  onFulfillmentChange,
+  pickupMagasinName,
   fulfillmentLabel = null,
   paymentMethod,
   onPaymentChange,
   paymentLabel = null,
   orderComment,
   onOrderCommentChange,
+  onOpenLineComment,
   onUpdateLine,
   onClear,
+  onSubmitOrder,
 }: Props) {
   const t = useTranslations("shop");
   const locale = useAppLocale();
   const [snack, setSnack] = useState<string | null>(null);
+  const [clearConfirmOpen, setClearConfirmOpen] = useState(false);
 
   const categoryMeta = useMemo(() => buildCategoryMeta(categoryGroups), [categoryGroups]);
 
@@ -85,6 +110,8 @@ export default function ShopCartPanel({
     [lines],
   );
 
+  const canExport = fulfillmentMode != null && paymentMethod != null;
+
   const orderText = useMemo(
     () =>
       buildOrderText(
@@ -93,6 +120,8 @@ export default function ShopCartPanel({
         locale,
         {
           title: t("orderTitle"),
+          cartNumber:
+            cartNumber != null ? t("cartNumberLabel", { number: cartNumber }) : null,
           total: t("estimatedTotal"),
           separator: "──────────────────────",
           uncategorized: t("uncategorized"),
@@ -100,19 +129,36 @@ export default function ShopCartPanel({
           payment: paymentLabel,
           commentLabel: t("orderCommentLabel"),
           comment: orderComment,
+          lineCommentLabel: t("lineCommentLabel"),
         },
         categoryMeta,
       ),
-    [lines, productById, locale, t, categoryMeta, fulfillmentLabel, paymentLabel, orderComment],
+    [
+      lines,
+      productById,
+      locale,
+      t,
+      categoryMeta,
+      cartNumber,
+      fulfillmentLabel,
+      paymentLabel,
+      orderComment,
+    ],
   );
 
   const whatsAppPhone = getShopWhatsAppPhone();
-  const whatsAppHref = isShopWhatsAppConfigured()
-    ? buildWhatsAppUrl(whatsAppPhone, orderText)
-    : null;
+  const whatsAppHref =
+    canExport && isShopWhatsAppConfigured()
+      ? buildWhatsAppUrl(whatsAppPhone, orderText)
+      : null;
 
   const copyList = async () => {
+    if (!canExport) {
+      setSnack(t("exportRequirements"));
+      return;
+    }
     try {
+      await onSubmitOrder?.();
       await navigator.clipboard.writeText(orderText);
       setSnack(t("copied"));
     } catch {
@@ -120,14 +166,25 @@ export default function ShopCartPanel({
     }
   };
 
+  const openWhatsApp = async () => {
+    if (!canExport) {
+      setSnack(t("exportRequirements"));
+      return;
+    }
+    if (!whatsAppHref) {
+      setSnack(t("exportRequirements"));
+      return;
+    }
+    await onSubmitOrder?.();
+    window.open(whatsAppHref, "_blank", "noopener,noreferrer");
+  };
+
   const formatLineQty = (line: ShopCartLine) => formatShopQty(locale, line.qty, line.unitCode);
 
-  const goChangeFulfillment = useCallback(() => {
-    onClose();
-    window.setTimeout(() => {
-      window.scrollTo({ top: 0, behavior: "smooth" });
-    }, 280);
-  }, [onClose]);
+  const handleClearConfirm = useCallback(() => {
+    setClearConfirmOpen(false);
+    onClear();
+  }, [onClear]);
 
   return (
     <>
@@ -141,55 +198,21 @@ export default function ShopCartPanel({
           <Box sx={{ display: "flex", alignItems: "center", mb: 1 }}>
             <Typography variant="h6" sx={{ flex: 1, fontWeight: 700 }}>
               {t("cart")}
+              {cartNumber != null ? (
+                <Typography
+                  component="span"
+                  variant="body2"
+                  color="text.secondary"
+                  sx={{ ml: 1, fontWeight: 600 }}
+                >
+                  #{cartNumber}
+                </Typography>
+              ) : null}
             </Typography>
             <IconButton aria-label={t("close")} onClick={onClose} edge="end">
               <CloseIcon />
             </IconButton>
           </Box>
-
-          {fulfillmentLabel ? (
-            <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-              {fulfillmentLabel}{" "}
-              <Box
-                component="button"
-                type="button"
-                onClick={goChangeFulfillment}
-                sx={{
-                  color: "success.dark",
-                  fontWeight: 700,
-                  textDecoration: "underline",
-                  border: "none",
-                  bgcolor: "transparent",
-                  cursor: "pointer",
-                  p: 0,
-                  font: "inherit",
-                }}
-              >
-                {t("fulfillment.change")}
-              </Box>
-            </Typography>
-          ) : (
-            <Typography variant="body2" color="warning.dark" sx={{ mb: 1 }}>
-              {t("fulfillment.missingInCart")}{" "}
-              <Box
-                component="button"
-                type="button"
-                onClick={goChangeFulfillment}
-                sx={{
-                  fontWeight: 700,
-                  textDecoration: "underline",
-                  border: "none",
-                  bgcolor: "transparent",
-                  cursor: "pointer",
-                  p: 0,
-                  font: "inherit",
-                  color: "inherit",
-                }}
-              >
-                {t("fulfillment.choose")}
-              </Box>
-            </Typography>
-          )}
 
           {lines.length === 0 ? (
             <Typography color="text.secondary" sx={{ py: 4, textAlign: "center" }}>
@@ -230,62 +253,125 @@ export default function ShopCartPanel({
                             `soit ${formatShopKgEstimate(locale, line.qty * line.equivKgAtAdd)}`,
                           );
                         }
+                        const photoUrl = productPhotoUrlById.get(line.productId) ?? null;
                         return (
                           <ListItem
                             key={cartLineKey(line)}
-                            secondaryAction={
-                              <Box sx={{ display: "flex", alignItems: "center", gap: 0.25 }}>
-                                <IconButton
-                                  size="small"
-                                  aria-label="-"
-                                  onClick={() =>
-                                    onUpdateLine(
-                                      line.productId,
-                                      line.shopOrderUnitId,
-                                      subtractQtyByStep(line.qty, step),
-                                    )
-                                  }
-                                >
-                                  −
-                                </IconButton>
-                                <Typography
-                                  variant="body2"
-                                  sx={{ minWidth: "2rem", textAlign: "center", fontWeight: 700 }}
-                                >
-                                  {formatLineQty(line)}
-                                </Typography>
-                                <IconButton
-                                  size="small"
-                                  aria-label="+"
-                                  onClick={() =>
-                                    onUpdateLine(
-                                      line.productId,
-                                      line.shopOrderUnitId,
-                                      addQtyByStep(line.qty, step),
-                                    )
-                                  }
-                                >
-                                  +
-                                </IconButton>
-                                <IconButton
-                                  size="small"
-                                  color="error"
-                                  aria-label={t("removeProduct")}
-                                  onClick={() =>
-                                    onUpdateLine(line.productId, line.shopOrderUnitId, 0)
-                                  }
-                                  sx={{ ml: 0.25 }}
-                                >
-                                  <DeleteOutlineOutlinedIcon fontSize="small" />
-                                </IconButton>
-                              </Box>
-                            }
-                            sx={{ pr: 15 }}
+                            disableGutters
+                            sx={{
+                              py: 1,
+                              px: 0,
+                              alignItems: "flex-start",
+                              gap: 1,
+                              borderBottom: "1px solid",
+                              borderColor: "divider",
+                            }}
                           >
+                            <Box
+                              sx={{
+                                position: "relative",
+                                width: 52,
+                                height: 52,
+                                flexShrink: 0,
+                                borderRadius: 1,
+                                bgcolor: "grey.50",
+                                border: "1px solid",
+                                borderColor: "divider",
+                                overflow: "hidden",
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "center",
+                              }}
+                            >
+                              {photoUrl ? (
+                                <Image
+                                  src={photoUrl}
+                                  alt=""
+                                  fill
+                                  className="object-contain"
+                                  sizes="52px"
+                                />
+                              ) : (
+                                <Typography variant="caption" color="text.secondary" sx={{ fontSize: "0.65rem" }}>
+                                  —
+                                </Typography>
+                              )}
+                            </Box>
                             <ListItemText
+                              sx={{ flex: 1, m: 0, minWidth: 0 }}
                               primary={productDisplayName(product, locale)}
+                              slotProps={{
+                                primary: { sx: { fontWeight: 600, fontSize: "0.875rem" } },
+                              }}
                               secondary={secondaryParts.join(" — ")}
                             />
+                            <Box sx={{ display: "flex", alignItems: "center", gap: 0.25, flexShrink: 0 }}>
+                              {line.comment?.trim() ? (
+                                <ShopLineCommentBubble
+                                  comment={line.comment}
+                                  onClick={() =>
+                                    onOpenLineComment(line.productId, line.shopOrderUnitId)
+                                  }
+                                  maxWidth={100}
+                                />
+                              ) : null}
+                              <IconButton
+                                size="small"
+                                aria-label={
+                                  line.comment?.trim()
+                                    ? t("lineCommentEdit")
+                                    : t("lineCommentAdd")
+                                }
+                                color={line.comment?.trim() ? "success" : "default"}
+                                onClick={() =>
+                                  onOpenLineComment(line.productId, line.shopOrderUnitId)
+                                }
+                              >
+                                <ChatBubbleOutlineOutlinedIcon fontSize="small" />
+                              </IconButton>
+                              <IconButton
+                                size="small"
+                                aria-label="-"
+                                onClick={() =>
+                                  onUpdateLine(
+                                    line.productId,
+                                    line.shopOrderUnitId,
+                                    subtractQtyByStep(line.qty, step),
+                                  )
+                                }
+                              >
+                                −
+                              </IconButton>
+                              <Typography
+                                variant="body2"
+                                sx={{ minWidth: "2rem", textAlign: "center", fontWeight: 700 }}
+                              >
+                                {formatLineQty(line)}
+                              </Typography>
+                              <IconButton
+                                size="small"
+                                aria-label="+"
+                                onClick={() =>
+                                  onUpdateLine(
+                                    line.productId,
+                                    line.shopOrderUnitId,
+                                    addQtyByStep(line.qty, step),
+                                  )
+                                }
+                              >
+                                +
+                              </IconButton>
+                              <IconButton
+                                size="small"
+                                color="error"
+                                aria-label={t("removeProduct")}
+                                onClick={() =>
+                                  onUpdateLine(line.productId, line.shopOrderUnitId, 0)
+                                }
+                              >
+                                <DeleteOutlineOutlinedIcon fontSize="small" />
+                              </IconButton>
+                            </Box>
                           </ListItem>
                         );
                       })}
@@ -297,6 +383,14 @@ export default function ShopCartPanel({
               <Typography variant="subtitle1" sx={{ mt: 2, mb: 1, fontWeight: 700 }}>
                 {t("estimatedTotal")} : {formatShopPriceDh(locale, total, true)}
               </Typography>
+
+              <ShopFulfillmentSelector
+                mode={fulfillmentMode}
+                onChange={onFulfillmentChange}
+                pickupMagasinName={pickupMagasinName}
+              />
+
+              <ShopPaymentSelector method={paymentMethod} onChange={onPaymentChange} />
 
               <TextField
                 label={t("orderCommentLabel")}
@@ -311,7 +405,11 @@ export default function ShopCartPanel({
                 sx={{ mb: 1.5 }}
               />
 
-              <ShopPaymentSelector method={paymentMethod} onChange={onPaymentChange} />
+              {!canExport ? (
+                <Typography variant="body2" color="warning.dark" sx={{ mb: 1 }}>
+                  {t("exportRequirements")}
+                </Typography>
+              ) : null}
 
               <Box sx={{ display: "flex", flexDirection: "column", gap: 1 }}>
                 {whatsAppHref ? (
@@ -319,15 +417,23 @@ export default function ShopCartPanel({
                     variant="contained"
                     color="success"
                     startIcon={<WhatsAppIcon />}
-                    component="a"
-                    href={whatsAppHref}
-                    target="_blank"
-                    rel="noopener noreferrer"
+                    onClick={() => void openWhatsApp()}
                     fullWidth
                   >
                     {t("sendWhatsApp")}
                   </Button>
-                ) : null}
+                ) : (
+                  <Button
+                    variant="contained"
+                    color="success"
+                    startIcon={<WhatsAppIcon />}
+                    onClick={() => setSnack(t("exportRequirements"))}
+                    disabled={!isShopWhatsAppConfigured()}
+                    fullWidth
+                  >
+                    {t("sendWhatsApp")}
+                  </Button>
+                )}
                 <Button
                   variant="outlined"
                   color="success"
@@ -337,7 +443,12 @@ export default function ShopCartPanel({
                 >
                   {t("copyList")}
                 </Button>
-                <Button variant="text" color="inherit" onClick={onClear} fullWidth>
+                <Button
+                  variant="text"
+                  color="inherit"
+                  onClick={() => setClearConfirmOpen(true)}
+                  fullWidth
+                >
                   {t("clearCart")}
                 </Button>
               </Box>
@@ -345,6 +456,19 @@ export default function ShopCartPanel({
           )}
         </Box>
       </Drawer>
+
+      <Dialog open={clearConfirmOpen} onClose={() => setClearConfirmOpen(false)}>
+        <DialogTitle>{t("clearCartConfirmTitle")}</DialogTitle>
+        <DialogContent>
+          <DialogContentText>{t("clearCartConfirmMessage")}</DialogContentText>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setClearConfirmOpen(false)}>{t("clearCartCancel")}</Button>
+          <Button onClick={handleClearConfirm} color="error" variant="contained">
+            {t("clearCartConfirm")}
+          </Button>
+        </DialogActions>
+      </Dialog>
 
       <Snackbar
         open={snack != null}
@@ -363,6 +487,7 @@ export function buildCartLineFromProduct(
   qty: number,
   locale: AppLocale,
   canonicalKg?: number | null,
+  comment?: string,
 ): ShopCartLine {
   const option = findShopOption(product, shopOrderUnitId);
   const unitLabel = option ? shopOptionLabel(option, locale) : "";
@@ -378,5 +503,6 @@ export function buildCartLineFromProduct(
     equivKgAtAdd:
       shopOrderUnitId != null && option?.equivKg != null ? option.equivKg : null,
     canonicalKg: resolvedCanonicalKg,
+    comment,
   };
 }

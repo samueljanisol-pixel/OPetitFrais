@@ -25,6 +25,7 @@ type Props = {
   onRefreshPrices: () => void;
   onSendSaurusPrices: () => void;
   onReprintLastTicket: () => void;
+  onOpenCommandesBoutique?: () => void;
   onOpenSettings: () => void;
   onQuitApp: () => void;
 };
@@ -39,6 +40,7 @@ export default function MenuDialog({
   onRefreshPrices,
   onSendSaurusPrices,
   onReprintLastTicket,
+  onOpenCommandesBoutique,
   onOpenSettings,
   onQuitApp,
 }: Props) {
@@ -105,6 +107,20 @@ export default function MenuDialog({
             </Typography>
           ) : null}
         </Box>
+        {onOpenCommandesBoutique ? (
+          <Button
+            variant="outlined"
+            size="large"
+            fullWidth
+            onClick={() => {
+              onOpenCommandesBoutique();
+              onClose();
+            }}
+            sx={{ justifyContent: "flex-start", py: 1.25, fontWeight: 700 }}
+          >
+            Commandes boutique
+          </Button>
+        ) : null}
         <Button
           variant="outlined"
           size="large"

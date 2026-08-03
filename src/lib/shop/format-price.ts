@@ -37,6 +37,42 @@ export function formatShopQtyWithUnitLabel(
   return `${qtyFormatted} × ${unit}`;
 }
 
+export type ShopLineQtyFields = {
+  qty: number;
+  unitCode?: string;
+  unitLabel?: string;
+  shopOrderUnitId?: string | null;
+  equivKgAtAdd?: number | null;
+};
+
+/** Libellé quantité commande boutique (ex. « 2 × 1 pièce », « 1,5 kg »). */
+export function formatShopLineQtyParts(
+  line: ShopLineQtyFields,
+  locale: AppLocale,
+): { qtyLabel: string; kgHint: string | null } {
+  const unitCode = line.unitCode ?? "unit";
+  const formatted = formatShopQty(locale, line.qty, unitCode);
+  const unit = (line.unitLabel ?? "").trim() || (unitCode === "kg" ? "kg" : "unité");
+  const qtyLabel = formatShopQtyWithUnitLabel(
+    formatted,
+    unit,
+    line.shopOrderUnitId ?? null,
+    unitCode,
+  );
+  let kgHint: string | null = null;
+  if (line.equivKgAtAdd != null && line.equivKgAtAdd > 0 && line.shopOrderUnitId != null) {
+    const totalKg = line.qty * line.equivKgAtAdd;
+    const soit = locale === "ar-MA" ? "أي" : "soit";
+    kgHint = `${soit} ${formatShopKgEstimate(locale, totalKg)}`;
+  }
+  return { qtyLabel, kgHint };
+}
+
+export function formatShopLineQtyLabel(line: ShopLineQtyFields, locale: AppLocale): string {
+  const { qtyLabel, kgHint } = formatShopLineQtyParts(line, locale);
+  return kgHint ? `${qtyLabel} (${kgHint})` : qtyLabel;
+}
+
 export function formatShopKgEstimate(locale: AppLocale, kg: number): string {
   const formatted = formatNumber(locale, kg, {
     minimumFractionDigits: kg % 1 !== 0 ? 1 : 0,

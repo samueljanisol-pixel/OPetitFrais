@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type { SessionPayload } from "@/lib/auth/session-types";
 import { buildSessionDisplayLabel } from "@/lib/auth/display-label";
+import { normalizeProfileRole } from "@/lib/auth/normalize-profile-role";
 import { loadMagasinsForUser } from "@/lib/magasins/load-magasins-for-user";
 import { normalizeLocale } from "@/i18n/config";
 
@@ -23,7 +24,13 @@ export async function GET() {
       .eq("user_id", user.id)
       .maybeSingle();
 
-    const role = profile?.roles as { name: string; slug: string; is_full_access: boolean } | null | undefined;
+    const role = normalizeProfileRole(
+      profile?.roles as
+        | { name: string; slug: string; is_full_access: boolean }
+        | { name: string; slug: string; is_full_access: boolean }[]
+        | null
+        | undefined,
+    );
 
     const meta = (user.user_metadata ?? {}) as Record<string, unknown>;
     const metaStr = (k: string) => {
@@ -42,7 +49,12 @@ export async function GET() {
     const { magasins, restricted: magasinsRestricted } = await loadMagasinsForUser(
       supabase,
       user.id,
-      role,
+      role
+        ? {
+            slug: role.slug ?? null,
+            is_full_access: role.is_full_access === true,
+          }
+        : null,
     );
 
     const displayLabel = buildSessionDisplayLabel(

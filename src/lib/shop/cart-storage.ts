@@ -21,6 +21,7 @@ function parseLine(raw: unknown): ShopCartLine | null {
     l.equivKgAtAdd === null || typeof l.equivKgAtAdd === "number" ? l.equivKgAtAdd : null;
   const canonicalKg =
     l.canonicalKg === null || typeof l.canonicalKg === "number" ? l.canonicalKg : null;
+  const comment = typeof l.comment === "string" ? l.comment : undefined;
   return {
     productId: l.productId,
     shopOrderUnitId,
@@ -30,6 +31,7 @@ function parseLine(raw: unknown): ShopCartLine | null {
     priceAtAdd: l.priceAtAdd,
     equivKgAtAdd,
     canonicalKg,
+    comment,
   };
 }
 
@@ -69,7 +71,11 @@ export function upsertCartLine(lines: ShopCartLine[], line: ShopCartLine): ShopC
   }
   if (idx < 0) return [...lines, line];
   const next = [...lines];
-  next[idx] = line;
+  const existing = next[idx];
+  next[idx] = {
+    ...line,
+    comment: line.comment !== undefined ? line.comment : existing.comment,
+  };
   return next;
 }
 

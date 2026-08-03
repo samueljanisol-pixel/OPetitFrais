@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 import { canAccessPath } from "@/lib/auth/route-permissions";
+import { normalizeProfileRole } from "@/lib/auth/normalize-profile-role";
 import { backofficeUrl, isBackofficeOnlyPath, isShopHost, isShopLocalPreviewPath, isShopOnlyPath, shopLocalPreviewUrl, shopPublicUrl } from "@/lib/shop/hosts";
 
 const PUBLIC_PATHS = ["/login", "/api", "/_next", "/favicon.ico", "/manifest.webmanifest", "/sw.js", "/icons", "/icon.png"];
@@ -78,8 +79,10 @@ export async function proxy(req: NextRequest) {
     .eq("user_id", data.user.id)
     .maybeSingle();
 
-  const isFullAccess =
-    (prof?.roles as { is_full_access?: boolean } | null | undefined)?.is_full_access ?? true;
+  const role = normalizeProfileRole(
+    prof?.roles as { is_full_access?: boolean } | { is_full_access?: boolean }[] | null | undefined,
+  );
+  const isFullAccess = role?.is_full_access === true;
 
   if (!canAccessPath(pathname, keys, isFullAccess)) {
     const deny = req.nextUrl.clone();

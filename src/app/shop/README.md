@@ -5,15 +5,15 @@ Page publique de commande pour les clients particuliers. Accessible sur le domai
 ## Fonctionnement
 
 1. Catalogue produits **actifs** et **visible vitrine** (`active = true`, `visible_vitrine = true`), groupés par catégorie puis sous-catégorie. L’ordre des catégories suit `ref_category.sort_order` (réglable dans Paramètres → Catégories). Barre catégories sticky : chips centrés ; pastille compteur panier **en superposition** (coin supérieur droit), sans modifier la taille du chip.
-2. En-tête boutique : slogan **« Qualité et Fraîcheur au quotidien »** + choix **retrait magasin** / **livraison à domicile** (localStorage `opf-shop-fulfillment-v1`, repris dans le message WhatsApp).
+2. **Numéro de panier interne** : chaque panier reçoit un numéro séquentiel (`shop_cart.cart_number`, affiché `#1001`…) synchronisé via `POST /api/shop/cart/sync`. Repris dans le texte copié et le message WhatsApp. Vider le panier (avec confirmation) clôt le panier en base (`status = cleared`) et le prochain ajout crée un **nouveau numéro**.
 3. Le client ajoute des produits au panier :
    - Options = **UdV** (si autorisée) + **unités de commande vitrine** cochées sur le produit (même sans poids pièce ; dans ce cas pas d’estimation « ~X kg / pièce » ni « soit ~X kg »).
    - Favori produit pré-sélectionné sur la carte.
    - **Une seule unité par produit** dans le panier : changement Kg ↔ Botte via le **poids de référence** (`piece_weight_kg` × `piece_qty`). La masse kg est mémorisée (`canonicalKg`) : ex. 2,5 Kg → 3 Botte (~1 kg/botte) → retour Kg = **2,5 Kg**.
    - **Kg** (UdV) : pas de 0,5 kg ; autres unités : pas de 1.
    - Prix catalogue affiché **au kg** (UdV) sur la carte ; poids pièce avec `~` ; total panier / WhatsApp estimés (`piece_qty × poids × prix/kg`).
-4. Panier stocké **uniquement en cache navigateur** (`localStorage`, clé `opf-shop-cart-v2`) — lignes clés `(produit, unité vitrine|UdV)`. Barre fixe : **Voir mon panier · N produits · ~total DH** (WhatsApp depuis le drawer panier uniquement).
-5. Export : copier la liste texte ou ouvrir WhatsApp avec le message pré-rempli (libellé + mode retrait/livraison + **paiement** + total + commentaire optionnel).
+4. Panier stocké en **localStorage** (`opf-shop-cart-v2`) et **synchronisé serveur** (`shop_cart`) — commentaire produit via **`ShopCommentDialog`** + bulle **`ShopLineCommentBubble`** (vignette et panier) ; commentaire commande **inline** dans le drawer. Les lignes dont le produit n’est plus **actif** ou **visible vitrine** sont retirées **uniquement des paniers en cours** (`status = active`, non soumis) : localStorage, sync API, trigger Postgres sur `product`. **Les commandes envoyées** (`status = submitted`) **conservent toutes leurs lignes**, y compris si le produit est désactivé ensuite.
+5. Export : copier la liste texte ou ouvrir WhatsApp (numéro panier + mode livraison + **paiement** + lignes avec commentaires + total + commentaire commande). Au **premier export**, le panier est **soumis** côté serveur (`action = submit` → `status = submitted`, `payment_status = unpaid`) pour le rattachement client en backoffice ([`/clients`](../clients/README.md)).
 6. Page **`/livraison`** : carte (zone + magasins), vérif GPS / pin, contact boutique (appel / WhatsApp). API `GET /api/shop/livraison`.
 7. **Statistiques anonymes** : heartbeat vers `POST /api/shop/analytics/heartbeat` (visiteur UUID en localStorage). Consultation backoffice : [`/boutique/stats`](../boutique/stats/README.md) (permission `shop.read`).
 
@@ -22,14 +22,19 @@ Page publique de commande pour les clients particuliers. Accessible sur le domai
 | Fichier | Rôle |
 |---------|------|
 | `ShopOrderPage.tsx` | Server : catalogue + nom magasin retrait |
-| `ShopOrderClient.tsx` | Client : slogan, mode livraison, grille, panier |
-| `ShopFulfillmentSelector.tsx` | Choix retrait / livraison domicile |
+| `ShopOrderClient.tsx` | Client : slogan, grille, panier, sync serveur |
+| `ShopFulfillmentSelector.tsx` | Choix retrait / livraison (drawer panier) |
 | `ShopShell.tsx` | Header boutique (logo, langue, panier) |
 | `ShopProductCard.tsx` | Carte produit : quantité + **unité de vente** sélectionnée, boutons +/- centrés |
 | `ShopPaymentSelector.tsx` | Choix paiement Espèce / Carte Bancaire (panier) |
-| `ShopCartPanel.tsx` | Drawer panier + export ; suppression ligne (icône poubelle) |
+| `ShopCartPanel.tsx` | Drawer panier + export ; commentaires via dialogue |
+| `ShopLineCommentBubble.tsx` | Bulle commentaire produit (vignette + panier) |
+| `ShopCommentDialog.tsx` | Fenêtre commentaire produit (`FormDialog`) |
 | `../livraison/` | Page carte zone / magasins / contact |
 | `src/lib/shop/*` | Hosts, catalogue, panier, livraison, format export, analytics |
+| `src/lib/shop/cart-prune.ts` | Retrait lignes panier (produit inactif / hors vitrine) |
+| `src/lib/shop/cart-sync-*.ts` | Sync panier → `shop_cart` |
+| `src/app/api/shop/cart/sync/route.ts` | API création / mise à jour / clôture / **soumission** panier |
 | `src/app/page.tsx` | Route `/` selon le domaine (shop vs backoffice) |
 | `src/proxy.ts` | Host boutique ; redirect `/livraison` hors shop → domaine boutique |
 

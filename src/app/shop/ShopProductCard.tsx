@@ -3,8 +3,11 @@
 import Image from "next/image";
 import { useMemo } from "react";
 import AddIcon from "@mui/icons-material/Add";
+import ChatBubbleOutlineOutlinedIcon from "@mui/icons-material/ChatBubbleOutlineOutlined";
+import DeleteOutlineOutlinedIcon from "@mui/icons-material/DeleteOutlineOutlined";
 import RemoveIcon from "@mui/icons-material/Remove";
 import { Box, Chip, IconButton, Typography } from "@mui/material";
+import { useTranslations } from "next-intl";
 import {
   findShopOption,
   resolveShopOrderOptions,
@@ -19,15 +22,19 @@ import { useAppLocale } from "@/lib/i18n/useAppFormat";
 import { productDisplayName } from "@/lib/products/product-display-name";
 import { labelFromRefForLocale } from "@/lib/commandes-fournisseur/product-display";
 import type { ShopProduct } from "@/lib/shop/types";
+import ShopLineCommentBubble from "@/app/shop/ShopLineCommentBubble";
 
 type Props = {
   product: ShopProduct;
   photoUrl: string | null;
   qty: number;
   selectedShopOrderUnitId: string | null;
+  lineComment?: string | null;
   onSelectUnit: (shopOrderUnitId: string | null) => void;
   onAdd: () => void;
   onRemove: () => void;
+  onClearProduct?: () => void;
+  onOpenComment?: () => void;
 };
 
 export default function ShopProductCard({
@@ -35,15 +42,20 @@ export default function ShopProductCard({
   photoUrl,
   qty,
   selectedShopOrderUnitId,
+  lineComment = null,
   onSelectUnit,
   onAdd,
   onRemove,
+  onClearProduct,
+  onOpenComment,
 }: Props) {
+  const t = useTranslations("shop");
   const locale = useAppLocale();
   const label = productDisplayName(product, locale);
   const options = useMemo(() => resolveShopOrderOptions(product), [product]);
   const option = findShopOption(product, selectedShopOrderUnitId) ?? options[0] ?? null;
   const inCart = qty > 0;
+  const hasComment = Boolean(lineComment?.trim());
   const qtyNumber = option ? formatShopQty(locale, qty, option.unitCode) : "0";
   const qtyUnitLabel = option ? shopOptionLabel(option, locale) : "";
   const priceUnitLabel = labelFromRefForLocale(product.ref_sales_unit, locale);
@@ -55,6 +67,7 @@ export default function ShopProductCard({
   return (
     <Box
       sx={{
+        position: "relative",
         display: "flex",
         flexDirection: "column",
         height: "100%",
@@ -88,6 +101,68 @@ export default function ShopProductCard({
             —
           </Typography>
         )}
+        {inCart && onClearProduct ? (
+          <IconButton
+            size="small"
+            aria-label={t("removeProduct")}
+            onClick={onClearProduct}
+            sx={{
+              position: "absolute",
+              top: 4,
+              left: 4,
+              width: 28,
+              height: 28,
+              bgcolor: "rgba(255,255,255,0.92)",
+              border: "1px solid",
+              borderColor: "error.light",
+              color: "error.main",
+              boxShadow: "0 1px 3px rgba(0,0,0,0.12)",
+              "&:hover": { bgcolor: "error.light", color: "error.dark" },
+            }}
+          >
+            <DeleteOutlineOutlinedIcon sx={{ fontSize: 16 }} />
+          </IconButton>
+        ) : null}
+        {inCart && onOpenComment ? (
+          <Box
+            sx={{
+              position: "absolute",
+              top: 4,
+              right: 4,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "flex-end",
+              gap: 0.25,
+              maxWidth: "calc(100% - 8px)",
+            }}
+          >
+            {hasComment ? (
+              <ShopLineCommentBubble
+                comment={lineComment ?? ""}
+                onClick={onOpenComment}
+                maxWidth={100}
+              />
+            ) : null}
+            <IconButton
+              size="small"
+              aria-label={hasComment ? t("lineCommentEdit") : t("lineCommentAdd")}
+              onClick={onOpenComment}
+              sx={{
+                width: 28,
+                height: 28,
+                flexShrink: 0,
+                bgcolor: "rgba(255,255,255,0.92)",
+                border: "1px solid",
+                borderColor: hasComment ? "success.light" : "divider",
+                color: hasComment ? "success.dark" : "text.secondary",
+                boxShadow: "0 1px 3px rgba(0,0,0,0.12)",
+                "&:hover": { bgcolor: "rgba(236, 253, 245, 0.95)" },
+              }}
+            >
+              <ChatBubbleOutlineOutlinedIcon sx={{ fontSize: 16 }} />
+            </IconButton>
+          </Box>
+        ) : null}
       </Box>
 
       <Box sx={{ flex: 1, display: "flex", flexDirection: "column", px: 0.875, pt: 0.375, pb: 0.75, gap: 0.375 }}>

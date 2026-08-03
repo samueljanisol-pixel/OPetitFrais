@@ -10,7 +10,7 @@ import {
   Alert,
 } from "@mui/material";
 import CloseOutlinedIcon from "@mui/icons-material/CloseOutlined";
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   formatMoneyDh,
   formatMoneyDhFixed,
@@ -291,6 +291,7 @@ type Props = {
   open: boolean;
   totalDue: number;
   clientId: string | null;
+  linkedShopOrder?: boolean;
   onClose: () => void;
   onValidate: (opts: {
     printTicket: boolean;
@@ -301,7 +302,14 @@ type Props = {
   }) => void;
 };
 
-export default function PaymentDialog({ open, totalDue, clientId, onClose, onValidate }: Props) {
+export default function PaymentDialog({
+  open,
+  totalDue,
+  clientId,
+  linkedShopOrder = false,
+  onClose,
+  onValidate,
+}: Props) {
   const [mode, setMode] = useState<PaymentMode>("cash");
   const [rows, setRows] = useState<PaymentRow[]>([]);
   const [selectedRowId, setSelectedRowId] = useState<string | null>(null);
@@ -310,6 +318,23 @@ export default function PaymentDialog({ open, totalDue, clientId, onClose, onVal
   const [creditWarning, setCreditWarning] = useState(false);
   /** Après sélection d'une ligne : la 1ʳᵉ touche remplace le montant affiché. */
   const numpadOverwriteRef = useRef(false);
+
+  useEffect(() => {
+    if (!open || !linkedShopOrder || totalDue <= 0) return;
+    setDelivery(true);
+    setRows([
+      {
+        id: paymentRowId("credit"),
+        mode: "credit",
+        amount: roundMoney(totalDue),
+      },
+    ]);
+    setMode("credit");
+    setNumpad(String(roundMoney(totalDue)));
+    setCreditWarning(false);
+    setSelectedRowId(null);
+    numpadOverwriteRef.current = false;
+  }, [open, linkedShopOrder, totalDue]);
 
   const totalPaid = useMemo(
     () => roundMoney(rows.reduce((s, r) => s + r.amount, 0)),
@@ -810,22 +835,24 @@ export default function PaymentDialog({ open, totalDue, clientId, onClose, onVal
           Livraison {delivery ? "ON" : "OFF"}
         </Button>
         <Box sx={{ display: "flex", gap: 1 }}>
+          {!linkedShopOrder ? (
+            <Button
+              variant="contained"
+              disabled={!canValidate}
+              onClick={() => {
+                onValidate(buildValidatePayload(false));
+                handleClose();
+              }}
+              sx={dialogActionBtnSx}
+            >
+              Valider sans ticket
+            </Button>
+          ) : null}
           <Button
             variant="contained"
             disabled={!canValidate}
             onClick={() => {
-              onValidate(buildValidatePayload(false));
-              handleClose();
-            }}
-            sx={dialogActionBtnSx}
-          >
-            Valider sans ticket
-          </Button>
-          <Button
-            variant="contained"
-            disabled={!canValidate}
-            onClick={() => {
-              onValidate(buildValidatePayload(true));
+              onValidate(buildValidatePayload(linkedShopOrder ? true : true));
               handleClose();
             }}
             sx={dialogActionBtnSx}

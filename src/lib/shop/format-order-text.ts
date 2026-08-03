@@ -9,6 +9,7 @@ export type OrderTextLine = {
   name: string;
   qtyLabel: string;
   lineTotal: number;
+  comment?: string | null;
 };
 
 function formatQtyLabel(line: ShopCartLine, locale: AppLocale): string {
@@ -36,11 +37,13 @@ export type OrderTextLabels = {
   total: string;
   separator: string;
   uncategorized?: string;
+  cartNumber?: string | null;
   fulfillment?: string | null;
   payment?: string | null;
   /** Libellé « Commentaire : » dans le message exporté. */
   commentLabel?: string;
   comment?: string | null;
+  lineCommentLabel?: string;
 };
 
 export type OrderTextCategoryMeta = Map<string, { label: string; sortOrder: number }>;
@@ -56,18 +59,27 @@ function toOrderTextLine(
     name: productDisplayName(product, locale),
     qtyLabel: formatQtyLabel(line, locale),
     lineTotal: line.qty * line.priceAtAdd,
+    comment: line.comment?.trim() || null,
   };
 }
 
 /** Aligne les quantités avec des espaces fixes (même colonne pour toutes les lignes du bloc). */
 export function formatLinesWithFixedSpacing(
-  lines: Pick<OrderTextLine, "name" | "qtyLabel">[],
+  lines: Pick<OrderTextLine, "name" | "qtyLabel" | "comment">[],
+  lineCommentLabel?: string,
 ): string[] {
   if (lines.length === 0) return [];
   const nameWidth = Math.max(...lines.map((l) => l.name.length));
   const gapAfterName = 2;
+  const prefix = lineCommentLabel?.trim();
 
-  return lines.map(({ name, qtyLabel }) => `${name.padEnd(nameWidth + gapAfterName, " ")}${qtyLabel}`);
+  return lines.flatMap(({ name, qtyLabel, comment }) => {
+    const main = `${name.padEnd(nameWidth + gapAfterName, " ")}${qtyLabel}`;
+    const trimmed = comment?.trim();
+    if (!trimmed) return [main];
+    const note = prefix ? `  → ${prefix}: ${trimmed}` : `  → ${trimmed}`;
+    return [main, note];
+  });
 }
 
 export function buildOrderText(
@@ -78,6 +90,9 @@ export function buildOrderText(
   categoryMeta?: OrderTextCategoryMeta,
 ): string {
   const rows: string[] = [labels.title];
+  if (labels.cartNumber?.trim()) {
+    rows.push(labels.cartNumber.trim());
+  }
   if (labels.fulfillment?.trim()) {
     rows.push(labels.fulfillment.trim());
   }
@@ -101,7 +116,7 @@ export function buildOrderText(
       for (const entry of entries) {
         total += entry.lineTotal;
       }
-      rows.push(...formatLinesWithFixedSpacing(entries));
+      rows.push(...formatLinesWithFixedSpacing(entries, labels.lineCommentLabel));
       rows.push("");
     }
     if (rows[rows.length - 1] === "") rows.pop();
@@ -113,7 +128,7 @@ export function buildOrderText(
     for (const entry of entries) {
       total += entry.lineTotal;
     }
-    rows.push(...formatLinesWithFixedSpacing(entries));
+    rows.push(...formatLinesWithFixedSpacing(entries, labels.lineCommentLabel));
   }
 
   rows.push(labels.separator);
