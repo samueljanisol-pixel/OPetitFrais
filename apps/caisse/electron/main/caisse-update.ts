@@ -687,35 +687,41 @@ async function spawnInstaller(installerPath: string): Promise<void> {
   const helperLog = join(tempDir, "opf-caisse-update-launch.log");
   const setupName = installerPath.split(/[/\\]/).pop() || "OPetitFrais-Caisse-Setup.exe";
 
-  // ASCII only.
+  // ASCII only. N'ouvre le setup qu'en secours (explorer l'a deja lance).
+  // Puis une seule relance de la caisse (runAfterFinish NSIS desactive).
   const cmd = [
     "@echo off",
-    "setlocal EnableExtensions",
+    "setlocal EnableExtensions EnableDelayedExpansion",
     `echo %date% %time% helper start>>"${helperLog}"`,
-    "timeout /t 3 /nobreak >nul",
-    `tasklist /FI "IMAGENAME eq ${setupName}" 2>nul | find /I "${setupName}" >nul`,
+    "timeout /t 5 /nobreak >nul",
+    `tasklist 2>nul | find /I "OPetitFrais-Caisse-Setup" >nul`,
     "if errorlevel 1 (",
-    `  echo %date% %time% setup not running - start /wait>>"${helperLog}"`,
+    `  echo %date% %time% setup not seen - fallback start /wait>>"${helperLog}"`,
     `  if exist "${installerPath}" start "OPF Setup" /wait "${installerPath}"`,
     ") else (",
-    `  echo %date% %time% wait until setup exits>>"${helperLog}"`,
+    `  echo %date% %time% wait setup exit>>"${helperLog}"`,
+    "  set /a _wait=0",
     "  :wait_setup",
-    `  tasklist /FI "IMAGENAME eq ${setupName}" 2>nul | find /I "${setupName}" >nul`,
+    `  tasklist 2>nul | find /I "OPetitFrais-Caisse-Setup" >nul`,
     "  if not errorlevel 1 (",
+    "    set /a _wait+=1",
+    "    if !_wait! GEQ 180 goto setup_done",
     "    timeout /t 2 /nobreak >nul",
     "    goto wait_setup",
     "  )",
     ")",
+    ":setup_done",
     `echo %date% %time% setup finished>>"${helperLog}"`,
     `if exist "${installerPath}" del /f /q "${installerPath}" >nul 2>&1`,
-    "timeout /t 1 /nobreak >nul",
-    `echo %date% %time% relaunch app>>"${helperLog}"`,
+    "timeout /t 2 /nobreak >nul",
+    `echo %date% %time% relaunch app once>>"${helperLog}"`,
     `start "" "${appExe}"`,
     "endlocal",
     "",
   ].join("\r\n");
+  const cmdWithDelayed = cmd;
 
-  await fs.writeFile(helperCmd, cmd, "utf8");
+  await fs.writeFile(helperCmd, cmdWithDelayed, "utf8");
   await logUpdate(`helper cmd écrit → ${helperCmd}`);
 
   // Ouvrir le setup tout de suite (survit au quit Electron).

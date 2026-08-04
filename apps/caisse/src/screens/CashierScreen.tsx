@@ -88,8 +88,9 @@ import ClientSelectDialog from "../components/ClientSelectDialog";
 import ProductQtyDialog from "../components/ProductQtyDialog";
 import HoldCartDialog from "../components/HoldCartDialog";
 import MenuDialog from "../components/MenuDialog";
-import CommandesBoutiqueDialog from "../components/CommandesBoutiqueDialog";
-import type { CommandeEncaissementItem } from "../lib/commandes-boutique";
+import CommandesBoutiqueDialog, {
+  type PasserCaissePick,
+} from "../components/CommandesBoutiqueDialog";
 import { fetchClientsFromCache } from "../lib/clients";
 import SettingsDialog from "../components/SettingsDialog";
 import CashierStatusBar from "../components/CashierStatusBar";
@@ -98,7 +99,9 @@ import { formatTicketReference, nextTicketNumber } from "../lib/ticket-counter";
 import {
   fetchCommandeBoutiqueTicketEscPosBase64,
   collectCommandeBoutiquePayment,
+  holdCommandeBoutique,
   linkCommandeBoutique,
+  lockCommandeBoutique,
   unlockCommandeBoutique,
   type CommandeEncaissementItem,
 } from "../lib/commandes-boutique";
@@ -174,9 +177,9 @@ export default function CashierScreen({ onRequestQuit }: { onRequestQuit: () => 
     cartId: string;
     cartNumber: number;
     total: number;
+    clientId: string | null;
   } | null>(null);
-  const [encaissementCartConflict, setEncaissementCartConflict] =
-    useState<CommandeEncaissementItem | null>(null);
+  const [passerCaisseConflict, setPasserCaisseConflict] = useState<PasserCaissePick | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [saurusSending, setSaurusSending] = useState(false);
   const [backofficeUrl, setBackofficeUrl] = useState<string | null>(null);
@@ -752,6 +755,11 @@ export default function CashierScreen({ onRequestQuit }: { onRequestQuit: () => 
               cartId: linkedId,
               ticketRef,
               paymentStatus,
+              lines: cart.lines.map((line) => ({
+                productName: line.productName,
+                qty: line.qty,
+                salesUnit: line.salesUnit,
+              })),
             });
             if (ticket2.base64) {
               const print2 = await printEscPosBase64(ticket2.base64, { ticketPrinter });
@@ -790,10 +798,16 @@ export default function CashierScreen({ onRequestQuit }: { onRequestQuit: () => 
       }
     }
 
+    setPaymentOpen(false);
+
+    if (encaissement) {
+      setEncaissementCheckout(null);
+      return;
+    }
+
     setLinkedShopCartId(null);
     setLinkedShopCartNumber(null);
     setEncaissementCheckout(null);
-    setPaymentOpen(false);
     setCart(clearCart(cart));
     clearCachedCart(magasin, caisseCode);
     clearAddHistory();
@@ -848,8 +862,6 @@ export default function CashierScreen({ onRequestQuit }: { onRequestQuit: () => 
   const releaseLinkedShopOrder = async () => {
     if (encaissementCheckout) {
       setEncaissementCheckout(null);
-      setLinkedShopCartId(null);
-      setLinkedShopCartNumber(null);
       return;
     }
     if (!linkedShopCartId) return;
@@ -865,11 +877,15 @@ export default function CashierScreen({ onRequestQuit }: { onRequestQuit: () => 
   const confirmClearCart = () => {
     void releaseLinkedShopOrder();
     setLastPaymentSummary(null);
+    setLinkedShopCartId(null);
+    setLinkedShopCartNumber(null);
+    setEncaissementCheckout(null);
     setCart(clearCart(cart));
     clearCachedCart(magasin, caisseCode);
     clearAddHistory();
     broadcast(createEmptyCart(), true);
     setClearCartConfirmOpen(false);
+    setInfo("Panier / commande annulé(e)");
   };
 
   const cloneCart = (source: CartState): CartState => ({
@@ -878,89 +894,217 @@ export default function CashierScreen({ onRequestQuit }: { onRequestQuit: () => 
     lines: source.lines.map((line) => ({ ...line })),
   });
 
-  const handleHoldCurrentCart = () => {
-    if (lineCount === 0) return;
-    const entry: HeldCartEntry = {
+  const hasCartContent =
+    lineCount > 0 || cart.clientId != null || linkedShopCartId != null;
+
+  const pushCurrentToHolds = (): HeldCartEntry | null => {
+    if (!hasCartContent) return null;
+    return {
       id: createHoldId(),
       cart: cloneCart(cart),
       heldAt: new Date().toISOString(),
+      linkedShopCartId,
+      linkedShopCartNumber,
     };
+  };
+
+  const handleHoldCurrentCart = async () => {
+    if (!hasCartContent) return;
+    if (linkedShopCartId) {
+      const holdResult = await holdCommandeBoutique({
+        cartId: linkedShopCartId,
+        magasinCode: magasin,
+        caisseCode,
+      });
+      if (!holdResult.ok) {
+        setError(holdResult.error ?? "Mise en attente commande impossible");
+        return;
+      }
+    }
+    const entry = pushCurrentToHolds();
+    if (!entry) return;
     setHeldCarts((prev) => [...prev, entry]);
+    setLinkedShopCartId(null);
+    setLinkedShopCartNumber(null);
     setCart(createEmptyCart());
     clearCachedCart(magasin, caisseCode);
     clearAddHistory();
-    setInfo("Panier mis en attente");
+    setInfo(
+      entry.linkedShopCartNumber != null
+        ? `Commande #${entry.linkedShopCartNumber} mise en attente`
+        : "Panier mis en attente",
+    );
   };
 
-  const holdCurrentCartSilently = () => {
-    const hasContent = lineCount > 0 || cart.clientId != null;
-    if (!hasContent) return;
-    const entry: HeldCartEntry = {
-      id: createHoldId(),
-      cart: cloneCart(cart),
-      heldAt: new Date().toISOString(),
-    };
-    setHeldCarts((prev) => [...prev, entry]);
+  const holdCurrentCartSilently = async () => {
+    if (!hasCartContent) return;
+    if (linkedShopCartId) {
+      const holdResult = await holdCommandeBoutique({
+        cartId: linkedShopCartId,
+        magasinCode: magasin,
+        caisseCode,
+      });
+      if (!holdResult.ok) {
+        setError(holdResult.error ?? "Mise en attente commande impossible");
+        return;
+      }
+    }
+    const entry = pushCurrentToHolds();
+    if (entry) setHeldCarts((prev) => [...prev, entry]);
+    setLinkedShopCartId(null);
+    setLinkedShopCartNumber(null);
     setCart(createEmptyCart());
     clearCachedCart(magasin, caisseCode);
     clearAddHistory();
   };
 
-  const applyEncaissement = (item: CommandeEncaissementItem) => {
+  const applyPasserCaisse = async (
+    item: PasserCaissePick,
+    mode: "replace" | "keep",
+  ) => {
+    if (linkedShopCartId && linkedShopCartId !== item.cartId) {
+      await unlockCommandeBoutique({
+        cartId: linkedShopCartId,
+        magasinCode: magasin,
+        caisseCode,
+      });
+    }
+
+    setEncaissementCheckout(null);
+    setLinkedShopCartId(item.cartId);
+    setLinkedShopCartNumber(item.cartNumber);
+
+    if (mode === "keep") {
+      setCart((prev) =>
+        setClient(prev, {
+          id: item.clientId,
+          name: item.clientName,
+        }),
+      );
+    } else {
+      setCart(
+        setClient(createEmptyCart(), {
+          id: item.clientId,
+          name: item.clientName,
+        }),
+      );
+      clearCachedCart(magasin, caisseCode);
+      clearAddHistory();
+    }
+
+    setInfo(`Commande #${item.cartNumber} — en cours à la caisse`);
+  };
+
+  const parkCurrentCartIfNeeded = async (): Promise<HeldCartEntry | null> => {
+    if (!hasCartContent) return null;
+    if (linkedShopCartId) {
+      const holdResult = await holdCommandeBoutique({
+        cartId: linkedShopCartId,
+        magasinCode: magasin,
+        caisseCode,
+      });
+      if (!holdResult.ok) {
+        setError(holdResult.error ?? "Mise en attente commande impossible");
+        return null;
+      }
+    }
+    return pushCurrentToHolds();
+  };
+
+  const handleSelectPasserCaisse = async (item: PasserCaissePick) => {
+    if (item.resume) {
+      const localHold = heldCarts.find((h) => h.linkedShopCartId === item.cartId);
+      if (localHold) {
+        let parked: HeldCartEntry | null = null;
+        if (hasCartContent && linkedShopCartId !== item.cartId) {
+          parked = await parkCurrentCartIfNeeded();
+          if (hasCartContent && parked == null && linkedShopCartId) return;
+        }
+        setHeldCarts((prev) => {
+          const withoutRecalled = prev.filter((h) => h.id !== localHold.id);
+          return parked ? [...withoutRecalled, parked] : withoutRecalled;
+        });
+        setEncaissementCheckout(null);
+        setLinkedShopCartId(item.cartId);
+        setLinkedShopCartNumber(item.cartNumber);
+        setCart(cloneCart(localHold.cart));
+        clearAddHistory();
+        setInfo(`Commande #${item.cartNumber} rappelée`);
+        return;
+      }
+    }
+
+    if (linkedShopCartId === item.cartId) {
+      setInfo(`Commande #${item.cartNumber} déjà en cours`);
+      return;
+    }
+
+    if (hasCartContent) {
+      setPasserCaisseConflict(item);
+      return;
+    }
+
+    await applyPasserCaisse(item, "replace");
+  };
+
+  const handleSelectEncaisser = (item: CommandeEncaissementItem) => {
     setEncaissementCheckout({
       cartId: item.cartId,
       cartNumber: item.cartNumber,
       total: item.montant,
+      clientId: item.clientId,
     });
-    setLinkedShopCartId(item.cartId);
-    setLinkedShopCartNumber(item.cartNumber);
-    setCart((prev) => {
-      const cleared = clearCart(prev);
-      return setClient(cleared, {
-        id: item.clientId,
-        name: item.clientName,
-      });
-    });
-    clearCachedCart(magasin, caisseCode);
     setPaymentOpen(true);
     setInfo(`Encaissement commande #${item.cartNumber}`);
   };
 
-  const handleSelectEncaisser = (item: CommandeEncaissementItem) => {
-    const hasContent = lineCount > 0 || cart.clientId != null;
-    if (hasContent) {
-      setEncaissementCartConflict(item);
-      return;
-    }
-    applyEncaissement(item);
-  };
-
-  const handleRecallHold = (holdId: string) => {
+  const handleRecallHold = async (holdId: string) => {
     const entry = heldCarts.find((h) => h.id === holdId);
     if (!entry) return;
 
-    const hasCurrentCart = lineCount > 0 || cart.clientId != null;
-    let nextHolds = heldCarts.filter((h) => h.id !== holdId);
+    const parked = await parkCurrentCartIfNeeded();
+    if (hasCartContent && parked == null && linkedShopCartId) return;
 
-    if (hasCurrentCart) {
-      nextHolds = [
-        ...nextHolds,
-        {
-          id: createHoldId(),
-          cart: cloneCart(cart),
-          heldAt: new Date().toISOString(),
-        },
-      ];
+    if (entry.linkedShopCartId) {
+      const lock = await lockCommandeBoutique({
+        cartId: entry.linkedShopCartId,
+        magasinCode: magasin,
+        caisseCode,
+      });
+      if (!lock.ok) {
+        setError(lock.error ?? "Reprise commande impossible");
+        return;
+      }
+      setLinkedShopCartId(entry.linkedShopCartId);
+      setLinkedShopCartNumber(entry.linkedShopCartNumber ?? null);
+    } else {
+      setLinkedShopCartId(null);
+      setLinkedShopCartNumber(null);
     }
 
-    setHeldCarts(nextHolds);
+    setHeldCarts((prev) => {
+      const withoutRecalled = prev.filter((h) => h.id !== holdId);
+      return parked ? [...withoutRecalled, parked] : withoutRecalled;
+    });
     setCart(cloneCart(entry.cart));
     clearAddHistory();
     setHoldDialogOpen(false);
-    setInfo(`Panier rappelé${entry.cart.clientName ? ` : ${entry.cart.clientName}` : ""}`);
+    setInfo(
+      entry.linkedShopCartNumber != null
+        ? `Commande #${entry.linkedShopCartNumber} rappelée`
+        : `Panier rappelé${entry.cart.clientName ? ` : ${entry.cart.clientName}` : ""}`,
+    );
   };
 
   const handleDeleteHold = (holdId: string) => {
+    const entry = heldCarts.find((h) => h.id === holdId);
+    if (entry?.linkedShopCartId) {
+      void unlockCommandeBoutique({
+        cartId: entry.linkedShopCartId,
+        magasinCode: magasin,
+        caisseCode,
+      });
+    }
     setHeldCarts((prev) => prev.filter((h) => h.id !== holdId));
   };
 
@@ -1565,18 +1709,18 @@ export default function CashierScreen({ onRequestQuit }: { onRequestQuit: () => 
               color="secondary"
               fullWidth
               onClick={() => setHoldDialogOpen(true)}
-              disabled={lineCount === 0 && heldCarts.length === 0}
+              disabled={!hasCartContent && heldCarts.length === 0}
               sx={compactActionBtnSx}
             >
               Attente{heldCarts.length > 0 ? ` (${heldCarts.length})` : ""}
             </Button>
-            <Tooltip title="Supprimer le panier">
+            <Tooltip title="Supprimer le panier / commande">
               <span>
                 <Button
                   size="small"
                   variant="outlined"
                   color="error"
-                  disabled={lineCount === 0 && encaissementCheckout == null}
+                  disabled={!hasCartContent && encaissementCheckout == null}
                   onClick={() => setClearCartConfirmOpen(true)}
                   sx={{ ...compactActionBtnSx, minWidth: 44, px: 0.75, flexShrink: 0 }}
                 >
@@ -1837,7 +1981,7 @@ export default function CashierScreen({ onRequestQuit }: { onRequestQuit: () => 
                   whiteSpace: "nowrap",
                 }}
               >
-                {formatMoneyDhFixed(paymentDueTotal)}
+                {formatMoneyDhFixed(total)}
               </Typography>
             </Paper>
           </Box>
@@ -1847,9 +1991,12 @@ export default function CashierScreen({ onRequestQuit }: { onRequestQuit: () => 
       <PaymentDialog
         open={paymentOpen}
         totalDue={paymentDueTotal}
-        clientId={cart.clientId}
+        clientId={encaissementCheckout ? encaissementCheckout.clientId : cart.clientId}
         linkedShopOrder={linkedShopCartId != null && encaissementCheckout == null}
-        onClose={() => setPaymentOpen(false)}
+        onClose={() => {
+          setPaymentOpen(false);
+          setEncaissementCheckout(null);
+        }}
         onValidate={handlePayment}
       />
 
@@ -1898,10 +2045,15 @@ export default function CashierScreen({ onRequestQuit }: { onRequestQuit: () => 
         open={holdDialogOpen}
         currentCart={cart}
         currentLineCount={lineCount}
+        canHoldCurrent={hasCartContent}
         holds={heldCarts}
         onClose={() => setHoldDialogOpen(false)}
-        onHoldCurrent={handleHoldCurrentCart}
-        onRecall={handleRecallHold}
+        onHoldCurrent={() => {
+          void handleHoldCurrentCart();
+        }}
+        onRecall={(id) => {
+          void handleRecallHold(id);
+        }}
         onDeleteHold={handleDeleteHold}
       />
 
@@ -1931,20 +2083,10 @@ export default function CashierScreen({ onRequestQuit }: { onRequestQuit: () => 
         open={commandesBoutiqueOpen}
         magasinCode={magasin}
         caisseCode={caisseCode}
+        ticketPrinter={ticketPrinter}
         onClose={() => setCommandesBoutiqueOpen(false)}
-        onSelectPasserCaisse={({ cartId, cartNumber, clientId, clientName }) => {
-          setEncaissementCheckout(null);
-          setLinkedShopCartId(cartId);
-          setLinkedShopCartNumber(cartNumber);
-          setCart((prev) => {
-            const cleared = clearCart(prev);
-            return setClient(cleared, {
-              id: clientId,
-              name: clientName,
-            });
-          });
-          clearCachedCart(magasin, caisseCode);
-          setInfo(`Commande #${cartNumber} — client sélectionné`);
+        onSelectPasserCaisse={(item) => {
+          void handleSelectPasserCaisse(item);
         }}
         onSelectEncaisser={handleSelectEncaisser}
       />
@@ -1962,7 +2104,16 @@ export default function CashierScreen({ onRequestQuit }: { onRequestQuit: () => 
       />
 
       <Dialog open={clearCartConfirmOpen} onClose={() => setClearCartConfirmOpen(false)} maxWidth="xs" fullWidth>
-        <DialogTitle>Supprimer le panier ?</DialogTitle>
+        <DialogTitle>
+          {linkedShopCartNumber != null ? "Supprimer la commande en caisse ?" : "Supprimer le panier ?"}
+        </DialogTitle>
+        <DialogContent>
+          <Typography sx={{ pt: 0.5 }}>
+            {linkedShopCartNumber != null
+              ? `La commande #${linkedShopCartNumber} repassera « À passer en caisse ».`
+              : "Le panier en cours sera vidé."}
+          </Typography>
+        </DialogContent>
         <DialogActions sx={{ px: 3, pb: 2, pt: 1 }}>
           <Button onClick={() => setClearCartConfirmOpen(false)}>Annuler</Button>
           <Button color="error" variant="contained" onClick={confirmClearCart}>
@@ -1972,8 +2123,8 @@ export default function CashierScreen({ onRequestQuit }: { onRequestQuit: () => 
       </Dialog>
 
       <Dialog
-        open={encaissementCartConflict != null}
-        onClose={() => setEncaissementCartConflict(null)}
+        open={passerCaisseConflict != null}
+        onClose={() => setPasserCaisseConflict(null)}
         maxWidth="xs"
         fullWidth
       >
@@ -1982,30 +2133,59 @@ export default function CashierScreen({ onRequestQuit }: { onRequestQuit: () => 
           <Typography sx={{ pt: 0.5 }}>
             {lineCount > 0
               ? `Le panier contient ${lineCount} article(s)`
-              : "Un client est déjà sélectionné"}
-            {cart.clientName ? ` (${cart.clientName})` : ""}. Que faire avant d&apos;encaisser la
-            commande #{encaissementCartConflict?.cartNumber} ?
+              : linkedShopCartNumber != null
+                ? `Commande #${linkedShopCartNumber} déjà liée`
+                : "Un client est déjà sélectionné"}
+            {cart.clientName ? ` (${cart.clientName})` : ""}. Que faire pour la commande #
+            {passerCaisseConflict?.cartNumber} ?
           </Typography>
         </DialogContent>
         <DialogActions sx={{ px: 3, pb: 2, pt: 1, flexDirection: "column", gap: 1, alignItems: "stretch" }}>
           <Button
             variant="outlined"
+            color="error"
             fullWidth
-            onClick={() => setEncaissementCartConflict(null)}
+            onClick={() => {
+              const item = passerCaisseConflict;
+              if (!item) return;
+              void (async () => {
+                await releaseLinkedShopOrder();
+                setCart(createEmptyCart());
+                clearCachedCart(magasin, caisseCode);
+                clearAddHistory();
+                setPasserCaisseConflict(null);
+                await applyPasserCaisse(item, "replace");
+              })();
+            }}
             sx={{ fontWeight: 700 }}
           >
-            Continuer le panier en cours
+            Annuler le panier en cours
           </Button>
           <Button
             variant="contained"
             fullWidth
             onClick={() => {
-              const item = encaissementCartConflict;
+              const item = passerCaisseConflict;
               if (!item) return;
-              holdCurrentCartSilently();
-              setEncaissementCartConflict(null);
-              applyEncaissement(item);
-              setInfo("Panier mis en attente — encaissement commande");
+              setPasserCaisseConflict(null);
+              void applyPasserCaisse(item, "keep");
+            }}
+            sx={{ fontWeight: 700 }}
+          >
+            Utiliser le panier en cours
+          </Button>
+          <Button
+            variant="outlined"
+            fullWidth
+            onClick={() => {
+              const item = passerCaisseConflict;
+              if (!item) return;
+              void (async () => {
+                await holdCurrentCartSilently();
+                setPasserCaisseConflict(null);
+                await applyPasserCaisse(item, "replace");
+                setInfo("Panier mis en attente — commande prise en caisse");
+              })();
             }}
             sx={{ fontWeight: 700 }}
           >

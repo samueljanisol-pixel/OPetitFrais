@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { authorizeCaisseTicket } from "@/lib/caisse/authorize-caisse-ticket";
-import { releaseCommandeFromCaisse } from "@/lib/commandes-client/workflow";
+import { holdCommandeAtCaisse } from "@/lib/commandes-client/workflow";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/server";
 
 const CORS_HEADERS = {
@@ -27,8 +27,13 @@ export async function POST(req: NextRequest) {
   }
 
   const cartId = typeof body.cartId === "string" ? body.cartId.trim() : "";
-  if (!cartId) {
-    return NextResponse.json({ error: "cartId requis" }, { status: 400, headers: CORS_HEADERS });
+  const magasinCode = typeof body.magasinCode === "string" ? body.magasinCode.trim() : "";
+  const caisseCode = typeof body.caisseCode === "string" ? body.caisseCode.trim() : "";
+  if (!cartId || !magasinCode || !caisseCode) {
+    return NextResponse.json(
+      { error: "cartId, magasinCode, caisseCode requis" },
+      { status: 400, headers: CORS_HEADERS },
+    );
   }
 
   let supabase;
@@ -41,12 +46,7 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const result = await releaseCommandeFromCaisse(supabase, {
-    shopCartId: cartId,
-    magasinCode: body.magasinCode,
-    caisseCode: body.caisseCode,
-  });
-
+  const result = await holdCommandeAtCaisse(supabase, { shopCartId: cartId, magasinCode, caisseCode });
   if (result.error) {
     return NextResponse.json(
       { error: result.error },

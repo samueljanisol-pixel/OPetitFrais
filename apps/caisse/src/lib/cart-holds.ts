@@ -2,17 +2,19 @@ import type { CartState } from "@opf/caisse-core";
 import { cartTotals } from "@opf/caisse-core";
 import { normalizeCartState } from "./cart-cache";
 
-const HOLDS_VERSION = 1;
+const HOLDS_VERSION = 2;
 const HOLDS_PREFIX = "opf-caisse-holds-v1";
 
 export type HeldCartEntry = {
   id: string;
   cart: CartState;
   heldAt: string;
+  linkedShopCartId?: string | null;
+  linkedShopCartNumber?: number | null;
 };
 
 type CachedHoldsPayload = {
-  version: typeof HOLDS_VERSION;
+  version: typeof HOLDS_VERSION | 1;
   holds: HeldCartEntry[];
 };
 
@@ -26,7 +28,21 @@ function normalizeHeldEntry(raw: unknown): HeldCartEntry | null {
   if (typeof row.id !== "string" || typeof row.heldAt !== "string") return null;
   const cart = normalizeCartState(row.cart);
   if (!cart) return null;
-  return { id: row.id, cart, heldAt: row.heldAt };
+  const linkedShopCartId =
+    typeof row.linkedShopCartId === "string" && row.linkedShopCartId.trim().length > 0
+      ? row.linkedShopCartId.trim()
+      : null;
+  const linkedShopCartNumber =
+    typeof row.linkedShopCartNumber === "number" && Number.isFinite(row.linkedShopCartNumber)
+      ? row.linkedShopCartNumber
+      : null;
+  return {
+    id: row.id,
+    cart,
+    heldAt: row.heldAt,
+    linkedShopCartId,
+    linkedShopCartNumber,
+  };
 }
 
 export function loadHeldCarts(magasinCode: string, caisseCode: string): HeldCartEntry[] {
@@ -37,12 +53,17 @@ export function loadHeldCarts(magasinCode: string, caisseCode: string): HeldCart
     if (!raw) return [];
 
     const parsed = JSON.parse(raw) as CachedHoldsPayload;
-    if (parsed.version !== HOLDS_VERSION || !Array.isArray(parsed.holds)) return [];
+    if ((parsed.version !== HOLDS_VERSION && parsed.version !== 1) || !Array.isArray(parsed.holds)) {
+      return [];
+    }
 
     const holds: HeldCartEntry[] = [];
     for (const entry of parsed.holds) {
       const normalized = normalizeHeldEntry(entry);
-      if (normalized && normalized.cart.lines.length > 0) {
+      if (!normalized) continue;
+      const hasLines = normalized.cart.lines.length > 0;
+      const hasLinkedOrder = Boolean(normalized.linkedShopCartId);
+      if (hasLines || hasLinkedOrder) {
         holds.push(normalized);
       }
     }
@@ -76,6 +97,7 @@ export function createHoldId(): string {
 }
 
 export function heldCartLabel(entry: HeldCartEntry, index: number): string {
+  if (entry.linkedShopCartNumber != null) return `Commande #${entry.linkedShopCartNumber}`;
   if (entry.cart.clientName?.trim()) return entry.cart.clientName.trim();
   return `Attente ${index + 1}`;
 }

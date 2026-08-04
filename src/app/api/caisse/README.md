@@ -262,11 +262,16 @@ Token identique (`CAISSE_TICKET_TOKEN`). Service role côté serveur.
 
 | Route | Méthode | Description |
 |-------|---------|-------------|
-| `/api/caisse/commandes-boutique` | GET | Liste `a_passer_caisse` + état verrou |
-| `/api/caisse/commandes-boutique/lock` | POST | Verrouiller pour ce poste |
-| `/api/caisse/commandes-boutique/unlock` | POST | Libérer le verrou |
+| `/api/caisse/commandes-boutique` | GET | Listes préparation + caisse + état verrou |
+| `/api/caisse/commandes-boutique/preparation-ticket` | GET | Ticket préparation ESC/POS (par catégorie, coches `[ ]`) |
+| `/api/caisse/commandes-boutique/preparation` | POST | `start` / `back` / `finish` (statuts préparation) |
+| `/api/caisse/commandes-boutique/lock` | POST | Prise en caisse (`en_cours_caisse` + verrou) |
+| `/api/caisse/commandes-boutique/hold` | POST | Mise en attente (`en_attente_caisse`) |
+| `/api/caisse/commandes-boutique/unlock` | POST | Libérer → retour `a_passer_caisse` |
 | `/api/caisse/commandes-boutique/link` | POST | Lier ticket POS (`shop_cart_pos_link`) + transition workflow |
-| `/api/caisse/commandes-boutique/ticket` | GET | 2ᵉ ticket ESC/POS (check-list préparation + code-barres) |
+| `/api/caisse/commandes-boutique/ticket` | GET/POST | 2ᵉ ticket ESC/POS (POST : lignes panier caisse + code-barres) |
+| `/api/caisse/commandes-boutique/a-encaisser` | GET | Espèce / impayé à encaisser |
+| `/api/caisse/commandes-boutique/collect-payment` | POST | Encaissement post-livraison/retrait |
 
 Paramètres communs : `magasinCode`, `caisseCode`, `token`.
 

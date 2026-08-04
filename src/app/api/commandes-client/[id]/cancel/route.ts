@@ -44,11 +44,13 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
     return NextResponse.json({ error: "Commande non annulable" }, { status: 409 });
   }
 
-  if (
-    row.workflow_status === "a_passer_caisse" &&
+  const lockedAtCaisse =
+    (row.workflow_status === "a_passer_caisse" ||
+      row.workflow_status === "en_cours_caisse" ||
+      row.workflow_status === "en_attente_caisse") &&
     row.caisse_locked_at != null &&
-    !isLockExpired(row.caisse_locked_at)
-  ) {
+    !isLockExpired(row.caisse_locked_at);
+  if (lockedAtCaisse) {
     const label = `${row.caisse_lock_magasin_code ?? ""}${row.caisse_lock_caisse_code ?? ""}`.trim();
     return NextResponse.json(
       { error: label ? `Commande verrouillée en caisse (${label})` : "Commande verrouillée en caisse" },

@@ -345,3 +345,19 @@ export async function findCommandeByTicketRef(
   if (!data) return { shopCartId: null, error: "Ticket inconnu" };
   return { shopCartId: String(data.shop_cart_id), error: null };
 }
+
+export async function findCommandeByCartNumber(
+  supabase: SupabaseClient,
+  cartNumber: number,
+): Promise<{ shopCartId: string | null; error: string | null }> {
+  const { data, error } = await supabase
+    .from("shop_cart")
+    .select("id")
+    .eq("status", "submitted")
+    .eq("cart_number", cartNumber)
+    .maybeSingle();
+
+  if (error) return { shopCartId: null, error: error.message };
+  if (!data) return { shopCartId: null, error: "Panier introuvable" };
+  return { shopCartId: String(data.id), error: null };
+}

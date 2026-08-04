@@ -76,7 +76,8 @@ export async function POST(req: NextRequest) {
   if (loadErr) {
     return NextResponse.json({ error: loadErr }, { status: 404, headers: CORS_HEADERS });
   }
-  if (!row || row.workflow_status !== "a_passer_caisse") {
+  const fromStatus = row?.workflow_status;
+  if (!row || (fromStatus !== "en_cours_caisse" && fromStatus !== "a_passer_caisse")) {
     return NextResponse.json({ error: "Commande non disponible" }, { status: 409, headers: CORS_HEADERS });
   }
 
@@ -112,7 +113,7 @@ export async function POST(req: NextRequest) {
 
   const result = await transitionWorkflowStatus(supabase, {
     shopCartId: cartId,
-    fromStatus: "a_passer_caisse",
+    fromStatus,
     toStatus,
     extraPatch: { payment_status: paymentStatus },
   });
@@ -123,7 +124,7 @@ export async function POST(req: NextRequest) {
 
   await appendWorkflowLog(supabase, {
     shopCartId: cartId,
-    fromStatus: "a_passer_caisse",
+    fromStatus,
     toStatus,
     action: "pos_link",
     metadata: { magasinCode, caisseCode, ticketRef, total, paymentStatus },

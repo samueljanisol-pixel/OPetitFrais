@@ -6,6 +6,8 @@ export const WORKFLOW_STATUSES = [
   "a_preparer",
   "en_preparation",
   "a_passer_caisse",
+  "en_cours_caisse",
+  "en_attente_caisse",
   "a_livrer",
   "a_retirer",
   "en_livraison",
@@ -70,7 +72,12 @@ export const CANCELLABLE_STATUSES: WorkflowStatus[] = [
   "a_preparer",
   "en_preparation",
   "a_passer_caisse",
+  "en_cours_caisse",
+  "en_attente_caisse",
 ];
+
+/** Commandes prises en charge au POS (hors liste « à passer »). */
+export const CAISSE_ACTIVE_STATUSES: WorkflowStatus[] = ["en_cours_caisse", "en_attente_caisse"];
 
 export type ShopCartWorkflowLine = {
   productId: string;
@@ -121,7 +128,9 @@ const TRANSITIONS: Partial<Record<WorkflowStatus, WorkflowStatus[]>> = {
   a_valider: ["a_preparer", "annulee"],
   a_preparer: ["en_preparation", "annulee"],
   en_preparation: ["a_passer_caisse", "a_preparer", "annulee"],
-  a_passer_caisse: ["a_livrer", "a_retirer", "annulee"],
+  a_passer_caisse: ["en_cours_caisse", "a_livrer", "a_retirer", "annulee"],
+  en_cours_caisse: ["en_attente_caisse", "a_passer_caisse", "a_livrer", "a_retirer", "annulee"],
+  en_attente_caisse: ["en_cours_caisse", "a_passer_caisse", "annulee"],
   a_livrer: ["en_livraison"],
   en_livraison: ["livre_paye", "livre_espece_a_encaisser", "livre_non_paye"],
   a_retirer: ["retire_paye", "retire_espece_a_encaisser", "retire_compte_client"],
@@ -151,6 +160,31 @@ export function parseTicketReference(ticketRef: string): {
     caisseCode: `C${m[2]}`,
     ticketNumber,
   };
+}
+
+export type DeliverySearchQuery =
+  | { kind: "ticket"; ticketRef: string }
+  | { kind: "cartNumber"; cartNumber: number };
+
+/** Code ticket MxxCxxTxxx ou numéro de panier (#1234 ou 1234). */
+export function parseDeliverySearchQuery(raw: string): DeliverySearchQuery | null {
+  const trimmed = raw.trim();
+  if (!trimmed) return null;
+
+  const ticket = parseTicketReference(trimmed);
+  if (ticket) {
+    return { kind: "ticket", ticketRef: trimmed.toUpperCase() };
+  }
+
+  const numStr = trimmed.replace(/^#+/, "");
+  if (/^\d+$/.test(numStr)) {
+    const cartNumber = Number(numStr);
+    if (Number.isFinite(cartNumber) && cartNumber > 0) {
+      return { kind: "cartNumber", cartNumber };
+    }
+  }
+
+  return null;
 }
 
 export function isLockExpired(lockedAt: string | null, nowMs = Date.now()): boolean {
@@ -392,6 +426,18 @@ export async function acquireCaisseLock(
     caisseCode: string;
   },
 ): Promise<{ error: string | null; conflict?: boolean; lockLabel?: string }> {
+  return takeCommandeAtCaisse(supabase, input);
+}
+
+/** Prend une commande au POS : verrou + statut `en_cours_caisse`. */
+export async function takeCommandeAtCaisse(
+  supabase: SupabaseClient,
+  input: {
+    shopCartId: string;
+    magasinCode: string;
+    caisseCode: string;
+  },
+): Promise<{ error: string | null; conflict?: boolean; lockLabel?: string }> {
   const { data: row, error: fe } = await supabase
     .from("shop_cart")
     .select(
@@ -402,13 +448,32 @@ export async function acquireCaisseLock(
 
   if (fe) return { error: fe.message };
   if (!row) return { error: "Commande introuvable" };
-  if (String(row.workflow_status) !== "a_passer_caisse") {
+
+  const cart = row as ShopCartRow;
+  await clearExpiredCaisseLockIfNeeded(supabase, cart);
+
+  const { data: fresh, error: fe2 } = await supabase
+    .from("shop_cart")
+    .select(
+      "id, workflow_status, caisse_locked_at, caisse_lock_magasin_code, caisse_lock_caisse_code",
+    )
+    .eq("id", input.shopCartId)
+    .maybeSingle();
+  if (fe2) return { error: fe2.message };
+  if (!fresh) return { error: "Commande introuvable" };
+
+  const current = fresh as ShopCartRow;
+  const status = current.workflow_status;
+  if (
+    status !== "a_passer_caisse" &&
+    status !== "en_cours_caisse" &&
+    status !== "en_attente_caisse"
+  ) {
     return { error: "Commande non disponible en caisse", conflict: true };
   }
 
-  const cart = row as ShopCartRow;
-  if (cart.caisse_locked_at != null && !isLockExpired(cart.caisse_locked_at)) {
-    const lock = computeCaisseLockState(cart, input.magasinCode, input.caisseCode);
+  if (current.caisse_locked_at != null && !isLockExpired(current.caisse_locked_at)) {
+    const lock = computeCaisseLockState(current, input.magasinCode, input.caisseCode);
     if (lock.state === "locked_other") {
       return {
         error: `Commande en cours sur ${lock.label ?? "une autre caisse"}`,
@@ -419,26 +484,28 @@ export async function acquireCaisseLock(
   }
 
   const now = new Date().toISOString();
+  const fromStatus = status;
   const { data, error } = await supabase
     .from("shop_cart")
     .update({
+      workflow_status: "en_cours_caisse",
       caisse_locked_at: now,
       caisse_lock_magasin_code: input.magasinCode.trim(),
       caisse_lock_caisse_code: input.caisseCode.trim(),
     })
     .eq("id", input.shopCartId)
-    .eq("workflow_status", "a_passer_caisse")
+    .eq("workflow_status", fromStatus)
     .select("id")
     .maybeSingle();
 
   if (error) return { error: error.message };
-  if (!data) return { error: "Verrou impossible", conflict: true };
+  if (!data) return { error: "Prise en caisse impossible", conflict: true };
 
   await appendWorkflowLog(supabase, {
     shopCartId: input.shopCartId,
-    fromStatus: "a_passer_caisse",
-    toStatus: "a_passer_caisse",
-    action: "lock_caisse",
+    fromStatus,
+    toStatus: "en_cours_caisse",
+    action: fromStatus === "en_cours_caisse" ? "lock_caisse" : "transition",
     metadata: {
       magasinCode: input.magasinCode,
       caisseCode: input.caisseCode,
@@ -446,6 +513,120 @@ export async function acquireCaisseLock(
   });
 
   return { error: null };
+}
+
+/** Met une commande POS en attente (`en_attente_caisse`). */
+export async function holdCommandeAtCaisse(
+  supabase: SupabaseClient,
+  input: {
+    shopCartId: string;
+    magasinCode: string;
+    caisseCode: string;
+  },
+): Promise<{ error: string | null; conflict?: boolean }> {
+  const { data: row, error: fe } = await supabase
+    .from("shop_cart")
+    .select(
+      "id, workflow_status, caisse_locked_at, caisse_lock_magasin_code, caisse_lock_caisse_code",
+    )
+    .eq("id", input.shopCartId)
+    .maybeSingle();
+
+  if (fe) return { error: fe.message };
+  if (!row) return { error: "Commande introuvable" };
+
+  const cart = row as ShopCartRow;
+  if (cart.workflow_status !== "en_cours_caisse") {
+    return { error: "Commande non en cours à la caisse", conflict: true };
+  }
+
+  const lock = computeCaisseLockState(cart, input.magasinCode, input.caisseCode);
+  if (lock.state === "locked_other") {
+    return { error: `Commande en cours sur ${lock.label ?? "une autre caisse"}`, conflict: true };
+  }
+
+  const result = await transitionWorkflowStatus(supabase, {
+    shopCartId: input.shopCartId,
+    fromStatus: "en_cours_caisse",
+    toStatus: "en_attente_caisse",
+  });
+  if (result.error) return result;
+
+  const now = new Date().toISOString();
+  await supabase
+    .from("shop_cart")
+    .update({
+      caisse_locked_at: now,
+      caisse_lock_magasin_code: input.magasinCode.trim(),
+      caisse_lock_caisse_code: input.caisseCode.trim(),
+    })
+    .eq("id", input.shopCartId);
+
+  return { error: null };
+}
+
+/** Libère une commande POS → retour `a_passer_caisse` + clear verrou. */
+export async function releaseCommandeFromCaisse(
+  supabase: SupabaseClient,
+  input: {
+    shopCartId: string;
+    magasinCode?: string;
+    caisseCode?: string;
+    force?: boolean;
+  },
+): Promise<{ error: string | null; conflict?: boolean }> {
+  const { data: row, error: fe } = await supabase
+    .from("shop_cart")
+    .select(
+      "id, workflow_status, caisse_locked_at, caisse_lock_magasin_code, caisse_lock_caisse_code",
+    )
+    .eq("id", input.shopCartId)
+    .maybeSingle();
+
+  if (fe) return { error: fe.message };
+  if (!row) return { error: "Commande introuvable" };
+
+  const cart = row as ShopCartRow;
+  if (!input.force && input.magasinCode && input.caisseCode && cart.caisse_locked_at != null) {
+    const lock = computeCaisseLockState(cart, input.magasinCode, input.caisseCode);
+    if (lock.state === "locked_other") {
+      return { error: "Verrou détenu par un autre poste", conflict: true };
+    }
+  }
+
+  const status = cart.workflow_status;
+  if (status === "en_cours_caisse" || status === "en_attente_caisse") {
+    const { data, error } = await supabase
+      .from("shop_cart")
+      .update({
+        workflow_status: "a_passer_caisse",
+        caisse_locked_at: null,
+        caisse_lock_magasin_code: null,
+        caisse_lock_caisse_code: null,
+      })
+      .eq("id", input.shopCartId)
+      .eq("workflow_status", status)
+      .select("id")
+      .maybeSingle();
+
+    if (error) return { error: error.message };
+    if (!data) return { error: "Libération refusée (statut modifié)", conflict: true };
+
+    await appendWorkflowLog(supabase, {
+      shopCartId: input.shopCartId,
+      fromStatus: status,
+      toStatus: "a_passer_caisse",
+      action: "unlock_caisse",
+      metadata: {
+        magasinCode: input.magasinCode ?? cart.caisse_lock_magasin_code,
+        caisseCode: input.caisseCode ?? cart.caisse_lock_caisse_code,
+      },
+    });
+
+    return { error: null };
+  }
+
+  return releaseCaisseLock(supabase, input);
 }
 
 export async function releaseCaisseLock(

@@ -38,6 +38,12 @@ const SETUP_HEIGHT = 560;
 
 const isDev = !app.isPackaged;
 
+/** Une seule instance caisse — la 2ᵉ ouverture ramène la fenêtre existante. */
+const gotSingleInstanceLock = app.requestSingleInstanceLock();
+if (!gotSingleInstanceLock) {
+  app.quit();
+}
+
 function appIconPath(): string | undefined {
   const candidates = [
     join(__dirname, "../../build/icon.png"),
@@ -190,7 +196,16 @@ function createCustomerWindow(): void {
   });
 }
 
+app.on("second-instance", () => {
+  if (!cashierWindow || cashierWindow.isDestroyed()) return;
+  if (cashierWindow.isMinimized()) cashierWindow.restore();
+  cashierWindow.show();
+  cashierWindow.focus();
+});
+
 app.whenReady().then(async () => {
+  if (!gotSingleInstanceLock) return;
+
   Menu.setApplicationMenu(null);
 
   await startEmbeddedCaisseAgent();

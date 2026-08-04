@@ -26,6 +26,8 @@ type Props = {
   open: boolean;
   currentCart: CartState;
   currentLineCount: number;
+  /** Autorise la mise en attente même sans lignes (ex. commande boutique liée). */
+  canHoldCurrent?: boolean;
   holds: HeldCartEntry[];
   onClose: () => void;
   onHoldCurrent: () => void;
@@ -37,13 +39,14 @@ export default function HoldCartDialog({
   open,
   currentCart,
   currentLineCount,
+  canHoldCurrent: canHoldCurrentProp,
   holds,
   onClose,
   onHoldCurrent,
   onRecall,
   onDeleteHold,
 }: Props) {
-  const canHoldCurrent = currentLineCount > 0;
+  const canHoldCurrent = canHoldCurrentProp ?? currentLineCount > 0;
 
   return (
     <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>

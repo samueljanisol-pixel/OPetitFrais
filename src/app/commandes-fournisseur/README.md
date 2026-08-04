@@ -298,6 +298,7 @@ API : `GET/PATCH …/comptes/achats/[achatId]`, `POST/DELETE …/photos`. RLS : 
 - Sélection de plusieurs achats **impayés** (orange) du même compte → mode de paiement, date, commentaire.
 - Achats payés en **vert** ; totaux : total, payé, reste à payer.
 - **Photos justificatives** (reçu, virement…) : ajoutables à la création du paiement ou ensuite via « Photos » dans l’historique. Stockage bucket `paiement-photos`, table `fournisseur_paiement_photo`. API : `GET/POST/DELETE /api/commandes-fournisseur/comptes/paiements/[paiementId]/photos`.
+- **Récapitulatif image** : PNG généré à la volée (`html-to-image`) avec compte, montant, mode, achats réglés. API : `GET /api/commandes-fournisseur/comptes/paiements/[paiementId]/recap`. Boutons « Télécharger récap » et « Envoyer WhatsApp » (télécharge l’image puis ouvre `wa.me` du vendeur — numéro `ref_supplier_vendeur.phone`). À la création : « Enregistrer & Envoyer » si le vendeur a un numéro WhatsApp configuré.
 
 ### Réouverture lot
 

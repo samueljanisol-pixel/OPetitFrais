@@ -7,6 +7,7 @@ export type CommandeBoutiqueItem = {
   clientName: string | null;
   fulfillmentMode: string | null;
   montantEstime: number | null;
+  workflowStatus?: string | null;
   caisseLockState: "available" | "locked_self" | "locked_other";
   caisseLockLabel: string | null;
 };
@@ -71,30 +72,57 @@ function mapFetchError(e: unknown, backofficeUrl: string): string {
 export async function fetchCommandesBoutique(
   magasinCode: string,
   caisseCode: string,
-): Promise<{ commandes: CommandeBoutiqueItem[]; error: string | null }> {
+): Promise<{
+  commandes: CommandeBoutiqueItem[];
+  enCours: CommandeBoutiqueItem[];
+  aPreparer: CommandeBoutiqueItem[];
+  enPreparation: CommandeBoutiqueItem[];
+  error: string | null;
+}> {
+  const empty = {
+    commandes: [] as CommandeBoutiqueItem[],
+    enCours: [] as CommandeBoutiqueItem[],
+    aPreparer: [] as CommandeBoutiqueItem[],
+    enPreparation: [] as CommandeBoutiqueItem[],
+  };
   const config = await getCaisseConfig();
   if (!config.caisseToken.trim()) {
-    return { commandes: [], error: "Token caisse introuvable (caisse.config.json)" };
+    return { ...empty, error: "Token caisse introuvable (caisse.config.json)" };
   }
 
   try {
     const res = await caisseApiFetch(
       `/api/caisse/commandes-boutique?magasin=${encodeURIComponent(magasinCode)}&caisse=${encodeURIComponent(caisseCode)}`,
     );
-    const parsed = await readCaisseApiJson<{ commandes?: CommandeBoutiqueItem[]; error?: string }>(res);
+    const parsed = await readCaisseApiJson<{
+      commandes?: CommandeBoutiqueItem[];
+      enCours?: CommandeBoutiqueItem[];
+      aPreparer?: CommandeBoutiqueItem[];
+      enPreparation?: CommandeBoutiqueItem[];
+      error?: string;
+    }>(res);
     if (parsed.error) {
-      return { commandes: [], error: parsed.error };
+      return { ...empty, error: parsed.error };
     }
     const json = parsed.json;
     if (!json) {
-      return { commandes: [], error: `Erreur API (${res.status})` };
+      return { ...empty, error: `Erreur API (${res.status})` };
     }
     if (!res.ok) {
-      return { commandes: [], error: typeof json.error === "string" ? json.error : "Erreur API" };
+      return {
+        ...empty,
+        error: typeof json.error === "string" ? json.error : "Erreur API",
+      };
     }
-    return { commandes: json.commandes ?? [], error: null };
+    return {
+      commandes: json.commandes ?? [],
+      enCours: json.enCours ?? [],
+      aPreparer: json.aPreparer ?? [],
+      enPreparation: json.enPreparation ?? [],
+      error: null,
+    };
   } catch (e) {
-    return { commandes: [], error: mapFetchError(e, config.backofficeUrl) };
+    return { ...empty, error: mapFetchError(e, config.backofficeUrl) };
   }
 }
 
@@ -211,6 +239,28 @@ export async function unlockCommandeBoutique(input: {
   }
 }
 
+export async function holdCommandeBoutique(input: {
+  cartId: string;
+  magasinCode: string;
+  caisseCode: string;
+}): Promise<{ ok: boolean; error: string | null }> {
+  const config = await getCaisseConfig();
+  try {
+    const res = await caisseApiFetch("/api/caisse/commandes-boutique/hold", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    });
+    const parsed = await readCaisseApiJson<{ error?: string }>(res);
+    if (parsed.error) return { ok: false, error: parsed.error };
+    const json = parsed.json;
+    if (!json || !res.ok) return { ok: false, error: json?.error ?? "Mise en attente impossible" };
+    return { ok: true, error: null };
+  } catch (e) {
+    return { ok: false, error: mapFetchError(e, config.backofficeUrl) };
+  }
+}
+
 export async function linkCommandeBoutique(input: {
   cartId: string;
   magasinCode: string;
@@ -226,7 +276,7 @@ export async function linkCommandeBoutique(input: {
     qty: number;
     unitPrice: number;
     lineTotal: number;
-    salesUnit: "kg" | "unit";
+    salesUnit: string;
   }>;
 }): Promise<{ ok: boolean; error: string | null }> {
   const config = await getCaisseConfig();
@@ -250,16 +300,25 @@ export async function fetchCommandeBoutiqueTicketEscPosBase64(input: {
   cartId: string;
   ticketRef: string;
   paymentStatus: string;
+  lines: Array<{
+    productName: string;
+    qty: number;
+    salesUnit: string;
+  }>;
 }): Promise<{ base64: string | null; error: string | null }> {
   const config = await getCaisseConfig();
   try {
-    const params = new URLSearchParams({
-      cartId: input.cartId,
-      ticketRef: input.ticketRef,
-      paymentStatus: input.paymentStatus,
-      encode: "base64",
+    const res = await caisseApiFetch("/api/caisse/commandes-boutique/ticket", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        cartId: input.cartId,
+        ticketRef: input.ticketRef,
+        paymentStatus: input.paymentStatus,
+        encode: "base64",
+        lines: input.lines,
+      }),
     });
-    const res = await caisseApiFetch(`/api/caisse/commandes-boutique/ticket?${params.toString()}`);
     const parsed = await readCaisseApiJson<{ base64?: string; error?: string }>(res);
     if (parsed.error) return { base64: null, error: parsed.error };
     const json = parsed.json;
@@ -269,5 +328,45 @@ export async function fetchCommandeBoutiqueTicketEscPosBase64(input: {
     return { base64: json.base64 ?? null, error: null };
   } catch (e) {
     return { base64: null, error: mapFetchError(e, config.backofficeUrl) };
+  }
+}
+
+export async function fetchPreparationTicketEscPosBase64(
+  cartId: string,
+): Promise<{ base64: string | null; error: string | null }> {
+  const config = await getCaisseConfig();
+  try {
+    const params = new URLSearchParams({ cartId, encode: "base64" });
+    const res = await caisseApiFetch(`/api/caisse/commandes-boutique/preparation-ticket?${params}`);
+    const parsed = await readCaisseApiJson<{ base64?: string; error?: string }>(res);
+    if (parsed.error) return { base64: null, error: parsed.error };
+    const json = parsed.json;
+    if (!json || !res.ok) {
+      return { base64: null, error: json?.error ?? "Ticket préparation indisponible" };
+    }
+    return { base64: json.base64 ?? null, error: null };
+  } catch (e) {
+    return { base64: null, error: mapFetchError(e, config.backofficeUrl) };
+  }
+}
+
+export async function preparationActionCommandeBoutique(input: {
+  cartId: string;
+  action: "start" | "back" | "finish";
+}): Promise<{ ok: boolean; error: string | null }> {
+  const config = await getCaisseConfig();
+  try {
+    const res = await caisseApiFetch("/api/caisse/commandes-boutique/preparation", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    });
+    const parsed = await readCaisseApiJson<{ error?: string }>(res);
+    if (parsed.error) return { ok: false, error: parsed.error };
+    const json = parsed.json;
+    if (!json || !res.ok) return { ok: false, error: json?.error ?? "Action préparation impossible" };
+    return { ok: true, error: null };
+  } catch (e) {
+    return { ok: false, error: mapFetchError(e, config.backofficeUrl) };
   }
 }

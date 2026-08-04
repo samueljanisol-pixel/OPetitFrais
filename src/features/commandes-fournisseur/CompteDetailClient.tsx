@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import {
@@ -18,9 +18,14 @@ import {
   Paper,
   Typography,
 } from "@mui/material";
+import ImageOutlinedIcon from "@mui/icons-material/ImageOutlined";
+import WhatsAppIcon from "@mui/icons-material/WhatsApp";
 import AppLink from "@/components/AppLink";
 import ComptePaiementFormDialog from "@/features/commandes-fournisseur/ComptePaiementFormDialog";
 import PaiementPhotosDialog from "@/features/commandes-fournisseur/PaiementPhotosDialog";
+import PaiementRecapExporter, {
+  type PaiementRecapExportHandle,
+} from "@/features/commandes-fournisseur/PaiementRecapExporter";
 import type { CompteAccountType } from "@/lib/commandes-fournisseur/compte-queries";
 import { useSessionPermissions } from "@/lib/auth/useSessionPermissions";
 import { useAppFormat } from "@/lib/i18n/useAppFormat";
@@ -85,6 +90,10 @@ export default function CompteDetailClient({ accountType, accountId }: Props) {
   const [paiementOpen, setPaiementOpen] = useState(false);
   const [photosPaiementId, setPhotosPaiementId] = useState<string | null>(null);
   const [photosPaymentLabel, setPhotosPaymentLabel] = useState("");
+  const [whatsappAvailable, setWhatsappAvailable] = useState(false);
+  const [exportBusyId, setExportBusyId] = useState<string | null>(null);
+  const [exportErr, setExportErr] = useState<string | null>(null);
+  const recapExporterRef = useRef<PaiementRecapExportHandle>(null);
 
   useEffect(() => {
     if (!permLoading && !can("commandes_fournisseur.comptes")) {
@@ -101,6 +110,7 @@ export default function CompteDetailClient({ accountType, accountId }: Props) {
         account?: {
           label?: string;
           parent_supplier_label?: string;
+          whatsapp_available?: boolean;
         };
         achats?: AchatRow[];
         paiements?: PaiementRow[];
@@ -113,6 +123,7 @@ export default function CompteDetailClient({ accountType, accountId }: Props) {
       }
       setAccountLabel(json.account?.label ?? "—");
       setParentLabel(json.account?.parent_supplier_label ?? null);
+      setWhatsappAvailable(Boolean(json.account?.whatsapp_available));
       setAchats(json.achats ?? []);
       setPaiements(json.paiements ?? []);
       setTotals(json.totals ?? { total: 0, paye: 0, reste: 0 });
@@ -154,6 +165,38 @@ export default function CompteDetailClient({ accountType, accountId }: Props) {
     } else {
       setSelected(new Set(unpaidIds));
     }
+  }
+
+  async function downloadRecap(paiementId: string) {
+    setExportErr(null);
+    setExportBusyId(paiementId);
+    try {
+      const result = await recapExporterRef.current?.downloadRecap(paiementId);
+      if (result && !result.ok) {
+        setExportErr(result.error);
+      }
+    } finally {
+      setExportBusyId(null);
+    }
+  }
+
+  async function sendRecapWhatsApp(paiementId: string) {
+    setExportErr(null);
+    setExportBusyId(paiementId);
+    try {
+      const result = await recapExporterRef.current?.sendWhatsApp(paiementId);
+      if (result && !result.ok) {
+        setExportErr(result.error);
+      }
+    } finally {
+      setExportBusyId(null);
+    }
+  }
+
+  async function handleSavedAndSend(paiementId: string) {
+    setPaiementOpen(false);
+    await sendRecapWhatsApp(paiementId);
+    void load();
   }
 
   if (permLoading || !can("commandes_fournisseur.comptes")) {
@@ -218,6 +261,11 @@ export default function CompteDetailClient({ accountType, accountId }: Props) {
       {err ? (
         <Alert severity="error" sx={{ mb: 2 }}>
           {err}
+        </Alert>
+      ) : null}
+      {exportErr ? (
+        <Alert severity="error" sx={{ mb: 2 }} onClose={() => setExportErr(null)}>
+          {exportErr}
         </Alert>
       ) : null}
 
@@ -326,19 +374,56 @@ export default function CompteDetailClient({ accountType, accountId }: Props) {
                             : ""}
                         </Typography>
                       </Box>
-                      <Button
-                        size="small"
-                        variant="outlined"
-                        onClick={() => {
-                          setPhotosPaiementId(p.id);
-                          setPhotosPaymentLabel(
-                            `${formatDh(p.montant)} DH — ${p.payment_method_label}`,
-                          );
-                        }}
-                        sx={{ textTransform: "none", flexShrink: 0 }}
-                      >
-                        {t("managePhotos")}
-                      </Button>
+                      <Box className="flex flex-wrap items-center gap-1" sx={{ flexShrink: 0 }}>
+                        <Button
+                          size="small"
+                          variant="outlined"
+                          startIcon={
+                            exportBusyId === p.id ? (
+                              <CircularProgress size={14} color="inherit" />
+                            ) : (
+                              <ImageOutlinedIcon fontSize="small" />
+                            )
+                          }
+                          disabled={exportBusyId != null}
+                          onClick={() => void downloadRecap(p.id)}
+                          sx={{ textTransform: "none" }}
+                        >
+                          {t("downloadRecap")}
+                        </Button>
+                        {whatsappAvailable ? (
+                          <Button
+                            size="small"
+                            variant="contained"
+                            color="success"
+                            startIcon={
+                              exportBusyId === p.id ? (
+                                <CircularProgress size={14} color="inherit" />
+                              ) : (
+                                <WhatsAppIcon fontSize="small" />
+                              )
+                            }
+                            disabled={exportBusyId != null}
+                            onClick={() => void sendRecapWhatsApp(p.id)}
+                            sx={{ textTransform: "none" }}
+                          >
+                            {t("sendRecapWhatsApp")}
+                          </Button>
+                        ) : null}
+                        <Button
+                          size="small"
+                          variant="outlined"
+                          onClick={() => {
+                            setPhotosPaiementId(p.id);
+                            setPhotosPaymentLabel(
+                              `${formatDh(p.montant)} DH — ${p.payment_method_label}`,
+                            );
+                          }}
+                          sx={{ textTransform: "none" }}
+                        >
+                          {t("managePhotos")}
+                        </Button>
+                      </Box>
                     </Box>
                   </Paper>
                 </ListItem>
@@ -354,12 +439,16 @@ export default function CompteDetailClient({ accountType, accountId }: Props) {
         accountId={accountId}
         achatIds={[...selected]}
         montant={selectedMontant}
+        whatsappAvailable={whatsappAvailable}
         onClose={() => setPaiementOpen(false)}
         onSaved={() => {
           setPaiementOpen(false);
           void load();
         }}
+        onSavedAndSend={whatsappAvailable ? handleSavedAndSend : undefined}
       />
+
+      <PaiementRecapExporter ref={recapExporterRef} />
 
       {photosPaiementId ? (
         <PaiementPhotosDialog

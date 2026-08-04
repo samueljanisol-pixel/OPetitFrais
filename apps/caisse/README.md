@@ -127,9 +127,10 @@ En bas à gauche de la caisse (barre d’état, 2 lignes) :
 2. Si la version serveur est plus récente → téléchargement automatique (~83 Mo) en arrière-plan (`OPetitFrais-Caisse-Setup-{version}.exe`) ; un cache plus ancien est abandonné
 3. **Au lancement**, si la dernière MAJ est téléchargée → dialogue **« Mise à jour disponible »** (**Plus tard** / **Installer**) avant l’ouverture de la caisse
 4. Clic sur **« MAJ prête »** / **Installer** → **nouvelle vérification serveur** ; si une version encore plus récente existe → retéléchargement, sinon écran **« Mise à jour en cours »**
-5. Ouverture du setup via **`explorer.exe`** (hors Job Object Electron — sinon le process est tué au `app.quit`), fermeture caisse, puis helper `.cmd` breakaway pour **relancer** l’app
-6. Log lancement : `%TEMP%\opf-caisse-update-launch.log`
-7. Si la version installée ≥ version serveur → badge « À jour » (cache TEMP purgé)
+5. Ouverture du setup via **`explorer.exe`**, fermeture caisse, helper `.cmd` breakaway qui **attend la fin** puis relance l’app une seule fois (`runAfterFinish` NSIS désactivé pour éviter un 2ᵉ lancement)
+6. **Instance unique** : `requestSingleInstanceLock` — une 2ᵉ ouverture ramène la fenêtre existante
+7. Log lancement : `%TEMP%\opf-caisse-update-launch.log`
+8. Si la version installée ≥ version serveur → badge « À jour » (cache TEMP purgé)
 
 En cas d’échec (caisse se ferme sans installation, ou **NSIS Error : installer integrity check has failed**) :
 
@@ -267,7 +268,12 @@ Le client sélectionné est associé au panier ; obligatoire pour le mode paieme
 
 ## Commandes boutique
 
-Menu → **Commandes boutique** : liste des commandes `a_passer_caisse` pour le magasin/caisse configurés.
+Menu → **Commandes boutique** : listes **À préparer**, **En préparation**, **À passer en caisse**, **En cours / En attente**, **À encaisser**.
+
+### Préparation (papier)
+
+- **À préparer** : clic = imprime une check-list rangée par catégorie avec `[ ]` devant chaque ligne ; bouton **Préparer** → `en_preparation`.
+- **En préparation** : réimpression possible ; **À préparer** (retour) ; **À passer en caisse** (fin, checklist papier).
 
 **Prérequis backoffice** : les routes `/api/caisse/commandes-boutique/*` doivent être déployées sur l’URL configurée dans `caisse.config.json`. En local : `http://localhost:3000` avec `npm run dev`. En prod : déployer la version du monorepo incluant le module commandes client. Si l’API n’est pas encore en ligne, la caisse affiche une erreur explicite (404) au lieu de « Réseau indisponible ».
 
@@ -288,23 +294,23 @@ Parcours test complet :
 3. Menu → **Commandes boutique** → ouvrir la commande → encaissement test (double ticket).
 4. Aucun impact sur le CA des vrais magasins (M01, M02…).
 
-1. **Verrou** poste (30 min) — une commande = un caissier à la fois.
-2. Chargement : **client seul** sur le panier (lignes vides) ; badge **Commande #N** visible.
-3. Le caissier pèse et encaisse normalement.
-4. **Double impression** obligatoire (ticket vente + ticket commande boutique) — pas de « Valider sans ticket ».
-5. Crédit client **pré-rempli** mais modifiable ; switch **Livraison** activé si commande livraison.
-6. À la validation : lien API `shop_cart_pos_link` + passage statut `livraison` / `retrait`.
+1. **Prise en caisse** → statut `en_cours_caisse` + verrou poste (30 min) — la commande quitte « À passer ».
+2. Si un **panier est déjà en cours** : dialogue **annuler** / **utiliser le panier** / **mettre en attente**.
+3. Chargement : client + panier (vide ou conservé) ; badge **Commande #N**.
+4. **Mise en attente** (bouton Attente) → statut `en_attente_caisse` + panier local.
+5. **Suppression** panier/commande → retour `a_passer_caisse`.
+6. Le caissier pèse et encaisse normalement.
+7. **Double impression** : ticket vente + ticket commande avec les **articles du panier caisse** (suffixe ` x` si unité ≠ unité/kg).
+8. À la validation : lien API `shop_cart_pos_link` + passage statut livraison / retrait.
 
 ### À encaisser (espèce / impayé livraison)
 
-Deuxième liste dans **Commandes boutique** — commandes déjà passées en caisse dont le paiement est encore dû :
+Liste séparée — commandes déjà passées en caisse dont le paiement est encore dû :
 
 - `livre_espece_a_encaisser` / `retire_espece_a_encaisser` (espèce confirmée à la livraison/retrait)
 - `livre_non_paye` (livraison sans paiement)
 
-Clic → ouverture directe du **modal Paiement** (montant = total caisse `pos_total`), client pré-sélectionné, badge **Encaissement #N**. Validation → API `collect-payment` + ticket de caisse (ligne « Commande #N »).
-
-Si un **panier est déjà en cours** (lignes ou client sélectionné), un dialogue propose de **continuer le panier** ou de le **mettre en attente** avant l’encaissement.
+Clic → **modal Paiement uniquement** (montant = `pos_total`) **sans modifier le panier caisse**. Annulation du modal → la commande reste à encaisser. Validation → API `collect-payment` + ticket (ligne « Commande #N »).
 
 Fichiers : `src/lib/commandes-boutique.ts`, `src/components/CommandesBoutiqueDialog.tsx`, `PaymentDialog` (`linkedShopOrder`).
 

@@ -12,16 +12,22 @@ import {
   DialogActions,
   DialogContent,
   DialogTitle,
+  IconButton,
+  InputAdornment,
   List,
   ListItem,
+  ListItemButton,
   ListItemText,
   MenuItem,
   Paper,
   Stack,
   TextField,
+  Tooltip,
   Typography,
 } from "@mui/material";
+import ClearIcon from "@mui/icons-material/Clear";
 import PhotoCameraOutlinedIcon from "@mui/icons-material/PhotoCameraOutlined";
+import SearchIcon from "@mui/icons-material/Search";
 import AppLink from "@/components/AppLink";
 import CommandeClientLinesEditor from "@/features/commandes-client/CommandeClientLinesEditor";
 import TicketRefCameraScannerDialog, {
@@ -63,6 +69,8 @@ export default function CommandeLivraisonClient() {
   const [productById, setProductById] = useState<Map<string, ShopProduct>>(new Map());
   const [categoryMeta, setCategoryMeta] = useState<Map<string, CategoryMeta>>(new Map());
   const [cameraOpen, setCameraOpen] = useState(false);
+  const [searching, setSearching] = useState(false);
+  const [actionLoading, setActionLoading] = useState(false);
   const [cameraSupported, setCameraSupported] = useState(false);
 
   useEffect(() => {
@@ -164,16 +172,17 @@ export default function CommandeLivraisonClient() {
     }
   }, [confirmItem, detailCommande?.id, loadDetail]);
 
-  const handleScan = useCallback(
-    async (refOverride?: string) => {
-      const ticketRef = (refOverride ?? scanRef).trim();
-      if (!ticketRef) return;
+  const lookupCommande = useCallback(
+    async (query: string) => {
+      const trimmed = query.trim();
+      if (!trimmed) return;
       setErr(null);
+      setSearching(true);
       try {
         const res = await fetch("/api/commandes-client/scan", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ ticketRef }),
+          body: JSON.stringify({ query: trimmed, lookupOnly: true }),
         });
         const json = (await res.json()) as {
           commande?: CommandeClientListItem;
@@ -183,32 +192,66 @@ export default function CommandeLivraisonClient() {
           setErr(typeof json.error === "string" ? json.error : tCommon("error"));
           return;
         }
-        setScanRef("");
-        setCameraOpen(false);
-        await load();
         if (json.commande) {
           openConfirm(json.commande);
         }
       } catch {
         setErr(tCommon("networkError"));
+      } finally {
+        setSearching(false);
       }
     },
-    [scanRef, load, openConfirm, tCommon],
+    [openConfirm, tCommon],
   );
+
+  const handleSearch = useCallback(() => {
+    void lookupCommande(scanRef);
+  }, [lookupCommande, scanRef]);
 
   const handleCameraDetected = useCallback(
-    (ticketRef: string) => {
+    async (ticketRef: string) => {
+      setCameraOpen(false);
       setScanRef(ticketRef);
-      void handleScan(ticketRef);
+      await lookupCommande(ticketRef);
     },
-    [handleScan],
+    [lookupCommande],
   );
 
+  const refreshConfirmItem = useCallback((item: CommandeClientListItem) => {
+    setConfirmItem(item);
+    setPayment(defaultConfirmedPaymentForDelivery(item.payment_method));
+  }, []);
+
+  const handleStartDelivery = async () => {
+    if (!confirmItem || confirmItem.workflow_status !== "a_livrer") return;
+    setActionLoading(true);
+    setErr(null);
+    try {
+      const res = await fetch(
+        `/api/commandes-client/${encodeURIComponent(confirmItem.id)}/start-delivery`,
+        { method: "POST" },
+      );
+      const json = (await res.json()) as { commande?: CommandeClientListItem; error?: string };
+      if (!res.ok || !json.commande) {
+        setErr(typeof json.error === "string" ? json.error : tCommon("error"));
+        return;
+      }
+      refreshConfirmItem(json.commande);
+      await load();
+    } catch {
+      setErr(tCommon("networkError"));
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
   const handleConfirm = async () => {
-    if (!confirmItem) return;
+    if (!confirmItem || confirmItem.workflow_status !== "en_livraison") return;
     const isPaid = confirmItem.payment_status === "paid";
     const body = isPaid ? {} : { payment };
 
+    setActionLoading(true);
+    setErr(null);
     try {
       const res = await fetch(
         `/api/commandes-client/${encodeURIComponent(confirmItem.id)}/confirm-delivery`,
@@ -227,8 +270,13 @@ export default function CommandeLivraisonClient() {
       await load();
     } catch {
       setErr(tCommon("networkError"));
+    } finally {
+      setActionLoading(false);
     }
   };
+
+  const isAwaitingDelivery = confirmItem?.workflow_status === "a_livrer";
+  const isInDelivery = confirmItem?.workflow_status === "en_livraison";
 
   return (
     <Box sx={{ maxWidth: 720, mx: "auto", p: 2 }}>
@@ -239,20 +287,54 @@ export default function CommandeLivraisonClient() {
         {t("title")}
       </Typography>
       <Stack spacing={1} sx={{ mb: 2 }}>
-        <Stack direction="row" spacing={1}>
+        <Stack direction="row" spacing={1} sx={{ alignItems: "flex-start" }}>
           <TextField
             size="small"
             label={t("scanLabel")}
             value={scanRef}
             onChange={(e) => setScanRef(e.target.value)}
             onKeyDown={(e) => {
-              if (e.key === "Enter") void handleScan();
+              if (e.key === "Enter") handleSearch();
             }}
             fullWidth
+            slotProps={{
+              input: {
+                endAdornment: scanRef.trim() ? (
+                  <InputAdornment position="end">
+                    <IconButton
+                      size="small"
+                      edge="end"
+                      aria-label={t("clearSearch")}
+                      onClick={() => setScanRef("")}
+                    >
+                      <ClearIcon fontSize="small" />
+                    </IconButton>
+                  </InputAdornment>
+                ) : null,
+              },
+            }}
           />
-          <Button variant="contained" onClick={() => void handleScan()}>
-            {t("scan")}
-          </Button>
+          <Tooltip title={t("search")}>
+            <span>
+              <IconButton
+                color="primary"
+                disabled={!scanRef.trim() || searching}
+                onClick={handleSearch}
+                aria-label={t("search")}
+                sx={{
+                  mt: 0.25,
+                  width: 40,
+                  height: 40,
+                  bgcolor: "primary.main",
+                  color: "primary.contrastText",
+                  "&:hover": { bgcolor: "primary.dark" },
+                  "&.Mui-disabled": { bgcolor: "action.disabledBackground", color: "action.disabled" },
+                }}
+              >
+                {searching ? <CircularProgress size={22} color="inherit" /> : <SearchIcon />}
+              </IconButton>
+            </span>
+          </Tooltip>
         </Stack>
         {cameraSupported ? (
           <Button
@@ -275,24 +357,21 @@ export default function CommandeLivraisonClient() {
       ) : (
         <List component={Paper}>
           {items.map((c) => (
-            <ListItem key={c.id} divider>
-              <ListItemText
-                primary={
-                  <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
-                    <span>#{c.cart_number}</span>
-                    <Chip size="small" label={workflowStatusLabel(c.workflow_status)} />
-                    {c.payment_status === "paid" ? (
-                      <Chip size="small" color="success" label={t("paid")} />
-                    ) : null}
-                  </Stack>
-                }
-                secondary={`${c.client_nom ?? "—"} · ${formatDh(displayTotal(c))} DH`}
-              />
-              {c.workflow_status === "en_livraison" ? (
-                <Button size="small" variant="outlined" onClick={() => openConfirm(c)}>
-                  {t("confirm")}
-                </Button>
-              ) : null}
+            <ListItem key={c.id} disablePadding divider>
+              <ListItemButton onClick={() => openConfirm(c)}>
+                <ListItemText
+                  primary={
+                    <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
+                      <span>#{c.cart_number}</span>
+                      <Chip size="small" label={workflowStatusLabel(c.workflow_status)} />
+                      {c.payment_status === "paid" ? (
+                        <Chip size="small" color="success" label={t("paid")} />
+                      ) : null}
+                    </Stack>
+                  }
+                  secondary={`${c.client_nom ?? "—"} · ${formatDh(displayTotal(c))} DH`}
+                />
+              </ListItemButton>
             </ListItem>
           ))}
         </List>
@@ -347,7 +426,7 @@ export default function CommandeLivraisonClient() {
               </Typography>
               {confirmItem.payment_status === "paid" ? (
                 <Typography>{t("alreadyPaid")}</Typography>
-              ) : (
+              ) : isInDelivery ? (
                 <TextField
                   select
                   fullWidth
@@ -359,7 +438,9 @@ export default function CommandeLivraisonClient() {
                   <MenuItem value="cash">{t("cash")}</MenuItem>
                   <MenuItem value="none">{t("none")}</MenuItem>
                 </TextField>
-              )}
+              ) : isAwaitingDelivery ? (
+                <Typography color="text.secondary">{t("startDeliveryHint")}</Typography>
+              ) : null}
             </Stack>
           ) : null}
         </DialogContent>
@@ -370,9 +451,11 @@ export default function CommandeLivraisonClient() {
                 {t("backToConfirm")}
               </Button>
               <Button onClick={closeConfirm}>{tCommon("cancel")}</Button>
-              <Button variant="contained" onClick={() => void handleConfirm()}>
-                {t("confirm")}
-              </Button>
+              {isInDelivery ? (
+                <Button variant="contained" disabled={actionLoading} onClick={() => void handleConfirm()}>
+                  {t("confirm")}
+                </Button>
+              ) : null}
             </>
           ) : (
             <>
@@ -382,9 +465,16 @@ export default function CommandeLivraisonClient() {
                 </Button>
               ) : null}
               <Button onClick={closeConfirm}>{tCommon("cancel")}</Button>
-              <Button variant="contained" onClick={() => void handleConfirm()}>
-                {t("confirm")}
-              </Button>
+              {isAwaitingDelivery ? (
+                <Button variant="contained" disabled={actionLoading} onClick={() => void handleStartDelivery()}>
+                  {t("startDelivery")}
+                </Button>
+              ) : null}
+              {isInDelivery ? (
+                <Button variant="contained" disabled={actionLoading} onClick={() => void handleConfirm()}>
+                  {t("confirm")}
+                </Button>
+              ) : null}
             </>
           )}
         </DialogActions>

@@ -80,6 +80,8 @@ export async function GET(_req: Request, ctx: Ctx) {
       account_id: supplierId,
       label,
       supplier_id: supplierId,
+      whatsapp_phone: null,
+      whatsapp_available: false,
     },
     achats,
     paiements: paiementsRes.paiements,

@@ -44,6 +44,7 @@
       "clients": "إدارة الزبناء",
       "commandesClient": "طلبيات الزبناء",
       "commandesClientPreparation": "تحضير الطلبيات",
+      "commandesClientLivraison": "توصيل الطلبيات",
       "logout": "خرج",
       "settings": "الإعدادات",
       "settingsAria": "الإعدادات",
@@ -237,8 +238,9 @@
       "livraison": {
         "title": "التوصيل",
         "back": "رجع",
-        "scanLabel": "رمز التذكرة (MxxCxxTxxx)",
-        "scan": "مسح",
+        "scanLabel": "رمز التذكرة أو رقم السلة",
+        "search": "بحث",
+        "clearSearch": "مسح",
         "scanCamera": "مسح بالكامéra",
         "cameraTitle": "مسح التذكرة",
         "cameraHint": "وجّه الكامéra نحو الرمز الشريطي Code 128 (MxxCxxTxxx).",
@@ -246,7 +248,9 @@
         "cameraDenied": "تم رفض الوصول إلى الكامéra.",
         "cameraUnavailable": "الكامéra غير متاحة على هذا الجهاز.",
         "confirm": "تأكيد التوصيل",
-        "confirmTitle": "تأكيد التوصيل",
+        "startDelivery": "بدء التوصيل",
+        "startDeliveryHint": "الطلبية جاهزة — ابدأ التوصيل قبل تأكيد الدفع والتسليم.",
+        "confirmTitle": "طلبية التوصيل",
         "orderNumber": "الطلبية",
         "client": "الزبون",
         "total": "المجموع",
@@ -989,7 +993,9 @@
           "photosEmpty": "لا توجد صور.",
           "photoCamera": "التقاط صورة",
           "photoGallery": "المعرض",
-          "photoDeleteAria": "حذف الصورة"
+          "photoDeleteAria": "حذف الصورة",
+          "downloadRecap": "نزّل الملخّص",
+          "sendRecapWhatsApp": "صيفط WhatsApp"
         },
         "paymentDialog": {
           "title": "سجّل دفع",
@@ -1002,7 +1008,20 @@
           "photoCamera": "التقاط صورة",
           "photoGallery": "المعرض",
           "photoDeleteAria": "حذف الصورة",
-          "photosUploadFailed": "تم تسجيل الدفع، لكن تعذّر إرسال بعض الصور. يمكنك إضافتها من السجل."
+          "photosUploadFailed": "تم تسجيل الدفع، لكن تعذّر إرسال بعض الصور. يمكنك إضافتها من السجل.",
+          "saveAndSend": "سجّل & صيفط"
+        },
+        "paymentRecap": {
+          "title": "وصل الدفع",
+          "account": "الحساب",
+          "supplier": "المورد",
+          "paymentDate": "تاريخ الدفع",
+          "method": "طريقة الدفع",
+          "amount": "المبلغ",
+          "achatsTitle": "المشتريات المدفوعة",
+          "achatDate": "تاريخ الإقفال",
+          "achatAmount": "المبلغ",
+          "comment": "تعليق"
         },
         "achatDetail": {
           "back": "رجوع للحساب",

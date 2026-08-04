@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { normalizeWhatsAppPhone } from "@/lib/whatsapp/url";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { requireApiPermission } from "@/lib/auth/require-permission-api";
 import {
@@ -25,7 +26,7 @@ export async function GET(_req: Request, ctx: Ctx) {
 
   const { data: vendeur, error: ve } = await supabase
     .from("ref_supplier_vendeur")
-    .select("id, label, supplier_id, ref_supplier(id, code, label)")
+    .select("id, label, supplier_id, phone, preferred_locale, ref_supplier(id, code, label)")
     .eq("id", vendeurId)
     .maybeSingle();
 
@@ -65,6 +66,9 @@ export async function GET(_req: Request, ctx: Ctx) {
 
   const totals = summarizeAchats(achatsRes.achats);
 
+  const vendeurPhone = (vendeur as { phone?: string | null }).phone ?? null;
+  const whatsappAvailable = normalizeWhatsAppPhone(vendeurPhone ?? "") !== null;
+
   return NextResponse.json({
     account: {
       account_type: "vendeur" as const,
@@ -72,6 +76,8 @@ export async function GET(_req: Request, ctx: Ctx) {
       label: String((vendeur as { label: string }).label),
       parent_supplier_label: parentLabel,
       supplier_id: String((vendeur as { supplier_id: string }).supplier_id),
+      whatsapp_phone: whatsappAvailable ? vendeurPhone : null,
+      whatsapp_available: whatsappAvailable,
     },
     achats,
     paiements: paiementsRes.paiements,

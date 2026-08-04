@@ -44,6 +44,7 @@
       "clients": "Gestion clients",
       "commandesClient": "Commandes client",
       "commandesClientPreparation": "Préparation commandes",
+      "commandesClientLivraison": "Livraison commandes",
       "logout": "Déconnexion",
       "settings": "Paramètres",
       "settingsAria": "Paramètres",
@@ -237,8 +238,9 @@
       "livraison": {
         "title": "Livraison",
         "back": "Retour",
-        "scanLabel": "Code ticket (MxxCxxTxxx)",
-        "scan": "Scanner",
+        "scanLabel": "N° ticket ou panier",
+        "search": "Rechercher",
+        "clearSearch": "Effacer la saisie",
         "scanCamera": "Scanner avec la caméra",
         "cameraTitle": "Scanner le ticket",
         "cameraHint": "Cadrez le code-barres Code 128 du ticket (MxxCxxTxxx). La caméra arrière est utilisée si disponible.",
@@ -246,7 +248,9 @@
         "cameraDenied": "Accès à la caméra refusé. Autorisez la caméra dans les paramètres du navigateur.",
         "cameraUnavailable": "Caméra indisponible sur cet appareil.",
         "confirm": "Confirmer livraison",
-        "confirmTitle": "Confirmation livraison",
+        "startDelivery": "Démarrer la livraison",
+        "startDeliveryHint": "La commande est prête — démarrez la livraison avant de confirmer le paiement et la remise.",
+        "confirmTitle": "Commande livraison",
         "orderNumber": "Commande",
         "client": "Client",
         "total": "Total",
@@ -989,7 +993,9 @@
           "photosEmpty": "Aucune photo.",
           "photoCamera": "Prendre une photo",
           "photoGallery": "Galerie",
-          "photoDeleteAria": "Supprimer la photo"
+          "photoDeleteAria": "Supprimer la photo",
+          "downloadRecap": "Télécharger récap",
+          "sendRecapWhatsApp": "Envoyer WhatsApp"
         },
         "paymentDialog": {
           "title": "Enregistrer un paiement",
@@ -1002,7 +1008,20 @@
           "photoCamera": "Prendre une photo",
           "photoGallery": "Galerie",
           "photoDeleteAria": "Supprimer la photo",
-          "photosUploadFailed": "Paiement enregistré, mais une ou plusieurs photos n'ont pas pu être envoyées. Vous pouvez les ajouter depuis l'historique."
+          "photosUploadFailed": "Paiement enregistré, mais une ou plusieurs photos n'ont pas pu être envoyées. Vous pouvez les ajouter depuis l'historique.",
+          "saveAndSend": "Enregistrer & Envoyer"
+        },
+        "paymentRecap": {
+          "title": "Reçu de paiement",
+          "account": "Compte",
+          "supplier": "Fournisseur",
+          "paymentDate": "Date du paiement",
+          "method": "Mode de paiement",
+          "amount": "Montant",
+          "achatsTitle": "Achats réglés",
+          "achatDate": "Date clôture",
+          "achatAmount": "Montant",
+          "comment": "Commentaire"
         },
         "achatDetail": {
           "back": "Retour au compte",

@@ -279,6 +279,29 @@ export default function BackofficeHome() {
                 {t('commandesClientPreparation')}
               </Button>
             ) : null}
+            {canDeliverCommandesClient ? (
+              <Button
+                component={AppLink}
+                href="/commandes-client/livraison"
+                variant="outlined"
+                color="success"
+                size="large"
+                fullWidth
+                startIcon={<LocalShippingOutlinedIcon sx={{ fontSize: 28 }} />}
+                sx={{
+                  borderRadius: 2,
+                  textTransform: 'none',
+                  fontWeight: 600,
+                  py: 1.25,
+                  px: 2,
+                  justifyContent: 'flex-start',
+                  gap: 1.25,
+                  '& .MuiButton-startIcon': { mr: 0.5, ml: 0 },
+                }}
+              >
+                {t('commandesClientLivraison')}
+              </Button>
+            ) : null}
             {canCommandesFournisseur ? (
               <Button
                 component={AppLink}

@@ -15,6 +15,7 @@ import {
   TextField,
   Typography,
 } from "@mui/material";
+import WhatsAppIcon from "@mui/icons-material/WhatsApp";
 import { useCallback, useEffect, useState } from "react";
 import { useTranslations } from "next-intl";
 import type { CompteAccountType } from "@/lib/commandes-fournisseur/compte-queries";
@@ -27,8 +28,10 @@ type Props = {
   accountId: string;
   achatIds: string[];
   montant: number;
+  whatsappAvailable?: boolean;
   onClose: () => void;
   onSaved: () => void;
+  onSavedAndSend?: (paiementId: string) => void | Promise<void>;
 };
 
 function formatDh(n: number): string {
@@ -65,8 +68,10 @@ export default function ComptePaiementFormDialog({
   accountId,
   achatIds,
   montant,
+  whatsappAvailable = false,
   onClose,
   onSaved,
+  onSavedAndSend,
 }: Props) {
   const t = useTranslations("backoffice.commandes.comptes.paymentDialog");
   const tCommon = useTranslations("common");
@@ -105,38 +110,48 @@ export default function ComptePaiementFormDialog({
     void loadMethods();
   }, [open, loadMethods]);
 
-  async function save() {
+  async function persistPayment(): Promise<string | null> {
+    const res = await fetch("/api/commandes-fournisseur/comptes/paiements", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        accountType,
+        accountId,
+        achatIds,
+        paymentMethodId,
+        datePaiement,
+        commentaire: commentaire.trim() || null,
+      }),
+    });
+    const json = (await res.json()) as { error?: string; paiementId?: string };
+    if (!res.ok) {
+      setErr(typeof json.error === "string" ? json.error : tCommon("error"));
+      return null;
+    }
+    return typeof json.paiementId === "string" ? json.paiementId : null;
+  }
+
+  async function save(andSend: boolean) {
     if (!paymentMethodId || achatIds.length === 0) return;
+    if (andSend && !whatsappAvailable) return;
+
     setSaving(true);
     setErr(null);
     setWarn(null);
     try {
-      const res = await fetch("/api/commandes-fournisseur/comptes/paiements", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          accountType,
-          accountId,
-          achatIds,
-          paymentMethodId,
-          datePaiement,
-          commentaire: commentaire.trim() || null,
-        }),
-      });
-      const json = (await res.json()) as { error?: string; paiementId?: string };
-      if (!res.ok) {
-        setErr(typeof json.error === "string" ? json.error : tCommon("error"));
-        return;
-      }
+      const paiementId = await persistPayment();
+      if (!paiementId) return;
 
-      const paiementId = typeof json.paiementId === "string" ? json.paiementId : "";
-      if (paiementId && pendingPhotoFiles.length > 0) {
+      if (pendingPhotoFiles.length > 0) {
         const photosOk = await uploadPaiementPhotos(paiementId, pendingPhotoFiles);
         if (!photosOk) {
           setWarn(t("photosUploadFailed"));
-          onSaved();
-          return;
         }
+      }
+
+      if (andSend && onSavedAndSend) {
+        await onSavedAndSend(paiementId);
+        return;
       }
 
       onSaved();
@@ -216,13 +231,31 @@ export default function ComptePaiementFormDialog({
           onChange={handlePendingPhotosChange}
         />
       </DialogContent>
-      <DialogActions>
+      <DialogActions sx={{ flexWrap: "wrap", gap: 1 }}>
         <Button onClick={onClose} disabled={saving}>
           {tCommon("cancel")}
         </Button>
-        <Button variant="contained" color="success" disabled={saving || achatIds.length === 0} onClick={() => void save()}>
+        <Button
+          variant="contained"
+          color="success"
+          disabled={saving || achatIds.length === 0}
+          onClick={() => void save(false)}
+          sx={{ textTransform: "none" }}
+        >
           {saving ? tCommon("loading") : tCommon("save")}
         </Button>
+        {whatsappAvailable && onSavedAndSend ? (
+          <Button
+            variant="contained"
+            color="success"
+            disabled={saving || achatIds.length === 0}
+            startIcon={<WhatsAppIcon />}
+            onClick={() => void save(true)}
+            sx={{ textTransform: "none" }}
+          >
+            {saving ? tCommon("loading") : t("saveAndSend")}
+          </Button>
+        ) : null}
       </DialogActions>
     </FormDialog>
   );

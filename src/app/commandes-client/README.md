@@ -10,17 +10,33 @@ Workflow opérationnel des commandes soumises depuis la boutique en ligne (`shop
 | `/commandes-client/[id]` | `commandes_client.read` | Détail, **rattachement client**, **édition lignes** (avant validation), validation, annulation |
 | `/commandes-client/preparation` | `commandes_client.prepare` | Liste commandes à préparer (progression par ligne) |
 | `/commandes-client/preparation/[id]` | `commandes_client.prepare` | Vue commande puis préparation active (vert/rouge), commentaire, fin → `a_passer_caisse` |
-| `/commandes-client/livraison` | `commandes_client.deliver` | Scan ticket (saisie ou caméra) → confirmation livraison |
+| `/commandes-client/livraison` | `commandes_client.deliver` | Recherche / liste → dialogue commande ; transitions via **Démarrer la livraison** (`a_livrer` → `en_livraison`) et **Confirmer livraison** dans le dialogue uniquement |
 | `/commandes-client/retrait` | `commandes_client.deliver` | Retrait comptoir |
 
-Lien accueil backoffice : **Commandes client**.
+Lien accueil backoffice : **Commandes client** ; raccourcis **Préparation commandes** et **Livraison commandes** (permission `commandes_client.deliver`).
 
 ## Machine à états (`workflow_status`)
 
 ```
-nouvelle → a_valider → a_preparer → en_preparation → a_passer_caisse → (livraison|retrait) → terminee
-                              ↘ annulee (motif obligatoire, avant caisse)
+nouvelle → a_valider → a_preparer → en_preparation → a_passer_caisse
+  → en_cours_caisse ⇄ en_attente_caisse
+  → (livraison|retrait) → terminee
+                              ↘ annulee (motif obligatoire, avant / pendant caisse)
 ```
+
+### Caisse POS
+
+| Statut | Signification |
+|--------|----------------|
+| `a_passer_caisse` | Prête à être prise au poste |
+| `en_cours_caisse` | Ouverte sur une caisse (absente de la liste « à passer ») |
+| `en_attente_caisse` | Panier / commande mis en attente au POS |
+
+- Prise en caisse → `en_cours_caisse` + verrou poste.
+- Mise en attente → `en_attente_caisse`.
+- Suppression du panier lié → retour `a_passer_caisse`.
+- Encaissement final (lien POS) → `a_livrer` / `a_retirer`.
+- Ticket commande imprimé : lignes du **panier caisse réel** (pas la check-list préparation).
 
 ### Préparation (`en_preparation`)
 
@@ -40,7 +56,7 @@ Chaque commande est rattachée à un **`magasin_id`** (obligatoire avant validat
 
 ## Verrou caisse
 
-Une commande `a_passer_caisse` ne peut être ouverte que sur **un poste** à la fois (`caisse_locked_at`, `caisse_locked_by`). Expiration : **30 minutes**.
+Une commande au POS (`a_passer_caisse` / `en_cours_caisse` / `en_attente_caisse`) ne peut être ouverte que sur **un poste** à la fois (`caisse_locked_at`). Expiration : **30 minutes**.
 
 ## Journal
 
@@ -62,16 +78,19 @@ Préfixe `/api/commandes-client` :
 | `/[id]/start-preparation` | POST | prepare |
 | `/[id]/lines/[lineKey]/prepared` | PATCH | prepare (statut ligne : available / unavailable / unchecked) |
 | `/[id]/finish-preparation` | POST | prepare |
-| `/scan` | POST | deliver — `a_livrer` → `en_livraison` puis ouvre confirmation ; `en_livraison` → confirmation directe |
+| `/scan` | POST | deliver — recherche `{ query }` (ticket ou n° panier), `lookupOnly: true` par défaut côté UI |
+| `/[id]/start-delivery` | POST | deliver — `a_livrer` → `en_livraison` |
 | `/[id]/confirm-delivery` | POST | deliver |
 | `/[id]/confirm-pickup` | POST | deliver |
 | `/[id]/collect-cash` | POST | deliver (backoffice, sans ticket POS) |
 
-API caisse (token `CAISSE_TICKET_TOKEN`) : voir [`../api/caisse/README.md`](../api/caisse/README.md) et routes `commandes-boutique/*` (`link`, `a-encaisser`, `collect-payment`).
+API caisse (token `CAISSE_TICKET_TOKEN`) : voir [`../api/caisse/README.md`](../api/caisse/README.md) et routes `commandes-boutique/*` (`preparation`, `preparation-ticket`, `link`, `a-encaisser`, `collect-payment`).
+
+La caisse POS peut aussi gérer la **préparation papier** : listes `a_preparer` / `en_preparation`, impression check-list par catégorie, transitions `start` / `back` / `finish`.
 
 ## Schéma
 
-Migration : `supabase/migrations/20260803240000_shop_cart_workflow.sql`, `20260804000000_shop_cart_en_preparation.sql`
+Migration : `supabase/migrations/20260803240000_shop_cart_workflow.sql`, `20260804000000_shop_cart_en_preparation.sql`, `20260804120000_shop_cart_caisse_en_cours.sql`
 
 - Colonnes `shop_cart` : `magasin_id`, `workflow_status` (incl. `en_preparation`), `preparation_comment`, timestamps workflow, annulation, verrou caisse
 - Tables : `shop_cart_pos_link`, `shop_cart_workflow_log`

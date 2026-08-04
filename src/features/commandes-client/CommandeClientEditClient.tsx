@@ -296,7 +296,15 @@ export default function CommandeClientEditClient({ cartId }: Props) {
   const canCancel =
     can("commandes_client.validate") &&
     commande.workflow_status != null &&
-    ["nouvelle", "a_valider", "a_preparer", "en_preparation", "a_passer_caisse"].includes(commande.workflow_status);
+    [
+      "nouvelle",
+      "a_valider",
+      "a_preparer",
+      "en_preparation",
+      "a_passer_caisse",
+      "en_cours_caisse",
+      "en_attente_caisse",
+    ].includes(commande.workflow_status);
   const canLinkClient =
     can("commandes_client.validate") &&
     (commande.workflow_status === "nouvelle" || commande.workflow_status === "a_valider");
