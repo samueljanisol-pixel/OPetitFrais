@@ -12,7 +12,7 @@ import {
 } from "node:fs";
 import { join } from "node:path";
 import { promisify } from "node:util";
-import { Readable } from "node:stream";
+import { Readable, Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { app, type BrowserWindow } from "electron";
 import { loadRuntimeConfig } from "./load-config";
@@ -176,10 +176,19 @@ function readInstallerHead(filePath: string, length: number): Buffer {
   }
 }
 
+/** Hash fichier — éviter pipeline(stream, hash) sous Electron (digest parfois faux). */
 async function sha256File(filePath: string): Promise<string> {
-  const hash = createHash("sha256");
-  await pipeline(createReadStream(filePath), hash);
-  return hash.digest("hex");
+  return new Promise((resolve, reject) => {
+    const hash = createHash("sha256");
+    const stream = createReadStream(filePath);
+    stream.on("data", (chunk: Buffer | string) => {
+      hash.update(typeof chunk === "string" ? Buffer.from(chunk) : chunk);
+    });
+    stream.on("error", reject);
+    stream.on("end", () => {
+      resolve(hash.digest("hex"));
+    });
+  });
 }
 
 /** Vérifie taille attendue + en-tête PE + signature NSIS (+ SHA-256 si fourni). */
@@ -220,6 +229,9 @@ async function validateInstallerFile(
   const sha256 = await sha256File(filePath);
   const expectedHash = expectedSha256?.trim().toLowerCase() ?? "";
   if (expectedHash && sha256 !== expectedHash) {
+    await logUpdate(
+      `SHA-256 mismatch: got ${sha256.slice(0, 16)}… expected ${expectedHash.slice(0, 16)}… (${sizeBytes} o)`,
+    );
     return {
       ok: false,
       reason: `checksum SHA-256 incorrect (fichier corrompu)`,
@@ -276,14 +288,13 @@ async function fetchReleaseInfo(): Promise<
   };
 }
 
-async function downloadInstaller(
+async function downloadInstallerOnce(
   downloadUrl: string,
-  dest: string,
+  partPath: string,
   sizeBytes: number | null,
   expectedSha256: string | null,
 ): Promise<{ sizeBytes: number; sha256: string }> {
   const config = loadRuntimeConfig();
-  const partPath = `${dest}.part`;
 
   try {
     await fs.unlink(partPath);
@@ -309,19 +320,24 @@ async function downloadInstaller(
   let received = 0;
   const nodeStream = Readable.fromWeb(res.body as import("stream/web").ReadableStream<Uint8Array>);
 
-  nodeStream.on("data", (chunk: Buffer | string) => {
-    received += typeof chunk === "string" ? Buffer.byteLength(chunk) : chunk.length;
-    if (total > 0) {
-      setState({
-        phase: "downloading",
-        progressPercent: Math.min(99, Math.round((received / total) * 100)),
-      });
-    } else if (received > 0) {
-      setState({ phase: "downloading", progressPercent: null });
-    }
+  // Ne pas faire stream.on('data') + pipeline : sous Electron ça peut corrompre
+  // le fichier tout en gardant une taille proche / identique (NSIS integrity fail).
+  const progressTap = new Transform({
+    transform(chunk: Buffer, _enc, callback) {
+      received += chunk.length;
+      if (total > 0) {
+        setState({
+          phase: "downloading",
+          progressPercent: Math.min(99, Math.round((received / total) * 100)),
+        });
+      } else if (received > 0) {
+        setState({ phase: "downloading", progressPercent: null });
+      }
+      callback(null, chunk);
+    },
   });
 
-  await pipeline(nodeStream, createWriteStream(partPath));
+  await pipeline(nodeStream, progressTap, createWriteStream(partPath));
 
   const validated = await validateInstallerFile(
     partPath,
@@ -337,13 +353,45 @@ async function downloadInstaller(
     throw new Error(validated.reason);
   }
 
-  try {
-    await fs.unlink(dest);
-  } catch {
-    /* ignore */
-  }
-  await fs.rename(partPath, dest);
   return { sizeBytes: validated.sizeBytes, sha256: validated.sha256 };
+}
+
+async function downloadInstaller(
+  downloadUrl: string,
+  dest: string,
+  sizeBytes: number | null,
+  expectedSha256: string | null,
+): Promise<{ sizeBytes: number; sha256: string }> {
+  const partPath = `${dest}.part`;
+  const maxAttempts = 3;
+  let lastError = "Téléchargement impossible";
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    try {
+      if (attempt > 1) {
+        await logUpdate(`nouvel essai téléchargement (${attempt}/${maxAttempts})`);
+        setState({ phase: "downloading", progressPercent: 0, error: null });
+      }
+      const validated = await downloadInstallerOnce(
+        downloadUrl,
+        partPath,
+        sizeBytes,
+        expectedSha256,
+      );
+      try {
+        await fs.unlink(dest);
+      } catch {
+        /* ignore */
+      }
+      await fs.rename(partPath, dest);
+      return validated;
+    } catch (e) {
+      lastError = e instanceof Error ? e.message : String(e);
+      await logUpdate(`échec téléchargement essai ${attempt}/${maxAttempts}: ${lastError}`);
+    }
+  }
+
+  throw new Error(lastError);
 }
 
 async function runUpdateCheck(): Promise<void> {

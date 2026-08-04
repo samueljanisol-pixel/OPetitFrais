@@ -5,7 +5,6 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { PassThrough } from "node:stream";
 import { Readable } from "node:stream";
-import { pipeline } from "node:stream/promises";
 import { getCaisseAppVersion } from "./caisse-app-version";
 import {
   caisseReleaseInstallerCandidates,
@@ -56,9 +55,15 @@ export function caisseReleaseFtpSha256RemotePath(version?: string): string {
 }
 
 async function sha256LocalFile(localPath: string): Promise<string> {
-  const hash = createHash("sha256");
-  await pipeline(createReadStream(localPath), hash);
-  return hash.digest("hex");
+  return new Promise((resolve, reject) => {
+    const hash = createHash("sha256");
+    const stream = createReadStream(localPath);
+    stream.on("data", (chunk: Buffer | string) => {
+      hash.update(typeof chunk === "string" ? Buffer.from(chunk) : chunk);
+    });
+    stream.on("error", reject);
+    stream.on("end", () => resolve(hash.digest("hex")));
+  });
 }
 
 function ftpRemoteCandidates(version?: string): string[] {
