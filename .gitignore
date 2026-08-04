@@ -33,6 +33,11 @@ packages/*/dist/
 .DS_Store
 *.pem
 
+# artefacts locaux de diagnostic MAJ caisse (ne jamais committer)
+/opf-ftp-*.exe
+/opf-api-*.exe
+/*.sha256
+
 # debug
 npm-debug.log*
 yarn-debug.log*
