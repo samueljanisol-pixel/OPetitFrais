@@ -43,7 +43,7 @@ export default function ShopShell({
         >
           <Image
             src="/logo-opetitfrais.png"
-            alt=""
+            alt={t("logoAlt")}
             fill
             className="object-contain p-0.5"
             sizes="136px"

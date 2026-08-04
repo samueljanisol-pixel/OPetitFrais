@@ -31,7 +31,8 @@ export function isShopHost(host: string | null | undefined): boolean {
   return getShopHosts().includes(normalizeHost(host));
 }
 
-const BACKOFFICE_PATH_PREFIXES = [
+/** Chemins staff : exclus de l’indexation boutique (`robots.txt`). */
+export const BACKOFFICE_PATH_PREFIXES = [
   "/admin",
   "/produits",
   "/ca",

@@ -468,7 +468,7 @@ export default function ShopOrderClient({
         <main className="flex min-h-0 flex-1 flex-col bg-gradient-to-b from-emerald-50/80 to-white pb-28">
           <Box sx={{ px: 2, pt: 2, pb: 1 }}>
             <Typography
-              component="p"
+              component="h1"
               className={locale === "ar-MA" ? undefined : shopSloganScript.className}
               sx={{
                 display: "block",
@@ -485,7 +485,12 @@ export default function ShopOrderClient({
             >
               {t("slogan")}
             </Typography>
-            <Typography variant="h5" color="success.dark" sx={{ fontWeight: 800, mt: 0.5 }}>
+            <Typography
+              component="h2"
+              variant="h5"
+              color="success.dark"
+              sx={{ fontWeight: 800, mt: 0.5 }}
+            >
               {t("title")}
             </Typography>
             <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>

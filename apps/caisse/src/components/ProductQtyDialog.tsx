@@ -214,13 +214,14 @@ export default function ProductQtyDialog(props: Props) {
               />
             ) : (
               <Typography variant="caption" color="text.disabled" sx={{ fontSize: 18, fontWeight: 700 }}>
-                {salesUnit === "kg" ? "Kg" : "U"}
+                {salesUnit === "kg" ? "Kg" : "Unité"}
               </Typography>
             )}
           </Box>
           <Box sx={{ minWidth: 0, display: "flex", flexDirection: "column", justifyContent: "center" }}>
             <Typography variant="caption" color="text.secondary" sx={{ display: "block", minHeight: 16 }}>
-              {productCode} — {formatMoneyFr(listUnitPrice)} DH/{salesUnit === "kg" ? "kg" : "u"}
+              {productCode} — {formatMoneyFr(listUnitPrice)} DH/
+              {salesUnit === "kg" ? "kg" : "Unité"}
             </Typography>
           </Box>
         </Box>

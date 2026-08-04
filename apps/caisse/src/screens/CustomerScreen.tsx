@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
 import { Box, Paper, Typography } from "@mui/material";
-import { formatMoneyDhFixed, formatMoneyFr } from "@opf/caisse-core";
+import { formatMoneyDhFixed, formatMoneyFr, formatMoneyFrFixed } from "@opf/caisse-core";
 import type { CartBroadcast } from "../../electron/preload/index";
 import logoOpetitFrais from "../assets/logo-opetit-frais.png";
+import { formatQtyWithUnit, salesUnitLabel } from "../lib/format-qty-unit";
 
 const CUSTOMER_SCREEN_SX = {
   width: "100vw",
@@ -97,18 +98,47 @@ export default function CustomerScreen() {
             {lines.map((line) => (
               <Box
                 key={`${line.productName}-${line.qty}`}
-                sx={{ display: "flex", justifyContent: "space-between", py: 0.5, px: 1 }}
+                sx={{
+                  display: "grid",
+                  gridTemplateColumns: "minmax(0, 1fr) auto auto",
+                  columnGap: 1.5,
+                  alignItems: "center",
+                  py: 0.45,
+                  px: 1,
+                }}
               >
-                <Box>
-                  <Typography variant="body2" sx={{ fontWeight: 600 }}>
-                    {line.productName}
-                  </Typography>
-                  <Typography variant="caption" color="primary.main">
-                    {line.qty} x {formatMoneyFr(line.unitPrice)}{" "}
-                    {line.salesUnit === "kg" ? "DH/Kg" : "DH/Unité"}
-                  </Typography>
-                </Box>
-                <Typography variant="body2">{formatMoneyFr(line.lineTotal)}</Typography>
+                <Typography
+                  variant="body2"
+                  sx={{
+                    fontWeight: 600,
+                    minWidth: 0,
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  {line.productName}
+                </Typography>
+                <Typography
+                  variant="body2"
+                  color="primary.main"
+                  sx={{ whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums" }}
+                >
+                  {formatQtyWithUnit(line.qty, line.salesUnit)} ×{" "}
+                  {formatMoneyFr(line.unitPrice)} DH/{salesUnitLabel(line.salesUnit)}
+                </Typography>
+                <Typography
+                  variant="body2"
+                  sx={{
+                    fontWeight: 700,
+                    textAlign: "right",
+                    whiteSpace: "nowrap",
+                    fontVariantNumeric: "tabular-nums",
+                    minWidth: 64,
+                  }}
+                >
+                  {formatMoneyFrFixed(line.lineTotal)} DH
+                </Typography>
               </Box>
             ))}
           </Box>
@@ -120,7 +150,7 @@ export default function CustomerScreen() {
           <Typography variant="subtitle2">TOTAL</Typography>
           <Typography variant="body2">{data.lineCount} article(s)</Typography>
         </Box>
-        <Typography variant="h4" sx={{ fontWeight: 700 }}>
+        <Typography variant="h4" sx={{ fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>
           {formatMoneyDhFixed(data.total)}
         </Typography>
       </Paper>

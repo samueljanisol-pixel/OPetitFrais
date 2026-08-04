@@ -170,7 +170,7 @@ export function useClock(now = new Date()): Date {
 
 export function formatCashierClock(date: Date): string {
   return date.toLocaleString("fr-FR", {
-    weekday: "short",
+    weekday: "long",
     day: "2-digit",
     month: "2-digit",
     year: "numeric",
@@ -178,4 +178,11 @@ export function formatCashierClock(date: Date): string {
     minute: "2-digit",
     second: "2-digit",
   });
+}
+
+/** Affiche « Magasin : XX - Caisse : XX » à partir des codes config. */
+export function formatMagasinCaisseLabel(magasinCode: string, caisseCode: string): string {
+  const magasin = magasinCode.trim().replace(/^M/i, "") || "—";
+  const caisse = caisseCode.trim().replace(/^C/i, "") || "—";
+  return `Magasin : ${magasin} - Caisse : ${caisse}`;
 }

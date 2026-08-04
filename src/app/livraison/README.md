@@ -20,11 +20,15 @@ Page publique `/livraison` sur le domaine boutique (`opetitfrais.ma`).
 
 Paramètres → **Zone livraison** + fiches magasins (Administration).
 
+## SEO
+
+`generateMetadata` (title / description / OG / canonical) via `shop.seoLivraison*` — détail dans [`../shop/README.md`](../shop/README.md#référencement-seo).
+
 ## Fichiers
 
 | Fichier | Rôle |
 |---------|------|
-| `page.tsx` | Server : charge payload, redirect hors shop |
+| `page.tsx` | Server : metadata SEO + charge payload, redirect hors shop |
 | `LivraisonClient.tsx` | Carte, GPS, listes, contact |
 | `src/lib/shop/load-shop-livraison.ts` | Chargement payload |
 | `src/lib/shop/map/*` | Carte Leaflet (dynamic, no SSR) |

@@ -6,8 +6,8 @@ import {
   escPosLine,
   escPosLineCenter,
   escPosSelectCodePage1252,
+  escPosStyledLine,
 } from "@opf/caisse-core";
-import { salesUnitTicketSuffix } from "@/lib/caisse/shop-boutique-ticket";
 
 export type PreparationTicketLine = {
   qty: number;
@@ -37,13 +37,56 @@ function fulfillmentLabel(mode: string | null): string {
   return mode ?? "-";
 }
 
+function normalizeUnit(value: string | null | undefined): string {
+  return (value ?? "")
+    .trim()
+    .normalize("NFD")
+    .replace(/\p{Diacritic}/gu, "")
+    .toLowerCase();
+}
+
+/** Partie unité après la quantité : `kg`, `Unité(s)`, ou `x pièce`. */
+export function formatPreparationUnitPart(
+  unitCode: string | null | undefined,
+  unitLabel: string | null | undefined,
+): string {
+  const code = normalizeUnit(unitCode);
+  const label = (unitLabel ?? "").trim();
+  const labelNorm = normalizeUnit(label);
+
+  if (code === "kg" || labelNorm === "kg") return "kg";
+
+  const isDefaultUnit =
+    code === "unit" ||
+    labelNorm === "unit" ||
+    labelNorm === "unite" ||
+    labelNorm === "unites" ||
+    labelNorm === "unite(s)" ||
+    labelNorm === "u" ||
+    (!code && !labelNorm);
+
+  if (isDefaultUnit) return "Unité(s)";
+  if (label) return `x ${label}`;
+  if (unitCode?.trim()) return `x ${unitCode.trim()}`;
+  return "Unité(s)";
+}
+
+function formatPrepQty(qty: number, unitPart: string): string {
+  if (unitPart === "kg") {
+    const decimals = Math.abs(qty) >= 10 ? 2 : 3;
+    const raw = qty.toFixed(decimals).replace(".", ",");
+    return raw.replace(/0+$/, "").replace(/,$/, "") || "0";
+  }
+  if (Number.isInteger(qty)) return String(qty);
+  return String(qty).replace(".", ",");
+}
+
 function formatPrepLine(line: PreparationTicketLine): string {
   const name = line.productName.trim() || "Article";
   const comment = line.comment?.trim() ? ` (${line.comment.trim()})` : "";
-  const unitKey = (line.unitCode ?? line.unitLabel ?? "").trim().toLowerCase();
-  const qtyPart = unitKey === "kg" ? `${line.qty} kg` : `${line.qty}`;
-  const suffix = salesUnitTicketSuffix(line.unitCode ?? line.unitLabel);
-  return `[ ] ${qtyPart} ${name}${suffix}${comment}`;
+  const unitPart = formatPreparationUnitPart(line.unitCode, line.unitLabel);
+  const qtyPart = formatPrepQty(line.qty, unitPart);
+  return `[ ] ${qtyPart} ${unitPart} ${name}${comment}`;
 }
 
 export function buildShopPreparationTicketEscPos(input: ShopPreparationTicketInput): Uint8Array {
@@ -60,13 +103,11 @@ export function buildShopPreparationTicketEscPos(input: ShopPreparationTicketInp
     chunks.push(escPosLine(`Note: ${input.orderComment.trim()}`));
   }
   chunks.push(escPosBlankLine());
-  chunks.push(escPosLine("Cochez chaque ligne au stylo"));
-  chunks.push(escPosBlankLine());
 
   for (const group of input.groups) {
     chunks.push(escPosLine(`--- ${group.categoryLabel} ---`));
     for (const line of group.lines) {
-      chunks.push(escPosLine(formatPrepLine(line)));
+      chunks.push(escPosStyledLine(formatPrepLine(line), { bold: true, doubleHeight: true }));
     }
     chunks.push(escPosBlankLine());
   }

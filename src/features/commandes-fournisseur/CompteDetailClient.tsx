@@ -358,7 +358,15 @@ export default function CompteDetailClient({ accountType, accountId }: Props) {
               {paiements.map((p) => (
                 <ListItem key={p.id} disablePadding sx={{ mb: 1 }}>
                   <Paper variant="outlined" sx={{ p: 1.5, width: "100%" }}>
-                    <Box className="flex flex-wrap items-start justify-between gap-2">
+                    <Box
+                      sx={{
+                        display: "flex",
+                        flexDirection: { xs: "column", sm: "row" },
+                        alignItems: { xs: "stretch", sm: "flex-start" },
+                        justifyContent: "space-between",
+                        gap: 2,
+                      }}
+                    >
                       <Box sx={{ flex: 1, minWidth: 0 }}>
                         <Typography sx={{ fontWeight: 600 }}>
                           {formatDh(p.montant)} DH — {p.payment_method_label}
@@ -374,7 +382,15 @@ export default function CompteDetailClient({ accountType, accountId }: Props) {
                             : ""}
                         </Typography>
                       </Box>
-                      <Box className="flex flex-wrap items-center gap-1" sx={{ flexShrink: 0 }}>
+                      <Box
+                        sx={{
+                          display: "flex",
+                          flexWrap: "wrap",
+                          gap: 1,
+                          width: { xs: "100%", sm: "auto" },
+                          flexShrink: 0,
+                        }}
+                      >
                         <Button
                           size="small"
                           variant="outlined"
@@ -387,7 +403,11 @@ export default function CompteDetailClient({ accountType, accountId }: Props) {
                           }
                           disabled={exportBusyId != null}
                           onClick={() => void downloadRecap(p.id)}
-                          sx={{ textTransform: "none" }}
+                          sx={{
+                            textTransform: "none",
+                            flex: { xs: "1 1 calc(50% - 4px)", sm: "0 0 auto" },
+                            minWidth: { xs: 0, sm: "auto" },
+                          }}
                         >
                           {t("downloadRecap")}
                         </Button>
@@ -405,7 +425,11 @@ export default function CompteDetailClient({ accountType, accountId }: Props) {
                             }
                             disabled={exportBusyId != null}
                             onClick={() => void sendRecapWhatsApp(p.id)}
-                            sx={{ textTransform: "none" }}
+                            sx={{
+                              textTransform: "none",
+                              flex: { xs: "1 1 calc(50% - 4px)", sm: "0 0 auto" },
+                              minWidth: { xs: 0, sm: "auto" },
+                            }}
                           >
                             {t("sendRecapWhatsApp")}
                           </Button>
@@ -419,7 +443,14 @@ export default function CompteDetailClient({ accountType, accountId }: Props) {
                               `${formatDh(p.montant)} DH — ${p.payment_method_label}`,
                             );
                           }}
-                          sx={{ textTransform: "none" }}
+                          sx={{
+                            textTransform: "none",
+                            flex: {
+                              xs: whatsappAvailable ? "1 1 100%" : "1 1 calc(50% - 4px)",
+                              sm: "0 0 auto",
+                            },
+                            minWidth: { xs: 0, sm: "auto" },
+                          }}
                         >
                           {t("managePhotos")}
                         </Button>

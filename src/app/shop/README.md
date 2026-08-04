@@ -35,7 +35,9 @@ Page publique de commande pour les clients particuliers. Accessible sur le domai
 | `src/lib/shop/cart-prune.ts` | Retrait lignes panier (produit inactif / hors vitrine) |
 | `src/lib/shop/cart-sync-*.ts` | Sync panier → `shop_cart` |
 | `src/app/api/shop/cart/sync/route.ts` | API création / mise à jour / clôture / **soumission** panier |
-| `src/app/page.tsx` | Route `/` selon le domaine (shop vs backoffice) |
+| `src/app/page.tsx` | Route `/` selon le domaine (shop vs backoffice) + metadata SEO |
+| `src/lib/shop/shop-metadata.ts` | Title, description, OG, canonical (host shop) |
+| `src/app/robots.ts` / `sitemap.ts` | Indexation Google |
 | `src/proxy.ts` | Host boutique ; redirect `/livraison` hors shop → domaine boutique |
 
 ## Variables d'environnement
@@ -90,6 +92,26 @@ Puis **redémarrer** `npm run dev` :
 ## i18n
 
 Namespace `shop.*` dans `src/messages/fr.json` et `ar-MA.json`. Noms produits et catégories via champs DB (`sales_name_ar`, `label_ar`).
+
+## Référencement (SEO)
+
+La boutique publique est indexable sur `opetitfrais.ma` ; le backoffice (`opetitfrais.janisol.ma`) est en `noindex` / `Disallow: /`.
+
+| Élément | Emplacement |
+|---------|-------------|
+| Title / description / Open Graph / canonical | `generateMetadata` sur `/` et `/livraison` via [`src/lib/shop/shop-metadata.ts`](../../lib/shop/shop-metadata.ts) ; clés `shop.seo*` |
+| `metadataBase` | [`src/app/layout.tsx`](../layout.tsx) → `https://opetitfrais.ma` |
+| `robots.txt` | [`src/app/robots.ts`](../robots.ts) — host shop : allow `/`, disallow chemins staff ; host backoffice : disallow tout |
+| `sitemap.xml` | [`src/app/sitemap.ts`](../sitemap.ts) — `/` et `/livraison` |
+| Sémantique | `h1` slogan, `alt` logo et photos produit |
+
+### Google Search Console (manuel)
+
+1. Créer une propriété pour `opetitfrais.ma` (ou le domaine) sur [Google Search Console](https://search.google.com/search-console).
+2. Soumettre le sitemap : `https://opetitfrais.ma/sitemap.xml`.
+3. Demander l’indexation de `https://opetitfrais.ma/` (Inspection d’URL → Demander une indexation).
+
+L’apparition dans les résultats Google n’est pas instantanée ; compter plusieurs jours selon le crawl.
 
 ## Contrôle catalogue (backoffice)
 

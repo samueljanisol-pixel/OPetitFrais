@@ -4,8 +4,9 @@ import { formatDecimalFr, formatMoneyFr, roundMoney } from "../format/money.js";
 /** Largeur utile ticket 80 mm — Font B ESC/POS ≈ 64 car. */
 export const SALE_TICKET_WIDTH = 64;
 
-const COL_NAME = 28;
-const COL_QTY = 8;
+const COL_NAME = 22;
+const COL_QTY = 7;
+const COL_UNIT = 9;
 const COL_PRICE = 12;
 const COL_TOTAL = 12;
 
@@ -40,10 +41,15 @@ export function formatTicketQty(line: CartLine): string {
   return formatTicketAmount(Math.abs(line.qty), 3);
 }
 
+export function formatTicketUnit(line: CartLine): string {
+  return line.salesUnit === "kg" ? "kg" : "Unité";
+}
+
 export function formatTicketHeaderRow(): string {
   return (
     padRight("Produit", COL_NAME) +
     padLeft("Qte", COL_QTY) +
+    padLeft("Unité", COL_UNIT) +
     padLeft("Prix", COL_PRICE) +
     padLeft("Total", COL_TOTAL)
   );
@@ -56,6 +62,7 @@ export function formatTicketSeparatorLine(): string {
 function formatTicketAmountsSuffix(line: CartLine): string {
   return (
     padLeft(formatTicketQty(line), COL_QTY) +
+    padLeft(formatTicketUnit(line), COL_UNIT) +
     padLeft(formatTicketAmount(line.unitPrice), COL_PRICE) +
     padLeft(formatTicketAmount(line.lineTotal), COL_TOTAL)
   );

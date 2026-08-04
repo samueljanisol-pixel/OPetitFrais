@@ -32,11 +32,10 @@ import {
   cartTotals,
   clearCart,
   createEmptyCart,
-  formatDecimalFr,
   formatMoneyDhFixed,
   formatMoneyFr,
+  formatMoneyFrFixed,
   formatBalanceWeightKgFrFixed,
-  formatWeightKgFr,
   mergeLineIntoCart,
   removeLine,
   setClient,
@@ -94,7 +93,14 @@ import CommandesBoutiqueDialog, {
 import { fetchClientsFromCache } from "../lib/clients";
 import SettingsDialog from "../components/SettingsDialog";
 import CashierStatusBar from "../components/CashierStatusBar";
-import { useApiServerStatus } from "../lib/status-bar";
+import {
+  formatCashierClock,
+  formatMagasinCaisseLabel,
+  useApiServerStatus,
+  useClock,
+} from "../lib/status-bar";
+
+const CATALOG_BACKGROUND_REFRESH_MS = 5 * 60 * 1000;
 import { formatTicketReference, nextTicketNumber } from "../lib/ticket-counter";
 import {
   fetchCommandeBoutiqueTicketEscPosBase64,
@@ -118,6 +124,7 @@ import {
   saveHeldCarts,
   type HeldCartEntry,
 } from "../lib/cart-holds";
+import { formatQtyWithUnit, salesUnitLabel } from "../lib/format-qty-unit";
 import RoundNumpad from "../components/RoundNumpad";
 import RoundActionButton from "../components/RoundActionButton";
 import logoOpetitFrais from "../assets/logo-opetit-frais.png";
@@ -184,6 +191,7 @@ export default function CashierScreen({ onRequestQuit }: { onRequestQuit: () => 
   const [saurusSending, setSaurusSending] = useState(false);
   const [backofficeUrl, setBackofficeUrl] = useState<string | null>(null);
   const apiOnline = useApiServerStatus(backofficeUrl);
+  const clockNow = useClock();
   const [heldCarts, setHeldCarts] = useState<HeldCartEntry[]>([]);
   const [selectedLineId, setSelectedLineId] = useState<string | null>(null);
   const [lineEditOpen, setLineEditOpen] = useState(false);
@@ -451,46 +459,61 @@ export default function CashierScreen({ onRequestQuit }: { onRequestQuit: () => 
     saveCachedCart(magasin, caisseCode, cart);
   }, [cart, magasin, caisseCode]);
 
-  const loadCatalog = useCallback(async (options?: { showInfo?: boolean; forceRefresh?: boolean }) => {
-    setCatalogLoading(true);
-    try {
-      const result = options?.forceRefresh
-        ? await refreshCatalogFromApi()
-        : await fetchCatalogFromCache();
-      setCatalogSource(result.source);
-      setCatalogFetchedAt(result.fetchedAt);
-      if (result.products.length > 0) {
-        const active = activeCatalogProducts(result.products);
-        const tabs = categoryTabsFromCatalog(active);
-        setCatalog(active);
-        setCategoryMeta(result.categoryMeta);
-        setCategory((prev) => (tabs.includes(prev) ? prev : tabs[0] ?? ""));
-        setCatalogReady(true);
-        if (options?.showInfo) {
-          if (result.source === "cache") {
-            setInfo(`Catalogue hors ligne (${formatCatalogCacheDate(result.fetchedAt)})`);
-          } else {
-            const ar = countCatalogArabicLabels(active);
-            setInfo(
-              `${active.length} produits importés${ar.products > 0 ? ` (${ar.products} noms ar)` : ""}`,
-            );
+  const loadCatalog = useCallback(
+    async (options?: { showInfo?: boolean; forceRefresh?: boolean; silent?: boolean }) => {
+      const silent = options?.silent === true;
+      if (!silent) setCatalogLoading(true);
+      try {
+        const result = options?.forceRefresh
+          ? await refreshCatalogFromApi()
+          : await fetchCatalogFromCache();
+        setCatalogSource(result.source);
+        setCatalogFetchedAt(result.fetchedAt);
+        if (result.products.length > 0) {
+          const active = activeCatalogProducts(result.products);
+          const tabs = categoryTabsFromCatalog(active);
+          setCatalog(active);
+          setCategoryMeta(result.categoryMeta);
+          setCategory((prev) => (tabs.includes(prev) ? prev : tabs[0] ?? ""));
+          setCatalogReady(true);
+          if (options?.showInfo) {
+            if (result.source === "cache") {
+              setInfo(`Catalogue hors ligne (${formatCatalogCacheDate(result.fetchedAt)})`);
+            } else {
+              const ar = countCatalogArabicLabels(active);
+              setInfo(
+                `${active.length} produits importés${ar.products > 0 ? ` (${ar.products} noms ar)` : ""}`,
+              );
+            }
           }
+          return;
         }
-        return;
-      }
 
-      if (result.error && (await isCatalogApiConfigured())) {
-        setError(`Catalogue : ${result.error}`);
-      } else if (result.error) {
-        setError(result.error);
+        if (silent) return;
+
+        if (result.error && (await isCatalogApiConfigured())) {
+          setError(`Catalogue : ${result.error}`);
+        } else if (result.error) {
+          setError(result.error);
+        }
+      } finally {
+        if (!silent) setCatalogLoading(false);
       }
-    } finally {
-      setCatalogLoading(false);
-    }
-  }, []);
+    },
+    [],
+  );
 
   useEffect(() => {
     void loadCatalog();
+  }, [loadCatalog]);
+
+  /** Actualisation catalogue en fond uniquement (pas au changement de catégorie). */
+  useEffect(() => {
+    const id = window.setInterval(() => {
+      if (typeof navigator !== "undefined" && !navigator.onLine) return;
+      void loadCatalog({ forceRefresh: true, silent: true });
+    }, CATALOG_BACKGROUND_REFRESH_MS);
+    return () => window.clearInterval(id);
   }, [loadCatalog]);
 
   useEffect(() => {
@@ -1116,23 +1139,10 @@ export default function CashierScreen({ onRequestQuit }: { onRequestQuit: () => 
     lineHeight: 1.2,
   } as const;
 
+  const offlineMode = catalogReady && !apiOnline;
+
   return (
     <Box sx={{ width: 1024, height: 768, display: "flex", flexDirection: "column", overflow: "hidden" }}>
-      {catalogReady && (catalogSource === "cache" || !apiOnline) ? (
-        <Alert
-          severity="warning"
-          sx={{
-            borderRadius: 0,
-            py: 0.15,
-            px: 1,
-            flexShrink: 0,
-            "& .MuiAlert-message": { fontSize: 12, py: 0.25 },
-          }}
-        >
-          Mode hors ligne — catalogue du {formatCatalogCacheDate(catalogFetchedAt)}. Ventes et tickets
-          locaux OK ; commandes boutique et sync serveur indisponibles.
-        </Alert>
-      ) : null}
       <Box sx={{ display: "flex", flex: 1, minHeight: 0 }}>
         <Box sx={{ flex: 1, display: "flex", flexDirection: "column", minWidth: 0 }}>
           <Box
@@ -1420,8 +1430,12 @@ export default function CashierScreen({ onRequestQuit }: { onRequestQuit: () => 
                           }}
                         />
                       ) : (
-                        <Typography variant="caption" color="text.disabled" sx={{ fontSize: 22, fontWeight: 700 }}>
-                          {p.salesUnit === "kg" ? "Kg" : "U"}
+                        <Typography
+                          variant="caption"
+                          color="text.disabled"
+                          sx={{ fontSize: p.salesUnit === "kg" ? 22 : 14, fontWeight: 700 }}
+                        >
+                          {p.salesUnit === "kg" ? "Kg" : "Unité"}
                         </Typography>
                       )}
                     </Box>
@@ -1442,7 +1456,7 @@ export default function CashierScreen({ onRequestQuit }: { onRequestQuit: () => 
                         {p.code}
                       </Typography>
                       <Typography variant="caption" sx={{ fontSize: 9, lineHeight: 1.1, fontWeight: 600 }}>
-                        {p.price} DH/{p.salesUnit === "kg" ? "Kg" : "U"}
+                        {p.price} DH/{p.salesUnit === "kg" ? "Kg" : "Unité"}
                       </Typography>
                     </Box>
 
@@ -1489,7 +1503,16 @@ export default function CashierScreen({ onRequestQuit }: { onRequestQuit: () => 
                 }}
               >
                 <Box sx={{ width: 248, flexShrink: 0, display: "flex", alignItems: "center" }}>
-                  <CashierStatusBar backofficeUrl={backofficeUrl} />
+                  <CashierStatusBar
+                    backofficeUrl={backofficeUrl}
+                    offlineMode={offlineMode}
+                    offlineCatalogDate={
+                      offlineMode ? formatCatalogCacheDate(catalogFetchedAt) : null
+                    }
+                    pricesUpdatedLabel={
+                      catalogFetchedAt ? formatCatalogCacheDate(catalogFetchedAt) : null
+                    }
+                  />
                 </Box>
 
                 <Box
@@ -1508,7 +1531,16 @@ export default function CashierScreen({ onRequestQuit }: { onRequestQuit: () => 
                         aria-label="Page précédente"
                         disabled={productPage <= 0}
                         onClick={() => setProductPage((page) => Math.max(0, page - 1))}
-                        sx={{ bgcolor: "#fff", border: 1, borderColor: "divider" }}
+                        sx={
+                          productPage > 0
+                            ? {
+                                bgcolor: "primary.main",
+                                color: "#fff",
+                                boxShadow: 2,
+                                "&:hover": { bgcolor: "primary.dark" },
+                              }
+                            : { bgcolor: "#fff", border: 1, borderColor: "divider" }
+                        }
                       >
                         <ChevronLeftIcon />
                       </IconButton>
@@ -1530,7 +1562,16 @@ export default function CashierScreen({ onRequestQuit }: { onRequestQuit: () => 
                         onClick={() =>
                           setProductPage((page) => Math.min(productPageCount - 1, page + 1))
                         }
-                        sx={{ bgcolor: "#fff", border: 1, borderColor: "divider" }}
+                        sx={
+                          productPage < productPageCount - 1
+                            ? {
+                                bgcolor: "primary.main",
+                                color: "#fff",
+                                boxShadow: 2,
+                                "&:hover": { bgcolor: "primary.dark" },
+                              }
+                            : { bgcolor: "#fff", border: 1, borderColor: "divider" }
+                        }
                       >
                         <ChevronRightIcon />
                       </IconButton>
@@ -1664,7 +1705,7 @@ export default function CashierScreen({ onRequestQuit }: { onRequestQuit: () => 
               flexShrink: 0,
               bgcolor: "#fff",
               display: "flex",
-              alignItems: "center",
+              alignItems: "flex-start",
               gap: 0.5,
               px: 1,
               py: 0.75,
@@ -1673,11 +1714,44 @@ export default function CashierScreen({ onRequestQuit }: { onRequestQuit: () => 
             }}
           >
             <Box
-              component="img"
-              src={logoOpetitFrais}
-              alt="O'petit frais"
-              sx={{ flex: 1, height: 44, width: "auto", maxWidth: "100%", objectFit: "contain" }}
-            />
+              sx={{
+                flex: 1,
+                minWidth: 0,
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                gap: 0.25,
+              }}
+            >
+              <Box
+                component="img"
+                src={logoOpetitFrais}
+                alt="O'petit frais"
+                sx={{ height: 44, width: "auto", maxWidth: "100%", objectFit: "contain" }}
+              />
+              <Box sx={{ textAlign: "center", lineHeight: 1.15, width: "100%" }}>
+                <Typography
+                  sx={{
+                    fontSize: 11,
+                    fontWeight: 700,
+                    color: "text.primary",
+                  }}
+                >
+                  {formatMagasinCaisseLabel(magasin, caisseCode)}
+                </Typography>
+                <Typography
+                  sx={{
+                    fontSize: 11,
+                    fontWeight: 600,
+                    color: "text.secondary",
+                    textTransform: "capitalize",
+                    fontVariantNumeric: "tabular-nums",
+                  }}
+                >
+                  {formatCashierClock(clockNow)}
+                </Typography>
+              </Box>
+            </Box>
             <Button
               size="small"
               variant="outlined"
@@ -1686,7 +1760,7 @@ export default function CashierScreen({ onRequestQuit }: { onRequestQuit: () => 
                 setLastTicketPaidAt(loadLastTicketPaidAt());
                 setMenuOpen(true);
               }}
-              sx={{ ...compactActionBtnSx, minWidth: 56, flexShrink: 0 }}
+              sx={{ ...compactActionBtnSx, minWidth: 56, flexShrink: 0, mt: 0.25 }}
               startIcon={<MenuIcon sx={{ fontSize: 18 }} />}
             >
               Menu
@@ -1745,9 +1819,23 @@ export default function CashierScreen({ onRequestQuit }: { onRequestQuit: () => 
             </Box>
           ) : null}
 
-          <Typography align="center" variant="h6" sx={{ bgcolor: "#eee", mx: 1, borderRadius: 1 }}>
-            {codeBuffer || "—"}
-          </Typography>
+          {codeBuffer.trim().length > 0 ? (
+            <Typography
+              align="center"
+              sx={{
+                bgcolor: "#eee",
+                mx: 1,
+                mb: 0.25,
+                borderRadius: 1,
+                fontSize: 15,
+                fontWeight: 700,
+                lineHeight: 1.35,
+                fontVariantNumeric: "tabular-nums",
+              }}
+            >
+              {codeBuffer}
+            </Typography>
+          ) : null}
 
           <Box sx={{ width: "100%", px: 1, pb: 0.5, flexShrink: 0 }}>
               <RoundNumpad
@@ -1866,75 +1954,88 @@ export default function CashierScreen({ onRequestQuit }: { onRequestQuit: () => 
                 >
                   <Box
                     sx={{
-                      display: "grid",
-                      gridTemplateColumns: "minmax(0, 1fr) 36px 46px 40px",
-                      columnGap: 0.25,
-                      alignItems: "center",
+                      display: "flex",
+                      alignItems: "flex-start",
+                      gap: 0.5,
                       minWidth: 0,
                     }}
                   >
                     <Typography
                       variant="caption"
                       sx={{
-                      fontSize: showArabicLabels ? 13 : 11,
-                      fontWeight: 700,
-                      minWidth: 0,
-                      lineHeight: 1.2,
-                      overflow: "hidden",
-                      textOverflow: "ellipsis",
-                      whiteSpace: "nowrap",
-                      pr: 0.25,
-                      ...(showArabicLabels ? arabicDisplaySx : null),
-                    }}
-                  >
-                    {cartLineDisplayName(line, activeCatalog, displayLocale)}
-                  </Typography>
-                    <Typography
-                      variant="caption"
-                      sx={{
-                        fontSize: 8,
-                        color: "text.secondary",
-                        textAlign: "right",
-                        fontVariantNumeric: "tabular-nums",
-                        whiteSpace: "nowrap",
-                        overflow: "hidden",
+                        flex: 1,
+                        minWidth: 0,
+                        fontSize: showArabicLabels ? 13 : 11,
+                        fontWeight: 700,
+                        lineHeight: 1.25,
+                        whiteSpace: "normal",
+                        wordBreak: "break-word",
+                        pr: 0.5,
+                        ...(showArabicLabels ? arabicDisplaySx : null),
                       }}
                     >
-                      {line.salesUnit === "kg"
-                        ? `${formatWeightKgFr(line.qty)} kg`
-                        : formatDecimalFr(line.qty, 3)}
+                      {cartLineDisplayName(line, activeCatalog, displayLocale)}
                     </Typography>
-                    <Typography
-                      variant="caption"
+                    <Box
                       sx={{
-                        fontSize: 8,
-                        color: "text.secondary",
-                        textAlign: "right",
-                        fontVariantNumeric: "tabular-nums",
-                        whiteSpace: "nowrap",
-                        overflow: "hidden",
-                        pr: 0.25,
+                        flexShrink: 0,
+                        display: "flex",
+                        alignItems: "baseline",
+                        gap: 0.5,
+                        pt: 0.1,
                       }}
                     >
-                      {line.salesUnit === "kg"
-                        ? `${formatMoneyFr(line.unitPrice)} DH/kg`
-                        : `${formatMoneyFr(line.unitPrice)} DH/u`}
-                    </Typography>
+                      <Typography
+                        variant="caption"
+                        sx={{
+                          fontSize: 8,
+                          color: "text.secondary",
+                          textAlign: "right",
+                          fontVariantNumeric: "tabular-nums",
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        {formatQtyWithUnit(line.qty, line.salesUnit)}
+                      </Typography>
+                      <Box
+                        sx={{
+                          alignSelf: "stretch",
+                          width: "1px",
+                          bgcolor: "divider",
+                          my: 0.15,
+                          flexShrink: 0,
+                        }}
+                      />
+                      <Typography
+                        variant="caption"
+                        sx={{
+                          fontSize: 8,
+                          color: "text.secondary",
+                          textAlign: "right",
+                          fontVariantNumeric: "tabular-nums",
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        {`${formatMoneyFr(line.unitPrice)} DH/${salesUnitLabel(line.salesUnit)}`}
+                      </Typography>
+                    </Box>
                     <Typography
                       variant="caption"
                       sx={{
+                        flexShrink: 0,
                         fontSize: 9,
                         fontWeight: 700,
                         textAlign: "right",
                         fontVariantNumeric: "tabular-nums",
                         whiteSpace: "nowrap",
-                        pl: 0.75,
-                        ml: 0.35,
+                        pl: 0.5,
+                        pt: 0.1,
+                        minWidth: 36,
                         borderLeft: "1px solid",
                         borderColor: "divider",
                       }}
                     >
-                      {formatMoneyFr(line.lineTotal)}
+                      {formatMoneyFrFixed(line.lineTotal)}
                     </Typography>
                   </Box>
                 </Paper>

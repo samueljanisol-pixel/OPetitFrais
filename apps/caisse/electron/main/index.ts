@@ -14,6 +14,10 @@ import {
   prefetchCatalog,
 } from "./fetch-catalog";
 import {
+  handleCatalogPhotoProtocol,
+  registerCatalogPhotoProtocol,
+} from "./catalog-photos";
+import {
   clearCachedClients,
   getCachedClients,
   prefetchClients,
@@ -37,6 +41,9 @@ const SETUP_WIDTH = 440;
 const SETUP_HEIGHT = 560;
 
 const isDev = !app.isPackaged;
+
+/** Avant app.ready — photos catalogue hors ligne. */
+registerCatalogPhotoProtocol();
 
 /** Une seule instance caisse — la 2ᵉ ouverture ramène la fenêtre existante. */
 const gotSingleInstanceLock = app.requestSingleInstanceLock();
@@ -206,6 +213,7 @@ app.on("second-instance", () => {
 app.whenReady().then(async () => {
   if (!gotSingleInstanceLock) return;
 
+  handleCatalogPhotoProtocol();
   Menu.setApplicationMenu(null);
 
   await startEmbeddedCaisseAgent();

@@ -12,6 +12,8 @@ export {
   escPosLine,
   escPosLineCenter,
   escPosSelectCodePage1252,
+  escPosStyledLine,
 } from "./tickets/escpos-commands.js";
+export type { EscPosTextStyle } from "./tickets/escpos-commands.js";
 export { escPosCode128BarcodeFullWidth } from "./tickets/code128.js";
 export { formatTicketReference } from "./tickets/sale-ticket-format.js";

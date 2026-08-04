@@ -1,8 +1,6 @@
 import { Box, Tooltip, Typography } from "@mui/material";
 import {
-  formatCashierClock,
   useApiServerStatus,
-  useClock,
   useInternetStatus,
   useSaurusScaleStatus,
 } from "../lib/status-bar";
@@ -10,6 +8,11 @@ import CaisseVersionBadge from "./CaisseVersionBadge";
 
 type Props = {
   backofficeUrl: string | null;
+  /** Mode hors ligne (serveur API inaccessible). */
+  offlineMode?: boolean;
+  offlineCatalogDate?: string | null;
+  /** Dernière actualisation du catalogue / prix (libellé déjà formaté). */
+  pricesUpdatedLabel?: string | null;
 };
 
 function StatusDot({
@@ -44,11 +47,15 @@ function StatusDot({
   );
 }
 
-export default function CashierStatusBar({ backofficeUrl }: Props) {
+export default function CashierStatusBar({
+  backofficeUrl,
+  offlineMode = false,
+  offlineCatalogDate = null,
+  pricesUpdatedLabel = null,
+}: Props) {
   const internetOk = useInternetStatus();
   const apiOk = useApiServerStatus(backofficeUrl);
   const saurus = useSaurusScaleStatus();
-  const now = useClock();
 
   const saurusOk = saurus.connected;
 
@@ -107,24 +114,52 @@ export default function CashierStatusBar({ backofficeUrl }: Props) {
           width: "100%",
         }}
       >
-        <Box sx={{ flex: 1, minWidth: 0, pr: 0.5 }}>
+        <Box sx={{ flex: 1, minWidth: 0, pr: 0.5, display: "flex", flexDirection: "column", gap: 0.15 }}>
           <CaisseVersionBadge />
+          {pricesUpdatedLabel ? (
+            <Tooltip title="Dernière mise à jour du catalogue / prix">
+              <Typography
+                variant="caption"
+                sx={{
+                  fontSize: 10,
+                  lineHeight: 1.15,
+                  fontWeight: 600,
+                  color: "text.secondary",
+                  fontVariantNumeric: "tabular-nums",
+                  whiteSpace: "nowrap",
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                }}
+              >
+                Prix : {pricesUpdatedLabel}
+              </Typography>
+            </Tooltip>
+          ) : null}
         </Box>
-        <Typography
-          variant="caption"
-          sx={{
-            fontSize: 12,
-            fontWeight: 700,
-            lineHeight: 1.2,
-            fontVariantNumeric: "tabular-nums",
-            color: "text.primary",
-            textAlign: "right",
-            whiteSpace: "nowrap",
-            flexShrink: 0,
-          }}
-        >
-          {formatCashierClock(now)}
-        </Typography>
+        {offlineMode ? (
+          <Tooltip
+            title={
+              offlineCatalogDate
+                ? `Catalogue local du ${offlineCatalogDate}. Ventes et tickets OK ; commandes boutique indisponibles.`
+                : "Serveur inaccessible. Ventes et tickets locaux OK."
+            }
+          >
+            <Typography
+              variant="caption"
+              sx={{
+                fontSize: 11,
+                fontWeight: 800,
+                lineHeight: 1.2,
+                color: "#b26a00",
+                textAlign: "right",
+                whiteSpace: "nowrap",
+                flexShrink: 0,
+              }}
+            >
+              Mode hors ligne
+            </Typography>
+          </Tooltip>
+        ) : null}
       </Box>
     </Box>
   );

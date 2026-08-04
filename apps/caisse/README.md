@@ -225,11 +225,11 @@ Package partagé [`@opf/caisse-core`](../../packages/caisse-core) :
 
 Au démarrage, le catalogue est **préchargé** côté Electron (réseau puis cache disque `%AppData%/OPetitFrais/catalog-cache.json`). La grille produits s’affiche dès que le cache est disponible.
 
-**Hors ligne** : si internet ou le serveur backoffice est inaccessible, la caisse charge le **dernier catalogue en cache** (date affichée dans le bandeau orange). Les ventes, tickets, balance locale et envoi SAURUS restent possibles. Indisponibles : commandes boutique, création/modification clients, actualisation des prix.
+**Hors ligne** : si le serveur backoffice est inaccessible, la caisse charge le **dernier catalogue en cache**. Indication **Mode hors ligne** en bas à droite (barre de statut), pas en bandeau haut. Les ventes, tickets, balance locale et envoi SAURUS restent possibles. Indisponibles : commandes boutique, création/modification clients.
 
-Le **catalogue** est persisté dans `%AppData%/OPetitFrais/catalog-cache.json` ; la **liste clients** dans `clients-cache.json` (plus miroir `localStorage` côté renderer). Les deux sont préchargés au démarrage Electron.
+Le **catalogue** est persisté dans `%AppData%/OPetitFrais/catalog-cache.json` ; les **photos produits** dans `catalog-photos/` (protocole `caisse-photo://`, disponibles hors ligne) ; la **liste clients** dans `clients-cache.json`.
 
-Menu → **Actualiser les prix** force un rechargement réseau ; en cas d’échec, le cache précédent est conservé.
+**Actualisation** : en fond toutes les **5 minutes** (et Menu → Actualiser les prix). Changer de catégorie / page ne relance pas le catalogue (évite les ralentissements si internet faible).
 
 Sans token et sans cache, la grille reste vide et un message d’erreur s’affiche.
 

@@ -2,6 +2,7 @@ import { existsSync, readFileSync, writeFileSync } from "fs";
 import { join } from "path";
 import { app } from "electron";
 import type { CatalogProduct } from "@opf/caisse-core";
+import { applyLocalPhotoUrls, cacheCatalogPhotos } from "./catalog-photos";
 import { loadRuntimeConfig } from "./load-config";
 import {
   normalizeCatalogProducts,
@@ -72,7 +73,7 @@ function saveDiskCatalog(
 }
 
 function payloadFromDisk(disk: DiskCatalogCache): InitialCatalogPayload {
-  const products = normalizeCatalogProducts(disk.products);
+  const products = applyLocalPhotoUrls(normalizeCatalogProducts(disk.products));
   const categories = normalizeCategoryMeta(disk.categories);
   return {
     products,
@@ -80,6 +81,13 @@ function payloadFromDisk(disk: DiskCatalogCache): InitialCatalogPayload {
     error: null,
     source: "cache",
     fetchedAt: disk.fetchedAt,
+  };
+}
+
+function withLocalPhotos(payload: InitialCatalogPayload): InitialCatalogPayload {
+  return {
+    ...payload,
+    products: applyLocalPhotoUrls(payload.products),
   };
 }
 
@@ -127,10 +135,12 @@ export async function prefetchCatalog(force = false): Promise<InitialCatalogPayl
     }
 
     const fetchedAt = json.fetchedAt ?? new Date().toISOString();
+    // Garde les URL distantes sur disque ; les fichiers locaux sont à côté.
     saveDiskCatalog(products, categories, fetchedAt);
+    await cacheCatalogPhotos(products);
 
     cachedCatalog = {
-      products,
+      products: applyLocalPhotoUrls(products),
       categories,
       error: null,
       source: "network",
@@ -145,12 +155,21 @@ export async function prefetchCatalog(force = false): Promise<InitialCatalogPayl
 
 export function getCachedCatalog(): InitialCatalogPayload | null {
   if (cachedCatalog && cachedCatalog.products.length > 0) {
-    return cachedCatalog;
+    return withLocalPhotos(cachedCatalog);
   }
 
   const disk = loadDiskCatalog();
   if (disk) {
     cachedCatalog = payloadFromDisk(disk);
+    // Complète les photos manquantes en fond si un jour le réseau revient.
+    void cacheCatalogPhotos(normalizeCatalogProducts(disk.products)).then(() => {
+      if (cachedCatalog) {
+        cachedCatalog = withLocalPhotos({
+          ...cachedCatalog,
+          products: normalizeCatalogProducts(disk.products),
+        });
+      }
+    });
     return cachedCatalog;
   }
 

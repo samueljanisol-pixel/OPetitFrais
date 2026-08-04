@@ -94,7 +94,13 @@ export default function ShopProductCard({
       >
         {photoUrl ? (
           <Box sx={{ position: "relative", width: "100%", height: "100%" }}>
-            <Image src={photoUrl} alt="" fill className="object-contain" sizes="(max-width: 600px) 45vw, 160px" />
+            <Image
+              src={photoUrl}
+              alt={label}
+              fill
+              className="object-contain"
+              sizes="(max-width: 600px) 45vw, 160px"
+            />
           </Box>
         ) : (
           <Typography variant="caption" color="text.secondary" sx={{ fontSize: "0.65rem" }}>
