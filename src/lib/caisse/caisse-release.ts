@@ -6,6 +6,7 @@ import { getCaisseAppVersion } from "./caisse-app-version";
 import {
   caisseReleasePublicDownloadUrl,
   caisseReleasePublicUrl,
+  ftpCaisseReleaseSha256,
   ftpCaisseReleaseSizeBytes,
   isFtpReleaseConfigured,
 } from "./caisse-release-ftp";
@@ -36,6 +37,7 @@ export type CaisseReleaseInfo = {
   filename: string;
   source: CaisseReleaseSource;
   sizeBytes: number | null;
+  sha256: string | null;
   downloadUrl: string;
   expiresAt: string | null;
 };
@@ -158,6 +160,7 @@ export async function resolveCaisseReleaseDownload(
       filename,
       source: "local",
       sizeBytes,
+      sha256: null,
       downloadUrl: publicDownloadUrl ?? downloadUrl,
       expiresAt: null,
     };
@@ -167,11 +170,13 @@ export async function resolveCaisseReleaseDownload(
     const sizeBytes = await ftpCaisseReleaseSizeBytes(version);
     const exists = typeof sizeBytes === "number" && sizeBytes > 0;
     if (exists) {
+      const sha256 = await ftpCaisseReleaseSha256(version);
       return {
         version,
         filename,
         source: publicDownloadUrl ? "ftp-public" : publicUrl ? "ftp-public" : "ftp",
         sizeBytes,
+        sha256,
         downloadUrl: publicDownloadUrl ?? downloadUrl,
         expiresAt: null,
       };
@@ -231,6 +236,7 @@ export async function resolveCaisseReleaseDownload(
     filename,
     source: "supabase",
     sizeBytes: sizeBytes,
+    sha256: null,
     downloadUrl: data.signedUrl,
     expiresAt,
   };

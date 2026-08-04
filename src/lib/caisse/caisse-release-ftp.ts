@@ -1,7 +1,11 @@
+import { createHash } from "node:crypto";
 import { Client } from "basic-ftp";
-import { createReadStream, statSync } from "node:fs";
+import { createReadStream, readFileSync, statSync, unlinkSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { PassThrough } from "node:stream";
 import { Readable } from "node:stream";
+import { pipeline } from "node:stream/promises";
 import { getCaisseAppVersion } from "./caisse-app-version";
 import {
   caisseReleaseInstallerCandidates,
@@ -45,6 +49,16 @@ export function caisseReleaseFtpRemoteFileName(version?: string): string {
 export function caisseReleaseFtpRemotePath(version?: string): string {
   const dir = CAISSE_RELEASE_FTP_REMOTE_DIR.replace(/\/+$/, "") || "/POS";
   return `${dir}/${caisseReleaseFtpRemoteFileName(version)}`;
+}
+
+export function caisseReleaseFtpSha256RemotePath(version?: string): string {
+  return `${caisseReleaseFtpRemotePath(version)}.sha256`;
+}
+
+async function sha256LocalFile(localPath: string): Promise<string> {
+  const hash = createHash("sha256");
+  await pipeline(createReadStream(localPath), hash);
+  return hash.digest("hex");
 }
 
 function ftpRemoteCandidates(version?: string): string[] {
@@ -149,16 +163,54 @@ export async function ftpCaisseReleaseExists(version?: string): Promise<boolean>
 export async function uploadCaisseReleaseToFtp(
   localPath: string,
   version?: string,
-): Promise<string> {
+): Promise<{ remotePath: string; sha256: string }> {
   const remotePath = caisseReleaseFtpRemotePath(version);
+  const remoteShaPath = caisseReleaseFtpSha256RemotePath(version);
   const remoteDir = CAISSE_RELEASE_FTP_REMOTE_DIR.replace(/\/+$/, "") || "/POS";
+  const sha256 = await sha256LocalFile(localPath);
+  const shaLocal = join(tmpdir(), `opf-caisse-${sha256.slice(0, 12)}.sha256`);
+  writeFileSync(shaLocal, `${sha256}\n`, "utf8");
 
-  await withFtpClient(async (client) => {
-    await client.ensureDir(remoteDir);
-    await client.uploadFrom(localPath, remotePath);
-  });
+  try {
+    await withFtpClient(async (client) => {
+      await client.ensureDir(remoteDir);
+      await client.uploadFrom(localPath, remotePath);
+      await client.uploadFrom(shaLocal, remoteShaPath);
+    });
+  } finally {
+    try {
+      unlinkSync(shaLocal);
+    } catch {
+      /* ignore */
+    }
+  }
 
-  return remotePath;
+  return { remotePath, sha256 };
+}
+
+/** Lit le sidecar `.sha256` publié avec l'installateur (null si absent). */
+export async function ftpCaisseReleaseSha256(version?: string): Promise<string | null> {
+  if (!isFtpReleaseConfigured()) return null;
+
+  const remoteShaPath = caisseReleaseFtpSha256RemotePath(version);
+  const localTmp = join(tmpdir(), `opf-caisse-sha-${Date.now()}.sha256`);
+
+  try {
+    await withFtpClient(async (client) => {
+      await client.downloadTo(localTmp, remoteShaPath);
+    });
+    const raw = readFileSync(localTmp, "utf8").trim().split(/\s+/)[0] ?? "";
+    if (/^[a-f0-9]{64}$/i.test(raw)) return raw.toLowerCase();
+    return null;
+  } catch {
+    return null;
+  } finally {
+    try {
+      unlinkSync(localTmp);
+    } catch {
+      /* ignore */
+    }
+  }
 }
 
 export async function downloadCaisseReleaseFromFtpToFile(

@@ -77,9 +77,10 @@ async function main(): Promise<void> {
 
   console.log(`Upload ${installerPath} (${mb} Mo) → FTP ${remotePath}`);
 
-  await uploadCaisseReleaseToFtp(installerPath, version);
+  const { sha256 } = await uploadCaisseReleaseToFtp(installerPath, version);
 
   console.log("OK — installateur publié sur le FTP.");
+  console.log(`SHA-256 : ${sha256}`);
   console.log("");
   console.log("Téléchargement sécurisé (token CAISSE_TICKET_TOKEN) :");
   console.log("  https://opetitfrais.janisol.ma/api/caisse/release/download?token=TOKEN");

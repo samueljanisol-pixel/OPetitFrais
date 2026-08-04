@@ -1,5 +1,15 @@
+import { createHash } from "node:crypto";
 import { execFile, spawn } from "node:child_process";
-import { closeSync, createWriteStream, existsSync, openSync, promises as fs, readSync, statSync } from "node:fs";
+import {
+  closeSync,
+  createReadStream,
+  createWriteStream,
+  existsSync,
+  openSync,
+  promises as fs,
+  readSync,
+  statSync,
+} from "node:fs";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { Readable } from "node:stream";
@@ -27,6 +37,7 @@ type ReleaseApiResponse = {
   version?: string;
   downloadUrl?: string;
   sizeBytes?: number | null;
+  sha256?: string | null;
   error?: string;
 };
 
@@ -34,6 +45,7 @@ type PendingMeta = {
   version: string;
   filePath: string;
   sizeBytes?: number | null;
+  sha256?: string | null;
 };
 
 const CHECK_INTERVAL_MS = 4 * 60 * 60 * 1000;
@@ -164,11 +176,18 @@ function readInstallerHead(filePath: string, length: number): Buffer {
   }
 }
 
-/** Vérifie taille attendue + en-tête PE + signature NSIS (évite exe tronqués / corrompus). */
-function validateInstallerFile(
+async function sha256File(filePath: string): Promise<string> {
+  const hash = createHash("sha256");
+  await pipeline(createReadStream(filePath), hash);
+  return hash.digest("hex");
+}
+
+/** Vérifie taille attendue + en-tête PE + signature NSIS (+ SHA-256 si fourni). */
+async function validateInstallerFile(
   filePath: string,
   expectedSizeBytes: number | null | undefined,
-): { ok: true; sizeBytes: number } | { ok: false; reason: string } {
+  expectedSha256?: string | null,
+): Promise<{ ok: true; sizeBytes: number; sha256: string } | { ok: false; reason: string }> {
   if (!existsSync(filePath)) {
     return { ok: false, reason: "fichier installateur absent" };
   }
@@ -198,7 +217,16 @@ function validateInstallerFile(
     return { ok: false, reason: "installateur NSIS invalide ou incomplet" };
   }
 
-  return { ok: true, sizeBytes };
+  const sha256 = await sha256File(filePath);
+  const expectedHash = expectedSha256?.trim().toLowerCase() ?? "";
+  if (expectedHash && sha256 !== expectedHash) {
+    return {
+      ok: false,
+      reason: `checksum SHA-256 incorrect (fichier corrompu)`,
+    };
+  }
+
+  return { ok: true, sizeBytes, sha256 };
 }
 
 async function invalidatePendingInstaller(
@@ -215,7 +243,14 @@ async function invalidatePendingInstaller(
 }
 
 async function fetchReleaseInfo(): Promise<
-  { ok: true; version: string; downloadUrl: string; sizeBytes: number | null } | { ok: false; error: string }
+  | {
+      ok: true;
+      version: string;
+      downloadUrl: string;
+      sizeBytes: number | null;
+      sha256: string | null;
+    }
+  | { ok: false; error: string }
 > {
   const config = loadRuntimeConfig();
   if (!config.backofficeUrl.trim() || !config.caisseToken.trim()) {
@@ -237,6 +272,7 @@ async function fetchReleaseInfo(): Promise<
     version: json.version.trim(),
     downloadUrl: json.downloadUrl,
     sizeBytes: json.sizeBytes ?? null,
+    sha256: typeof json.sha256 === "string" && json.sha256.length > 0 ? json.sha256.toLowerCase() : null,
   };
 }
 
@@ -244,8 +280,17 @@ async function downloadInstaller(
   downloadUrl: string,
   dest: string,
   sizeBytes: number | null,
-): Promise<void> {
+  expectedSha256: string | null,
+): Promise<{ sizeBytes: number; sha256: string }> {
   const config = loadRuntimeConfig();
+  const partPath = `${dest}.part`;
+
+  try {
+    await fs.unlink(partPath);
+  } catch {
+    /* ignore */
+  }
+
   const res = await fetch(downloadUrl, {
     headers: config.caisseToken.trim()
       ? { "x-caisse-ticket-token": config.caisseToken.trim() }
@@ -276,61 +321,55 @@ async function downloadInstaller(
     }
   });
 
-  await pipeline(nodeStream, createWriteStream(dest));
+  await pipeline(nodeStream, createWriteStream(partPath));
 
-  const stat = statSync(dest);
-  if (sizeBytes && sizeBytes > 0 && stat.size !== sizeBytes) {
-    try {
-      await fs.unlink(dest);
-    } catch {
-      /* ignore */
-    }
-    throw new Error(`Téléchargement incomplet (${stat.size} / ${sizeBytes} octets)`);
-  }
-
-  if (total > 0 && stat.size !== total) {
-    try {
-      await fs.unlink(dest);
-    } catch {
-      /* ignore */
-    }
-    throw new Error(`Téléchargement incomplet (${stat.size} / ${total} octets)`);
-  }
-
-  const validated = validateInstallerFile(dest, sizeBytes ?? (total > 0 ? total : null));
+  const validated = await validateInstallerFile(
+    partPath,
+    sizeBytes ?? (total > 0 ? total : null),
+    expectedSha256,
+  );
   if (!validated.ok) {
     try {
-      await fs.unlink(dest);
+      await fs.unlink(partPath);
     } catch {
       /* ignore */
     }
     throw new Error(validated.reason);
   }
+
+  try {
+    await fs.unlink(dest);
+  } catch {
+    /* ignore */
+  }
+  await fs.rename(partPath, dest);
+  return { sizeBytes: validated.sizeBytes, sha256: validated.sha256 };
 }
 
 async function runUpdateCheck(): Promise<void> {
   if (!app.isPackaged || downloadInFlight) return;
+  downloadInFlight = true;
 
-  const config = loadRuntimeConfig();
-  if (!config.backofficeUrl.trim() || !config.caisseToken.trim()) {
+  try {
+    const config = loadRuntimeConfig();
+    if (!config.backofficeUrl.trim() || !config.caisseToken.trim()) {
+      setState({
+        phase: "idle",
+        currentVersion: app.getVersion(),
+        error: null,
+        progressPercent: null,
+      });
+      return;
+    }
+
+    const currentVersion = app.getVersion();
     setState({
-      phase: "idle",
-      currentVersion: app.getVersion(),
+      phase: "checking",
+      currentVersion,
       error: null,
       progressPercent: null,
     });
-    return;
-  }
 
-  const currentVersion = app.getVersion();
-  setState({
-    phase: "checking",
-    currentVersion,
-    error: null,
-    progressPercent: null,
-  });
-
-  try {
     const release = await fetchReleaseInfo();
     if (!release.ok) {
       setState({ phase: "error", error: release.error, updateAvailable: false, installerReady: false });
@@ -340,7 +379,8 @@ async function runUpdateCheck(): Promise<void> {
     const pending = await readPendingMeta();
     if (pending && pending.version === release.version) {
       const expectedSize = release.sizeBytes ?? pending.sizeBytes ?? null;
-      const cached = validateInstallerFile(pending.filePath, expectedSize);
+      const expectedSha = release.sha256 ?? pending.sha256 ?? null;
+      const cached = await validateInstallerFile(pending.filePath, expectedSize, expectedSha);
       if (cached.ok) {
         setState({
           phase: "ready",
@@ -384,25 +424,23 @@ async function runUpdateCheck(): Promise<void> {
       error: null,
     });
 
-    downloadInFlight = true;
     const dest = installerPath(release.version);
-    try {
-      await fs.unlink(dest);
-    } catch {
-      /* ignore */
-    }
+    const validated = await downloadInstaller(
+      release.downloadUrl,
+      dest,
+      release.sizeBytes,
+      release.sha256,
+    );
 
-    await downloadInstaller(release.downloadUrl, dest, release.sizeBytes);
-    const validated = validateInstallerFile(dest, release.sizeBytes);
-    if (!validated.ok) {
-      throw new Error(validated.reason);
-    }
     await writePendingMeta({
       version: release.version,
       filePath: dest,
-      sizeBytes: validated.sizeBytes,
+      sizeBytes: release.sizeBytes ?? validated.sizeBytes,
+      sha256: release.sha256 ?? validated.sha256,
     });
-    await logUpdate(`téléchargé ${dest} (${validated.sizeBytes} octets)`);
+    await logUpdate(
+      `téléchargé ${dest} (${validated.sizeBytes} octets, sha256=${validated.sha256.slice(0, 12)}…)`,
+    );
 
     setState({
       phase: "ready",
@@ -537,7 +575,9 @@ export async function installCaisseUpdate(): Promise<{ ok: true } | { ok: false;
     const release = await fetchReleaseInfo();
     const expectedSize =
       release.ok && release.sizeBytes ? release.sizeBytes : pending.sizeBytes ?? null;
-    const validated = validateInstallerFile(pending.filePath, expectedSize);
+    const expectedSha =
+      release.ok && release.sha256 ? release.sha256 : pending.sha256 ?? null;
+    const validated = await validateInstallerFile(pending.filePath, expectedSize, expectedSha);
     if (!validated.ok) {
       await invalidatePendingInstaller(pending, validated.reason, expectedSize);
       return { ok: false, error: `${validated.reason} — retéléchargez la MAJ` };
@@ -583,13 +623,13 @@ export function startCaisseUpdateChecks(): void {
     const pending = await readPendingMeta();
     if (pending && isVersionNewer(pending.version, app.getVersion())) {
       let expectedSize = pending.sizeBytes ?? null;
-      if (expectedSize == null) {
-        const release = await fetchReleaseInfo();
-        if (release.ok) {
-          expectedSize = release.sizeBytes;
-        }
+      let expectedSha = pending.sha256 ?? null;
+      const release = await fetchReleaseInfo();
+      if (release.ok) {
+        if (expectedSize == null) expectedSize = release.sizeBytes;
+        if (!expectedSha) expectedSha = release.sha256;
       }
-      const validated = validateInstallerFile(pending.filePath, expectedSize);
+      const validated = await validateInstallerFile(pending.filePath, expectedSize, expectedSha);
       if (validated.ok) {
         setState({
           phase: "ready",

@@ -193,7 +193,9 @@ Variables :
 | `CAISSE_RELEASE_FTP_DIR` | Dossier FTP (défaut `/POS`) |
 | `CAISSE_RELEASE_FTP_FILE` | Nom du fichier sur le FTP (défaut `OPetitFrais-Caisse-Setup-{version}.exe`) |
 | `CAISSE_RELEASE_PUBLIC_URL` | Optionnel : URL HTTPS directe fixe (legacy, une seule version) |
-| `CAISSE_RELEASE_PUBLIC_BASE_URL` | **Recommandé prod** : base HTTPS du dossier FTP (ex. `https://opetitfrais.janisol.ma/POS`) — la caisse télécharge `{base}/OPetitFrais-Caisse-Setup-{version}.exe` sans proxy Vercel |
+| `CAISSE_RELEASE_PUBLIC_BASE_URL` | Optionnel : base HTTPS publique du dossier FTP (ex. autre hôte que le backoffice) — la caisse télécharge `{base}/OPetitFrais-Caisse-Setup-{version}.exe` sans proxy Vercel. **Ne pas** utiliser `https://opetitfrais.janisol.ma/POS` (404 / auth). |
+
+`GET /api/caisse/release` renvoie aussi `sha256` (sidecar FTP `*.exe.sha256`, publié par `npm run upload:caisse-release`) pour que la caisse rejette un fichier corrompu même si la taille correspond.
 | `CAISSE_RELEASE_INSTALLER_PATH` | Chemin absolu local (dev / override) |
 | `CAISSE_RELEASE_DOWNLOAD_NAME` | Override nom au téléchargement (sinon dérivé de la version caisse) |
 

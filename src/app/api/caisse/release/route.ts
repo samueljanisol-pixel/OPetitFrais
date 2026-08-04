@@ -46,6 +46,7 @@ export async function GET(req: NextRequest) {
       filename: result.filename,
       source: result.source,
       sizeBytes: result.sizeBytes,
+      sha256: result.sha256,
       downloadUrl: result.downloadUrl,
       expiresAt: result.expiresAt,
     },
