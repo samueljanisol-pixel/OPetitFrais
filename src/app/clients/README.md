@@ -23,7 +23,7 @@ Un **panier boutique en ligne** (`shop_cart`) n'est **pas** une vente. C'est une
 | Route | Rôle |
 |-------|------|
 | `/clients` | Liste clients + paniers non rattachés |
-| `/clients/[id]` | Compte client : paniers, paiements |
+| `/clients/[id]` | Compte client : paniers, paiements (montant **caisse** si encaissé, sinon estimation commande) |
 | `/clients/[id]/paniers/[cartId]` | Détail panier client : **panier caisse encaissé** (ticket POS + lignes) si lié ; sinon panier boutique. Magasin et caisse POS affichés si encaissé. Bouton « Voir la commande d'origine » si encaissé. |
 
 ## API
@@ -40,6 +40,7 @@ Un **panier boutique en ligne** (`shop_cart`) n'est **pas** une vente. C'est une
 ## Schéma (migration `20260803230000_client_gestion.sql`)
 
 - Extension `shop_cart` : `client_id`, `submitted_at`, `montant_total`, `payment_status`
+- Montant affiché sur la fiche client : `shop_cart_pos_link.total` si ticket POS lié, sinon `montant_total`
 - `client_paiement` + `client_paiement_panier` (1 panier = max 1 paiement backoffice)
 - Extension `caisse_client` : `auth_user_id` (futur compte boutique)
 

@@ -20,7 +20,7 @@ import {
 } from "@mui/material";
 import RefreshOutlinedIcon from "@mui/icons-material/RefreshOutlined";
 import AppLink from "@/components/AppLink";
-import { formatDh, workflowStatusLabel } from "@/features/commandes-client/workflow-labels";
+import { formatDh, displayCommandeTotal, workflowStatusLabel } from "@/features/commandes-client/workflow-labels";
 import type { CommandeClientListItem } from "@/lib/commandes-client/queries";
 import { useSessionPermissions } from "@/lib/auth/useSessionPermissions";
 import { useBackChevronIcon } from "@/lib/i18n/useBackChevronIcon";
@@ -149,7 +149,7 @@ export default function CommandePreparationListClient() {
                     secondary={
                       <Stack spacing={0.75} sx={{ mt: 0.75 }}>
                         <Typography variant="caption" color="text.secondary">
-                          {formatDh(c.montant_total)} DH
+                          {formatDh(displayCommandeTotal(c))} DH
                           {c.fulfillment_mode === "home"
                             ? ` · ${tDetail("home")}`
                             : c.fulfillment_mode === "pickup"

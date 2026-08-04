@@ -134,7 +134,7 @@ En cas d’échec (caisse se ferme sans installation, ou **NSIS Error : installe
 2. Relancer la caisse — elle retéléchargera l’installateur (taille + signature NSIS vérifiées)
 3. Consulter `%APPDATA%\OPetitFrais Caisse\caisse-update.log` pour le détail
 
-Cause fréquente : **téléchargement incomplet** (~83 Mo attendus). La caisse rejette désormais un exe dont la taille ne correspond pas à celle annoncée par l’API ou sans signature NSIS valide.
+Cause fréquente : **téléchargement incomplet** via le proxy API/Vercel (~83 Mo attendus). Configurer `CAISSE_RELEASE_PUBLIC_BASE_URL` sur Vercel (ex. `https://opetitfrais.janisol.ma/POS`) ou redéployer le backoffice avec la correction FTP (fichier complet avant envoi). La caisse rejette un exe dont la taille ne correspond pas à celle annoncée par l’API ou sans signature NSIS valide.
 
 **Publier une nouvelle version** (une seule commande) :
 
@@ -198,6 +198,7 @@ Package partagé [`@opf/caisse-core`](../../packages/caisse-core) :
 - [x] Lignes panier compactes — sélection pour modifier poids/prix ou supprimer
 - [x] Bip succès à l'ajout produit (`Bip_Valide.wav` WinDev) / bip synthétique erreur
 - [x] Panier groupé par catégorie + cache local (restauration après crash)
+- [x] **Mode hors ligne** : catalogue et clients depuis le dernier cache si internet ou serveur indisponible ; ventes, tickets et balance SAURUS restent utilisables
 - [x] Paniers en attente (mise en attente, rappel, persistance locale)
 - [x] Annulation des ajouts (pile LIFO, bouton rond à droite du clavier)
 - [x] **Commandes boutique** — Menu → liste commandes `a_passer_caisse`, verrou poste, client seul au panier, double impression ticket, lien POS
@@ -211,7 +212,15 @@ Package partagé [`@opf/caisse-core`](../../packages/caisse-core) :
 
 ## Import catalogue Supabase
 
-Au démarrage, le catalogue est **préchargé** côté Electron avant l’affichage de la fenêtre ; la grille produits apparaît **en une seule fois** une fois le chargement terminé. Sans token ou en cas d’erreur API, la grille reste vide et un message d’erreur s’affiche.
+Au démarrage, le catalogue est **préchargé** côté Electron (réseau puis cache disque `%AppData%/OPetitFrais/catalog-cache.json`). La grille produits s’affiche dès que le cache est disponible.
+
+**Hors ligne** : si internet ou le serveur backoffice est inaccessible, la caisse charge le **dernier catalogue en cache** (date affichée dans le bandeau orange). Les ventes, tickets, balance locale et envoi SAURUS restent possibles. Indisponibles : commandes boutique, création/modification clients, actualisation des prix.
+
+Le **catalogue** est persisté dans `%AppData%/OPetitFrais/catalog-cache.json` ; la **liste clients** dans `clients-cache.json` (plus miroir `localStorage` côté renderer). Les deux sont préchargés au démarrage Electron.
+
+Menu → **Actualiser les prix** force un rechargement réseau ; en cas d’échec, le cache précédent est conservé.
+
+Sans token et sans cache, la grille reste vide et un message d’erreur s’affiche.
 
 Onglets catégories (ordre fixe) : **Légume**, **Fruit**, **Frigo**, **Herbes**, **Epice**, **Divers** — puis les autres catégories éventuelles.
 
@@ -284,6 +293,8 @@ Deuxième liste dans **Commandes boutique** — commandes déjà passées en cai
 - `livre_non_paye` (livraison sans paiement)
 
 Clic → ouverture directe du **modal Paiement** (montant = total caisse `pos_total`), client pré-sélectionné, badge **Encaissement #N**. Validation → API `collect-payment` + ticket de caisse (ligne « Commande #N »).
+
+Si un **panier est déjà en cours** (lignes ou client sélectionné), un dialogue propose de **continuer le panier** ou de le **mettre en attente** avant l’encaissement.
 
 Fichiers : `src/lib/commandes-boutique.ts`, `src/components/CommandesBoutiqueDialog.tsx`, `PaymentDialog` (`linkedShopOrder`).
 

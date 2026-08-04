@@ -31,7 +31,7 @@ nouvelle → a_valider → a_preparer → en_preparation → a_passer_caisse →
 5. **Terminer** : toutes les lignes doivent être vertes ou rouges ; sinon dialogue de confirmation → lignes restantes marquées en rupture → `a_passer_caisse`.
 
 - **`montant_total`** : estimation backoffice (lignes boutique).
-- **Total caisse réel** : `shop_cart_pos_link.total` après passage caisse POS.
+- **Total caisse réel** : `shop_cart_pos_link.total` après passage caisse POS — **affiché partout à la place de l'estimation** dès que le lien POS existe (liste commandes, livraison, retrait, préparation).
 - **`payment_status = paid`** : client informé à la livraison/retrait, pas de dialogue paiement.
 
 ## Magasin

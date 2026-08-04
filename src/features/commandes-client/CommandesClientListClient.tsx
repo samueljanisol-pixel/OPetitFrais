@@ -23,6 +23,7 @@ import AppLink from "@/components/AppLink";
 import {
   formatDh,
   LIST_FILTERS,
+  displayCommandeTotal,
   workflowStatusLabel,
 } from "@/features/commandes-client/workflow-labels";
 import type { CommandeClientListItem } from "@/lib/commandes-client/queries";
@@ -209,7 +210,7 @@ export default function CommandesClientListClient() {
                   }
                   secondary={
                     <>
-                      {c.client_nom ?? t("noClient")} · {formatDh(c.montant_total)} DH
+                      {c.client_nom ?? t("noClient")} · {formatDh(displayCommandeTotal(c))} DH
                       {c.magasin_nom ? ` · ${c.magasin_nom}` : ""}
                     </>
                   }

@@ -12,7 +12,7 @@ export type CatalogFetchResult = {
   products: CatalogProduct[];
   categories: string[];
   categoryMeta: CatalogCategoryMeta[];
-  source: "api" | "mock";
+  source: "api" | "cache" | "mock";
   error: string | null;
   fetchedAt: string | null;
 };
@@ -24,6 +24,14 @@ type ApiCatalogResponse = {
   fetchedAt?: string;
   error?: string;
 };
+
+type BrowserCatalogCache = {
+  products: CatalogProduct[];
+  categoryMeta: CatalogCategoryMeta[];
+  fetchedAt: string;
+};
+
+const BROWSER_CATALOG_CACHE_KEY = "opf-caisse-catalog-cache";
 
 let cachedConfig: CaisseRuntimeConfig | null = null;
 
@@ -57,6 +65,86 @@ export async function getCaisseConfig(): Promise<CaisseRuntimeConfig> {
 export async function isCatalogApiConfigured(): Promise<boolean> {
   const config = await getCaisseConfig();
   return config.caisseToken.trim().length > 0;
+}
+
+function categoryLabelsFromMeta(categoryMeta: CatalogCategoryMeta[]): string[] {
+  return categoryMeta
+    .slice()
+    .sort((a, b) => a.sortOrder - b.sortOrder || a.label.localeCompare(b.label, "fr"))
+    .map((c) => c.label);
+}
+
+function catalogResultFromPayload(
+  products: CatalogProduct[],
+  categoryMeta: CatalogCategoryMeta[],
+  source: CatalogFetchResult["source"],
+  error: string | null,
+  fetchedAt: string | null,
+): CatalogFetchResult {
+  return {
+    products,
+    categories: categoryLabelsFromMeta(categoryMeta),
+    categoryMeta,
+    source,
+    error,
+    fetchedAt,
+  };
+}
+
+function loadBrowserCatalogCache(): CatalogFetchResult | null {
+  if (typeof localStorage === "undefined") return null;
+
+  try {
+    const raw = localStorage.getItem(BROWSER_CATALOG_CACHE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as BrowserCatalogCache;
+    const products = normalizeCatalogProducts(parsed.products);
+    const categoryMeta = normalizeCategoryMeta(parsed.categoryMeta);
+    if (products.length === 0) return null;
+    return catalogResultFromPayload(
+      products,
+      categoryMeta,
+      "cache",
+      null,
+      parsed.fetchedAt ?? null,
+    );
+  } catch {
+    return null;
+  }
+}
+
+function saveBrowserCatalogCache(
+  products: CatalogProduct[],
+  categoryMeta: CatalogCategoryMeta[],
+  fetchedAt: string,
+): void {
+  if (typeof localStorage === "undefined") return;
+
+  try {
+    const payload: BrowserCatalogCache = { products, categoryMeta, fetchedAt };
+    localStorage.setItem(BROWSER_CATALOG_CACHE_KEY, JSON.stringify(payload));
+  } catch {
+    // ignore quota errors
+  }
+}
+
+function resultFromInitialCatalogPayload(
+  payload: {
+    products: unknown;
+    categories: unknown;
+    error: string | null;
+    source?: "network" | "cache" | "none";
+    fetchedAt?: string | null;
+  },
+): CatalogFetchResult {
+  const products = normalizeCatalogProducts(payload.products);
+  const categoryMeta = normalizeCategoryMeta(payload.categories);
+  let source: CatalogFetchResult["source"] = "mock";
+  if (products.length > 0) {
+    source = payload.source === "cache" ? "cache" : "api";
+  }
+
+  return catalogResultFromPayload(products, categoryMeta, source, payload.error, payload.fetchedAt ?? null);
 }
 
 async function fetchCatalogPayloadFromApi(): Promise<{
@@ -119,52 +207,93 @@ async function fetchCatalogPayloadFromApi(): Promise<{
   }
 }
 
-export async function fetchCatalogFromApi(): Promise<CatalogFetchResult> {
-  if (window.caisseApi?.refreshCatalogCache) {
-    const cached = await window.caisseApi.refreshCatalogCache();
-    const products = normalizeCatalogProducts(cached.products);
-    const categoryMeta = normalizeCategoryMeta(cached.categories);
-
-    if (products.length > 0) {
-      const categories = categoryMeta
-        .slice()
-        .sort((a, b) => a.sortOrder - b.sortOrder || a.label.localeCompare(b.label, "fr"))
-        .map((c) => c.label);
-
-      return {
-        products,
-        categories,
-        categoryMeta,
-        source: "api",
-        error: null,
-        fetchedAt: new Date().toISOString(),
-      };
-    }
-
-    if (cached.error) {
-      return {
-        products: [],
-        categories: [],
-        categoryMeta: [],
-        source: "mock",
-        error: cached.error,
-        fetchedAt: null,
-      };
+/** Charge le catalogue depuis le cache local (Electron ou localStorage), sans appel réseau. */
+export async function fetchCatalogFromCache(): Promise<CatalogFetchResult> {
+  if (window.caisseApi?.getInitialCatalog) {
+    const cached = await window.caisseApi.getInitialCatalog();
+    if (cached && cached.products.length > 0) {
+      return resultFromInitialCatalogPayload(cached);
     }
   }
 
-  const payload = await fetchCatalogPayloadFromApi();
-  const categories = payload.categoryMeta
-    .slice()
-    .sort((a, b) => a.sortOrder - b.sortOrder || a.label.localeCompare(b.label, "fr"))
-    .map((c) => c.label);
+  const browserCache = loadBrowserCatalogCache();
+  if (browserCache) return browserCache;
 
-  return {
-    products: payload.products,
-    categories,
-    categoryMeta: payload.categoryMeta,
-    source: payload.products.length > 0 ? "api" : "mock",
-    error: payload.error,
-    fetchedAt: payload.fetchedAt,
-  };
+  const payload = await fetchCatalogPayloadFromApi();
+  if (payload.products.length > 0) {
+    saveBrowserCatalogCache(payload.products, payload.categoryMeta, payload.fetchedAt ?? new Date().toISOString());
+    return catalogResultFromPayload(
+      payload.products,
+      payload.categoryMeta,
+      "api",
+      null,
+      payload.fetchedAt,
+    );
+  }
+
+  return catalogResultFromPayload(
+    payload.products,
+    payload.categoryMeta,
+    "mock",
+    payload.error,
+    payload.fetchedAt,
+  );
+}
+
+/** Force une actualisation réseau (Menu → Actualiser les prix). Fallback cache si hors ligne. */
+export async function refreshCatalogFromApi(): Promise<CatalogFetchResult> {
+  if (window.caisseApi?.refreshCatalogCache) {
+    const cached = await window.caisseApi.refreshCatalogCache();
+    const result = resultFromInitialCatalogPayload(cached);
+    if (result.products.length > 0) return result;
+    if (result.error) return result;
+  }
+
+  const payload = await fetchCatalogPayloadFromApi();
+  if (payload.products.length > 0) {
+    saveBrowserCatalogCache(payload.products, payload.categoryMeta, payload.fetchedAt ?? new Date().toISOString());
+    return catalogResultFromPayload(
+      payload.products,
+      payload.categoryMeta,
+      "api",
+      null,
+      payload.fetchedAt,
+    );
+  }
+
+  const browserCache = loadBrowserCatalogCache();
+  if (browserCache) {
+    return {
+      ...browserCache,
+      error: payload.error ?? browserCache.error,
+    };
+  }
+
+  return catalogResultFromPayload(
+    payload.products,
+    payload.categoryMeta,
+    "mock",
+    payload.error,
+    payload.fetchedAt,
+  );
+}
+
+/** @deprecated Préférer fetchCatalogFromCache ou refreshCatalogFromApi */
+export async function fetchCatalogFromApi(): Promise<CatalogFetchResult> {
+  return refreshCatalogFromApi();
+}
+
+export function formatCatalogCacheDate(iso: string | null): string {
+  if (!iso) return "date inconnue";
+  try {
+    return new Date(iso).toLocaleString("fr-FR", {
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  } catch {
+    return iso;
+  }
 }

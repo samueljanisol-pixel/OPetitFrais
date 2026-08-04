@@ -1,9 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
+import { createReadStream } from "node:fs";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { Readable } from "node:stream";
 import { authorizeCaisseTicket } from "@/lib/caisse/authorize-caisse-ticket";
 import { getCaisseAppVersion } from "@/lib/caisse/caisse-app-version";
 import {
+  caisseReleasePublicDownloadUrl,
   caisseReleasePublicUrl,
-  streamCaisseReleaseFromFtp,
+  downloadCaisseReleaseFromFtpToFile,
 } from "@/lib/caisse/caisse-release-ftp";
 import { caisseReleaseDownloadName } from "@/lib/caisse/caisse-release-filename";
 import {
@@ -73,17 +79,36 @@ export async function GET(req: NextRequest) {
     });
   }
 
-  const publicUrl = caisseReleasePublicUrl();
-  if (publicUrl) {
-    return NextResponse.redirect(publicUrl, { headers: CORS_HEADERS });
+  const publicDownloadUrl = caisseReleasePublicDownloadUrl(version);
+  if (publicDownloadUrl) {
+    return NextResponse.redirect(publicDownloadUrl, { headers: CORS_HEADERS });
   }
 
-  const ftpStreamed = await streamCaisseReleaseFromFtp(version);
-  if (!("error" in ftpStreamed)) {
-    const ftpFilename = ftpStreamed.remotePath.split("/").pop() ?? filename;
-    return new NextResponse(ftpStreamed.stream, {
-      headers: attachmentHeaders(ftpFilename, ftpStreamed.sizeBytes),
-    });
+  const legacyPublicUrl = caisseReleasePublicUrl();
+  if (legacyPublicUrl) {
+    return NextResponse.redirect(legacyPublicUrl, { headers: CORS_HEADERS });
+  }
+
+  const tmpDir = await mkdtemp(join(tmpdir(), "opf-caisse-release-"));
+  const tmpFile = join(tmpDir, filename);
+  try {
+    const downloaded = await downloadCaisseReleaseFromFtpToFile(tmpFile, version);
+    if (!("error" in downloaded)) {
+      const nodeStream = createReadStream(tmpFile);
+      nodeStream.on("close", () => {
+        void rm(tmpDir, { recursive: true, force: true });
+      });
+      nodeStream.on("error", () => {
+        void rm(tmpDir, { recursive: true, force: true });
+      });
+
+      const webStream = Readable.toWeb(nodeStream) as ReadableStream<Uint8Array>;
+      return new NextResponse(webStream, {
+        headers: attachmentHeaders(filename, downloaded.sizeBytes),
+      });
+    }
+  } catch {
+    await rm(tmpDir, { recursive: true, force: true }).catch(() => undefined);
   }
 
   const result = await resolveCaisseReleaseDownload(req.nextUrl.origin, token);
@@ -99,7 +124,7 @@ export async function GET(req: NextRequest) {
   }
 
   return NextResponse.json(
-    { ok: false, error: ftpStreamed.error },
+    { ok: false, error: "Installateur caisse indisponible" },
     { status: 503, headers: CORS_HEADERS },
   );
 }

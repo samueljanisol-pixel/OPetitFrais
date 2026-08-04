@@ -1,4 +1,5 @@
 import { Client } from "basic-ftp";
+import { createReadStream, statSync } from "node:fs";
 import { PassThrough } from "node:stream";
 import { Readable } from "node:stream";
 import { getCaisseAppVersion } from "./caisse-app-version";
@@ -15,6 +16,24 @@ export const CAISSE_RELEASE_FTP_REMOTE_DIR =
 export function caisseReleasePublicUrl(): string | null {
   const raw = process.env.CAISSE_RELEASE_PUBLIC_URL?.trim();
   return raw && raw.length > 0 ? raw : null;
+}
+
+/**
+ * Base HTTPS publique du dossier /POS (ex. https://opetitfrais.janisol.ma/POS).
+ * Permet à la caisse de télécharger l'installateur sans passer par le proxy Vercel.
+ */
+export function caisseReleasePublicBaseUrl(): string | null {
+  const raw = process.env.CAISSE_RELEASE_PUBLIC_BASE_URL?.trim();
+  return raw && raw.length > 0 ? raw.replace(/\/+$/, "") : null;
+}
+
+/** URL HTTPS directe de l'installateur versionné (évite proxy API + flux FTP tronqué). */
+export function caisseReleasePublicDownloadUrl(version?: string): string | null {
+  const base = caisseReleasePublicBaseUrl();
+  if (base) {
+    return `${base}/${caisseReleaseInstallerFileName(version ?? getCaisseAppVersion())}`;
+  }
+  return caisseReleasePublicUrl();
 }
 
 export function caisseReleaseFtpRemoteFileName(version?: string): string {
@@ -140,6 +159,42 @@ export async function uploadCaisseReleaseToFtp(
   });
 
   return remotePath;
+}
+
+export async function downloadCaisseReleaseFromFtpToFile(
+  destPath: string,
+  version?: string,
+): Promise<{ sizeBytes: number; remotePath: string } | { error: string }> {
+  if (!isFtpReleaseConfigured()) {
+    return { error: "FTP non configuré sur le serveur" };
+  }
+
+  const match = await resolveFtpReleaseMatch(version);
+  if (!match) {
+    return { error: "Installateur caisse introuvable sur le FTP" };
+  }
+
+  try {
+    await withFtpClient(async (client) => {
+      await client.downloadTo(destPath, match.remotePath);
+    });
+
+    const sizeBytes = statSync(destPath).size;
+    const expected = match.sizeBytes ?? 0;
+    if (expected > 0 && sizeBytes !== expected) {
+      return {
+        error: `FTP incomplet (${sizeBytes} / ${expected} octets)`,
+      };
+    }
+    if (sizeBytes <= 0) {
+      return { error: "Fichier FTP vide" };
+    }
+
+    return { sizeBytes, remotePath: match.remotePath };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : "Téléchargement FTP impossible";
+    return { error: msg };
+  }
 }
 
 export async function streamCaisseReleaseFromFtp(

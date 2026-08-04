@@ -49,6 +49,7 @@ export async function GET(_req: NextRequest, { params }: RouteParams) {
     cart_number: p.cart_number,
     label: `Panier #${p.cart_number}`,
     montant_total: p.montant_total,
+    pos_total: p.pos_total,
     submitted_at: p.submitted_at,
     fulfillment_mode: p.fulfillment_mode,
     payment_method: p.payment_method,

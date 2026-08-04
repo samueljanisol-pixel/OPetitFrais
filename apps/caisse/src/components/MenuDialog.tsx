@@ -26,6 +26,7 @@ type Props = {
   onSendSaurusPrices: () => void;
   onReprintLastTicket: () => void;
   onOpenCommandesBoutique?: () => void;
+  commandesBoutiqueDisabled?: boolean;
   onOpenSettings: () => void;
   onQuitApp: () => void;
 };
@@ -41,6 +42,7 @@ export default function MenuDialog({
   onSendSaurusPrices,
   onReprintLastTicket,
   onOpenCommandesBoutique,
+  commandesBoutiqueDisabled = false,
   onOpenSettings,
   onQuitApp,
 }: Props) {
@@ -107,18 +109,21 @@ export default function MenuDialog({
             </Typography>
           ) : null}
         </Box>
-        {onOpenCommandesBoutique ? (
+        {onOpenCommandesBoutique || commandesBoutiqueDisabled ? (
           <Button
             variant="outlined"
             size="large"
             fullWidth
+            disabled={commandesBoutiqueDisabled}
             onClick={() => {
+              if (commandesBoutiqueDisabled || !onOpenCommandesBoutique) return;
               onOpenCommandesBoutique();
               onClose();
             }}
             sx={{ justifyContent: "flex-start", py: 1.25, fontWeight: 700 }}
           >
             Commandes boutique
+            {commandesBoutiqueDisabled ? " (hors ligne)" : ""}
           </Button>
         ) : null}
         <Button

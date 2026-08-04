@@ -10,6 +10,24 @@ export type InitialCatalogPayload = {
     sortOrder: number;
   }>;
   error: string | null;
+  source?: "network" | "cache" | "none";
+  fetchedAt?: string | null;
+};
+
+export type InitialClientsPayload = {
+  clients: Array<{
+    id: string;
+    name: string;
+    phone: string | null;
+    email: string | null;
+    notes: string | null;
+    balanceDue: number;
+    sortOrder: number;
+    isSystem: boolean;
+  }>;
+  error: string | null;
+  source?: "network" | "cache" | "none";
+  fetchedAt?: string | null;
 };
 
 export type CartBroadcast = {
@@ -101,6 +119,10 @@ contextBridge.exposeInMainWorld("caisseApi", {
     ipcRenderer.invoke("caisse:getInitialCatalog"),
   refreshCatalogCache: (): Promise<InitialCatalogPayload> =>
     ipcRenderer.invoke("caisse:refreshCatalogCache"),
+  getInitialClients: (): Promise<InitialClientsPayload | null> =>
+    ipcRenderer.invoke("caisse:getInitialClients"),
+  refreshClientsCache: (): Promise<InitialClientsPayload> =>
+    ipcRenderer.invoke("caisse:refreshClientsCache"),
   saveHardwareConfig: (partial: CaisseHardwareConfig): Promise<CaisseRuntimeConfig> =>
     ipcRenderer.invoke("caisse:saveHardwareConfig", partial),
   sendSaurusCatalog: (): Promise<SendSaurusCatalogResult> =>

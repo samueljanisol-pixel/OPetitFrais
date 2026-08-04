@@ -6,6 +6,7 @@ export type ClientPanierRow = {
   cart_number: number;
   client_id: string | null;
   montant_total: number;
+  pos_total: number | null;
   payment_status: "unpaid" | "paid";
   submitted_at: string | null;
   fulfillment_mode: string | null;
@@ -53,6 +54,12 @@ function panierLabel(cartNumber: number): string {
   return `Panier #${cartNumber}`;
 }
 
+/** Montant comptable / affiché : total caisse si encaissé, sinon estimation commande. */
+export function effectivePanierMontant(p: Pick<ClientPanierRow, "montant_total" | "pos_total">): number {
+  if (p.pos_total != null && Number.isFinite(p.pos_total)) return p.pos_total;
+  return p.montant_total;
+}
+
 export function summarizePaniers(paniers: ClientPanierRow[]): {
   total: number;
   paye: number;
@@ -61,8 +68,9 @@ export function summarizePaniers(paniers: ClientPanierRow[]): {
   let total = 0;
   let paye = 0;
   for (const p of paniers) {
-    total += p.montant_total;
-    if (p.paye) paye += p.montant_total;
+    const montant = effectivePanierMontant(p);
+    total += montant;
+    if (p.paye) paye += montant;
   }
   return {
     total: roundMoney(total),
@@ -82,7 +90,7 @@ export async function loadClientSummaries(
       .order("nom", { ascending: true }),
     supabase
       .from("shop_cart")
-      .select("id, client_id, montant_total, payment_status")
+      .select("id, client_id, montant_total, payment_status, shop_cart_pos_link ( total )")
       .eq("status", "submitted")
       .not("client_id", "is", null),
   ]);
@@ -95,7 +103,13 @@ export async function loadClientSummaries(
   for (const row of paniersRes.data ?? []) {
     const clientId = (row as { client_id: string | null }).client_id;
     if (clientId == null) continue;
-    const montant = roundMoney(Number((row as { montant_total: number | null }).montant_total ?? 0));
+    const posLink = one((row as { shop_cart_pos_link?: unknown }).shop_cart_pos_link);
+    const posTotal =
+      posLink && (posLink as { total?: number | null }).total != null
+        ? roundMoney(Number((posLink as { total: number }).total))
+        : null;
+    const montantEstime = roundMoney(Number((row as { montant_total: number | null }).montant_total ?? 0));
+    const montant = posTotal ?? montantEstime;
     const paid = (row as { payment_status: string }).payment_status === "paid";
     const cur = totalsByClient.get(clientId) ?? { total: 0, paye: 0 };
     cur.total += montant;
@@ -134,7 +148,7 @@ export async function loadPaniersForClient(
   const { data, error } = await supabase
     .from("shop_cart")
     .select(
-      "id, cart_number, client_id, montant_total, payment_status, submitted_at, fulfillment_mode, payment_method, order_comment, lines, shop_cart_pos_link ( caisse_code, ticket_ref, magasins ( code, nom ) )",
+      "id, cart_number, client_id, montant_total, payment_status, submitted_at, fulfillment_mode, payment_method, order_comment, lines, shop_cart_pos_link ( caisse_code, ticket_ref, total, magasins ( code, nom ) )",
     )
     .eq("client_id", clientId)
     .eq("status", "submitted")
@@ -145,11 +159,17 @@ export async function loadPaniersForClient(
   const paniers: ClientPanierRow[] = (data ?? []).map((row) => {
     const paymentStatus = (row as { payment_status: string }).payment_status;
     const pos = parsePosCaisseInfo((row as { shop_cart_pos_link?: unknown }).shop_cart_pos_link);
+    const posLink = one((row as { shop_cart_pos_link?: unknown }).shop_cart_pos_link);
+    const posTotal =
+      posLink && (posLink as { total?: number | null }).total != null
+        ? roundMoney(Number((posLink as { total: number }).total))
+        : null;
     return {
       id: String((row as { id: string }).id),
       cart_number: Number((row as { cart_number: number }).cart_number),
       client_id: (row as { client_id: string | null }).client_id,
       montant_total: roundMoney(Number((row as { montant_total: number | null }).montant_total ?? 0)),
+      pos_total: posTotal,
       payment_status: paymentStatus === "paid" ? "paid" : "unpaid",
       submitted_at: (row as { submitted_at?: string | null }).submitted_at ?? null,
       fulfillment_mode: (row as { fulfillment_mode?: string | null }).fulfillment_mode ?? null,

@@ -32,6 +32,7 @@ type PanierRow = {
   cart_number: number;
   label: string;
   montant_total: number;
+  pos_total: number | null;
   submitted_at: string | null;
   paye: boolean;
   magasin_code: string | null;
@@ -71,6 +72,11 @@ function formatDh(n: number): string {
   }).format(n);
 }
 
+function panierDisplayMontant(p: Pick<PanierRow, "montant_total" | "pos_total">): number {
+  if (p.pos_total != null && Number.isFinite(p.pos_total)) return p.pos_total;
+  return p.montant_total;
+}
+
 function formatPanierSecondary(
   p: PanierRow,
   formatDateTime: (iso: string) => string,
@@ -87,7 +93,7 @@ function formatPanierSecondary(
   if (magasin) parts.push(`${magasinLabel} ${magasin}`);
   if (p.caisse_code) parts.push(`${caisseLabel} ${p.caisse_code}`);
 
-  parts.push(`${formatDh(p.montant_total)} DH`);
+  parts.push(`${formatDh(panierDisplayMontant(p))} DH`);
   parts.push(p.paye ? paidLabel : unpaidLabel);
   return parts.join(" · ");
 }
@@ -155,7 +161,7 @@ export default function ClientDetailClient({ clientId }: Props) {
   const selectedMontant = useMemo(() => {
     let sum = 0;
     for (const p of paniers) {
-      if (selected.has(p.id)) sum += p.montant_total;
+      if (selected.has(p.id)) sum += panierDisplayMontant(p);
     }
     return Math.round(sum * 100) / 100;
   }, [paniers, selected]);

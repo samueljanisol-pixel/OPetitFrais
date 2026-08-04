@@ -9,6 +9,7 @@ import type {
   CaisseUpdateState,
   CaisseWindowMode,
   InitialCatalogPayload,
+  InitialClientsPayload,
   PingSaurusScaleResult,
   SendSaurusCatalogResult,
 } from "../electron/preload/index";
@@ -36,6 +37,8 @@ declare global {
       setWindowMode: (mode: CaisseWindowMode) => Promise<void>;
       getInitialCatalog: () => Promise<InitialCatalogPayload | null>;
       refreshCatalogCache: () => Promise<InitialCatalogPayload>;
+      getInitialClients: () => Promise<InitialClientsPayload | null>;
+      refreshClientsCache: () => Promise<InitialClientsPayload>;
       saveHardwareConfig: (partial: CaisseHardwareConfig) => Promise<CaisseRuntimeConfig>;
       sendSaurusCatalog: () => Promise<SendSaurusCatalogResult>;
       pingSaurusScale: () => Promise<PingSaurusScaleResult>;

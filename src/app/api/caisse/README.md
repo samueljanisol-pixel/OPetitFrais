@@ -192,7 +192,8 @@ Variables :
 | `FTP_HOST`, `FTP_USER`, `FTP_PASSWORD` | Accès FTP Janisol (déjà utilisés pour sync photos) |
 | `CAISSE_RELEASE_FTP_DIR` | Dossier FTP (défaut `/POS`) |
 | `CAISSE_RELEASE_FTP_FILE` | Nom du fichier sur le FTP (défaut `OPetitFrais-Caisse-Setup-{version}.exe`) |
-| `CAISSE_RELEASE_PUBLIC_URL` | Optionnel : redirection HTTPS directe au lieu du flux FTP côté API |
+| `CAISSE_RELEASE_PUBLIC_URL` | Optionnel : URL HTTPS directe fixe (legacy, une seule version) |
+| `CAISSE_RELEASE_PUBLIC_BASE_URL` | **Recommandé prod** : base HTTPS du dossier FTP (ex. `https://opetitfrais.janisol.ma/POS`) — la caisse télécharge `{base}/OPetitFrais-Caisse-Setup-{version}.exe` sans proxy Vercel |
 | `CAISSE_RELEASE_INSTALLER_PATH` | Chemin absolu local (dev / override) |
 | `CAISSE_RELEASE_DOWNLOAD_NAME` | Override nom au téléchargement (sinon dérivé de la version caisse) |
 

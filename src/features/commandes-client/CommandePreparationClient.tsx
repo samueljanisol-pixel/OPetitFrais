@@ -286,7 +286,9 @@ export default function CommandePreparationClient({ cartId }: Props) {
       </Stack>
 
       <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-        {t("estimate")} : {formatDh(commande.montant_total)} DH
+        {commande.pos_total != null
+          ? `${tDetail("posTotal")} : ${formatDh(commande.pos_total)} DH`
+          : `${t("estimate")} : ${formatDh(commande.montant_total)} DH`}
       </Typography>
 
       {wrongStatus ? (

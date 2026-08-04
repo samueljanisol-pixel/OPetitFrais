@@ -28,6 +28,7 @@ export type ClientFormValues = {
 type Props = {
   open: boolean;
   client: CaisseClient | null;
+  serverOffline?: boolean;
   onClose: () => void;
   onSaved: (client: CaisseClient) => void;
 };
@@ -52,7 +53,13 @@ function keyboardMode(field: ClientFormField): AlphaKeyboardMode {
   return "text";
 }
 
-export default function ClientFormDialog({ open, client, onClose, onSaved }: Props) {
+export default function ClientFormDialog({
+  open,
+  client,
+  serverOffline = false,
+  onClose,
+  onSaved,
+}: Props) {
   const isEdit = client != null;
   const [form, setForm] = useState<ClientFormValues>(emptyForm);
   const [activeField, setActiveField] = useState<ClientFormField>("name");
@@ -139,6 +146,11 @@ export default function ClientFormDialog({ open, client, onClose, onSaved }: Pro
     <FormDialog open={open} onClose={handleClose} fullWidth maxWidth="sm">
       <DialogTitle>{isEdit ? "Modifier le client" : "Nouveau client"}</DialogTitle>
       <DialogContent sx={{ pt: 1 }}>
+        {serverOffline ? (
+          <Alert severity="warning" sx={{ mb: 1 }}>
+            Hors ligne — enregistrement serveur indisponible.
+          </Alert>
+        ) : null}
         {error ? (
           <Alert severity="error" sx={{ mb: 1 }}>
             {error}
@@ -190,7 +202,7 @@ export default function ClientFormDialog({ open, client, onClose, onSaved }: Pro
         <Button onClick={handleClose} disabled={saving}>
           Annuler
         </Button>
-        <Button variant="contained" onClick={() => void handleSave()} disabled={saving}>
+        <Button variant="contained" onClick={() => void handleSave()} disabled={saving || serverOffline}>
           {saving ? <CircularProgress size={22} /> : "Enregistrer"}
         </Button>
       </DialogActions>

@@ -31,6 +31,16 @@ export function formatDh(n: number | null | undefined): string {
   }).format(n);
 }
 
+/** Montant affiché : total caisse si encaissé, sinon estimation commande. */
+export function displayCommandeTotal(item: {
+  pos_total?: number | null;
+  montant_total?: number | null;
+}): number {
+  if (item.pos_total != null && Number.isFinite(item.pos_total)) return item.pos_total;
+  if (item.montant_total != null && Number.isFinite(item.montant_total)) return item.montant_total;
+  return 0;
+}
+
 export const LIST_FILTERS: Array<{ key: string; statuses?: WorkflowStatus[] }> = [
   { key: "all" },
   { key: "nouvelle", statuses: ["nouvelle"] },

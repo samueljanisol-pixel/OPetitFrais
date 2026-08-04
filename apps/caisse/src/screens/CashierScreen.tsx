@@ -63,7 +63,13 @@ import {
   type ProductSortMode,
 } from "../data/catalog-helpers";
 import { countCatalogArabicLabels } from "../../shared/catalog-normalize";
-import { fetchCatalogFromApi, isCatalogApiConfigured, type CatalogCategoryMeta } from "../lib/catalog";
+import {
+  fetchCatalogFromCache,
+  formatCatalogCacheDate,
+  isCatalogApiConfigured,
+  refreshCatalogFromApi,
+  type CatalogCategoryMeta,
+} from "../lib/catalog";
 import { loadDisplayLocale, saveDisplayLocale } from "../lib/display-locale";
 import { fetchWeight, printEscPosBase64, reconnectScale, sendTare, subscribeWeight } from "../lib/agent";
 import { playAddProductBeep, playAddProductErrorBeep } from "../lib/sounds";
@@ -83,8 +89,11 @@ import ProductQtyDialog from "../components/ProductQtyDialog";
 import HoldCartDialog from "../components/HoldCartDialog";
 import MenuDialog from "../components/MenuDialog";
 import CommandesBoutiqueDialog from "../components/CommandesBoutiqueDialog";
+import type { CommandeEncaissementItem } from "../lib/commandes-boutique";
+import { fetchClientsFromCache } from "../lib/clients";
 import SettingsDialog from "../components/SettingsDialog";
 import CashierStatusBar from "../components/CashierStatusBar";
+import { useApiServerStatus } from "../lib/status-bar";
 import { formatTicketReference, nextTicketNumber } from "../lib/ticket-counter";
 import {
   fetchCommandeBoutiqueTicketEscPosBase64,
@@ -140,6 +149,8 @@ export default function CashierScreen({ onRequestQuit }: { onRequestQuit: () => 
   const [categoryMeta, setCategoryMeta] = useState<CatalogCategoryMeta[]>([]);
   const [catalogReady, setCatalogReady] = useState(false);
   const [catalogLoading, setCatalogLoading] = useState(true);
+  const [catalogSource, setCatalogSource] = useState<"api" | "cache" | "mock" | null>(null);
+  const [catalogFetchedAt, setCatalogFetchedAt] = useState<string | null>(null);
   const [cart, setCart] = useState<CartState>(() => createEmptyCart());
   const [category, setCategory] = useState<string>("");
   const [subcategory, setSubcategory] = useState<string>(ALL_SUBCATEGORY);
@@ -164,9 +175,12 @@ export default function CashierScreen({ onRequestQuit }: { onRequestQuit: () => 
     cartNumber: number;
     total: number;
   } | null>(null);
+  const [encaissementCartConflict, setEncaissementCartConflict] =
+    useState<CommandeEncaissementItem | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [saurusSending, setSaurusSending] = useState(false);
   const [backofficeUrl, setBackofficeUrl] = useState<string | null>(null);
+  const apiOnline = useApiServerStatus(backofficeUrl);
   const [heldCarts, setHeldCarts] = useState<HeldCartEntry[]>([]);
   const [selectedLineId, setSelectedLineId] = useState<string | null>(null);
   const [lineEditOpen, setLineEditOpen] = useState(false);
@@ -434,10 +448,14 @@ export default function CashierScreen({ onRequestQuit }: { onRequestQuit: () => 
     saveCachedCart(magasin, caisseCode, cart);
   }, [cart, magasin, caisseCode]);
 
-  const loadCatalog = useCallback(async (options?: { showInfo?: boolean }) => {
+  const loadCatalog = useCallback(async (options?: { showInfo?: boolean; forceRefresh?: boolean }) => {
     setCatalogLoading(true);
     try {
-      const result = await fetchCatalogFromApi();
+      const result = options?.forceRefresh
+        ? await refreshCatalogFromApi()
+        : await fetchCatalogFromCache();
+      setCatalogSource(result.source);
+      setCatalogFetchedAt(result.fetchedAt);
       if (result.products.length > 0) {
         const active = activeCatalogProducts(result.products);
         const tabs = categoryTabsFromCatalog(active);
@@ -446,10 +464,14 @@ export default function CashierScreen({ onRequestQuit }: { onRequestQuit: () => 
         setCategory((prev) => (tabs.includes(prev) ? prev : tabs[0] ?? ""));
         setCatalogReady(true);
         if (options?.showInfo) {
-          const ar = countCatalogArabicLabels(active);
-          setInfo(
-            `${active.length} produits importés${ar.products > 0 ? ` (${ar.products} noms ar)` : ""}`,
-          );
+          if (result.source === "cache") {
+            setInfo(`Catalogue hors ligne (${formatCatalogCacheDate(result.fetchedAt)})`);
+          } else {
+            const ar = countCatalogArabicLabels(active);
+            setInfo(
+              `${active.length} produits importés${ar.products > 0 ? ` (${ar.products} noms ar)` : ""}`,
+            );
+          }
         }
         return;
       }
@@ -467,6 +489,10 @@ export default function CashierScreen({ onRequestQuit }: { onRequestQuit: () => 
   useEffect(() => {
     void loadCatalog();
   }, [loadCatalog]);
+
+  useEffect(() => {
+    void fetchClientsFromCache();
+  }, []);
 
   const broadcast = useCallback(
     (next: CartState, idle = false) => {
@@ -866,6 +892,49 @@ export default function CashierScreen({ onRequestQuit }: { onRequestQuit: () => 
     setInfo("Panier mis en attente");
   };
 
+  const holdCurrentCartSilently = () => {
+    const hasContent = lineCount > 0 || cart.clientId != null;
+    if (!hasContent) return;
+    const entry: HeldCartEntry = {
+      id: createHoldId(),
+      cart: cloneCart(cart),
+      heldAt: new Date().toISOString(),
+    };
+    setHeldCarts((prev) => [...prev, entry]);
+    setCart(createEmptyCart());
+    clearCachedCart(magasin, caisseCode);
+    clearAddHistory();
+  };
+
+  const applyEncaissement = (item: CommandeEncaissementItem) => {
+    setEncaissementCheckout({
+      cartId: item.cartId,
+      cartNumber: item.cartNumber,
+      total: item.montant,
+    });
+    setLinkedShopCartId(item.cartId);
+    setLinkedShopCartNumber(item.cartNumber);
+    setCart((prev) => {
+      const cleared = clearCart(prev);
+      return setClient(cleared, {
+        id: item.clientId,
+        name: item.clientName,
+      });
+    });
+    clearCachedCart(magasin, caisseCode);
+    setPaymentOpen(true);
+    setInfo(`Encaissement commande #${item.cartNumber}`);
+  };
+
+  const handleSelectEncaisser = (item: CommandeEncaissementItem) => {
+    const hasContent = lineCount > 0 || cart.clientId != null;
+    if (hasContent) {
+      setEncaissementCartConflict(item);
+      return;
+    }
+    applyEncaissement(item);
+  };
+
   const handleRecallHold = (holdId: string) => {
     const entry = heldCarts.find((h) => h.id === holdId);
     if (!entry) return;
@@ -905,6 +974,21 @@ export default function CashierScreen({ onRequestQuit }: { onRequestQuit: () => 
 
   return (
     <Box sx={{ width: 1024, height: 768, display: "flex", flexDirection: "column", overflow: "hidden" }}>
+      {catalogReady && (catalogSource === "cache" || !apiOnline) ? (
+        <Alert
+          severity="warning"
+          sx={{
+            borderRadius: 0,
+            py: 0.15,
+            px: 1,
+            flexShrink: 0,
+            "& .MuiAlert-message": { fontSize: 12, py: 0.25 },
+          }}
+        >
+          Mode hors ligne — catalogue du {formatCatalogCacheDate(catalogFetchedAt)}. Ventes et tickets
+          locaux OK ; commandes boutique et sync serveur indisponibles.
+        </Alert>
+      ) : null}
       <Box sx={{ display: "flex", flex: 1, minHeight: 0 }}>
         <Box sx={{ flex: 1, display: "flex", flexDirection: "column", minWidth: 0 }}>
           <Box
@@ -1772,6 +1856,7 @@ export default function CashierScreen({ onRequestQuit }: { onRequestQuit: () => 
       <ClientSelectDialog
         open={clientDialogOpen}
         selectedClientId={cart.clientId}
+        serverOffline={!apiOnline}
         onClose={() => setClientDialogOpen(false)}
         onValidate={(client) => {
           setCart((prev) => setClient(prev, client));
@@ -1827,9 +1912,10 @@ export default function CashierScreen({ onRequestQuit }: { onRequestQuit: () => 
         lastTicketAvailable={lastTicketAvailable}
         lastTicketPaidAt={lastTicketPaidAt}
         onClose={() => setMenuOpen(false)}
-        onRefreshPrices={() => void loadCatalog({ showInfo: true })}
+        onRefreshPrices={() => void loadCatalog({ showInfo: true, forceRefresh: true })}
         onSendSaurusPrices={() => void handleSendSaurusPrices()}
         onReprintLastTicket={() => void handleReprintLastTicket()}
+        commandesBoutiqueDisabled={!apiOnline}
         onOpenCommandesBoutique={() => {
           setMenuOpen(false);
           setCommandesBoutiqueOpen(true);
@@ -1860,25 +1946,7 @@ export default function CashierScreen({ onRequestQuit }: { onRequestQuit: () => 
           clearCachedCart(magasin, caisseCode);
           setInfo(`Commande #${cartNumber} — client sélectionné`);
         }}
-        onSelectEncaisser={(item: CommandeEncaissementItem) => {
-          setEncaissementCheckout({
-            cartId: item.cartId,
-            cartNumber: item.cartNumber,
-            total: item.montant,
-          });
-          setLinkedShopCartId(item.cartId);
-          setLinkedShopCartNumber(item.cartNumber);
-          setCart((prev) => {
-            const cleared = clearCart(prev);
-            return setClient(cleared, {
-              id: item.clientId,
-              name: item.clientName,
-            });
-          });
-          clearCachedCart(magasin, caisseCode);
-          setPaymentOpen(true);
-          setInfo(`Encaissement commande #${item.cartNumber}`);
-        }}
+        onSelectEncaisser={handleSelectEncaisser}
       />
 
       <SettingsDialog
@@ -1899,6 +1967,49 @@ export default function CashierScreen({ onRequestQuit }: { onRequestQuit: () => 
           <Button onClick={() => setClearCartConfirmOpen(false)}>Annuler</Button>
           <Button color="error" variant="contained" onClick={confirmClearCart}>
             Supprimer
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog
+        open={encaissementCartConflict != null}
+        onClose={() => setEncaissementCartConflict(null)}
+        maxWidth="xs"
+        fullWidth
+      >
+        <DialogTitle>Panier en cours</DialogTitle>
+        <DialogContent>
+          <Typography sx={{ pt: 0.5 }}>
+            {lineCount > 0
+              ? `Le panier contient ${lineCount} article(s)`
+              : "Un client est déjà sélectionné"}
+            {cart.clientName ? ` (${cart.clientName})` : ""}. Que faire avant d&apos;encaisser la
+            commande #{encaissementCartConflict?.cartNumber} ?
+          </Typography>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2, pt: 1, flexDirection: "column", gap: 1, alignItems: "stretch" }}>
+          <Button
+            variant="outlined"
+            fullWidth
+            onClick={() => setEncaissementCartConflict(null)}
+            sx={{ fontWeight: 700 }}
+          >
+            Continuer le panier en cours
+          </Button>
+          <Button
+            variant="contained"
+            fullWidth
+            onClick={() => {
+              const item = encaissementCartConflict;
+              if (!item) return;
+              holdCurrentCartSilently();
+              setEncaissementCartConflict(null);
+              applyEncaissement(item);
+              setInfo("Panier mis en attente — encaissement commande");
+            }}
+            sx={{ fontWeight: 700 }}
+          >
+            Mettre le panier en attente
           </Button>
         </DialogActions>
       </Dialog>

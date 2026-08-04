@@ -19,11 +19,13 @@ import PersonOffOutlinedIcon from "@mui/icons-material/PersonOffOutlined";
 import type { CaisseClient } from "@opf/caisse-core";
 import { formatMoneyFr } from "@opf/caisse-core";
 import ClientFormDialog from "./ClientFormDialog";
-import { fetchClientsFromApi } from "../lib/clients";
+import { fetchClientsFromCache, refreshClientsFromApi } from "../lib/clients";
+import { formatCatalogCacheDate } from "../lib/catalog";
 
 type Props = {
   open: boolean;
   selectedClientId: string | null;
+  serverOffline?: boolean;
   onClose: () => void;
   onValidate: (client: { id: string | null; name: string | null }) => void;
 };
@@ -31,22 +33,27 @@ type Props = {
 export default function ClientSelectDialog({
   open,
   selectedClientId,
+  serverOffline = false,
   onClose,
   onValidate,
 }: Props) {
   const [clients, setClients] = useState<CaisseClient[]>([]);
+  const [clientsSource, setClientsSource] = useState<"api" | "cache" | "empty">("empty");
+  const [clientsFetchedAt, setClientsFetchedAt] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pickedId, setPickedId] = useState<string | null>(selectedClientId);
   const [formOpen, setFormOpen] = useState(false);
   const [editClient, setEditClient] = useState<CaisseClient | null>(null);
 
-  const loadClients = useCallback(async () => {
+  const loadClients = useCallback(async (forceRefresh = false) => {
     setLoading(true);
     setError(null);
-    const result = await fetchClientsFromApi();
+    const result = forceRefresh ? await refreshClientsFromApi() : await fetchClientsFromCache();
     setClients(result.clients);
-    if (result.error) setError(result.error);
+    setClientsSource(result.source);
+    setClientsFetchedAt(result.fetchedAt);
+    if (result.clients.length === 0 && result.error) setError(result.error);
     setLoading(false);
   }, []);
 
@@ -102,6 +109,13 @@ export default function ClientSelectDialog({
             </Box>
           ) : null}
 
+          {clientsSource === "cache" ? (
+            <Alert severity="info" sx={{ mb: 2 }}>
+              Liste clients en cache ({formatCatalogCacheDate(clientsFetchedAt)}). Sélection possible ;
+              création et modification indisponibles hors ligne.
+            </Alert>
+          ) : null}
+
           {error ? (
             <Alert severity="warning" sx={{ mb: 2 }}>
               {error}
@@ -147,14 +161,16 @@ export default function ClientSelectDialog({
                     position: "relative",
                   }}
                 >
-                  <IconButton
-                    size="small"
-                    sx={{ position: "absolute", top: 4, right: 4 }}
-                    onClick={(e) => openEdit(client, e)}
-                    aria-label="Modifier"
-                  >
-                    <EditOutlinedIcon fontSize="small" />
-                  </IconButton>
+                  {!serverOffline ? (
+                    <IconButton
+                      size="small"
+                      sx={{ position: "absolute", top: 4, right: 4 }}
+                      onClick={(e) => openEdit(client, e)}
+                      aria-label="Modifier"
+                    >
+                      <EditOutlinedIcon fontSize="small" />
+                    </IconButton>
+                  ) : null}
                   <PersonOutlineOutlinedIcon color="primary" sx={{ mb: 0.5 }} />
                   <Typography variant="body2" sx={{ fontWeight: 700, pr: 3 }}>
                     {client.name}
@@ -171,7 +187,7 @@ export default function ClientSelectDialog({
         </DialogContent>
         <DialogActions sx={{ justifyContent: "space-between", px: 3, pb: 2 }}>
           <Button onClick={onClose}>Annuler</Button>
-          <Button variant="outlined" onClick={openCreate}>
+          <Button variant="outlined" disabled={serverOffline} onClick={openCreate}>
             Nouveau
           </Button>
           <Button
@@ -193,6 +209,7 @@ export default function ClientSelectDialog({
       <ClientFormDialog
         open={formOpen}
         client={editClient}
+        serverOffline={serverOffline}
         onClose={() => setFormOpen(false)}
         onSaved={handleSaved}
       />

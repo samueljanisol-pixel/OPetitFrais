@@ -28,7 +28,7 @@ import TicketRefCameraScannerDialog, {
   isCameraScanSupported,
 } from "@/features/commandes-client/TicketRefCameraScannerDialog";
 import FormDialog from "@/lib/mui/FormDialog";
-import { formatDh, workflowStatusLabel } from "@/features/commandes-client/workflow-labels";
+import { formatDh, displayCommandeTotal, workflowStatusLabel } from "@/features/commandes-client/workflow-labels";
 import type { CategoryMeta } from "@/lib/commandes-client/group-workflow-lines-by-category";
 import type { CommandeClientDetail, CommandeClientListItem } from "@/lib/commandes-client/queries";
 import {
@@ -40,7 +40,7 @@ import { useSessionPermissions } from "@/lib/auth/useSessionPermissions";
 import { useBackChevronIcon } from "@/lib/i18n/useBackChevronIcon";
 
 function displayTotal(item: CommandeClientListItem): number {
-  return item.pos_total ?? item.montant_total ?? 0;
+  return displayCommandeTotal(item);
 }
 
 export default function CommandeLivraisonClient() {

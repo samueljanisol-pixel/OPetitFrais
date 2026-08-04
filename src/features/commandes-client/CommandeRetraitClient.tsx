@@ -23,7 +23,7 @@ import {
 } from "@mui/material";
 import AppLink from "@/components/AppLink";
 import FormDialog from "@/lib/mui/FormDialog";
-import { formatDh, workflowStatusLabel } from "@/features/commandes-client/workflow-labels";
+import { formatDh, displayCommandeTotal, workflowStatusLabel } from "@/features/commandes-client/workflow-labels";
 import type { CommandeClientListItem } from "@/lib/commandes-client/queries";
 import type { ConfirmedPaymentMethod } from "@/lib/commandes-client/workflow";
 import { useSessionPermissions } from "@/lib/auth/useSessionPermissions";
@@ -123,7 +123,7 @@ export default function CommandeRetraitClient() {
                     ) : null}
                   </Stack>
                 }
-                secondary={`${c.client_nom ?? "—"} · ${formatDh(c.montant_total)} DH`}
+                secondary={`${c.client_nom ?? "—"} · ${formatDh(displayCommandeTotal(c))} DH`}
               />
               <Button size="small" variant="outlined" onClick={() => setConfirmItem(c)}>
                 {t("confirm")}

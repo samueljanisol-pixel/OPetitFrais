@@ -1,9 +1,10 @@
 import type { CaisseClient } from "@opf/caisse-core";
 import { getCaisseConfig } from "./catalog";
+import { loadClientsCache, saveClientsCache } from "./clients-cache";
 
 export type ClientsFetchResult = {
   clients: CaisseClient[];
-  source: "api" | "empty";
+  source: "api" | "cache" | "empty";
   error: string | null;
   fetchedAt: string | null;
 };
@@ -29,9 +30,70 @@ export async function isClientsApiConfigured(): Promise<boolean> {
   return config.caisseToken.trim().length > 0;
 }
 
+function resultFromCachedClients(
+  clients: CaisseClient[],
+  fetchedAt: string | null,
+  error: string | null = null,
+): ClientsFetchResult {
+  if (clients.length > 0) {
+    saveClientsCache(clients, fetchedAt ?? new Date().toISOString());
+    return {
+      clients,
+      source: "cache",
+      error,
+      fetchedAt,
+    };
+  }
+  return {
+    clients: [],
+    source: "empty",
+    error: error ?? "Liste clients indisponible",
+    fetchedAt: null,
+  };
+}
+
+function loadRendererClientsCache(): ClientsFetchResult | null {
+  const cached = loadClientsCache();
+  if (!cached || cached.clients.length === 0) return null;
+  return resultFromCachedClients(cached.clients, cached.fetchedAt);
+}
+
+/** Charge la liste clients depuis le cache (Electron disque ou localStorage), sans réseau. */
+export async function fetchClientsFromCache(): Promise<ClientsFetchResult> {
+  if (window.caisseApi?.getInitialClients) {
+    const cached = await window.caisseApi.getInitialClients();
+    if (cached && cached.clients.length > 0) {
+      return resultFromCachedClients(cached.clients, cached.fetchedAt ?? null);
+    }
+  }
+
+  const browserCache = loadRendererClientsCache();
+  if (browserCache) return browserCache;
+
+  return fetchClientsFromApi();
+}
+
+/** Force une actualisation réseau. Fallback cache si hors ligne. */
+export async function refreshClientsFromApi(): Promise<ClientsFetchResult> {
+  if (window.caisseApi?.refreshClientsCache) {
+    const cached = await window.caisseApi.refreshClientsCache();
+    if (cached.clients.length > 0) {
+      return resultFromCachedClients(cached.clients, cached.fetchedAt ?? null);
+    }
+    if (cached.error) {
+      const fallback = loadRendererClientsCache();
+      if (fallback) return { ...fallback, error: cached.error };
+    }
+  }
+
+  return fetchClientsFromApi();
+}
+
 export async function fetchClientsFromApi(): Promise<ClientsFetchResult> {
   const configured = await isClientsApiConfigured();
   if (!configured) {
+    const fallback = loadRendererClientsCache();
+    if (fallback) return fallback;
     return {
       clients: [],
       source: "empty",
@@ -45,6 +107,13 @@ export async function fetchClientsFromApi(): Promise<ClientsFetchResult> {
     const json = (await res.json()) as ApiClientsResponse;
 
     if (!res.ok || !json.ok || !json.clients) {
+      const fallback = loadRendererClientsCache();
+      if (fallback) {
+        return {
+          ...fallback,
+          error: json.error ?? `HTTP ${res.status}`,
+        };
+      }
       return {
         clients: [],
         source: "empty",
@@ -53,14 +122,21 @@ export async function fetchClientsFromApi(): Promise<ClientsFetchResult> {
       };
     }
 
+    const fetchedAt = json.fetchedAt ?? new Date().toISOString();
+    saveClientsCache(json.clients, fetchedAt);
+
     return {
       clients: json.clients,
       source: "api",
       error: null,
-      fetchedAt: json.fetchedAt ?? new Date().toISOString(),
+      fetchedAt,
     };
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Erreur réseau";
+    const fallback = loadRendererClientsCache();
+    if (fallback) {
+      return { ...fallback, error: msg };
+    }
     return { clients: [], source: "empty", error: msg, fetchedAt: null };
   }
 }

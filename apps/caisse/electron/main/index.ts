@@ -13,6 +13,11 @@ import {
   getCachedCatalog,
   prefetchCatalog,
 } from "./fetch-catalog";
+import {
+  clearCachedClients,
+  getCachedClients,
+  prefetchClients,
+} from "./fetch-clients";
 import { listWindowsSerialPorts } from "./list-serial-ports-win";
 import { sendSaurusCatalogFromCache } from "./send-saurus-catalog";
 import { pingConfiguredSaurusScale } from "./ping-saurus-scale";
@@ -194,7 +199,7 @@ app.whenReady().then(async () => {
   identityReady = identityStatus.complete;
 
   if (identityReady) {
-    await prefetchCatalog();
+    await Promise.all([prefetchCatalog(), prefetchClients()]);
   }
 
   ipcMain.handle("caisse:getConfig", () => loadRuntimeConfig());
@@ -208,7 +213,8 @@ app.whenReady().then(async () => {
   ipcMain.handle("caisse:notifyIdentityReady", async () => {
     identityReady = true;
     clearCachedCatalog();
-    await prefetchCatalog();
+    clearCachedClients();
+    await Promise.all([prefetchCatalog(), prefetchClients()]);
     createCustomerWindow();
     applyWindowMode("caisse");
     void triggerCaisseUpdateCheck();
@@ -226,6 +232,13 @@ app.whenReady().then(async () => {
   ipcMain.handle("caisse:refreshCatalogCache", async () => {
     clearCachedCatalog();
     return prefetchCatalog(true);
+  });
+
+  ipcMain.handle("caisse:getInitialClients", () => getCachedClients());
+
+  ipcMain.handle("caisse:refreshClientsCache", async () => {
+    clearCachedClients();
+    return prefetchClients(true);
   });
 
   ipcMain.handle(

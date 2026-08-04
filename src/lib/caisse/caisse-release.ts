@@ -4,8 +4,8 @@ import { Readable } from "node:stream";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/server";
 import { getCaisseAppVersion } from "./caisse-app-version";
 import {
+  caisseReleasePublicDownloadUrl,
   caisseReleasePublicUrl,
-  ftpCaisseReleaseExists,
   ftpCaisseReleaseSizeBytes,
   isFtpReleaseConfigured,
 } from "./caisse-release-ftp";
@@ -141,6 +141,8 @@ export async function resolveCaisseReleaseDownload(
   const version = releaseVersion();
   const filename = caisseReleaseDownloadName(version);
   const downloadUrl = apiDownloadUrl(origin, token);
+  const publicDownloadUrl = caisseReleasePublicDownloadUrl(version);
+  const publicUrl = caisseReleasePublicUrl();
 
   const localPath = await getLocalCaisseInstallerPath();
   if (localPath) {
@@ -156,21 +158,21 @@ export async function resolveCaisseReleaseDownload(
       filename,
       source: "local",
       sizeBytes,
-      downloadUrl,
+      downloadUrl: publicDownloadUrl ?? downloadUrl,
       expiresAt: null,
     };
   }
 
-  const publicUrl = caisseReleasePublicUrl();
-  if (isFtpReleaseConfigured() || publicUrl) {
-      const exists = await ftpCaisseReleaseExists(version);
-      if (exists) {
-        return {
-          version,
-          filename,
-          source: publicUrl ? "ftp-public" : "ftp",
-          sizeBytes: await ftpCaisseReleaseSizeBytes(version),
-        downloadUrl,
+  if (isFtpReleaseConfigured() || publicUrl || publicDownloadUrl) {
+    const sizeBytes = await ftpCaisseReleaseSizeBytes(version);
+    const exists = typeof sizeBytes === "number" && sizeBytes > 0;
+    if (exists) {
+      return {
+        version,
+        filename,
+        source: publicDownloadUrl ? "ftp-public" : publicUrl ? "ftp-public" : "ftp",
+        sizeBytes,
+        downloadUrl: publicDownloadUrl ?? downloadUrl,
         expiresAt: null,
       };
     }
