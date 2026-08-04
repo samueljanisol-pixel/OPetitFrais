@@ -10,10 +10,11 @@ import {
   readSync,
   statSync,
 } from "node:fs";
+import http from "node:http";
+import https from "node:https";
 import { join } from "node:path";
+import { URL } from "node:url";
 import { promisify } from "node:util";
-import { Readable, Transform } from "node:stream";
-import { pipeline } from "node:stream/promises";
 import { app, type BrowserWindow } from "electron";
 import { loadRuntimeConfig } from "./load-config";
 import { markQuitAllowed } from "./quit-control";
@@ -288,6 +289,140 @@ async function fetchReleaseInfo(): Promise<
   };
 }
 
+function reportDownloadProgress(received: number, total: number): void {
+  if (total > 0) {
+    setState({
+      phase: "downloading",
+      progressPercent: Math.min(99, Math.round((received / total) * 100)),
+    });
+  } else if (received > 0) {
+    setState({ phase: "downloading", progressPercent: null });
+  }
+}
+
+/** Téléchargement binaire via curl.exe (hors stack fetch Electron — fiable pour ~80 Mo). */
+async function downloadViaCurl(
+  downloadUrl: string,
+  partPath: string,
+  token: string,
+  expectedSize: number | null,
+): Promise<void> {
+  const total = expectedSize && expectedSize > 0 ? expectedSize : 0;
+  const args = [
+    "-L",
+    "-f",
+    "--retry",
+    "3",
+    "--retry-delay",
+    "2",
+    "--connect-timeout",
+    "30",
+    "--max-time",
+    "600",
+    "-o",
+    partPath,
+    "-H",
+    `x-caisse-ticket-token: ${token}`,
+    downloadUrl,
+  ];
+
+  await new Promise<void>((resolve, reject) => {
+    const child = spawn("curl.exe", args, {
+      windowsHide: true,
+      stdio: ["ignore", "ignore", "pipe"],
+    });
+
+    const poll = setInterval(() => {
+      try {
+        if (existsSync(partPath)) {
+          reportDownloadProgress(statSync(partPath).size, total);
+        }
+      } catch {
+        /* ignore */
+      }
+    }, 400);
+
+    let stderr = "";
+    child.stderr?.on("data", (chunk: Buffer) => {
+      stderr += chunk.toString("utf8");
+    });
+
+    child.once("error", (err) => {
+      clearInterval(poll);
+      reject(err);
+    });
+
+    child.once("close", (code) => {
+      clearInterval(poll);
+      if (code === 0) {
+        resolve();
+        return;
+      }
+      reject(new Error(`curl a échoué (code ${code ?? "?"})${stderr.trim() ? `: ${stderr.trim().slice(0, 200)}` : ""}`));
+    });
+  });
+}
+
+/** Fallback Node http(s) — sans fetch / Readable.fromWeb Electron. */
+async function downloadViaNodeHttp(
+  downloadUrl: string,
+  partPath: string,
+  token: string,
+  expectedSize: number | null,
+  redirectLeft = 5,
+): Promise<void> {
+  const total = expectedSize && expectedSize > 0 ? expectedSize : 0;
+
+  await new Promise<void>((resolve, reject) => {
+    const url = new URL(downloadUrl);
+    const lib = url.protocol === "https:" ? https : http;
+    const headers: Record<string, string> = {};
+    if (token) headers["x-caisse-ticket-token"] = token;
+
+    const req = lib.get(downloadUrl, { headers }, (res) => {
+      const status = res.statusCode ?? 0;
+      if (status >= 300 && status < 400 && res.headers.location) {
+        res.resume();
+        if (redirectLeft <= 0) {
+          reject(new Error("Trop de redirections HTTP"));
+          return;
+        }
+        const next = new URL(res.headers.location, downloadUrl).toString();
+        void downloadViaNodeHttp(next, partPath, token, expectedSize, redirectLeft - 1).then(resolve, reject);
+        return;
+      }
+      if (status !== 200) {
+        res.resume();
+        reject(new Error(`Téléchargement impossible (HTTP ${status})`));
+        return;
+      }
+
+      const contentLength = Number(res.headers["content-length"] || 0);
+      const progressTotal = total > 0 ? total : contentLength;
+      let received = 0;
+      const file = createWriteStream(partPath);
+
+      res.on("data", (chunk: Buffer) => {
+        received += chunk.length;
+        reportDownloadProgress(received, progressTotal);
+      });
+      res.pipe(file);
+
+      file.on("finish", () => {
+        file.close();
+        resolve();
+      });
+      file.on("error", reject);
+      res.on("error", reject);
+    });
+
+    req.on("error", reject);
+    req.setTimeout(600_000, () => {
+      req.destroy(new Error("Timeout téléchargement"));
+    });
+  });
+}
+
 async function downloadInstallerOnce(
   downloadUrl: string,
   partPath: string,
@@ -295,6 +430,7 @@ async function downloadInstallerOnce(
   expectedSha256: string | null,
 ): Promise<{ sizeBytes: number; sha256: string }> {
   const config = loadRuntimeConfig();
+  const token = config.caisseToken.trim();
 
   try {
     await fs.unlink(partPath);
@@ -302,55 +438,35 @@ async function downloadInstallerOnce(
     /* ignore */
   }
 
-  const res = await fetch(downloadUrl, {
-    headers: config.caisseToken.trim()
-      ? { "x-caisse-ticket-token": config.caisseToken.trim() }
-      : undefined,
-  });
-
-  if (!res.ok || !res.body) {
-    throw new Error(`Téléchargement impossible (HTTP ${res.status})`);
+  let method = "curl";
+  try {
+    if (process.platform === "win32") {
+      await downloadViaCurl(downloadUrl, partPath, token, sizeBytes);
+      await logUpdate("téléchargement via curl.exe OK");
+    } else {
+      throw new Error("curl réservé Windows");
+    }
+  } catch (curlErr) {
+    const curlMsg = curlErr instanceof Error ? curlErr.message : String(curlErr);
+    await logUpdate(`curl indisponible/échec (${curlMsg}) — fallback Node https`);
+    method = "node-http";
+    try {
+      await fs.unlink(partPath);
+    } catch {
+      /* ignore */
+    }
+    await downloadViaNodeHttp(downloadUrl, partPath, token, sizeBytes);
+    await logUpdate("téléchargement via Node https OK");
   }
 
-  const total =
-    sizeBytes && sizeBytes > 0
-      ? sizeBytes
-      : Number(res.headers.get("content-length") || 0);
-
-  let received = 0;
-  const nodeStream = Readable.fromWeb(res.body as import("stream/web").ReadableStream<Uint8Array>);
-
-  // Ne pas faire stream.on('data') + pipeline : sous Electron ça peut corrompre
-  // le fichier tout en gardant une taille proche / identique (NSIS integrity fail).
-  const progressTap = new Transform({
-    transform(chunk: Buffer, _enc, callback) {
-      received += chunk.length;
-      if (total > 0) {
-        setState({
-          phase: "downloading",
-          progressPercent: Math.min(99, Math.round((received / total) * 100)),
-        });
-      } else if (received > 0) {
-        setState({ phase: "downloading", progressPercent: null });
-      }
-      callback(null, chunk);
-    },
-  });
-
-  await pipeline(nodeStream, progressTap, createWriteStream(partPath));
-
-  const validated = await validateInstallerFile(
-    partPath,
-    sizeBytes ?? (total > 0 ? total : null),
-    expectedSha256,
-  );
+  const validated = await validateInstallerFile(partPath, sizeBytes, expectedSha256);
   if (!validated.ok) {
     try {
       await fs.unlink(partPath);
     } catch {
       /* ignore */
     }
-    throw new Error(validated.reason);
+    throw new Error(`${validated.reason} [${method}]`);
   }
 
   return { sizeBytes: validated.sizeBytes, sha256: validated.sha256 };

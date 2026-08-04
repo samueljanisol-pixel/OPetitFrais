@@ -137,7 +137,11 @@ En cas d’échec (caisse se ferme sans installation, ou **NSIS Error : installe
 3. Même taille ≠ fichier sain : un téléchargement concurrent peut corrompre le contenu (même octet count). Comparer : `node scripts/compare-caisse-installer.mjs 0.1.10` → `Hash identique: true`
 4. Consulter `%APPDATA%\OPetitFrais Caisse\caisse-update.log` pour le détail
 
-Correctifs téléchargement : écriture atomique (`.part` puis rename), verrou anti-course, jusqu’à 3 essais si échec, hash SHA-256 via lecture flux fiable (éviter `pipeline→hash` sous Electron qui pouvait rejeter à tort un fichier sain). Sidecar FTP `*.exe.sha256` optionnel.
+Téléchargement MAJ (source toujours FTP via `/api/caisse/release/download`) :
+
+1. **`curl.exe`** (Windows) — hors stack `fetch` Electron (cause fréquente de fichiers même taille mais corrompus → NSIS integrity fail)
+2. Fallback **Node `https`** si curl indisponible
+3. Fichier `.part` puis rename, jusqu’à 3 essais, contrôle taille + NSIS (+ SHA-256 sidecar FTP si présent)
 
 Cause fréquente : **téléchargement incomplet** via le proxy API/Vercel (~83 Mo attendus). Configurer `CAISSE_RELEASE_PUBLIC_BASE_URL` sur Vercel (ex. `https://opetitfrais.janisol.ma/POS`) ou redéployer le backoffice avec la correction FTP (fichier complet avant envoi). La caisse rejette un exe dont la taille ne correspond pas à celle annoncée par l’API ou sans signature NSIS valide.
 
