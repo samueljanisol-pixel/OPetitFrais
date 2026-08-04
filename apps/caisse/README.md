@@ -276,6 +276,15 @@ Parcours test complet :
 5. Crédit client **pré-rempli** mais modifiable ; switch **Livraison** activé si commande livraison.
 6. À la validation : lien API `shop_cart_pos_link` + passage statut `livraison` / `retrait`.
 
+### À encaisser (espèce / impayé livraison)
+
+Deuxième liste dans **Commandes boutique** — commandes déjà passées en caisse dont le paiement est encore dû :
+
+- `livre_espece_a_encaisser` / `retire_espece_a_encaisser` (espèce confirmée à la livraison/retrait)
+- `livre_non_paye` (livraison sans paiement)
+
+Clic → ouverture directe du **modal Paiement** (montant = total caisse `pos_total`), client pré-sélectionné, badge **Encaissement #N**. Validation → API `collect-payment` + ticket de caisse (ligne « Commande #N »).
+
 Fichiers : `src/lib/commandes-boutique.ts`, `src/components/CommandesBoutiqueDialog.tsx`, `PaymentDialog` (`linkedShopOrder`).
 
 ## Paiement

@@ -315,6 +315,22 @@ export async function resolveMagasinIdByCode(
   return { magasinId: null, error: "Magasin introuvable" };
 }
 
+export async function getCommandeClientListItem(
+  supabase: SupabaseClient,
+  id: string,
+): Promise<{ item: CommandeClientListItem | null; error: string | null }> {
+  const { data, error } = await supabase
+    .from("shop_cart")
+    .select(LIST_SELECT)
+    .eq("id", id)
+    .eq("status", "submitted")
+    .maybeSingle();
+
+  if (error) return { item: null, error: error.message };
+  if (!data) return { item: null, error: "Commande introuvable" };
+  return { item: mapListRow(data as Record<string, unknown>), error: null };
+}
+
 export async function findCommandeByTicketRef(
   supabase: SupabaseClient,
   ticketRef: string,

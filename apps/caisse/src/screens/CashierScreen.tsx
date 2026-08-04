@@ -88,8 +88,10 @@ import CashierStatusBar from "../components/CashierStatusBar";
 import { formatTicketReference, nextTicketNumber } from "../lib/ticket-counter";
 import {
   fetchCommandeBoutiqueTicketEscPosBase64,
+  collectCommandeBoutiquePayment,
   linkCommandeBoutique,
   unlockCommandeBoutique,
+  type CommandeEncaissementItem,
 } from "../lib/commandes-boutique";
 import {
   hasLastTicketEscPos,
@@ -157,6 +159,11 @@ export default function CashierScreen({ onRequestQuit }: { onRequestQuit: () => 
   const [commandesBoutiqueOpen, setCommandesBoutiqueOpen] = useState(false);
   const [linkedShopCartId, setLinkedShopCartId] = useState<string | null>(null);
   const [linkedShopCartNumber, setLinkedShopCartNumber] = useState<number | null>(null);
+  const [encaissementCheckout, setEncaissementCheckout] = useState<{
+    cartId: string;
+    cartNumber: number;
+    total: number;
+  } | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [saurusSending, setSaurusSending] = useState(false);
   const [backofficeUrl, setBackofficeUrl] = useState<string | null>(null);
@@ -318,6 +325,7 @@ export default function CashierScreen({ onRequestQuit }: { onRequestQuit: () => 
   const showArabicLabels = displayLocale === "ar";
 
   const { total, lineCount } = cartTotals(cart);
+  const paymentDueTotal = encaissementCheckout?.total ?? total;
 
   const selectedLine = useMemo(
     () => cart.lines.find((l) => l.id === selectedLineId) ?? null,
@@ -625,10 +633,30 @@ export default function CashierScreen({ onRequestQuit }: { onRequestQuit: () => 
     change: number;
   }) => {
     const paidAt = new Date();
+    const encaissement = encaissementCheckout;
     const linkedId = linkedShopCartId;
+    const saleTotal = encaissement?.total ?? total;
+    const ticketLines =
+      encaissement != null
+        ? [
+            {
+              id: "encaissement-commande",
+              productId: encaissement.cartId,
+              productCode: "",
+              productName: `Commande #${encaissement.cartNumber}`,
+              categoryLabel: "Commande boutique",
+              qty: 1,
+              unitPrice: encaissement.total,
+              lineTotal: encaissement.total,
+              salesUnit: "unit" as const,
+            },
+          ]
+        : cart.lines;
+    const ticketArticleCount = encaissement != null ? 1 : lineCount;
+
     setLastPaymentSummary({
       paidAt,
-      total,
+      total: saleTotal,
       totalPaid: opts.totalPaid,
       change: opts.change,
       payments: opts.payments.map((p) => ({ label: p.label, amount: p.amount })),
@@ -647,44 +675,64 @@ export default function CashierScreen({ onRequestQuit }: { onRequestQuit: () => 
     let ticketNumber = 0;
     let ticketRef = "";
 
-    if (opts.printTicket) {
+    if (opts.printTicket || linkedId || encaissement) {
       try {
         ticketNumber = nextTicketNumber(magasin, caisseCode);
         ticketRef = formatTicketReference(magasin, caisseCode, ticketNumber);
-        const buf = buildSaleTicketEscPos({
-          magasinCode: magasin,
-          caisseCode: caisseCode,
-          ticketNumber,
-          soldAt: paidAt,
-          lines: cart.lines,
-          total,
-          articleCount: lineCount,
-          clientName: cart.clientName,
-          payments: opts.payments,
-          change: opts.change,
-        });
-        const base64 = bytesToBase64(buf);
-        saveLastTicketEscPosBase64(base64, paidAt);
-        setLastTicketAvailable(true);
-        setLastTicketPaidAt(paidAt);
-        const printResult = await printEscPosBase64(base64, { ticketPrinter });
-        if (!printResult.ok) {
-          setError(printResult.error);
+
+        if (opts.printTicket) {
+          const buf = buildSaleTicketEscPos({
+            magasinCode: magasin,
+            caisseCode: caisseCode,
+            ticketNumber,
+            soldAt: paidAt,
+            lines: ticketLines,
+            total: saleTotal,
+            articleCount: ticketArticleCount,
+            clientName: cart.clientName,
+            payments: opts.payments,
+            change: opts.change,
+          });
+          const base64 = bytesToBase64(buf);
+          saveLastTicketEscPosBase64(base64, paidAt);
+          setLastTicketAvailable(true);
+          setLastTicketPaidAt(paidAt);
+          const printResult = await printEscPosBase64(base64, { ticketPrinter });
+          if (!printResult.ok) {
+            setError(printResult.error);
+          }
         }
 
-        if (linkedId && ticketRef) {
+        if (encaissement && ticketRef) {
+          const collectResult = await collectCommandeBoutiquePayment({
+            cartId: encaissement.cartId,
+            magasinCode: magasin,
+            caisseCode,
+            ticketNumber,
+            soldAt: paidAt.toISOString(),
+            total: saleTotal,
+            payments: opts.payments.map((p) => ({ mode: p.mode, amount: p.amount })),
+          });
+          if (!collectResult.ok) {
+            setError(collectResult.error ?? "Encaissement commande impossible");
+          } else {
+            setInfo(`Commande #${encaissement.cartNumber} encaissée`);
+          }
+        } else if (linkedId && ticketRef) {
           const hasCredit = opts.payments.some((p) => p.mode === "credit" && p.amount > 0.001);
           const paymentStatus = hasCredit ? "unpaid" : "paid";
-          const ticket2 = await fetchCommandeBoutiqueTicketEscPosBase64({
-            cartId: linkedId,
-            ticketRef,
-            paymentStatus,
-          });
-          if (ticket2.base64) {
-            const print2 = await printEscPosBase64(ticket2.base64, { ticketPrinter });
-            if (!print2.ok) setError(print2.error);
-          } else if (ticket2.error) {
-            setError(ticket2.error);
+          if (opts.printTicket) {
+            const ticket2 = await fetchCommandeBoutiqueTicketEscPosBase64({
+              cartId: linkedId,
+              ticketRef,
+              paymentStatus,
+            });
+            if (ticket2.base64) {
+              const print2 = await printEscPosBase64(ticket2.base64, { ticketPrinter });
+              if (!print2.ok) setError(print2.error);
+            } else if (ticket2.error) {
+              setError(ticket2.error);
+            }
           }
 
           const linkResult = await linkCommandeBoutique({
@@ -695,6 +743,15 @@ export default function CashierScreen({ onRequestQuit }: { onRequestQuit: () => 
             soldAt: paidAt.toISOString(),
             total,
             payments: opts.payments.map((p) => ({ mode: p.mode, amount: p.amount })),
+            lines: cart.lines.map((line) => ({
+              productId: line.productId,
+              productCode: line.productCode,
+              productName: line.productName,
+              qty: line.qty,
+              unitPrice: line.unitPrice,
+              lineTotal: line.lineTotal,
+              salesUnit: line.salesUnit,
+            })),
           });
           if (!linkResult.ok) {
             setError(linkResult.error ?? "Lien commande impossible");
@@ -709,6 +766,8 @@ export default function CashierScreen({ onRequestQuit }: { onRequestQuit: () => 
 
     setLinkedShopCartId(null);
     setLinkedShopCartNumber(null);
+    setEncaissementCheckout(null);
+    setPaymentOpen(false);
     setCart(clearCart(cart));
     clearCachedCart(magasin, caisseCode);
     clearAddHistory();
@@ -761,6 +820,12 @@ export default function CashierScreen({ onRequestQuit }: { onRequestQuit: () => 
   };
 
   const releaseLinkedShopOrder = async () => {
+    if (encaissementCheckout) {
+      setEncaissementCheckout(null);
+      setLinkedShopCartId(null);
+      setLinkedShopCartNumber(null);
+      return;
+    }
     if (!linkedShopCartId) return;
     await unlockCommandeBoutique({
       cartId: linkedShopCartId,
@@ -1427,7 +1492,7 @@ export default function CashierScreen({ onRequestQuit }: { onRequestQuit: () => 
                   size="small"
                   variant="outlined"
                   color="error"
-                  disabled={lineCount === 0}
+                  disabled={lineCount === 0 && encaissementCheckout == null}
                   onClick={() => setClearCartConfirmOpen(true)}
                   sx={{ ...compactActionBtnSx, minWidth: 44, px: 0.75, flexShrink: 0 }}
                 >
@@ -1440,8 +1505,12 @@ export default function CashierScreen({ onRequestQuit }: { onRequestQuit: () => 
           {linkedShopCartNumber != null ? (
             <Box sx={{ px: 1, pb: 0.5 }}>
               <Chip
-                label={`Commande #${linkedShopCartNumber}`}
-                color="info"
+                label={
+                  encaissementCheckout
+                    ? `Encaissement #${linkedShopCartNumber}`
+                    : `Commande #${linkedShopCartNumber}`
+                }
+                color={encaissementCheckout ? "warning" : "info"}
                 size="small"
                 sx={{ width: "100%", fontWeight: 700, borderRadius: 1 }}
               />
@@ -1474,7 +1543,7 @@ export default function CashierScreen({ onRequestQuit }: { onRequestQuit: () => 
                         <Button
                           variant="contained"
                           color="secondary"
-                          disabled={lineCount === 0}
+                          disabled={lineCount === 0 && encaissementCheckout == null}
                           onClick={() => setPaymentOpen(true)}
                           sx={{
                             width: "100%",
@@ -1684,7 +1753,7 @@ export default function CashierScreen({ onRequestQuit }: { onRequestQuit: () => 
                   whiteSpace: "nowrap",
                 }}
               >
-                {formatMoneyDhFixed(total)}
+                {formatMoneyDhFixed(paymentDueTotal)}
               </Typography>
             </Paper>
           </Box>
@@ -1693,9 +1762,9 @@ export default function CashierScreen({ onRequestQuit }: { onRequestQuit: () => 
 
       <PaymentDialog
         open={paymentOpen}
-        totalDue={total}
+        totalDue={paymentDueTotal}
         clientId={cart.clientId}
-        linkedShopOrder={linkedShopCartId != null}
+        linkedShopOrder={linkedShopCartId != null && encaissementCheckout == null}
         onClose={() => setPaymentOpen(false)}
         onValidate={handlePayment}
       />
@@ -1777,7 +1846,8 @@ export default function CashierScreen({ onRequestQuit }: { onRequestQuit: () => 
         magasinCode={magasin}
         caisseCode={caisseCode}
         onClose={() => setCommandesBoutiqueOpen(false)}
-        onSelect={({ cartId, cartNumber, clientId, clientName }) => {
+        onSelectPasserCaisse={({ cartId, cartNumber, clientId, clientName }) => {
+          setEncaissementCheckout(null);
           setLinkedShopCartId(cartId);
           setLinkedShopCartNumber(cartNumber);
           setCart((prev) => {
@@ -1789,6 +1859,25 @@ export default function CashierScreen({ onRequestQuit }: { onRequestQuit: () => 
           });
           clearCachedCart(magasin, caisseCode);
           setInfo(`Commande #${cartNumber} — client sélectionné`);
+        }}
+        onSelectEncaisser={(item: CommandeEncaissementItem) => {
+          setEncaissementCheckout({
+            cartId: item.cartId,
+            cartNumber: item.cartNumber,
+            total: item.montant,
+          });
+          setLinkedShopCartId(item.cartId);
+          setLinkedShopCartNumber(item.cartNumber);
+          setCart((prev) => {
+            const cleared = clearCart(prev);
+            return setClient(cleared, {
+              id: item.clientId,
+              name: item.clientName,
+            });
+          });
+          clearCachedCart(magasin, caisseCode);
+          setPaymentOpen(true);
+          setInfo(`Encaissement commande #${item.cartNumber}`);
         }}
       />
 

@@ -22,6 +22,7 @@ import AppLink from "@/components/AppLink";
 import ClientFormDialog from "@/features/clients/ClientFormDialog";
 import ClientPaiementFormDialog from "@/features/clients/ClientPaiementFormDialog";
 import ClientPanierLinkDialog from "@/features/clients/ClientPanierLinkDialog";
+import { formatMagasinLabel } from "@/lib/clients/pos-caisse-display";
 import { useSessionPermissions } from "@/lib/auth/useSessionPermissions";
 import { useAppFormat } from "@/lib/i18n/useAppFormat";
 import { useBackChevronIcon } from "@/lib/i18n/useBackChevronIcon";
@@ -33,6 +34,9 @@ type PanierRow = {
   montant_total: number;
   submitted_at: string | null;
   paye: boolean;
+  magasin_code: string | null;
+  magasin_nom: string | null;
+  caisse_code: string | null;
 };
 
 type PaiementRow = {
@@ -65,6 +69,27 @@ function formatDh(n: number): string {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   }).format(n);
+}
+
+function formatPanierSecondary(
+  p: PanierRow,
+  formatDateTime: (iso: string) => string,
+  formatDh: (n: number) => string,
+  paidLabel: string,
+  unpaidLabel: string,
+  magasinLabel: string,
+  caisseLabel: string,
+): string {
+  const parts: string[] = [];
+  parts.push(p.submitted_at ? formatDateTime(p.submitted_at) : "—");
+
+  const magasin = formatMagasinLabel(p);
+  if (magasin) parts.push(`${magasinLabel} ${magasin}`);
+  if (p.caisse_code) parts.push(`${caisseLabel} ${p.caisse_code}`);
+
+  parts.push(`${formatDh(p.montant_total)} DH`);
+  parts.push(p.paye ? paidLabel : unpaidLabel);
+  return parts.join(" · ");
 }
 
 export default function ClientDetailClient({ clientId }: Props) {
@@ -296,14 +321,15 @@ export default function ClientDetailClient({ clientId }: Props) {
                 >
                   <ListItemText
                     primary={p.label}
-                    secondary={
-                      <>
-                        {p.submitted_at ? formatDateTime(p.submitted_at) : "—"}
-                        {" · "}
-                        {formatDh(p.montant_total)} DH
-                        {p.paye ? ` · ${t("paidBadge")}` : ` · ${t("unpaidBadge")}`}
-                      </>
-                    }
+                    secondary={formatPanierSecondary(
+                      p,
+                      formatDateTime,
+                      formatDh,
+                      t("paidBadge"),
+                      t("unpaidBadge"),
+                      t("magasin"),
+                      t("caisse"),
+                    )}
                     slotProps={{ primary: { sx: { fontWeight: 600 } } }}
                   />
                 </ListItemButton>

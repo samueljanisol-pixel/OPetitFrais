@@ -11,6 +11,16 @@ export type CommandeBoutiqueItem = {
   caisseLockLabel: string | null;
 };
 
+export type CommandeEncaissementItem = {
+  cartId: string;
+  cartNumber: number;
+  clientId: string | null;
+  clientName: string | null;
+  montant: number;
+  workflowStatus: string | null;
+  encaissementLabel: string;
+};
+
 async function caisseApiFetch(path: string, init?: RequestInit): Promise<Response> {
   const config = await getCaisseConfig();
   const token = encodeURIComponent(config.caisseToken);
@@ -88,6 +98,61 @@ export async function fetchCommandesBoutique(
   }
 }
 
+export async function fetchCommandesAEncaisser(
+  magasinCode: string,
+): Promise<{ commandes: CommandeEncaissementItem[]; error: string | null }> {
+  const config = await getCaisseConfig();
+  if (!config.caisseToken.trim()) {
+    return { commandes: [], error: "Token caisse introuvable (caisse.config.json)" };
+  }
+
+  try {
+    const res = await caisseApiFetch(
+      `/api/caisse/commandes-boutique/a-encaisser?magasin=${encodeURIComponent(magasinCode)}`,
+    );
+    const parsed = await readCaisseApiJson<{ commandes?: CommandeEncaissementItem[]; error?: string }>(res);
+    if (parsed.error) {
+      return { commandes: [], error: parsed.error };
+    }
+    const json = parsed.json;
+    if (!json) {
+      return { commandes: [], error: `Erreur API (${res.status})` };
+    }
+    if (!res.ok) {
+      return { commandes: [], error: typeof json.error === "string" ? json.error : "Erreur API" };
+    }
+    return { commandes: json.commandes ?? [], error: null };
+  } catch (e) {
+    return { commandes: [], error: mapFetchError(e, config.backofficeUrl) };
+  }
+}
+
+export async function collectCommandeBoutiquePayment(input: {
+  cartId: string;
+  magasinCode: string;
+  caisseCode: string;
+  ticketNumber: number;
+  soldAt: string;
+  total: number;
+  payments: Array<{ mode: string; amount: number }>;
+}): Promise<{ ok: boolean; error: string | null }> {
+  const config = await getCaisseConfig();
+  try {
+    const res = await caisseApiFetch("/api/caisse/commandes-boutique/collect-payment", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    });
+    const parsed = await readCaisseApiJson<{ error?: string }>(res);
+    if (parsed.error) return { ok: false, error: parsed.error };
+    const json = parsed.json;
+    if (!json || !res.ok) return { ok: false, error: json?.error ?? "Encaissement impossible" };
+    return { ok: true, error: null };
+  } catch (e) {
+    return { ok: false, error: mapFetchError(e, config.backofficeUrl) };
+  }
+}
+
 export async function lockCommandeBoutique(input: {
   cartId: string;
   magasinCode: string;
@@ -154,6 +219,15 @@ export async function linkCommandeBoutique(input: {
   soldAt: string;
   total: number;
   payments: Array<{ mode: string; amount: number }>;
+  lines: Array<{
+    productId: string;
+    productCode: string;
+    productName: string;
+    qty: number;
+    unitPrice: number;
+    lineTotal: number;
+    salesUnit: "kg" | "unit";
+  }>;
 }): Promise<{ ok: boolean; error: string | null }> {
   const config = await getCaisseConfig();
   try {

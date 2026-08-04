@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireCommandesClientDeliver } from "@/lib/commandes-client/api-auth";
-import { findCommandeByTicketRef } from "@/lib/commandes-client/queries";
+import {
+  findCommandeByTicketRef,
+  getCommandeClientListItem,
+} from "@/lib/commandes-client/queries";
 import { parseTicketReference, transitionWorkflowStatus } from "@/lib/commandes-client/workflow";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
@@ -37,28 +40,35 @@ export async function POST(req: NextRequest) {
 
   if (ce) return NextResponse.json({ error: ce.message }, { status: 500 });
   if (!cart) return NextResponse.json({ error: "Commande introuvable" }, { status: 404 });
-  if (String(cart.workflow_status) !== "a_livrer") {
+
+  const workflowStatus = String(cart.workflow_status);
+
+  if (workflowStatus === "a_livrer") {
+    const now = new Date().toISOString();
+    const result = await transitionWorkflowStatus(supabase, {
+      shopCartId,
+      fromStatus: "a_livrer",
+      toStatus: "en_livraison",
+      actorUserId: gate.userId,
+      comment: ticketRef,
+      extraPatch: { delivery_started_at: now },
+    });
+
+    if (result.error) {
+      return NextResponse.json({ error: result.error }, { status: result.conflict ? 409 : 500 });
+    }
+  } else if (workflowStatus !== "en_livraison") {
     return NextResponse.json({ error: "Commande non disponible pour livraison" }, { status: 409 });
   }
 
-  const now = new Date().toISOString();
-  await supabase
-    .from("shop_cart")
-    .update({ delivery_started_at: now })
-    .eq("id", shopCartId);
+  const { item, error: itemErr } = await getCommandeClientListItem(supabase, shopCartId);
+  if (itemErr) return NextResponse.json({ error: itemErr }, { status: 500 });
+  if (!item) return NextResponse.json({ error: "Commande introuvable" }, { status: 404 });
 
-  const result = await transitionWorkflowStatus(supabase, {
+  return NextResponse.json({
+    ok: true,
     shopCartId,
-    fromStatus: "a_livrer",
-    toStatus: "en_livraison",
-    actorUserId: gate.userId,
-    comment: ticketRef,
-    extraPatch: { delivery_started_at: now },
+    workflow_status: "en_livraison",
+    commande: item,
   });
-
-  if (result.error) {
-    return NextResponse.json({ error: result.error }, { status: result.conflict ? 409 : 500 });
-  }
-
-  return NextResponse.json({ ok: true, shopCartId, workflow_status: "en_livraison" });
 }

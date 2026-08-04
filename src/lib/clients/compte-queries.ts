@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { parsePosCaisseInfo } from "@/lib/clients/pos-caisse-display";
 
 export type ClientPanierRow = {
   id: string;
@@ -12,6 +13,10 @@ export type ClientPanierRow = {
   order_comment: string | null;
   lines: unknown;
   paye: boolean;
+  magasin_code: string | null;
+  magasin_nom: string | null;
+  caisse_code: string | null;
+  ticket_ref: string | null;
 };
 
 export type ClientSummary = {
@@ -129,7 +134,7 @@ export async function loadPaniersForClient(
   const { data, error } = await supabase
     .from("shop_cart")
     .select(
-      "id, cart_number, client_id, montant_total, payment_status, submitted_at, fulfillment_mode, payment_method, order_comment, lines",
+      "id, cart_number, client_id, montant_total, payment_status, submitted_at, fulfillment_mode, payment_method, order_comment, lines, shop_cart_pos_link ( caisse_code, ticket_ref, magasins ( code, nom ) )",
     )
     .eq("client_id", clientId)
     .eq("status", "submitted")
@@ -139,6 +144,7 @@ export async function loadPaniersForClient(
 
   const paniers: ClientPanierRow[] = (data ?? []).map((row) => {
     const paymentStatus = (row as { payment_status: string }).payment_status;
+    const pos = parsePosCaisseInfo((row as { shop_cart_pos_link?: unknown }).shop_cart_pos_link);
     return {
       id: String((row as { id: string }).id),
       cart_number: Number((row as { cart_number: number }).cart_number),
@@ -151,6 +157,10 @@ export async function loadPaniersForClient(
       order_comment: (row as { order_comment?: string | null }).order_comment ?? null,
       lines: (row as { lines: unknown }).lines,
       paye: paymentStatus === "paid",
+      magasin_code: pos?.magasin_code ?? null,
+      magasin_nom: pos?.magasin_nom ?? null,
+      caisse_code: pos?.caisse_code ?? null,
+      ticket_ref: pos?.ticket_ref ?? null,
     };
   });
 

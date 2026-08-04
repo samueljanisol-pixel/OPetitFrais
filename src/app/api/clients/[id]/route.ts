@@ -53,6 +53,10 @@ export async function GET(_req: NextRequest, { params }: RouteParams) {
     fulfillment_mode: p.fulfillment_mode,
     payment_method: p.payment_method,
     paye: p.paye,
+    magasin_code: p.magasin_code,
+    magasin_nom: p.magasin_nom,
+    caisse_code: p.caisse_code,
+    ticket_ref: p.ticket_ref,
   }));
 
   const totals = summarizePaniers(paniersResult.paniers);

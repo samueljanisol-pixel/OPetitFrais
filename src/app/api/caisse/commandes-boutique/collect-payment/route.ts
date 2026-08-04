@@ -3,12 +3,13 @@ import { formatTicketReference } from "@opf/caisse-core";
 import { authorizeCaisseTicket } from "@/lib/caisse/authorize-caisse-ticket";
 import {
   appendWorkflowLog,
+  CAISSE_ENCAISSEMENT_STATUSES,
   paymentStatusFromPosPayments,
-  releaseCaisseLock,
   transitionWorkflowStatus,
-  workflowStatusAfterPosLink,
+  workflowStatusAfterPosCollectPayment,
+  type WorkflowStatus,
 } from "@/lib/commandes-client/workflow";
-import { resolveMagasinIdByCode, loadShopCartRow } from "@/lib/commandes-client/queries";
+import { loadShopCartRow } from "@/lib/commandes-client/queries";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/server";
 
 const CORS_HEADERS = {
@@ -29,15 +30,6 @@ type Body = {
   soldAt?: string;
   total?: number;
   payments?: Array<{ mode: string; amount: number }>;
-  lines?: Array<{
-    productId?: string;
-    productCode?: string;
-    productName?: string;
-    qty?: number;
-    unitPrice?: number;
-    lineTotal?: number;
-    salesUnit?: "kg" | "unit";
-  }>;
 };
 
 export async function POST(req: NextRequest) {
@@ -76,45 +68,34 @@ export async function POST(req: NextRequest) {
   if (loadErr) {
     return NextResponse.json({ error: loadErr }, { status: 404, headers: CORS_HEADERS });
   }
-  if (!row || row.workflow_status !== "a_passer_caisse") {
-    return NextResponse.json({ error: "Commande non disponible" }, { status: 409, headers: CORS_HEADERS });
+  if (!row) {
+    return NextResponse.json({ error: "Commande introuvable" }, { status: 404, headers: CORS_HEADERS });
   }
 
-  const { magasinId, error: magErr } = await resolveMagasinIdByCode(supabase, magasinCode);
-  if (magErr || !magasinId) {
-    return NextResponse.json({ error: magErr ?? "Magasin introuvable" }, { status: 404, headers: CORS_HEADERS });
+  const fromStatus = row.workflow_status as WorkflowStatus;
+  if (!CAISSE_ENCAISSEMENT_STATUSES.includes(fromStatus)) {
+    return NextResponse.json({ error: "Encaissement non disponible pour cette commande" }, { status: 409, headers: CORS_HEADERS });
+  }
+
+  const toStatus = workflowStatusAfterPosCollectPayment(fromStatus);
+  if (!toStatus) {
+    return NextResponse.json({ error: "Transition impossible" }, { status: 409, headers: CORS_HEADERS });
   }
 
   const ticketRef = formatTicketReference(magasinCode, caisseCode, ticketNumber);
   const paymentStatus = paymentStatusFromPosPayments(payments, total);
-  const toStatus = workflowStatusAfterPosLink(row.fulfillment_mode);
-  const posLines = Array.isArray(body.lines)
-    ? body.lines.filter((line) => line != null && typeof line === "object")
-    : [];
-  const soldAt =
-    typeof body.soldAt === "string" && body.soldAt.trim().length > 0 ? body.soldAt.trim() : null;
-
-  const { error: linkErr } = await supabase.from("shop_cart_pos_link").insert({
-    shop_cart_id: cartId,
-    magasin_id: magasinId,
-    caisse_code: caisseCode,
-    ticket_number: ticketNumber,
-    ticket_ref: ticketRef,
-    total,
-    lines: posLines,
-    payments,
-    sold_at: soldAt,
-  });
-
-  if (linkErr) {
-    return NextResponse.json({ error: linkErr.message }, { status: 500, headers: CORS_HEADERS });
+  if (paymentStatus !== "paid") {
+    return NextResponse.json(
+      { error: "Le paiement doit couvrir le montant dû (pas de crédit client pour cet encaissement)" },
+      { status: 400, headers: CORS_HEADERS },
+    );
   }
 
   const result = await transitionWorkflowStatus(supabase, {
     shopCartId: cartId,
-    fromStatus: "a_passer_caisse",
+    fromStatus,
     toStatus,
-    extraPatch: { payment_status: paymentStatus },
+    extraPatch: { payment_status: "paid" },
   });
 
   if (result.error) {
@@ -123,16 +104,14 @@ export async function POST(req: NextRequest) {
 
   await appendWorkflowLog(supabase, {
     shopCartId: cartId,
-    fromStatus: "a_passer_caisse",
+    fromStatus,
     toStatus,
-    action: "pos_link",
-    metadata: { magasinCode, caisseCode, ticketRef, total, paymentStatus },
+    action: "pos_collect_payment",
+    metadata: { magasinCode, caisseCode, ticketRef, total, payments },
   });
 
-  await releaseCaisseLock(supabase, { shopCartId: cartId, magasinCode, caisseCode, force: true });
-
   return NextResponse.json(
-    { ok: true, ticketRef, workflow_status: toStatus, payment_status: paymentStatus },
+    { ok: true, ticketRef, workflow_status: toStatus, payment_status: "paid" },
     { headers: CORS_HEADERS },
   );
 }

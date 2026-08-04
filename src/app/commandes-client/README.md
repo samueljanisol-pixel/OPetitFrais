@@ -10,7 +10,7 @@ Workflow opérationnel des commandes soumises depuis la boutique en ligne (`shop
 | `/commandes-client/[id]` | `commandes_client.read` | Détail, **rattachement client**, **édition lignes** (avant validation), validation, annulation |
 | `/commandes-client/preparation` | `commandes_client.prepare` | Liste commandes à préparer (progression par ligne) |
 | `/commandes-client/preparation/[id]` | `commandes_client.prepare` | Vue commande puis préparation active (vert/rouge), commentaire, fin → `a_passer_caisse` |
-| `/commandes-client/livraison` | `commandes_client.deliver` | Scan ticket + confirmation livraison |
+| `/commandes-client/livraison` | `commandes_client.deliver` | Scan ticket (saisie ou caméra) → confirmation livraison |
 | `/commandes-client/retrait` | `commandes_client.deliver` | Retrait comptoir |
 
 Lien accueil backoffice : **Commandes client**.
@@ -62,12 +62,12 @@ Préfixe `/api/commandes-client` :
 | `/[id]/start-preparation` | POST | prepare |
 | `/[id]/lines/[lineKey]/prepared` | PATCH | prepare (statut ligne : available / unavailable / unchecked) |
 | `/[id]/finish-preparation` | POST | prepare |
-| `/scan` | POST | deliver |
+| `/scan` | POST | deliver — `a_livrer` → `en_livraison` puis ouvre confirmation ; `en_livraison` → confirmation directe |
 | `/[id]/confirm-delivery` | POST | deliver |
 | `/[id]/confirm-pickup` | POST | deliver |
-| `/[id]/collect-cash` | POST | deliver |
+| `/[id]/collect-cash` | POST | deliver (backoffice, sans ticket POS) |
 
-API caisse (token `CAISSE_TICKET_TOKEN`) : `/api/caisse/commandes-boutique/*` — voir [`../api/caisse/README.md`](../api/caisse/README.md).
+API caisse (token `CAISSE_TICKET_TOKEN`) : voir [`../api/caisse/README.md`](../api/caisse/README.md) et routes `commandes-boutique/*` (`link`, `a-encaisser`, `collect-payment`).
 
 ## Schéma
 

@@ -26,9 +26,39 @@ export type WorkflowLogAction =
   | "unlock_caisse"
   | "lock_expired"
   | "cancel"
-  | "pos_link";
+  | "pos_link"
+  | "pos_collect_payment";
+
+/** Commandes boutique à encaisser au POS (espèce livraison/retrait ou impayé livraison). */
+export const CAISSE_ENCAISSEMENT_STATUSES: WorkflowStatus[] = [
+  "livre_espece_a_encaisser",
+  "retire_espece_a_encaisser",
+  "livre_non_paye",
+];
+
+export function workflowStatusAfterPosCollectPayment(
+  fromStatus: WorkflowStatus,
+): WorkflowStatus | null {
+  if (fromStatus === "livre_espece_a_encaisser" || fromStatus === "livre_non_paye") {
+    return "livre_paye";
+  }
+  if (fromStatus === "retire_espece_a_encaisser") {
+    return "retire_paye";
+  }
+  return null;
+}
 
 export type ConfirmedPaymentMethod = "cash" | "card" | "credit" | "none";
+
+/** Paiement par défaut à la confirmation livraison/retrait selon le choix boutique. */
+export function defaultConfirmedPaymentForDelivery(
+  paymentMethod: string | null | undefined,
+): ConfirmedPaymentMethod {
+  const normalized = typeof paymentMethod === "string" ? paymentMethod.trim().toLowerCase() : "";
+  if (normalized === "cash") return "cash";
+  if (normalized === "card") return "card";
+  return "card";
+}
 
 export type CaisseLockState = "available" | "locked_self" | "locked_other";
 

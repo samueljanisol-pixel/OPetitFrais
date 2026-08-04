@@ -24,7 +24,7 @@ Un **panier boutique en ligne** (`shop_cart`) n'est **pas** une vente. C'est une
 |-------|------|
 | `/clients` | Liste clients + paniers non rattachés |
 | `/clients/[id]` | Compte client : paniers, paiements |
-| `/clients/[id]/paniers/[cartId]` | Détail panier (lecture seule) |
+| `/clients/[id]/paniers/[cartId]` | Détail panier client : **panier caisse encaissé** (ticket POS + lignes) si lié ; sinon panier boutique. Magasin et caisse POS affichés si encaissé. Bouton « Voir la commande d'origine » si encaissé. |
 
 ## API
 
