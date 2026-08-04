@@ -650,28 +650,57 @@ async function unblockWindowsFile(filePath: string): Promise<void> {
   }
 }
 
+function escapePowerShellSingleQuoted(value: string): string {
+  return value.replace(/'/g, "''");
+}
+
 /**
- * Lance l'installateur NSIS one-click (barre de progression, sans pages à valider),
- * attend la fin, puis relance la caisse.
- * Pas de /S : la fenêtre de progression reste visible.
+ * Lance l'installateur après fermeture de la caisse (évite fichiers verrouillés),
+ * puis relance l'app. Évite `cmd start` + `windowsHide` (bip d'erreur Windows fréquent).
  */
 async function spawnInstaller(installerPath: string): Promise<void> {
-  const comSpec = process.env.ComSpec || "cmd.exe";
   const appExe = process.execPath;
-  // oneClick + sans /S → progression visible, aucune validation manuelle dans l'assistant.
-  const script = [
-    `start "" /wait "${installerPath}"`,
-    `del /f /q "${installerPath}" >nul 2>&1`,
-    `timeout /t 1 /nobreak >nul`,
-    `start "" "${appExe}"`,
-  ].join(" & ");
+  const helperPs1 = join(app.getPath("temp"), "opf-caisse-run-update.ps1");
+  const helperLog = join(app.getPath("userData"), "caisse-update-launch.log");
+  const setup = escapePowerShellSingleQuoted(installerPath);
+  const exe = escapePowerShellSingleQuoted(appExe);
+  const log = escapePowerShellSingleQuoted(helperLog);
+
+  const ps1 = [
+    "$ErrorActionPreference = 'Continue'",
+    `Add-Content -LiteralPath '${log}' -Value "$(Get-Date -Format o) helper start"`,
+    "# Attendre que Electron libère les binaires",
+    "Start-Sleep -Seconds 3",
+    `Unblock-File -LiteralPath '${setup}' -ErrorAction SilentlyContinue`,
+    `Add-Content -LiteralPath '${log}' -Value "$(Get-Date -Format o) Start-Process setup"`,
+    "try {",
+    `  $p = Start-Process -LiteralPath '${setup}' -PassThru -Wait`,
+    `  Add-Content -LiteralPath '${log}' -Value "$(Get-Date -Format o) setup exit $($p.ExitCode)"`,
+    "} catch {",
+    `  Add-Content -LiteralPath '${log}' -Value "$(Get-Date -Format o) setup error $($_.Exception.Message)"`,
+    "  # Secours : ouverture type Explorateur Windows",
+    `  Start-Process -FilePath 'explorer.exe' -ArgumentList @('${setup}')`,
+    "  Start-Sleep -Seconds 30",
+    "}",
+    `if (Test-Path -LiteralPath '${setup}') { Remove-Item -LiteralPath '${setup}' -Force -ErrorAction SilentlyContinue }`,
+    "Start-Sleep -Seconds 1",
+    `Add-Content -LiteralPath '${log}' -Value "$(Get-Date -Format o) relaunch app"`,
+    `Start-Process -LiteralPath '${exe}'`,
+  ].join("\r\n");
+
+  await fs.writeFile(helperPs1, ps1, "utf8");
+  await logUpdate(`helper PowerShell écrit → ${helperPs1}`);
 
   await new Promise<void>((resolve, reject) => {
-    const child = spawn(comSpec, ["/d", "/s", "/c", script], {
-      detached: true,
-      stdio: "ignore",
-      windowsHide: true,
-    });
+    const child = spawn(
+      "powershell.exe",
+      ["-NoProfile", "-ExecutionPolicy", "Bypass", "-WindowStyle", "Hidden", "-File", helperPs1],
+      {
+        detached: true,
+        stdio: "ignore",
+        windowsHide: true,
+      },
+    );
     child.once("error", reject);
     child.once("spawn", () => {
       child.unref();
@@ -679,7 +708,7 @@ async function spawnInstaller(installerPath: string): Promise<void> {
     });
   });
 
-  await logUpdate(`installateur visible lancé puis relance prévue → ${appExe}`);
+  await logUpdate(`helper lancé — installateur après quit, puis relance → ${appExe}`);
 }
 
 export function getCaisseUpdateState(): CaisseUpdateState {
@@ -798,13 +827,13 @@ export async function installCaisseUpdate(): Promise<{ ok: true } | { ok: false;
     await logUpdate(`lancement installateur visible ${pending.filePath} (${size} octets)`);
     await spawnInstaller(pending.filePath);
 
-    // Évite « MAJ prête » au prochain lancement (l'exe TEMP est effacé après install par le script cmd).
+    // Évite « MAJ prête » au prochain lancement (l'exe TEMP est effacé par le helper après install).
     await clearPendingMeta();
 
-    // Laisser le temps à la fenêtre NSIS d'apparaître avant de libérer les fichiers.
+    // Quitter vite : le helper attend ~3 s puis lance l'installateur (fichiers libérés).
     setTimeout(() => {
       app.quit();
-    }, 2500);
+    }, 800);
 
     return { ok: true };
   } catch (e) {
