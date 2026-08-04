@@ -127,8 +127,8 @@ En bas à gauche de la caisse (barre d’état, 2 lignes) :
 2. Si la version serveur est plus récente → téléchargement automatique (~83 Mo) en arrière-plan (`OPetitFrais-Caisse-Setup-{version}.exe`) ; un cache plus ancien est abandonné
 3. **Au lancement**, si la dernière MAJ est téléchargée → dialogue **« Mise à jour disponible »** (**Plus tard** / **Installer**) avant l’ouverture de la caisse
 4. Clic sur **« MAJ prête »** / **Installer** → **nouvelle vérification serveur** ; si une version encore plus récente existe → retéléchargement, sinon écran **« Mise à jour en cours »**
-5. Fermeture de la caisse, puis helper PowerShell (`Start-Process`) qui lance l’installateur NSIS one-click (évite le bip `cmd start` / `windowsHide`), puis **relance automatique**
-6. Log lancement : `%APPDATA%\OPetitFrais Caisse\caisse-update-launch.log`
+5. Ouverture du setup via **`explorer.exe`** (hors Job Object Electron — sinon le process est tué au `app.quit`), fermeture caisse, puis helper `.cmd` breakaway pour **relancer** l’app
+6. Log lancement : `%TEMP%\opf-caisse-update-launch.log`
 7. Si la version installée ≥ version serveur → badge « À jour » (cache TEMP purgé)
 
 En cas d’échec (caisse se ferme sans installation, ou **NSIS Error : installer integrity check has failed**) :

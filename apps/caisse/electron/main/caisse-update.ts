@@ -650,55 +650,22 @@ async function unblockWindowsFile(filePath: string): Promise<void> {
   }
 }
 
-function escapePowerShellSingleQuoted(value: string): string {
-  return value.replace(/'/g, "''");
-}
-
 /**
- * Lance l'installateur après fermeture de la caisse (évite fichiers verrouillés),
- * puis relance l'app. Évite `cmd start` + `windowsHide` (bip d'erreur Windows fréquent).
+ * Sous Windows, les enfants d'Electron sont tués au quit (Job Object).
+ * `cmd /c start ...` crée un process hors du job → le helper survit.
  */
-async function spawnInstaller(installerPath: string): Promise<void> {
-  const appExe = process.execPath;
-  const helperPs1 = join(app.getPath("temp"), "opf-caisse-run-update.ps1");
-  const helperLog = join(app.getPath("userData"), "caisse-update-launch.log");
-  const setup = escapePowerShellSingleQuoted(installerPath);
-  const exe = escapePowerShellSingleQuoted(appExe);
-  const log = escapePowerShellSingleQuoted(helperLog);
-
-  const ps1 = [
-    "$ErrorActionPreference = 'Continue'",
-    `Add-Content -LiteralPath '${log}' -Value "$(Get-Date -Format o) helper start"`,
-    "# Attendre que Electron libère les binaires",
-    "Start-Sleep -Seconds 3",
-    `Unblock-File -LiteralPath '${setup}' -ErrorAction SilentlyContinue`,
-    `Add-Content -LiteralPath '${log}' -Value "$(Get-Date -Format o) Start-Process setup"`,
-    "try {",
-    `  $p = Start-Process -LiteralPath '${setup}' -PassThru -Wait`,
-    `  Add-Content -LiteralPath '${log}' -Value "$(Get-Date -Format o) setup exit $($p.ExitCode)"`,
-    "} catch {",
-    `  Add-Content -LiteralPath '${log}' -Value "$(Get-Date -Format o) setup error $($_.Exception.Message)"`,
-    "  # Secours : ouverture type Explorateur Windows",
-    `  Start-Process -FilePath 'explorer.exe' -ArgumentList @('${setup}')`,
-    "  Start-Sleep -Seconds 30",
-    "}",
-    `if (Test-Path -LiteralPath '${setup}') { Remove-Item -LiteralPath '${setup}' -Force -ErrorAction SilentlyContinue }`,
-    "Start-Sleep -Seconds 1",
-    `Add-Content -LiteralPath '${log}' -Value "$(Get-Date -Format o) relaunch app"`,
-    `Start-Process -LiteralPath '${exe}'`,
-  ].join("\r\n");
-
-  await fs.writeFile(helperPs1, ps1, "utf8");
-  await logUpdate(`helper PowerShell écrit → ${helperPs1}`);
-
-  await new Promise<void>((resolve, reject) => {
+function spawnBreakawayCmd(helperCmdPath: string): Promise<void> {
+  const comSpec = process.env.ComSpec || "cmd.exe";
+  // start "title" /min → premier quoted = titre ; puis la commande .cmd
+  return new Promise((resolve, reject) => {
     const child = spawn(
-      "powershell.exe",
-      ["-NoProfile", "-ExecutionPolicy", "Bypass", "-WindowStyle", "Hidden", "-File", helperPs1],
+      comSpec,
+      ["/d", "/s", "/c", `start "OPFUpdate" /min "" "${helperCmdPath}"`],
       {
         detached: true,
         stdio: "ignore",
         windowsHide: true,
+        cwd: app.getPath("temp"),
       },
     );
     child.once("error", reject);
@@ -707,8 +674,67 @@ async function spawnInstaller(installerPath: string): Promise<void> {
       resolve();
     });
   });
+}
 
-  await logUpdate(`helper lancé — installateur après quit, puis relance → ${appExe}`);
+/**
+ * 1) Ouvre le setup via explorer.exe (hors Job Electron, comme un double-clic)
+ * 2) Helper .cmd breakaway : attend la fin du setup, puis relance la caisse
+ */
+async function spawnInstaller(installerPath: string): Promise<void> {
+  const appExe = process.execPath;
+  const tempDir = app.getPath("temp");
+  const helperCmd = join(tempDir, "opf-caisse-run-update.cmd");
+  const helperLog = join(tempDir, "opf-caisse-update-launch.log");
+  const setupName = installerPath.split(/[/\\]/).pop() || "OPetitFrais-Caisse-Setup.exe";
+
+  // ASCII only.
+  const cmd = [
+    "@echo off",
+    "setlocal EnableExtensions",
+    `echo %date% %time% helper start>>"${helperLog}"`,
+    "timeout /t 3 /nobreak >nul",
+    `tasklist /FI "IMAGENAME eq ${setupName}" 2>nul | find /I "${setupName}" >nul`,
+    "if errorlevel 1 (",
+    `  echo %date% %time% setup not running - start /wait>>"${helperLog}"`,
+    `  if exist "${installerPath}" start "OPF Setup" /wait "${installerPath}"`,
+    ") else (",
+    `  echo %date% %time% wait until setup exits>>"${helperLog}"`,
+    "  :wait_setup",
+    `  tasklist /FI "IMAGENAME eq ${setupName}" 2>nul | find /I "${setupName}" >nul`,
+    "  if not errorlevel 1 (",
+    "    timeout /t 2 /nobreak >nul",
+    "    goto wait_setup",
+    "  )",
+    ")",
+    `echo %date% %time% setup finished>>"${helperLog}"`,
+    `if exist "${installerPath}" del /f /q "${installerPath}" >nul 2>&1`,
+    "timeout /t 1 /nobreak >nul",
+    `echo %date% %time% relaunch app>>"${helperLog}"`,
+    `start "" "${appExe}"`,
+    "endlocal",
+    "",
+  ].join("\r\n");
+
+  await fs.writeFile(helperCmd, cmd, "utf8");
+  await logUpdate(`helper cmd écrit → ${helperCmd}`);
+
+  // Ouvrir le setup tout de suite (survit au quit Electron).
+  await new Promise<void>((resolve, reject) => {
+    const child = spawn("explorer.exe", [installerPath], {
+      detached: true,
+      stdio: "ignore",
+    });
+    child.once("error", reject);
+    child.once("spawn", () => {
+      child.unref();
+      resolve();
+    });
+  });
+  await logUpdate(`setup ouvert via explorer.exe → ${installerPath}`);
+
+  // Relance après install (process hors job via start).
+  await spawnBreakawayCmd(helperCmd);
+  await logUpdate(`helper relaunch breakaway — log ${helperLog}`);
 }
 
 export function getCaisseUpdateState(): CaisseUpdateState {
