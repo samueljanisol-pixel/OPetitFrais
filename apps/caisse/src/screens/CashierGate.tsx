@@ -87,8 +87,13 @@ export default function CashierGate() {
 
   const handleStartupUpdateConfirm = () => {
     setStartupUpdateOpen(false);
-    setStartupUpdateDismissed(true);
-    void runInstall();
+    // Re-vérifie le serveur avant install (via main) ; si une version plus récente
+    // est détectée, le téléchargement reprend et le dialogue pourra se rouvrir.
+    void runInstall().then((ok) => {
+      if (ok) {
+        setStartupUpdateDismissed(true);
+      }
+    });
   };
 
   let content: ReactNode;

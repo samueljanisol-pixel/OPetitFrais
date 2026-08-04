@@ -377,23 +377,6 @@ async function runUpdateCheck(): Promise<void> {
     }
 
     const pending = await readPendingMeta();
-    if (pending && pending.version === release.version) {
-      const expectedSize = release.sizeBytes ?? pending.sizeBytes ?? null;
-      const expectedSha = release.sha256 ?? pending.sha256 ?? null;
-      const cached = await validateInstallerFile(pending.filePath, expectedSize, expectedSha);
-      if (cached.ok) {
-        setState({
-          phase: "ready",
-          latestVersion: release.version,
-          updateAvailable: true,
-          installerReady: true,
-          progressPercent: 100,
-          error: null,
-        });
-        return;
-      }
-      await invalidatePendingInstaller(pending, cached.reason, expectedSize);
-    }
 
     if (!isVersionNewer(release.version, currentVersion)) {
       if (pending) {
@@ -413,6 +396,34 @@ async function runUpdateCheck(): Promise<void> {
         error: null,
       });
       return;
+    }
+
+    if (pending && pending.version === release.version) {
+      const expectedSize = release.sizeBytes ?? pending.sizeBytes ?? null;
+      const expectedSha = release.sha256 ?? pending.sha256 ?? null;
+      const cached = await validateInstallerFile(pending.filePath, expectedSize, expectedSha);
+      if (cached.ok) {
+        setState({
+          phase: "ready",
+          latestVersion: release.version,
+          updateAvailable: true,
+          installerReady: true,
+          progressPercent: 100,
+          error: null,
+        });
+        return;
+      }
+      await invalidatePendingInstaller(pending, cached.reason, expectedSize);
+    } else if (pending) {
+      // Cache obsolète (ex. 0.1.12 téléchargé, serveur déjà en 0.1.13).
+      await invalidatePendingInstaller(
+        pending,
+        `cache ${pending.version} ≠ serveur ${release.version}`,
+        release.sizeBytes,
+      );
+      await logUpdate(
+        `recherche MAJ : abandon du cache ${pending.version} au profit de ${release.version}`,
+      );
     }
 
     setState({
@@ -475,81 +486,36 @@ async function unblockWindowsFile(filePath: string): Promise<void> {
   }
 }
 
-function spawnInstallerDirect(installerPath: string): Promise<number | null> {
-  return new Promise((resolve, reject) => {
-    const child = spawn(installerPath, ["/S"], {
-      detached: true,
-      stdio: "ignore",
-      windowsHide: true,
-    });
-
-    child.once("error", (err) => {
-      reject(err);
-    });
-
-    child.once("spawn", () => {
-      const pid = child.pid ?? null;
-      child.unref();
-      resolve(pid);
-    });
-  });
-}
-
-async function spawnInstallerViaCmd(installerPath: string): Promise<void> {
+/**
+ * Lance l'installateur NSIS one-click (barre de progression, sans pages à valider),
+ * attend la fin, puis relance la caisse.
+ * Pas de /S : la fenêtre de progression reste visible.
+ */
+async function spawnInstaller(installerPath: string): Promise<void> {
   const comSpec = process.env.ComSpec || "cmd.exe";
+  const appExe = process.execPath;
+  // oneClick + sans /S → progression visible, aucune validation manuelle dans l'assistant.
+  const script = [
+    `start "" /wait "${installerPath}"`,
+    `del /f /q "${installerPath}" >nul 2>&1`,
+    `timeout /t 1 /nobreak >nul`,
+    `start "" "${appExe}"`,
+  ].join(" & ");
+
   await new Promise<void>((resolve, reject) => {
-    const child = spawn(comSpec, ["/d", "/s", "/c", "start", '""', "/min", installerPath, "/S"], {
+    const child = spawn(comSpec, ["/d", "/s", "/c", script], {
       detached: true,
       stdio: "ignore",
       windowsHide: true,
     });
     child.once("error", reject);
-    child.once("close", (code) => {
-      if (code === 0) {
-        child.unref();
-        resolve();
-        return;
-      }
-      reject(new Error(`cmd start a échoué (code ${code ?? "?"})`));
+    child.once("spawn", () => {
+      child.unref();
+      resolve();
     });
   });
-}
 
-async function spawnInstallerViaPowerShell(installerPath: string): Promise<void> {
-  const escaped = installerPath.replace(/'/g, "''");
-  await execFileAsync(
-    "powershell.exe",
-    [
-      "-NoProfile",
-      "-Command",
-      `Start-Process -LiteralPath '${escaped}' -ArgumentList '/S' -WindowStyle Hidden -PassThru | Out-Null`,
-    ],
-    { windowsHide: true, timeout: 15_000 },
-  );
-}
-
-async function spawnInstaller(installerPath: string): Promise<number | null> {
-  try {
-    const pid = await spawnInstallerDirect(installerPath);
-    await logUpdate(`installateur lancé (pid ${pid ?? "?"})`);
-    return pid;
-  } catch (directErr) {
-    const directMsg = directErr instanceof Error ? directErr.message : String(directErr);
-    await logUpdate(`spawn direct échoué (${directMsg})`);
-  }
-
-  try {
-    await spawnInstallerViaCmd(installerPath);
-    await logUpdate("installateur lancé via cmd start");
-    return null;
-  } catch (cmdErr) {
-    const cmdMsg = cmdErr instanceof Error ? cmdErr.message : String(cmdErr);
-    await logUpdate(`cmd start échoué (${cmdMsg})`);
-  }
-
-  await spawnInstallerViaPowerShell(installerPath);
-  await logUpdate("installateur lancé via PowerShell");
-  return null;
+  await logUpdate(`installateur visible lancé puis relance prévue → ${appExe}`);
 }
 
 export function getCaisseUpdateState(): CaisseUpdateState {
@@ -571,15 +537,85 @@ export async function installCaisseUpdate(): Promise<{ ok: true } | { ok: false;
   }
 
   try {
-    const size = statSync(pending.filePath).size;
+    const currentVersion = app.getVersion();
+    setState({
+      phase: "checking",
+      currentVersion,
+      installerReady: true,
+      error: null,
+      progressPercent: 100,
+    });
+
+    // Toujours re-vérifier le serveur avant d'installer (nouvelle version sortie entre-temps).
     const release = await fetchReleaseInfo();
-    const expectedSize =
-      release.ok && release.sizeBytes ? release.sizeBytes : pending.sizeBytes ?? null;
-    const expectedSha =
-      release.ok && release.sha256 ? release.sha256 : pending.sha256 ?? null;
+    if (!release.ok) {
+      setState({ phase: "ready", installerReady: true, error: release.error });
+      return { ok: false, error: release.error };
+    }
+
+    if (!isVersionNewer(release.version, currentVersion)) {
+      await invalidatePendingInstaller(pending, "déjà à jour", release.sizeBytes);
+      setState({
+        phase: "idle",
+        latestVersion: release.version,
+        updateAvailable: false,
+        installerReady: false,
+        progressPercent: null,
+        error: null,
+      });
+      return { ok: false, error: "Déjà à jour — installation annulée" };
+    }
+
+    if (isVersionNewer(release.version, pending.version)) {
+      await logUpdate(
+        `install annulée — serveur ${release.version} > cache ${pending.version}, retéléchargement`,
+      );
+      await invalidatePendingInstaller(
+        pending,
+        `version ${release.version} plus récente`,
+        release.sizeBytes,
+      );
+      setState({
+        phase: "idle",
+        latestVersion: release.version,
+        updateAvailable: true,
+        installerReady: false,
+        progressPercent: null,
+        error: null,
+      });
+      void runUpdateCheck();
+      return {
+        ok: false,
+        error: `Version ${release.version} disponible — téléchargement en cours`,
+      };
+    }
+
+    if (pending.version !== release.version) {
+      await invalidatePendingInstaller(
+        pending,
+        `cache ${pending.version} ≠ serveur ${release.version}`,
+        release.sizeBytes,
+      );
+      setState({
+        phase: "idle",
+        installerReady: false,
+        progressPercent: null,
+        error: null,
+      });
+      void runUpdateCheck();
+      return {
+        ok: false,
+        error: `Version serveur ${release.version} — téléchargement en cours`,
+      };
+    }
+
+    const size = statSync(pending.filePath).size;
+    const expectedSize = release.sizeBytes ?? pending.sizeBytes ?? null;
+    const expectedSha = release.sha256 ?? pending.sha256 ?? null;
     const validated = await validateInstallerFile(pending.filePath, expectedSize, expectedSha);
     if (!validated.ok) {
       await invalidatePendingInstaller(pending, validated.reason, expectedSize);
+      void runUpdateCheck();
       return { ok: false, error: `${validated.reason} — retéléchargez la MAJ` };
     }
     if (size < MIN_INSTALLER_BYTES) {
@@ -591,12 +627,17 @@ export async function installCaisseUpdate(): Promise<{ ok: true } | { ok: false;
       error: null,
       installerReady: true,
       progressPercent: 100,
+      latestVersion: release.version,
     });
     markQuitAllowed();
     await unblockWindowsFile(pending.filePath);
-    await logUpdate(`lancement ${pending.filePath} /S (${size} octets)`);
+    await logUpdate(`lancement installateur visible ${pending.filePath} (${size} octets)`);
     await spawnInstaller(pending.filePath);
 
+    // Évite « MAJ prête » au prochain lancement (l'exe TEMP est effacé après install par le script cmd).
+    await clearPendingMeta();
+
+    // Laisser le temps à la fenêtre NSIS d'apparaître avant de libérer les fichiers.
     setTimeout(() => {
       app.quit();
     }, 2500);
@@ -620,27 +661,16 @@ export function startCaisseUpdateChecks(): void {
   if (!app.isPackaged) return;
 
   void (async () => {
+    // Ne jamais proposer d'installer le cache TEMP sans re-vérifier le serveur :
+    // une version plus récente a pu être publiée entre-temps.
     const pending = await readPendingMeta();
-    if (pending && isVersionNewer(pending.version, app.getVersion())) {
-      let expectedSize = pending.sizeBytes ?? null;
-      let expectedSha = pending.sha256 ?? null;
-      const release = await fetchReleaseInfo();
-      if (release.ok) {
-        if (expectedSize == null) expectedSize = release.sizeBytes;
-        if (!expectedSha) expectedSha = release.sha256;
-      }
-      const validated = await validateInstallerFile(pending.filePath, expectedSize, expectedSha);
-      if (validated.ok) {
-        setState({
-          phase: "ready",
-          latestVersion: pending.version,
-          updateAvailable: true,
-          installerReady: true,
-          progressPercent: 100,
-          currentVersion: app.getVersion(),
-        });
-      } else {
-        await invalidatePendingInstaller(pending, validated.reason, expectedSize);
+    const currentVersion = app.getVersion();
+    if (pending && !isVersionNewer(pending.version, currentVersion)) {
+      await clearPendingMeta();
+      try {
+        await fs.unlink(pending.filePath);
+      } catch {
+        /* ignore */
       }
     }
     await runUpdateCheck();

@@ -123,10 +123,12 @@ En bas à gauche de la caisse (barre d’état, 2 lignes) :
 
 **Fonctionnement (poste packagé uniquement)** :
 
-1. Au démarrage puis toutes les 4 h, la caisse interroge `GET /api/caisse/release?token=…`
-2. Si la version serveur est plus récente → téléchargement automatique (~83 Mo) en arrière-plan (`OPetitFrais-Caisse-Setup-{version}.exe`)
-3. **Au lancement**, si une MAJ est déjà téléchargée → dialogue **« Mise à jour disponible »** (**Plus tard** / **Installer**) avant l’ouverture de la caisse
-4. Clic sur **« MAJ prête »** ou validation au lancement → écran **« Mise à jour en cours »** (sans autre confirmation), installateur NSIS silencieux (`/S`) en arrière-plan, puis fermeture de la caisse
+1. Au démarrage puis toutes les 4 h, la caisse interroge `GET /api/caisse/release?token=…` (**avant** toute proposition d’install du cache TEMP)
+2. Si la version serveur est plus récente → téléchargement automatique (~83 Mo) en arrière-plan (`OPetitFrais-Caisse-Setup-{version}.exe`) ; un cache plus ancien est abandonné
+3. **Au lancement**, si la dernière MAJ est téléchargée → dialogue **« Mise à jour disponible »** (**Plus tard** / **Installer**) avant l’ouverture de la caisse
+4. Clic sur **« MAJ prête »** / **Installer** → **nouvelle vérification serveur** ; si une version encore plus récente existe → retéléchargement, sinon écran **« Mise à jour en cours »** puis **fenêtre NSIS one-click** (progression visible, sans pages Suivant/Installer)
+5. Fermeture de la caisse pour libérer les fichiers, puis **relance automatique** après la fin de l’installateur
+6. Si la version installée ≥ version serveur → badge « À jour » (le cache TEMP est purgé ; plus de « MAJ prête » fantôme)
 
 En cas d’échec (caisse se ferme sans installation, ou **NSIS Error : installer integrity check has failed**) :
 

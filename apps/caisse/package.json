@@ -1,6 +1,6 @@
 {
   "name": "@opf/caisse",
-  "version": "0.1.12",
+  "version": "0.1.15",
   "private": true,
   "main": "./out/main/index.js",
   "scripts": {
@@ -63,11 +63,11 @@
       "artifactName": "OPetitFrais-Caisse-Setup-${version}.${ext}"
     },
     "nsis": {
-      "oneClick": false,
+      "oneClick": true,
       "perMachine": false,
-      "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
-      "shortcutName": "OPetitFrais Caisse"
+      "shortcutName": "OPetitFrais Caisse",
+      "runAfterFinish": true
     }
   }
 }

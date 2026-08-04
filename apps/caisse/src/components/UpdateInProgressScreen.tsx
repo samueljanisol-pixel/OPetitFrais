@@ -26,19 +26,22 @@ export default function UpdateInProgressScreen({ latestVersion, currentVersion, 
       <Typography variant="h5" sx={{ fontWeight: 800, textAlign: "center" }}>
         Mise à jour en cours
       </Typography>
-      <Typography variant="body1" color="text.secondary" sx={{ textAlign: "center", maxWidth: 420 }}>
+      <Typography variant="body1" color="text.secondary" sx={{ textAlign: "center", maxWidth: 460 }}>
         {latestVersion && currentVersion
           ? `Installation de la version ${latestVersion} (actuellement ${currentVersion}).`
           : latestVersion
             ? `Installation de la version ${latestVersion}.`
-            : "Installation de la mise à jour."}{" "}
-        La caisse va se fermer. L&apos;installation se poursuit en arrière-plan.
+            : "Installation de la mise à jour."}
+      </Typography>
+      <Typography variant="body2" color="text.secondary" sx={{ textAlign: "center", maxWidth: 460 }}>
+        Une fenêtre de progression va s&apos;ouvrir (aucune validation requise).
+        La caisse se ferme pour permettre la mise à jour, puis se relance automatiquement.
       </Typography>
       {!error ? (
         <Box sx={{ display: "flex", alignItems: "center", gap: 1.5, mt: 1 }}>
           <CircularProgress size={28} />
           <Typography variant="body2" color="text.secondary">
-            Veuillez patienter…
+            Ouverture de l&apos;installateur…
           </Typography>
         </Box>
       ) : (
