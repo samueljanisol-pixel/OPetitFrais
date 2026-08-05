@@ -11,12 +11,15 @@ export default async function ShopOrderPage() {
   const { groups, error } = await loadShopCatalog(locale, t('uncategorized'))
 
   let pickupMagasinName: string | null = null
+  let contactPhone: string | null = null
   try {
     const service = createSupabaseServiceRoleClient()
     const livraison = await loadShopLivraisonPayload(service)
     pickupMagasinName = livraison.pickupMagasin?.nom ?? null
+    contactPhone = livraison.contactPhone
   } catch {
     pickupMagasinName = null
+    contactPhone = null
   }
 
   return (
@@ -24,6 +27,7 @@ export default async function ShopOrderPage() {
       initialGroups={groups}
       catalogError={error}
       pickupMagasinName={pickupMagasinName}
+      contactPhone={contactPhone}
     />
   )
 }

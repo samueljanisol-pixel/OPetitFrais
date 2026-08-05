@@ -12,7 +12,7 @@ Page publique de commande pour les clients particuliers. Accessible sur le domai
    - **Une seule unité par produit** dans le panier : changement Kg ↔ Botte via le **poids de référence** (`piece_weight_kg` × `piece_qty`). La masse kg est mémorisée (`canonicalKg`) : ex. 2,5 Kg → 3 Botte (~1 kg/botte) → retour Kg = **2,5 Kg**.
    - **Kg** (UdV) : pas de 0,5 kg ; autres unités : pas de 1.
    - Prix catalogue affiché **au kg** (UdV) sur la carte ; poids pièce avec `~` ; total panier / WhatsApp estimés (`piece_qty × poids × prix/kg`).
-4. Panier stocké en **localStorage** (`opf-shop-cart-v2`) et **synchronisé serveur** (`shop_cart`) — commentaire produit via **`ShopCommentDialog`** + bulle **`ShopLineCommentBubble`** (vignette et panier) ; commentaire commande **inline** dans le drawer. Les lignes dont le produit n’est plus **actif** ou **visible vitrine** sont retirées **uniquement des paniers en cours** (`status = active`, non soumis) : localStorage, sync API, trigger Postgres sur `product`. **Les commandes envoyées** (`status = submitted`) **conservent toutes leurs lignes**, y compris si le produit est désactivé ensuite.
+4. Panier stocké en **localStorage** (`opf-shop-cart-v2`) et **synchronisé serveur** (`shop_cart`) — sync **débouncée** (600 ms), **une requête à la fois** ; une nouvelle modification pendant l’appel déclenche une resynchro à la fin. La réponse serveur (écho élagué des lignes envoyées) n’est appliquée **que si le panier local n’a pas changé** depuis l’envoi : sans ce garde-fou, des clics +/- rapides voyaient la quantité revenir en arrière. Vider le panier invalide la synchro en vol — commentaire produit via **`ShopCommentDialog`** + bulle **`ShopLineCommentBubble`** (vignette et panier) ; commentaire commande **inline** dans le drawer. Les lignes dont le produit n’est plus **actif** ou **visible vitrine** sont retirées **uniquement des paniers en cours** (`status = active`, non soumis) : localStorage, sync API, trigger Postgres sur `product`. **Les commandes envoyées** (`status = submitted`) **conservent toutes leurs lignes**, y compris si le produit est désactivé ensuite.
 5. Export : copier la liste texte ou ouvrir WhatsApp (numéro panier + mode livraison + **paiement** + lignes avec commentaires + total + commentaire commande). Au **premier export**, le panier est **soumis** côté serveur (`action = submit` → `status = submitted`, `payment_status = unpaid`) pour le rattachement client en backoffice ([`/clients`](../clients/README.md)).
 6. Page **`/livraison`** : carte (zone + magasins), vérif GPS / pin, contact boutique (appel / WhatsApp). API `GET /api/shop/livraison`.
 7. **Statistiques anonymes** : heartbeat vers `POST /api/shop/analytics/heartbeat` (visiteur UUID en localStorage). Consultation backoffice : [`/boutique/stats`](../boutique/stats/README.md) (permission `shop.read`).
@@ -47,7 +47,9 @@ Page publique de commande pour les clients particuliers. Accessible sur le domai
 | `SHOP_HOSTS` | `opetitfrais.ma,www.opetitfrais.ma` | Domaines boutique |
 | `NEXT_PUBLIC_SHOP_HOSTS` | (idem, optionnel client) | Détection host côté client si besoin |
 | `BACKOFFICE_HOST` | `opetitfrais.janisol.ma` | Redirect chemins staff |
-| `NEXT_PUBLIC_SHOP_WHATSAPP_PHONE` | `212612345678` | Lien WhatsApp (sans +) |
+| `NEXT_PUBLIC_SHOP_WHATSAPP_PHONE` | `212612345678` | Fallback WhatsApp panier si `shop_contact_phone` vide (sans +) |
+
+Le bouton **Envoyer par WhatsApp** du panier utilise en priorité le **numéro boutique** (`ref_app_setting.shop_contact_phone`, onglet Paramètres → Zone livraison), puis la variable d’env ci-dessus.
 
 ## Déploiement Vercel
 

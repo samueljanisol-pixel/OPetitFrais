@@ -70,6 +70,8 @@ type Props = {
   initialGroups: ShopCategoryGroup[];
   catalogError: string | null;
   pickupMagasinName: string | null;
+  /** Numéro boutique (Paramètres / shop_contact_phone), sans +. */
+  contactPhone?: string | null;
 };
 
 function flattenProducts(groups: ShopCategoryGroup[]): ShopProduct[] {
@@ -99,6 +101,7 @@ export default function ShopOrderClient({
   initialGroups,
   catalogError,
   pickupMagasinName,
+  contactPhone = null,
 }: Props) {
   const t = useTranslations("shop");
   const locale = useAppLocale();
@@ -119,6 +122,17 @@ export default function ShopOrderClient({
   );
   const skipNextWriteRef = useRef(true);
   const syncTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const syncPayloadRef = useRef<{
+    lines: ShopCartLine[];
+    fulfillmentMode: ShopFulfillmentMode | null;
+    paymentMethod: ShopPaymentMethod | null;
+    orderComment: string;
+  }>({ lines: [], fulfillmentMode: null, paymentMethod: null, orderComment: "" });
+  const cartIdRef = useRef<string | null>(null);
+  const cartEpochRef = useRef(0);
+  const syncInFlightRef = useRef(false);
+  const syncPendingRef = useRef(false);
+  const runSyncRef = useRef<() => void>(() => {});
   const [commentDialog, setCommentDialog] = useState<CommentDialogTarget | null>(null);
 
   const supabase = useMemo(() => createSupabaseBrowserClient(), []);
@@ -167,6 +181,7 @@ export default function ShopOrderClient({
     setPaymentMethod(readPaymentFromStorage().method);
     const session = readCartSessionFromStorage();
     if (session) {
+      cartIdRef.current = session.cartId;
       setCartId(session.cartId);
       setCartNumber(session.cartNumber);
     }
@@ -183,49 +198,72 @@ export default function ShopOrderClient({
     writeCartToStorage({ lines });
   }, [lines, hydrated]);
 
+  const runSync = useCallback(async () => {
+    const visitorKey = getOrCreateShopVisitorKey();
+    if (!visitorKey) return;
+
+    // Une seule requête à la fois : deux appels concurrents créeraient deux
+    // paniers et la réponse la plus lente écraserait l'état le plus récent.
+    if (syncInFlightRef.current) {
+      syncPendingRef.current = true;
+      return;
+    }
+
+    const sent = syncPayloadRef.current;
+    if (sent.lines.length === 0) return;
+
+    const sentCartId = cartIdRef.current;
+    const sentEpoch = cartEpochRef.current;
+    syncInFlightRef.current = true;
+    const result = await syncShopCartToServer(
+      sentCartId
+        ? { action: "sync", cartId: sentCartId, visitorKey, ...sent }
+        : { action: "create", visitorKey, ...sent },
+    );
+    syncInFlightRef.current = false;
+
+    if (result && sentEpoch === cartEpochRef.current) {
+      cartIdRef.current = result.cartId;
+      setCartId(result.cartId);
+      setCartNumber(result.cartNumber);
+      writeCartSessionToStorage({ cartId: result.cartId, cartNumber: result.cartNumber });
+      // Le serveur renvoie l'écho (élagué) des lignes envoyées : ne l'appliquer
+      // que si l'utilisateur n'a rien modifié depuis l'envoi.
+      if (syncPayloadRef.current.lines === sent.lines) {
+        applyServerCartLines(result.lines);
+      }
+    }
+
+    if (syncPendingRef.current) {
+      syncPendingRef.current = false;
+      runSyncRef.current();
+    }
+  }, [applyServerCartLines]);
+
+  useEffect(() => {
+    runSyncRef.current = () => {
+      void runSync();
+    };
+  }, [runSync]);
+
   useEffect(() => {
     if (!hydrated) return;
+
+    cartIdRef.current = cartId;
+    syncPayloadRef.current = { lines, fulfillmentMode, paymentMethod, orderComment };
 
     if (syncTimerRef.current) clearTimeout(syncTimerRef.current);
 
     if (lines.length === 0) return;
 
     syncTimerRef.current = setTimeout(() => {
-      const visitorKey = getOrCreateShopVisitorKey();
-      if (!visitorKey) return;
-
-      const payload = {
-        visitorKey,
-        lines,
-        fulfillmentMode,
-        paymentMethod,
-        orderComment,
-      };
-
-      if (cartId) {
-        void syncShopCartToServer({ action: "sync", cartId, ...payload }).then((result) => {
-          if (!result) return;
-          setCartId(result.cartId);
-          setCartNumber(result.cartNumber);
-          writeCartSessionToStorage({ cartId: result.cartId, cartNumber: result.cartNumber });
-          applyServerCartLines(result.lines);
-        });
-        return;
-      }
-
-      void syncShopCartToServer({ action: "create", ...payload }).then((result) => {
-        if (!result) return;
-        setCartId(result.cartId);
-        setCartNumber(result.cartNumber);
-        writeCartSessionToStorage({ cartId: result.cartId, cartNumber: result.cartNumber });
-        applyServerCartLines(result.lines);
-      });
+      runSyncRef.current();
     }, 600);
 
     return () => {
       if (syncTimerRef.current) clearTimeout(syncTimerRef.current);
     };
-  }, [lines, fulfillmentMode, paymentMethod, orderComment, cartId, hydrated, applyServerCartLines]);
+  }, [lines, fulfillmentMode, paymentMethod, orderComment, cartId, hydrated]);
 
   const setOrderCommentPersisted = useCallback((comment: string) => {
     setOrderComment(comment);
@@ -689,6 +727,7 @@ export default function ShopOrderClient({
         fulfillmentMode={fulfillmentMode}
         onFulfillmentChange={setMode}
         pickupMagasinName={pickupMagasinName}
+        contactPhone={contactPhone}
         fulfillmentLabel={fulfillmentLabel}
         paymentMethod={paymentMethod}
         onPaymentChange={setPaymentMethodPersisted}
@@ -699,6 +738,12 @@ export default function ShopOrderClient({
         onUpdateLine={updateLine}
         onClear={() => {
           const visitorKey = getOrCreateShopVisitorKey();
+          // Invalide toute synchro en vol : sa réponse ne doit pas ressusciter
+          // le panier vidé.
+          cartEpochRef.current += 1;
+          cartIdRef.current = null;
+          syncPendingRef.current = false;
+          if (syncTimerRef.current) clearTimeout(syncTimerRef.current);
           if (cartId && visitorKey) {
             void syncShopCartToServer({
               action: "clear",

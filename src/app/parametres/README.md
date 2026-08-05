@@ -35,7 +35,7 @@ Les fenêtres **Ajouter / Modifier** (référentiels, magasins, champs import pl
 Onglet **Zone livraison** :
 
 - Dessin du polygone sur carte (clics) → table `shop_delivery_zone`
-- **Numéro boutique** (`ref_app_setting.shop_contact_phone`) pour Appeler / WhatsApp sur `/livraison`
+- **Numéro boutique** (`ref_app_setting.shop_contact_phone`) pour Appeler / WhatsApp sur `/livraison` et le bouton WhatsApp du panier boutique
 - **Magasin retrait** (`ref_app_setting.shop_pickup_magasin_id`) — ex. Magasin 2
 
 Adresses / GPS / lien Google Maps / **Visible vitrine** : fiches **magasins de vente** uniquement (onglet Administration → Sites, magasins & caisses).

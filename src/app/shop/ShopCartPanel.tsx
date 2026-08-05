@@ -26,7 +26,7 @@ import {
 import { useTranslations } from "next-intl";
 import { useCallback, useMemo, useState } from "react";
 import { buildOrderText, buildWhatsAppUrl } from "@/lib/shop/format-order-text";
-import { getShopWhatsAppPhone, isShopWhatsAppConfigured } from "@/lib/shop/whatsapp-phone";
+import { isShopWhatsAppConfigured, resolveShopWhatsAppPhone } from "@/lib/shop/whatsapp-phone";
 import { addQtyByStep, subtractQtyByStep } from "@/lib/shop/cart-qty";
 import { productDisplayName } from "@/lib/products/product-display-name";
 import {
@@ -59,6 +59,8 @@ type Props = {
   fulfillmentMode: ShopFulfillmentMode | null;
   onFulfillmentChange: (mode: ShopFulfillmentMode) => void;
   pickupMagasinName: string | null;
+  /** Numéro boutique (Paramètres), prioritaire sur NEXT_PUBLIC_SHOP_WHATSAPP_PHONE. */
+  contactPhone?: string | null;
   fulfillmentLabel?: string | null;
   paymentMethod: ShopPaymentMethod | null;
   onPaymentChange: (method: ShopPaymentMethod) => void;
@@ -82,6 +84,7 @@ export default function ShopCartPanel({
   fulfillmentMode,
   onFulfillmentChange,
   pickupMagasinName,
+  contactPhone = null,
   fulfillmentLabel = null,
   paymentMethod,
   onPaymentChange,
@@ -146,11 +149,10 @@ export default function ShopCartPanel({
     ],
   );
 
-  const whatsAppPhone = getShopWhatsAppPhone();
+  const whatsAppPhone = resolveShopWhatsAppPhone(contactPhone);
+  const whatsAppConfigured = isShopWhatsAppConfigured(contactPhone);
   const whatsAppHref =
-    canExport && isShopWhatsAppConfigured()
-      ? buildWhatsAppUrl(whatsAppPhone, orderText)
-      : null;
+    canExport && whatsAppConfigured ? buildWhatsAppUrl(whatsAppPhone, orderText) : null;
 
   const copyList = async () => {
     if (!canExport) {
@@ -428,7 +430,7 @@ export default function ShopCartPanel({
                     color="success"
                     startIcon={<WhatsAppIcon />}
                     onClick={() => setSnack(t("exportRequirements"))}
-                    disabled={!isShopWhatsAppConfigured()}
+                    disabled={!whatsAppConfigured}
                     fullWidth
                   >
                     {t("sendWhatsApp")}
