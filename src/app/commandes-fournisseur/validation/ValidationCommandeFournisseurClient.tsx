@@ -32,6 +32,7 @@ type PendingCmd = {
   id: string;
   created_at: string;
   validated_at?: string | null;
+  date_livraison?: string | null;
   magasin_id: string;
   supplier_id: string;
   lineCount: number;
@@ -40,16 +41,25 @@ type PendingCmd = {
   magasins: { id: string; code: string; nom: string } | { id: string; code: string; nom: string }[] | null;
 };
 
-function formatCmdDateTime(c: PendingCmd, formatDateTime: (value: Date | string | number) => string, emDash: string): string {
+function formatCmdDateTime(
+  c: PendingCmd,
+  formatDateTime: (value: Date | string | number) => string,
+  formatDate: (value: Date | string | number) => string,
+  emDash: string,
+): string {
   const iso = c.validated_at ?? c.created_at;
-  if (!iso) return emDash;
-  return formatDateTime(iso);
+  const base = iso ? formatDateTime(iso) : emDash;
+  if (typeof c.date_livraison === "string" && c.date_livraison.length > 0) {
+    return `${base} · ${formatDate(`${c.date_livraison}T12:00:00`)}`;
+  }
+  return base;
 }
 
 type LotRow = {
   id: string;
   status: string;
   created_at: string;
+  date_livraison?: string | null;
   marque_prete_at: string | null;
   ref_supplier: { label: string } | { label: string }[] | null;
 };
@@ -79,7 +89,7 @@ export default function ValidationCommandeFournisseurClient() {
   const tc = useTranslations("backoffice.commandes.common");
   const te = useTranslations("backoffice.commandes.errors");
   const tCommon = useTranslations("common");
-  const { formatDateTime } = useAppFormat();
+  const { formatDateTime, formatDate } = useAppFormat();
   const BackChevron = useBackChevronIcon();
   const { labelFor } = useStatusLabels();
   const { loading, can } = useSessionPermissions();
@@ -163,6 +173,11 @@ export default function ValidationCommandeFournisseurClient() {
     [selectedCommandes],
   );
 
+  const lockedDeliveryDate = useMemo((): string | null | undefined => {
+    if (selectedCommandes.length === 0) return undefined;
+    return selectedCommandes[0]!.date_livraison ?? null;
+  }, [selectedCommandes]);
+
   const singleSelectedStoreLabel = useMemo(() => {
     if (selectedMagasinIds.size !== 1) return emDash;
     const cmd = selectedCommandes[0];
@@ -190,8 +205,12 @@ export default function ValidationCommandeFournisseurClient() {
     [lots],
   );
 
-  const toggle = (id: string, supplierId: string) => {
+  const toggle = (id: string, supplierId: string, deliveryDate: string | null | undefined) => {
     if (lockedSupplierId && supplierId !== lockedSupplierId) {
+      return;
+    }
+    const normalizedDate = deliveryDate ?? null;
+    if (lockedDeliveryDate !== undefined && normalizedDate !== lockedDeliveryDate) {
       return;
     }
     setSelected((prev) => {
@@ -237,6 +256,13 @@ export default function ValidationCommandeFournisseurClient() {
       setErr(te("sameSupplierRequired"));
       return;
     }
+    const deliveryDates = new Set(
+      selectedCommandes.map((c) => c.date_livraison ?? null),
+    );
+    if (deliveryDates.size > 1) {
+      setErr(te("sameDeliveryDateRequired"));
+      return;
+    }
     setErr(null);
     if (selectedMagasinIds.size === 1) {
       setSingleStoreConfirmOpen(true);
@@ -272,7 +298,14 @@ export default function ValidationCommandeFournisseurClient() {
                   />
                 </span>
               }
-              secondary={formatDateTime(l.created_at)}
+              secondary={
+                typeof l.date_livraison === "string" && l.date_livraison.length > 0
+                  ? t("lotRowWithDelivery", {
+                      dateTime: formatDateTime(l.created_at),
+                      deliveryDate: formatDate(`${l.date_livraison}T12:00:00`),
+                    })
+                  : formatDateTime(l.created_at)
+              }
               slotProps={{
                 primary: { component: "div" },
               }}
@@ -358,9 +391,21 @@ export default function ValidationCommandeFournisseurClient() {
                 {t("selectionLockedSupplier", { supplier: lockedSupplierLabel })}
               </Typography>
             ) : null}
+            {lockedDeliveryDate !== undefined ? (
+              <Typography variant="caption" color="text.secondary" className="!mb-2 block">
+                {lockedDeliveryDate
+                  ? t("selectionLockedDeliveryDate", {
+                      date: formatDate(`${lockedDeliveryDate}T12:00:00`),
+                    })
+                  : t("selectionLockedNoDeliveryDate")}
+              </Typography>
+            ) : null}
             <ul className="space-y-2 rounded-lg border border-slate-200 bg-white p-2">
               {filtered.map((c) => {
-                const rowDisabled = lockedSupplierId !== null && c.supplier_id !== lockedSupplierId;
+                const rowDisabled =
+                  (lockedSupplierId !== null && c.supplier_id !== lockedSupplierId) ||
+                  (lockedDeliveryDate !== undefined &&
+                    (c.date_livraison ?? null) !== lockedDeliveryDate);
                 return (
                 <li
                   key={c.id}
@@ -372,7 +417,7 @@ export default function ValidationCommandeFournisseurClient() {
                     control={
                       <Checkbox
                         checked={selected.has(c.id)}
-                        onChange={() => toggle(c.id, c.supplier_id)}
+                        onChange={() => toggle(c.id, c.supplier_id, c.date_livraison)}
                         disabled={rowDisabled}
                         size="small"
                       />
@@ -382,7 +427,7 @@ export default function ValidationCommandeFournisseurClient() {
                         {t("pendingRow", {
                           supplier: oneLabel(c.ref_supplier, emDash),
                           store: oneMag(c.magasins, emDash),
-                          dateTime: formatCmdDateTime(c, formatDateTime, emDash),
+                          dateTime: formatCmdDateTime(c, formatDateTime, formatDate, emDash),
                           productCount: tStatus("productCount", { count: c.lineCount }),
                         })}
                       </span>

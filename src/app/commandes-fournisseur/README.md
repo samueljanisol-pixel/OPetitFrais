@@ -1,5 +1,19 @@
 # Commandes fournisseur
 
+## Date de livraison (Station, Marché)
+
+Pour les fournisseurs **Marché** (`ref_supplier.code = marche`) et **Station** (fournisseur sans marchands / vendeurs), chaque commande magasin porte une **`date_livraison`** (type `date`).
+
+| Étape | Comportement |
+|---|---|
+| **Nouvelle commande** | Champ date (défaut : **lendemain**) ; modifiable avant validation |
+| **Récap saisie** | Affichage + bouton **Modifier** (fenêtre interne) ; modifiable tant que statut `en_saisie` ou `validee` (non intégrée) |
+| **Constitution lot** | Refus si les commandes sélectionnées ont des dates de livraison différentes ; confirmation si **un seul magasin** (dialogue existant) |
+| **Détail lot** | Affichage + bouton **Modifier** (fenêtre interne) ; modifiable en **brouillon**, prévalidation (admin) ou **prêt** (avant saisie achat réelle) ; propagée aux commandes incluses |
+
+Migration : `20260814140000_commande_date_livraison.sql`.  
+Backfill lots existants : `20260814150000_backfill_lot_date_livraison.sql` (lendemain calendaire de `created_at`, fuseau `Africa/Casablanca`).
+
 ## Hub d’accueil (`/commandes-fournisseur`)
 
 Depuis l’accueil backoffice, le bouton **Commandes fournisseur** mène à `/commandes-fournisseur`.

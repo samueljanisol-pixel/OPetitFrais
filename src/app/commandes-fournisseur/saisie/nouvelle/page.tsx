@@ -1,15 +1,16 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useTranslations } from "next-intl";
-import { Button, FormControl, InputLabel, MenuItem, Select, Typography } from "@mui/material";
+import { Button, FormControl, InputLabel, MenuItem, Select, TextField, Typography } from "@mui/material";
 import AppLink from "@/components/AppLink";
 import { useSessionPermissions } from "@/lib/auth/useSessionPermissions";
 import { useBackChevronIcon } from "@/lib/i18n/useBackChevronIcon";
+import { defaultDeliveryDateIso } from "@/lib/commandes-fournisseur/delivery-date";
 import { useMagasinSaisie } from "../MagasinSaisieContext";
 
-type Supplier = { id: string; code: string; label: string };
+type Supplier = { id: string; code: string; label: string; usesDeliveryDate?: boolean };
 
 export default function NouvelleCommandePage() {
   const router = useRouter();
@@ -23,6 +24,7 @@ export default function NouvelleCommandePage() {
   const BackChevron = useBackChevronIcon();
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [supplierId, setSupplierId] = useState("");
+  const [dateLivraison, setDateLivraison] = useState(() => defaultDeliveryDateIso());
   const [err, setErr] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
@@ -49,6 +51,12 @@ export default function NouvelleCommandePage() {
     }
   }, [suppliers, searchParams]);
 
+  const selectedSupplier = useMemo(
+    () => suppliers.find((s) => s.id === supplierId) ?? null,
+    [suppliers, supplierId],
+  );
+  const showDeliveryDate = Boolean(selectedSupplier?.usesDeliveryDate);
+
   const create = async () => {
     if (!magasinId || !supplierId) {
       setErr(te("chooseSupplier"));
@@ -61,7 +69,11 @@ export default function NouvelleCommandePage() {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ magasinId, supplierId: supplierId }),
+        body: JSON.stringify({
+          magasinId,
+          supplierId: supplierId,
+          ...(showDeliveryDate ? { dateLivraison } : {}),
+        }),
       });
       const j = (await res.json()) as { id?: string; error?: string };
       if (!res.ok) {
@@ -144,6 +156,17 @@ export default function NouvelleCommandePage() {
             ))}
           </Select>
         </FormControl>
+
+        {showDeliveryDate ? (
+          <TextField
+            label={tc("deliveryDateLabel")}
+            type="date"
+            value={dateLivraison}
+            onChange={(e) => setDateLivraison(e.target.value)}
+            fullWidth
+            slotProps={{ inputLabel: { shrink: true } }}
+          />
+        ) : null}
 
         {err ? (
           <Typography color="error" variant="body2">

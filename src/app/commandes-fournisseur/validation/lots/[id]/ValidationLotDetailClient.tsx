@@ -27,12 +27,14 @@ import { alpha } from "@mui/material/styles";
 import DeleteOutlineOutlinedIcon from "@mui/icons-material/DeleteOutlineOutlined";
 import ProductArabicSubtitle from "@/components/ProductArabicSubtitle";
 import CommandeFournisseurStatusChip from "@/components/commandes-fournisseur/CommandeFournisseurStatusChip";
+import DeliveryDateEditBlock from "@/components/commandes-fournisseur/DeliveryDateEditBlock";
 import AppLink from "@/components/AppLink";
 import FormDialog from "@/lib/mui/FormDialog";
 import { useSessionPermissions } from "@/lib/auth/useSessionPermissions";
 import {
   isLotPretOrAchatEnCours,
   isLotConsolidationEditable,
+  isLotDeliveryDateEditable,
   isLotPrevalidationOrPretOrAchatEnCours,
   LOT_STATUS_PREVALIDATION,
 } from "@/lib/commandes-fournisseur/lot-status-achat";
@@ -70,7 +72,8 @@ import { roundQty2 } from "@/lib/commandes-fournisseur/qty-parse";
 import ValidationLotVendeurRecap from "@/features/commandes-fournisseur/ValidationLotVendeurRecap";
 import LotConsolidationExportPanel from "@/features/commandes-fournisseur/LotConsolidationExportPanel";
 import { useVendeurCommentPersistence } from "@/features/commandes-fournisseur/useVendeurCommentPersistence";
-import { lotCommandeDateInfo } from "@/lib/commandes-fournisseur/lot-commande-date";
+import { lotCommandeDateInfo, lotLivraisonDateInfo } from "@/lib/commandes-fournisseur/lot-commande-date";
+import { supplierUsesDeliveryDate, defaultDeliveryDateIso } from "@/lib/commandes-fournisseur/delivery-date";
 import { magasinCodeMx } from "@/lib/commandes-fournisseur/magasin-code-mx";
 import type {
   MatrixGroupBy,
@@ -134,9 +137,10 @@ type Lot = {
   supplier_id: string;
   status: string;
   commentaire: string | null;
+  date_livraison?: string | null;
   created_at: string;
   marque_prete_at: string | null;
-  ref_supplier: { label: string } | { label: string }[] | null;
+  ref_supplier: { label: string; code?: string } | { label: string; code?: string }[] | null;
   commande_fournisseur_lot_inclusion: {
     commande_fournisseur: {
       id: string;
@@ -321,12 +325,15 @@ export default function ValidationLotDetailClient({ lotId }: { lotId: string }) 
     productLabel: string;
   } | null>(null);
   const [lotCommentDraft, setLotCommentDraft] = useState("");
+  const [dateLivraisonDraft, setDateLivraisonDraft] = useState("");
   const [matrixGroupBy, setMatrixGroupBy] = useState<MatrixGroupBy>("category");
   const [cmdComments, setCmdComments] = useState<Record<string, string>>({});
   const [lotCommentSaving, setLotCommentSaving] = useState(false);
+  const [dateLivraisonSaving, setDateLivraisonSaving] = useState(false);
   const [cmdCommentSavingId, setCmdCommentSavingId] = useState<string | null>(null);
   const [vendeurWhatsAppSent, setVendeurWhatsAppSent] = useState<Record<string, boolean>>({});
   const [canReopenBrouillon, setCanReopenBrouillon] = useState(false);
+  const [achatStarted, setAchatStarted] = useState(false);
   /** Quantité par cellule au focus : enregistrement seulement si la valeur a changé au blur. */
   const cellFocusBaseline = useRef<Record<string, number>>({});
 
@@ -385,6 +392,7 @@ export default function ValidationLotDetailClient({ lotId }: { lotId: string }) 
         vendeurCommentaires?: Record<string, string | null>;
         vendeurWhatsAppSent?: Record<string, boolean>;
         canReopenBrouillon?: boolean;
+        achatStarted?: boolean;
         error?: string;
       };
       if (!res.ok) {
@@ -402,6 +410,7 @@ export default function ValidationLotDetailClient({ lotId }: { lotId: string }) 
       applyVendeurCommentDrafts(vc);
       setVendeurWhatsAppSent(j.vendeurWhatsAppSent ?? {});
       setCanReopenBrouillon(j.canReopenBrouillon === true);
+      setAchatStarted(j.achatStarted === true);
     } catch (e) {
       setErr(e instanceof Error ? e.message : genericError);
     } finally {
@@ -428,6 +437,13 @@ export default function ValidationLotDetailClient({ lotId }: { lotId: string }) 
       return;
     }
     setLotCommentDraft(lot.commentaire ?? "");
+    const lotDate =
+      typeof lot.date_livraison === "string" && lot.date_livraison.length > 0
+        ? lot.date_livraison
+        : lot.status === "brouillon"
+          ? defaultDeliveryDateIso()
+          : "";
+    setDateLivraisonDraft(lotDate);
     const next: Record<string, string> = {};
     for (const inc of lot.commande_fournisseur_lot_inclusion ?? []) {
       const cf = inc.commande_fournisseur;
@@ -462,6 +478,7 @@ export default function ValidationLotDetailClient({ lotId }: { lotId: string }) 
   }, [lignes]);
 
   const commandeDate = useMemo(() => lotCommandeDateInfo(lot), [lot]);
+  const livraisonDate = useMemo(() => lotLivraisonDateInfo(lot), [lot]);
 
   const matrixCategoryColSpan = useMemo(() => {
     const ed = lot ? isLotConsolidationEditable(lot.status, isAdministrator) : false;
@@ -823,6 +840,52 @@ export default function ValidationLotDetailClient({ lotId }: { lotId: string }) 
     [lot, lotId, load, genericError, isAdministrator],
   );
 
+  const patchDateLivraison = useCallback(
+    async (nextRaw: string) => {
+      const lotCur = lot;
+      if (
+        !lotCur ||
+        !isLotDeliveryDateEditable(lotCur.status, isAdministrator, achatStarted)
+      ) {
+        return;
+      }
+      const stored = nextRaw.trim() === "" ? null : nextRaw.trim();
+      const prev = lotCur.date_livraison ?? null;
+      if (stored === prev) {
+        return;
+      }
+      setDateLivraisonSaving(true);
+      setErr(null);
+      try {
+        const res = await fetch(`/api/commandes-fournisseur/validation/lots/${lotId}`, {
+          method: "PATCH",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ dateLivraison: stored }),
+        });
+        const j = (await res.json()) as { error?: string };
+        if (!res.ok) {
+          const message = j.error ?? genericError;
+          setErr(message);
+          await load();
+          throw new Error(message);
+        }
+        await load();
+      } catch (e) {
+        if (e instanceof Error) {
+          setErr(e.message);
+        } else {
+          setErr(genericError);
+        }
+        await load();
+        throw e;
+      } finally {
+        setDateLivraisonSaving(false);
+      }
+    },
+    [lot, lotId, load, genericError, isAdministrator, achatStarted],
+  );
+
   const markVendeurWhatsAppSent = useCallback(
     async (vendeurKey: string) => {
       let alreadySent = false;
@@ -1010,9 +1073,18 @@ export default function ValidationLotDetailClient({ lotId }: { lotId: string }) 
     return null;
   }
 
-  const rSup = one(lot.ref_supplier as { label?: string } | { label?: string }[]);
+  const rSup = one(lot.ref_supplier as { label?: string; code?: string } | { label?: string; code?: string }[]);
   const supplierName = rSup && "label" in rSup && rSup.label ? String(rSup.label) : tCommandesCommon("emDash");
+  const supplierCode =
+    rSup && "code" in rSup && typeof rSup.code === "string" && rSup.code.length > 0
+      ? rSup.code
+      : null;
   const editable = isLotConsolidationEditable(lot.status, isAdministrator);
+  const deliveryDateEditable = isLotDeliveryDateEditable(lot.status, isAdministrator, achatStarted);
+  const showLotDeliveryDateSection =
+    deliveryDateEditable ||
+    Boolean(livraisonDate) ||
+    supplierUsesDeliveryDate(supplierCode, vendeurs.length);
   const vendeurCommentEditable =
     isLotConsolidationEditable(lot.status, isAdministrator) || isLotPretOrAchatEnCours(lot.status);
   const showRecap = isLotPrevalidationOrPretOrAchatEnCours(lot.status);
@@ -1081,9 +1153,43 @@ export default function ValidationLotDetailClient({ lotId }: { lotId: string }) 
         </div>
       </div>
       {readyAtText ? (
-        <Typography variant="body2" color="text.secondary" className="!mb-4">
+        <Typography variant="body2" color="text.secondary" className="!mb-2">
           {readyAtText}
         </Typography>
+      ) : null}
+      {showLotDeliveryDateSection ? (
+        deliveryDateEditable ? (
+          <DeliveryDateEditBlock
+            displayLabel={livraisonDate?.label ?? null}
+            savedIso={
+              typeof lot.date_livraison === "string" && lot.date_livraison.length > 0
+                ? lot.date_livraison
+                : null
+            }
+            editable
+            saving={dateLivraisonSaving}
+            emptyDefaultIso={
+              lot.status === "brouillon" ? dateLivraisonDraft || defaultDeliveryDateIso() : undefined
+            }
+            onSave={async (isoDate) => {
+              await patchDateLivraison(isoDate);
+            }}
+          />
+        ) : livraisonDate ? (
+          <Box
+            component="section"
+            className="!mb-4 rounded-lg border border-slate-200 bg-slate-50/80 p-3"
+          >
+            <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 1 }}>
+              {tCommandesCommon("deliveryDateLabel")}
+            </Typography>
+            <Typography variant="body2" color="text.secondary">
+              {tLotDetail("deliveryDateLine", { date: livraisonDate.label })}
+            </Typography>
+          </Box>
+        ) : (
+          <div className="!mb-4" />
+        )
       ) : (
         <div className="!mb-4" />
       )}

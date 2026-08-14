@@ -681,12 +681,16 @@
         "captureProduct": "Produit",
         "captureSupplierOrder": "Commande Fournisseur : {supplier}",
         "captureOrderOn": "Commande O' Petit Frais du {date}",
+        "captureDeliveryOn": "Livraison le {date}",
         "captureOrderBy": "par {name}",
         "purchasePrice": "Prix achat",
         "fees": "Frais",
         "summary": "Synthèse",
         "amountDh": "{amount} DH",
-        "qtySeparator": " · "
+        "qtySeparator": " · ",
+        "deliveryDateLabel": "Date de livraison",
+        "editDeliveryDate": "Modifier",
+        "deliveryDateNotSet": "Non renseignée"
       },
       "landing": {
         "title": "Commandes fournisseur",
@@ -712,7 +716,8 @@
           "title": "Nouvelle commande",
           "creating": "Création…",
           "startEntry": "Commencer la saisie",
-          "noStoreShort": "Aucun magasin rattaché."
+          "noStoreShort": "Aucun magasin rattaché.",
+          "deliveryDateLabel": "Date de livraison"
         }
       },
       "parcours": {
@@ -727,9 +732,11 @@
         "position": "{current} / {total}",
         "categoryNavAria": "Catégories du parcours"
       },
-      "recap": {
-        "backToList": "Liste des commandes",
-        "title": "Récapitulatif",
+        "recap": {
+          "backToList": "Liste des commandes",
+          "title": "Récapitulatif",
+          "deliveryOn": "Livraison le {date}",
+          "deliveryDateHint": "Cliquez sur la date pour la modifier. Enregistrement automatique en quittant le champ.",
         "productTour": "Parcours produits",
         "emptyEditable": "Aucune ligne. Utilisez le parcours produits ou « Ajouter un produit ».",
         "emptyReadOnly": "Aucune ligne. Passez par le parcours produits.",
@@ -765,7 +772,10 @@
             "cancel": "Annuler"
           },
           "selectionLockedSupplier": "Sélection limitée au fournisseur « {supplier} ».",
+          "selectionLockedDeliveryDate": "Sélection limitée à la livraison du {date}.",
+          "selectionLockedNoDeliveryDate": "Sélection limitée aux commandes sans date de livraison.",
           "pendingRow": "{supplier} — {store} — {dateTime} — {productCount}",
+          "lotRowWithDelivery": "{dateTime} — livraison {deliveryDate}",
           "lotsSection": "Lots en cours",
           "lotsEmpty": "Aucun lot en cours.",
           "lotsFinishedSection": "Lots terminés",
@@ -795,6 +805,9 @@
           "submitPrevalidation": "Soumettre en prévalidation",
           "cancelLot": "Annuler le lot",
           "lotCommentSection": "Commentaire du lot",
+          "deliveryDateSection": "Date de livraison",
+          "deliveryDateLine": "Livraison le {date}",
+          "deliveryDateHint": "Cliquez sur la date pour la modifier. Enregistrement automatique en quittant le champ.",
           "lotCommentPlaceholder": "Commentaire général sur ce lot consolidé…",
           "prefillFromOrders": "Préremplir depuis les commentaires",
           "includedOrdersSection": "Commandes incluses",
@@ -864,6 +877,7 @@
           "statusLine": "Statut : {status} — préparée : {readyDate} — clôture : {closedDate}",
           "datesLine": "Préparée : {readyDate} — clôture : {closedDate}",
           "datesLineReady": "Préparée : {readyDate}",
+          "deliveryDateLine": "Livraison le {date}",
           "readOnlyNotice": "Lot terminé : lecture seule. Utilisez « Modifier » pour le rouvrir.",
           "close": "Clôturer",
           "closing": "Clôture…",
@@ -1114,6 +1128,7 @@
         "chooseSupplier": "Choisissez un fournisseur",
         "selectAtLeastOneOrder": "Sélectionnez au moins une commande",
         "sameSupplierRequired": "Toutes les commandes sélectionnées doivent être du même fournisseur",
+        "sameDeliveryDateRequired": "Toutes les commandes sélectionnées doivent avoir la même date de livraison",
         "noStoreLinked": "Aucun magasin n'est rattaché à votre profil.",
         "noStoreLinkedShort": "Aucun magasin rattaché.",
         "noOrderCommentsToMerge": "Aucun commentaire de commande à intégrer.",

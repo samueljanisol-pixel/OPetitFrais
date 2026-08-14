@@ -34,6 +34,23 @@ export function isLotConsolidationEditable(status: string, isAdministrator: bool
   return false;
 }
 
+/** Date de livraison du lot : brouillon / prévalidation (admin) ou prêt sans achat commencé. */
+export function isLotDeliveryDateEditable(
+  status: string,
+  isAdministrator: boolean,
+  achatStarted: boolean,
+): boolean {
+  // En brouillon / prévalidation (admin), ne pas tenir compte de achatStarted :
+  // qte_achat y reflète la consolidation (Σ magasins), pas une saisie achat.
+  if (isLotConsolidationEditable(status, isAdministrator)) {
+    return true;
+  }
+  if (achatStarted) {
+    return false;
+  }
+  return status === "prete";
+}
+
 /**
  * Passe le lot de `prete` → `achat_en_cours` (no-op si déjà dans un autre statut).
  */

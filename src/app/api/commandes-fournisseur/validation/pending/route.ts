@@ -13,7 +13,7 @@ export async function GET() {
   const { data: rows, error } = await supabase
     .from("commande_fournisseur")
     .select(
-      "id, created_at, validated_at, magasin_id, supplier_id, ref_supplier(id, code, label), magasins(id, code, nom), commande_fournisseur_ligne(id, qte)",
+      "id, created_at, validated_at, date_livraison, magasin_id, supplier_id, ref_supplier(id, code, label), magasins(id, code, nom), commande_fournisseur_ligne(id, qte)",
     )
     .eq("status", "validee")
     .is("lot_id", null)

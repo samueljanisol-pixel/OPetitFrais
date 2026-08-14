@@ -18,9 +18,11 @@ import { clampQtyToApiRange } from "@/lib/commandes-fournisseur/qty-parse";
 import { syncCommandeLignesFromLotMagasinQty } from "@/lib/commandes-fournisseur/sync-lot-magasin-lignes";
 import { isUserAdministrator } from "@/lib/auth/require-administrator-api";
 import { lotHasAchatProgress, canReopenConsolidationBrouillon } from "@/lib/commandes-fournisseur/lot-achat-progress";
+import { parseIsoDateString } from "@/lib/commandes-fournisseur/delivery-date";
 import {
   isLotPretOrAchatEnCours,
   isLotConsolidationEditable,
+  isLotDeliveryDateEditable,
   LOT_STATUS_PREVALIDATION,
 } from "@/lib/commandes-fournisseur/lot-status-achat";
 import {
@@ -36,6 +38,8 @@ type LotPatchBody = {
   removeLotLigneId?: string;
   /** Commentaire général du lot (brouillon uniquement). */
   lotCommentaire?: string | null;
+  /** Date de livraison (brouillon / prévalidation). */
+  dateLivraison?: string | null;
   /** Commentaire par vendeur (brouillon ou prêt). */
   vendeurCommentaire?: { vendeurKey: string; commentaire: string | null };
   /** Marque l'envoi WhatsApp pour un vendeur (lot prêt). */
@@ -197,7 +201,7 @@ export async function GET(_req: Request, ctx: Ctx) {
   const { data: lot, error } = await supabase
     .from("commande_fournisseur_lot")
     .select(
-      "id, supplier_id, status, commentaire, created_at, marque_prete_at, ref_supplier(id, code, label), commande_fournisseur_lot_inclusion(commande_fournisseur(id, magasin_id, status, commentaire, created_at, validated_at, magasins(id, code, nom), ref_supplier(label)))",
+      "id, supplier_id, status, commentaire, date_livraison, created_at, marque_prete_at, ref_supplier(id, code, label), commande_fournisseur_lot_inclusion(commande_fournisseur(id, magasin_id, status, commentaire, date_livraison, created_at, validated_at, magasins(id, code, nom), ref_supplier(label)))",
     )
     .eq("id", id)
     .maybeSingle();
@@ -392,6 +396,7 @@ export async function PATCH(req: Request, ctx: Ctx) {
     body.setMagasinQte !== undefined,
     body.removeLotLigneId != null,
     body.lotCommentaire !== undefined,
+    body.dateLivraison !== undefined,
     body.vendeurCommentaire !== undefined,
     body.whatsappSent !== undefined,
     body.ligneUpdates !== undefined,
@@ -400,7 +405,7 @@ export async function PATCH(req: Request, ctx: Ctx) {
     return NextResponse.json(
       {
         error:
-          "Un seul de : status (prevalidation, prete ou brouillon), setMagasinQte, removeLotLigneId, lotCommentaire, vendeurCommentaire, whatsappSent, ligneUpdates",
+          "Un seul de : status (prevalidation, prete ou brouillon), setMagasinQte, removeLotLigneId, lotCommentaire, dateLivraison, vendeurCommentaire, whatsappSent, ligneUpdates",
       },
       { status: 400 },
     );
@@ -601,6 +606,61 @@ export async function PATCH(req: Request, ctx: Ctx) {
       );
       if (ue) {
         return NextResponse.json({ error: ue.message }, { status: 500 });
+      }
+    }
+    return NextResponse.json({ ok: true });
+  }
+
+  if (body.dateLivraison !== undefined) {
+    if (body.dateLivraison !== null && typeof body.dateLivraison !== "string") {
+      return NextResponse.json({ error: "dateLivraison invalide" }, { status: 400 });
+    }
+    const { data: lotCur, error: reDl } = await supabase
+      .from("commande_fournisseur_lot")
+      .select("id, status")
+      .eq("id", id)
+      .maybeSingle();
+    if (reDl || !lotCur) {
+      return NextResponse.json({ error: reDl?.message ?? "Introuvable" }, { status: reDl ? 500 : 404 });
+    }
+    const lotStatusDl = (lotCur as { status: string }).status;
+    const isAdmin = await isUserAdministrator(supabase, gate.userId);
+    const progress = await lotHasAchatProgress(supabase, id);
+    const achatStarted = "error" in progress ? true : progress.started;
+    if (!isLotDeliveryDateEditable(lotStatusDl, isAdmin, achatStarted)) {
+      return NextResponse.json({ error: "Modification impossible : lot verrouillé" }, { status: 409 });
+    }
+    const parsed =
+      body.dateLivraison === null || body.dateLivraison === ""
+        ? null
+        : parseIsoDateString(body.dateLivraison);
+    if (body.dateLivraison !== null && body.dateLivraison !== "" && !parsed) {
+      return NextResponse.json({ error: "dateLivraison invalide (attendu AAAA-MM-JJ)" }, { status: 400 });
+    }
+    const { error: ue } = await supabase
+      .from("commande_fournisseur_lot")
+      .update({ date_livraison: parsed })
+      .eq("id", id);
+    if (ue) {
+      return NextResponse.json({ error: ue.message }, { status: 500 });
+    }
+    if (parsed) {
+      const { data: incs, error: ie } = await supabase
+        .from("commande_fournisseur_lot_inclusion")
+        .select("commande_id")
+        .eq("lot_id", id);
+      if (ie) {
+        return NextResponse.json({ error: ie.message }, { status: 500 });
+      }
+      const cmdIds = (incs ?? []).map((r) => (r as { commande_id: string }).commande_id);
+      if (cmdIds.length > 0) {
+        const { error: uc } = await supabase
+          .from("commande_fournisseur")
+          .update({ date_livraison: parsed })
+          .in("id", cmdIds);
+        if (uc) {
+          return NextResponse.json({ error: uc.message }, { status: 500 });
+        }
       }
     }
     return NextResponse.json({ ok: true });

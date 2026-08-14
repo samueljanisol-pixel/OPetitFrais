@@ -27,6 +27,7 @@ import CommentOutlinedIcon from "@mui/icons-material/CommentOutlined";
 import DeleteOutlineOutlinedIcon from "@mui/icons-material/DeleteOutlineOutlined";
 import LigneSaisieComments from "@/components/commandes-fournisseur/LigneSaisieComments";
 import CommandeFournisseurStatusChip from "@/components/commandes-fournisseur/CommandeFournisseurStatusChip";
+import DeliveryDateEditBlock from "@/components/commandes-fournisseur/DeliveryDateEditBlock";
 import AppLink from "@/components/AppLink";
 import FormDialog from "@/lib/mui/FormDialog";
 import CommandeFournisseurProductPicker, {
@@ -50,6 +51,7 @@ import {
   type PackagingRowForDisplay,
 } from "@/lib/commandes-fournisseur/product-display";
 import { clampQtyToApiRange, roundQty2 } from "@/lib/commandes-fournisseur/qty-parse";
+import { defaultDeliveryDateIso } from "@/lib/commandes-fournisseur/delivery-date";
 import {
   productLogisticDisplayIsArabic,
   productLogisticDisplayName,
@@ -88,11 +90,12 @@ type Commande = {
   id: string;
   status: string;
   commentaire: string | null;
+  date_livraison?: string | null;
   supplier_id: string;
   magasin_id: string;
   validated_at?: string | null;
   created_at?: string;
-  ref_supplier: { label: string } | { label: string }[] | null;
+  ref_supplier: { label: string; code?: string } | { label: string; code?: string }[] | null;
   magasins?: { code?: string | null; nom?: string | null } | { code?: string | null; nom?: string | null }[] | null;
 };
 
@@ -314,7 +317,9 @@ export default function RecapClient({ commandeId }: { commandeId: string }) {
   const [commande, setCommande] = useState<Commande | null>(null);
   const [lignes, setLignes] = useState<Ligne[]>([]);
   const [saisieParLabel, setSaisieParLabel] = useState<string | null>(null);
+  const [usesDeliveryDate, setUsesDeliveryDate] = useState(false);
   const [comment, setComment] = useState("");
+  const [dateLivraisonDraft, setDateLivraisonDraft] = useState("");
   const [err, setErr] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -355,6 +360,7 @@ export default function RecapClient({ commandeId }: { commandeId: string }) {
         commande?: Commande;
         lignes?: Ligne[];
         saisieParLabel?: string | null;
+        usesDeliveryDate?: boolean;
         error?: string;
       };
       if (!res.ok) {
@@ -364,7 +370,15 @@ export default function RecapClient({ commandeId }: { commandeId: string }) {
       if (j.commande) {
         setCommande(j.commande);
         setComment(j.commande.commentaire ?? "");
+        const dl =
+          typeof j.commande.date_livraison === "string" && j.commande.date_livraison.length > 0
+            ? j.commande.date_livraison
+            : j.usesDeliveryDate && j.commande.status === "en_saisie"
+              ? defaultDeliveryDateIso()
+              : "";
+        setDateLivraisonDraft(dl);
       }
+      setUsesDeliveryDate(j.usesDeliveryDate === true);
       setLignes(j.lignes ?? []);
       setSaisieParLabel(typeof j.saisieParLabel === "string" ? j.saisieParLabel : null);
     } catch (e) {
@@ -379,6 +393,9 @@ export default function RecapClient({ commandeId }: { commandeId: string }) {
   }, [load]);
 
   const editable = commande?.status === "en_saisie";
+  const canEditDeliveryDate =
+    usesDeliveryDate &&
+    (commande?.status === "en_saisie" || commande?.status === "validee");
   const canExportRecapImage =
     !editable &&
     lignes.length > 0 &&
@@ -424,6 +441,30 @@ export default function RecapClient({ commandeId }: { commandeId: string }) {
     }
   }, [commandeId, comment, te]);
 
+  const saveDeliveryDate = useCallback(
+    async (nextIso?: string) => {
+      if (!canEditDeliveryDate) {
+        return;
+      }
+      const value = (nextIso ?? dateLivraisonDraft).trim();
+      const res = await fetch(`/api/commandes-fournisseur/commandes/${commandeId}`, {
+        method: "PATCH",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ dateLivraison: value || null }),
+      });
+      const j = (await res.json()) as { error?: string };
+      if (!res.ok) {
+        throw new Error(j.error ?? te("generic"));
+      }
+      setDateLivraisonDraft(value);
+      if (commande) {
+        setCommande({ ...commande, date_livraison: value || null });
+      }
+    },
+    [canEditDeliveryDate, commande, commandeId, dateLivraisonDraft, te],
+  );
+
   const onValidate = useCallback(async () => {
     setErr(null);
     setSaving(true);
@@ -431,6 +472,9 @@ export default function RecapClient({ commandeId }: { commandeId: string }) {
       if (editable) {
         await persistLignes();
         await saveComment();
+        if (canEditDeliveryDate) {
+          await saveDeliveryDate();
+        }
       }
       const res = await fetch(`/api/commandes-fournisseur/commandes/${commandeId}`, {
         method: "PATCH",
@@ -449,7 +493,7 @@ export default function RecapClient({ commandeId }: { commandeId: string }) {
     } finally {
       setSaving(false);
     }
-  }, [commandeId, editable, load, persistLignes, router, saveComment, te]);
+  }, [canEditDeliveryDate, commandeId, editable, load, persistLignes, router, saveComment, saveDeliveryDate, te]);
 
   const executeCancelOrder = useCallback(async () => {
     setCancelDialogOpen(false);
@@ -731,7 +775,13 @@ export default function RecapClient({ commandeId }: { commandeId: string }) {
       ? commande.validated_at
       : commande.created_at;
   const dateLabel = typeof dateIso === "string" && dateIso.length > 0 ? formatDate(dateIso) : "";
-  const titleSubtitle = [magasinName, dateLabel].filter((s) => s.length > 0).join(" · ");
+  const deliveryDateLabel =
+    typeof commande.date_livraison === "string" && commande.date_livraison.length > 0
+      ? formatDate(`${commande.date_livraison}T12:00:00`)
+      : "";
+  const titleSubtitle = [magasinName, dateLabel, deliveryDateLabel ? t("deliveryOn", { date: deliveryDateLabel }) : ""]
+    .filter((s) => s.length > 0)
+    .join(" · ");
 
   return (
     <main className="mx-auto w-full max-w-lg px-4 py-4">
@@ -1007,6 +1057,28 @@ export default function RecapClient({ commandeId }: { commandeId: string }) {
             ? t("emptyEditable")
             : t("emptyReadOnly")}
         </Typography>
+      ) : null}
+
+      {usesDeliveryDate ? (
+        <DeliveryDateEditBlock
+          displayLabel={
+            typeof commande.date_livraison === "string" && commande.date_livraison.length > 0
+              ? formatDate(`${commande.date_livraison}T12:00:00`)
+              : null
+          }
+          savedIso={
+            typeof commande.date_livraison === "string" && commande.date_livraison.length > 0
+              ? commande.date_livraison
+              : null
+          }
+          editable={canEditDeliveryDate}
+          emptyDefaultIso={
+            commande.status === "en_saisie" ? dateLivraisonDraft || defaultDeliveryDateIso() : undefined
+          }
+          onSave={async (isoDate) => {
+            await saveDeliveryDate(isoDate);
+          }}
+        />
       ) : null}
 
       <TextField

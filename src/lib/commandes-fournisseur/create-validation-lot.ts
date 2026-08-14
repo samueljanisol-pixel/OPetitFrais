@@ -6,6 +6,7 @@ import {
   normalizeEntityId,
   normalizeProductPackagingId,
 } from "@/lib/commandes-fournisseur/commande-ligne-key";
+import { assertUniformDeliveryDates } from "@/lib/commandes-fournisseur/delivery-date";
 import { insertLotLignesMerged } from "@/lib/commandes-fournisseur/insert-lot-lignes";
 import { vendeurIdsByProductIds } from "@/lib/commandes-fournisseur/product-vendeur";
 import { fallbackStatusLabel } from "@/lib/statusLabels/defaults";
@@ -33,7 +34,7 @@ export async function createValidationLot(
 
   const { data: commandes, error: ce } = await supabase
     .from("commande_fournisseur")
-    .select("id, supplier_id, status, lot_id, magasin_id")
+    .select("id, supplier_id, status, lot_id, magasin_id, date_livraison")
     .in("id", unique);
 
   if (ce) {
@@ -58,6 +59,14 @@ export async function createValidationLot(
     }
   }
 
+  const dateCheck = assertUniformDeliveryDates(
+    commandes.map((c) => (c as { date_livraison?: string | null }).date_livraison),
+  );
+  if (!dateCheck.ok) {
+    return { error: dateCheck.error };
+  }
+  const lotDateLivraison = dateCheck.date;
+
   const supplierId = commandes[0]!.supplier_id as string;
   const magByCmd = new Map(commandes.map((c) => [c.id as string, c.magasin_id as string]));
 
@@ -77,6 +86,7 @@ export async function createValidationLot(
       supplier_id: supplierId,
       status: "brouillon",
       created_by: userId,
+      ...(lotDateLivraison ? { date_livraison: lotDateLivraison } : {}),
     })
     .select("id")
     .single();

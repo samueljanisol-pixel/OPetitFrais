@@ -14,6 +14,8 @@ import {
   labelFromRef,
 } from "@/lib/commandes-fournisseur/product-display";
 import { notifyCommandeValidee } from "@/lib/notifications/notify-commande-validee";
+import { parseIsoDateString } from "@/lib/commandes-fournisseur/delivery-date";
+import { supplierRequiresDeliveryDate } from "@/lib/commandes-fournisseur/resolve-delivery-date";
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -31,7 +33,7 @@ export async function GET(_req: Request, ctx: Ctx) {
   const { data: cmd, error } = await supabase
     .from("commande_fournisseur")
     .select(
-      "id, magasin_id, supplier_id, status, commentaire, lot_id, created_by, validated_at, cancelled_at, cancelled_by, created_at, updated_at, ref_supplier(id, code, label), magasins(id, code, nom)",
+      "id, magasin_id, supplier_id, status, commentaire, date_livraison, lot_id, created_by, validated_at, cancelled_at, cancelled_by, created_at, updated_at, ref_supplier(id, code, label), magasins(id, code, nom)",
     )
     .eq("id", id)
     .maybeSingle();
@@ -158,8 +160,14 @@ export async function GET(_req: Request, ctx: Ctx) {
     }
   }
 
+  const usesDeliveryDate = await supplierRequiresDeliveryDate(
+    supabase,
+    cmd.supplier_id as string,
+  );
+
   return NextResponse.json({
     commande: cmd,
+    usesDeliveryDate,
     saisieParLabel,
     vendeurs: (vendeurs ?? []).map((v) => ({
       id: v.id as string,
@@ -210,9 +218,13 @@ export async function PATCH(req: Request, ctx: Ctx) {
     return NextResponse.json({ error: gate.error }, { status: gate.status });
   }
 
-  let body: { status?: string; commentaire?: string | null };
+  let body: { status?: string; commentaire?: string | null; dateLivraison?: string | null };
   try {
-    body = (await req.json()) as { status?: string; commentaire?: string | null };
+    body = (await req.json()) as {
+      status?: string;
+      commentaire?: string | null;
+      dateLivraison?: string | null;
+    };
   } catch {
     return NextResponse.json({ error: "JSON invalide" }, { status: 400 });
   }
@@ -220,7 +232,7 @@ export async function PATCH(req: Request, ctx: Ctx) {
   const supabase = await createSupabaseServerClient();
   const { data: current, error: re } = await supabase
     .from("commande_fournisseur")
-    .select("id, magasin_id, status")
+    .select("id, magasin_id, supplier_id, status")
     .eq("id", id)
     .maybeSingle();
 
@@ -253,6 +265,27 @@ export async function PATCH(req: Request, ctx: Ctx) {
   const payload: Record<string, unknown> = {};
   if (body.commentaire !== undefined) {
     payload.commentaire = body.commentaire;
+  }
+  if (body.dateLivraison !== undefined) {
+    if (current.status === "integree") {
+      return NextResponse.json({ error: "Commande verrouillée" }, { status: 409 });
+    }
+    if (body.dateLivraison === null || body.dateLivraison === "") {
+      const requires = await supplierRequiresDeliveryDate(
+        supabase,
+        current.supplier_id as string,
+      );
+      if (requires) {
+        return NextResponse.json({ error: "dateLivraison requise pour ce fournisseur" }, { status: 400 });
+      }
+      payload.date_livraison = null;
+    } else {
+      const parsed = parseIsoDateString(body.dateLivraison);
+      if (!parsed) {
+        return NextResponse.json({ error: "dateLivraison invalide (attendu AAAA-MM-JJ)" }, { status: 400 });
+      }
+      payload.date_livraison = parsed;
+    }
   }
   if (body.status !== undefined) {
     if (body.status === "annulee") {

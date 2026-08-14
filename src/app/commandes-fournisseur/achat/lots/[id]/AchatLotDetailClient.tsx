@@ -129,6 +129,7 @@ type LotApi = {
   supplier_id: string;
   status: string;
   commentaire: string | null;
+  date_livraison?: string | null;
   marque_prete_at: string | null;
   marque_terminee_at: string | null;
   created_at: string;
@@ -1982,6 +1983,11 @@ export default function AchatLotDetailClient({ lotId }: { lotId: string }) {
                   readyDate: lot.marque_prete_at ? formatDate(lot.marque_prete_at) : emDash,
                 })}
           </Typography>
+          {typeof lot.date_livraison === "string" && lot.date_livraison.length > 0 ? (
+            <Typography variant="body2" color="text.secondary" className="!mb-2">
+              {t("deliveryDateLine", { date: formatDate(`${lot.date_livraison}T12:00:00`) })}
+            </Typography>
+          ) : null}
           {!editable ? (
             <Alert severity="info" className="!mb-3">
               {t("readOnlyNotice")}

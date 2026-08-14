@@ -6,6 +6,7 @@ import {
   isSupplierCommandeActive,
   SUPPLIER_COMMANDE_INACTIVE_MSG,
 } from "@/lib/commandes-fournisseur/supplier-commande-active";
+import { resolveDeliveryDateForCreate } from "@/lib/commandes-fournisseur/resolve-delivery-date";
 
 /** Liste des commandes magasin (caissier : filtre magasinId obligatoire). */
 export async function GET(req: Request) {
@@ -40,7 +41,7 @@ export async function GET(req: Request) {
   let q = supabase
     .from("commande_fournisseur")
     .select(
-      "id, magasin_id, supplier_id, status, commentaire, validated_at, created_at, updated_at, ref_supplier(id, code, label), commande_fournisseur_ligne(id)",
+      "id, magasin_id, supplier_id, status, commentaire, date_livraison, validated_at, created_at, updated_at, ref_supplier(id, code, label), commande_fournisseur_ligne(id)",
     )
     .order("created_at", { ascending: false });
 
@@ -69,9 +70,13 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: gate.error }, { status: gate.status });
   }
 
-  let body: { magasinId?: string; supplierId?: string };
+  let body: { magasinId?: string; supplierId?: string; dateLivraison?: string | null };
   try {
-    body = (await req.json()) as { magasinId?: string; supplierId?: string };
+    body = (await req.json()) as {
+      magasinId?: string;
+      supplierId?: string;
+      dateLivraison?: string | null;
+    };
   } catch {
     return NextResponse.json({ error: "JSON invalide" }, { status: 400 });
   }
@@ -93,6 +98,11 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: SUPPLIER_COMMANDE_INACTIVE_MSG }, { status: 403 });
   }
 
+  const dateResolved = await resolveDeliveryDateForCreate(supabase, supplierId, body.dateLivraison);
+  if ("error" in dateResolved) {
+    return NextResponse.json({ error: dateResolved.error }, { status: 400 });
+  }
+
   const { data: row, error } = await supabase
     .from("commande_fournisseur")
     .insert({
@@ -100,6 +110,7 @@ export async function POST(req: Request) {
       supplier_id: supplierId,
       status: "en_saisie",
       created_by: gate.userId,
+      ...(dateResolved.date ? { date_livraison: dateResolved.date } : {}),
     })
     .select("id")
     .single();

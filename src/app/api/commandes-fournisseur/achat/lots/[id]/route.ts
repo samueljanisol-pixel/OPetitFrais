@@ -81,7 +81,7 @@ export async function GET(_req: NextRequest, ctx: Ctx) {
   const { data: lot, error } = await supabase
     .from("commande_fournisseur_lot")
     .select(
-      "id, supplier_id, status, commentaire, created_at, marque_prete_at, marque_terminee_at, ref_supplier(id, code, label)",
+      "id, supplier_id, status, commentaire, date_livraison, created_at, marque_prete_at, marque_terminee_at, ref_supplier(id, code, label)",
     )
     .eq("id", id)
     .maybeSingle();
