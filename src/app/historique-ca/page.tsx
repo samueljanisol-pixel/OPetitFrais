@@ -6,6 +6,7 @@ import Link from 'next/link'
 import AppLink from '@/components/AppLink'
 import BackNavButton from '@/components/BackNavButton'
 import { useEffect, useMemo, useRef, useState } from 'react'
+import CaJourHistogram from '@/components/CaJourHistogram'
 import { HISTORIQUE_FROM_ISO } from '@/lib/ca/constants'
 import { fetchHistoriqueFromSupabase } from '@/lib/ca/fromSupabase'
 import type { HistoriqueDayRow, HistoriquePayload } from '@/lib/ca/types'
@@ -27,6 +28,60 @@ const labelMagasin = (raw: string) => {
 const isoToUtcDate = (iso: string) => new Date(`${iso}T00:00:00Z`)
 
 const monthKey = (iso: string) => iso.slice(0, 7) // YYYY-MM
+
+function isoDateAddDays(iso: string, days: number): string {
+  const y = Number(iso.slice(0, 4))
+  const m = Number(iso.slice(5, 7))
+  const d = Number(iso.slice(8, 10))
+  const t = Date.UTC(y, m - 1, d) + days * 24 * 60 * 60 * 1000
+  const next = new Date(t)
+  return `${next.getUTCFullYear()}-${String(next.getUTCMonth() + 1).padStart(2, '0')}-${String(next.getUTCDate()).padStart(2, '0')}`
+}
+
+/** Tous les jours de la plage pour le graphique (jours sans vente = 0). */
+function fillDailyRange(
+  from: string,
+  to: string,
+  points: Array<{ date: string; total: number }>,
+): Array<{ date: string; total: number }> {
+  const map = new Map(points.map((p) => [p.date, p.total]))
+  const out: Array<{ date: string; total: number }> = []
+  let cur = from
+  while (cur <= to && out.length < 800) {
+    out.push({ date: cur, total: map.get(cur) ?? 0 })
+    const next = isoDateAddDays(cur, 1)
+    if (next <= cur) break
+    cur = next
+  }
+  return out
+}
+
+function nextYm(ym: string): string {
+  const y = Number(ym.slice(0, 4))
+  const m = Number(ym.slice(5, 7))
+  if (!Number.isFinite(y) || !Number.isFinite(m) || m < 1 || m > 12) return ym
+  if (m === 12) return `${y + 1}-01`
+  return `${y}-${String(m + 1).padStart(2, '0')}`
+}
+
+/** Tous les mois de la plage pour le graphique (mois sans vente = 0). */
+function fillMonthlyRange(
+  fromIso: string,
+  toIso: string,
+  months: Array<{ ym: string; total: number }>,
+): Array<{ date: string; total: number }> {
+  const map = new Map(months.map((m) => [m.ym, m.total]))
+  const out: Array<{ date: string; total: number }> = []
+  let cur = fromIso.slice(0, 7)
+  const end = toIso.slice(0, 7)
+  while (cur <= end && out.length < 240) {
+    out.push({ date: `${cur}-01`, total: map.get(cur) ?? 0 })
+    const next = nextYm(cur)
+    if (next <= cur) break
+    cur = next
+  }
+  return out
+}
 
 export default function HistoriqueCA() {
   const { session, loading: sessionLoading } = useSessionPermissions()
@@ -293,6 +348,20 @@ export default function HistoriqueCA() {
       .map(([mag, { date, total }]) => ({ mag, date, total }))
       .sort((a, b) => a.mag.localeCompare(b.mag))
 
+    const dailyChartPoints =
+      from && to
+        ? fillDailyRange(
+            from,
+            to,
+            days.map((d) => ({
+              date: d.date,
+              total: Number.isFinite(d.totalGlobal) ? d.totalGlobal : 0,
+            })),
+          )
+        : []
+    const monthlyChartPoints =
+      from && to ? fillMonthlyRange(from, to, monthList.map((m) => ({ ym: m.ym, total: m.total }))) : []
+
     return {
       days,
       totalGlobal,
@@ -310,6 +379,8 @@ export default function HistoriqueCA() {
       avgBenefitPerMonth,
       avgBenefitNetPerMonth,
       monthList,
+      dailyChartPoints,
+      monthlyChartPoints,
       recordDay,
       recordDaysByMagasin,
       from,
@@ -616,6 +687,30 @@ export default function HistoriqueCA() {
             </div>
           ) : null}
         </header>
+
+        {computed.monthlyChartPoints.length > 0 || computed.dailyChartPoints.length > 0 ? (
+          <section className="mt-8 grid gap-4">
+            {computed.monthlyChartPoints.length > 0 ? (
+              <div className="rounded-2xl border border-emerald-100 bg-white/80 p-4 shadow-sm backdrop-blur sm:p-5">
+                <CaJourHistogram
+                  points={computed.monthlyChartPoints}
+                  grain="month"
+                  title="Chiffre d’affaires par mois"
+                />
+              </div>
+            ) : null}
+            {computed.dailyChartPoints.length > 0 ? (
+              <div className="rounded-2xl border border-emerald-100 bg-white/80 p-4 shadow-sm backdrop-blur sm:p-5">
+                <CaJourHistogram
+                  points={computed.dailyChartPoints}
+                  grain="day"
+                  zoomable
+                  title="Chiffre d’affaires par jour"
+                />
+              </div>
+            ) : null}
+          </section>
+        ) : null}
 
         <section className="mt-8 grid gap-4">
           {computed.monthList.length === 0 ? (

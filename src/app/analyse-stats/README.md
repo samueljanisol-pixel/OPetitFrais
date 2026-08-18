@@ -38,7 +38,7 @@ Le bouton **Analyser** déclenche le chargement (pas de requête à chaque chang
 ## Affichage
 
 - **KPIs** : CA total (filtres) avec **% du CA période**, **bénéfice total** avec **% du CA filtré** et **% du CA avec marge**, moyenne CA/jour, nb lignes tableau
-- **Graphique** : histogramme SVG journalier — bascule **Tri CA** / **Tri qté** / **Tri bénéfice**
+- **Graphique** : histogramme SVG journalier — bascule **Tri CA** / **Tri qté** / **Tri bénéfice**. Clic sur une barre pour afficher la valeur ; zoom par glisser / boutons / molette.
 - **Tableau** : colonnes CA, quantité, **bénéfice** (% du CA ligne) ; regroupement produit / catégorie / fournisseur / magasin ; en **Tri CA**, colonnes **% période** et **% filtre** (si filtres produit actifs)
 
 ## Limites connues

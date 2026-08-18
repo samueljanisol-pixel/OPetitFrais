@@ -34,6 +34,10 @@ Migration : `supabase/migrations/20260715120000_shop_analytics.sql`
 
 RLS activé sans politique publique : accès serveur via **service role** uniquement.
 
+## Graphique
+
+Histogramme SVG des visites par jour (30 derniers jours). Clic sur une barre pour afficher la valeur ; zoom par glisser / boutons / molette.
+
 ## Permission
 
 - Clé : `shop.read`
