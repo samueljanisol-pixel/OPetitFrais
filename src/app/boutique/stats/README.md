@@ -36,7 +36,7 @@ RLS activé sans politique publique : accès serveur via **service role** unique
 
 ## Graphique
 
-Histogramme SVG des visites par jour (30 derniers jours). Clic sur une barre pour afficher la valeur ; zoom par glisser / boutons / molette.
+Histogramme SVG des visites par jour (30 derniers jours). Clic sur une barre pour afficher la valeur ; zoom par boutons Zoom +/− ; courbe de tendance (moyenne mobile lissée).
 
 ## Permission
 

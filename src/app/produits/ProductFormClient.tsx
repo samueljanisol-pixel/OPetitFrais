@@ -48,6 +48,11 @@ import {
   sanitizeQtyTypingFrac2,
 } from '@/lib/commandes-fournisseur/qty-parse'
 import { hasPackagingCombo, packagingDbErrorMessage } from '@/lib/products/packaging-errors'
+import {
+  allocateNextCatalogProductCode,
+  isCatalogCategory,
+  isCatalogSupplier,
+} from '@/lib/products/catalog-scope'
 import { productPackagingArchiveUpdate } from '@/lib/products/packaging-archive'
 import {
   loadProductSupplierIds,
@@ -212,14 +217,18 @@ export default function ProductFormClient({ productId, returnTo = null }: Props)
     if (pu.data) setPurchaseUnits(pu.data as RefRow[])
     if (ucv.data) setShopOrderUnits(ucv.data as RefShopOrderUnitRow[])
     if (c.data) {
-      setCats(c.data as RefRow[])
-      if (c.data[0] && isNew) setP(x => ({ ...x, category_id: (c.data[0] as RefRow).id }))
+      const catsCatalog = (c.data as RefRow[]).filter(isCatalogCategory)
+      setCats(catsCatalog)
+      const firstCat = catsCatalog[0]
+      if (firstCat && isNew) setP(x => ({ ...x, category_id: firstCat.id }))
     }
     if (sc.data) setSubcats(sc.data as RefSubcategoryRow[])
     if (s.data) {
-      setSups(s.data as RefRow[])
-      if (s.data[0] && isNew) {
-        const firstId = (s.data[0] as RefRow).id
+      const supsCatalog = (s.data as RefRow[]).filter(isCatalogSupplier)
+      setSups(supsCatalog)
+      const firstSup = supsCatalog[0]
+      if (firstSup && isNew) {
+        const firstId = firstSup.id
         setP(x => ({ ...x, supplier_id: firstId }))
         setProductSupplierIds(new Set([firstId]))
       }
@@ -502,10 +511,19 @@ export default function ProductFormClient({ productId, returnTo = null }: Props)
       etiquette_id: p.etiquette_id?.trim() ? p.etiquette_id : null,
     }
     if (isNew) {
+      let nextCode: string
+      try {
+        nextCode = await allocateNextCatalogProductCode(supabase)
+      } catch (e) {
+        setErr(e instanceof Error ? e.message : 'Impossible de calculer le code produit')
+        setSaving(false)
+        return
+      }
       const { data, error: e1 } = await supabase
         .from('product')
         .insert({
           ...payload,
+          code: nextCode,
         } as never)
         .select('id')
         .single()

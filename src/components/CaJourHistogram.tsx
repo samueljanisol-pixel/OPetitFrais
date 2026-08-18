@@ -17,7 +17,7 @@ type Props = {
   title?: string
   metric?: CaJourMetric
   grain?: CaJourGrain
-  /** Zoom par glisser / boutons / molette. Défaut : activé pour le grain jour. */
+  /** Zoom par boutons. Défaut : activé pour le grain jour. */
   zoomable?: boolean
 }
 
@@ -27,20 +27,9 @@ const PAD_R = 14
 const PAD_T = 36
 const PAD_B = 40
 const PAD_L = 56
-const DRAG_PX = 8
 const MIN_ZOOM_SPAN = 3
 
 type ZoomRange = { start: number; end: number }
-
-type DragState = {
-  pointerId: number
-  clientX0: number
-  clientY0: number
-  svgX0: number
-  svgX1: number
-  moved: boolean
-  aborted: boolean
-}
 
 function toUtcDate(iso: string): Date {
   const normalized = /^\d{4}-\d{2}$/.test(iso) ? `${iso}-01` : iso
@@ -100,6 +89,55 @@ function clampZoom(start: number, end: number, n: number): ZoomRange | null {
   return { start: s, end: Math.max(s, e) }
 }
 
+function smoothWindowSize(grain: CaJourGrain, n: number): number {
+  if (n < 3) return n
+  if (grain === 'month') return Math.min(3, n)
+  if (n >= 90) return 14
+  if (n >= 21) return 7
+  if (n >= 8) return 5
+  return 3
+}
+
+/** Moyenne mobile centrée (fenêtre réduite sur les bords). */
+function centeredMovingAverage(values: number[], window: number): number[] {
+  const w = Math.max(1, window)
+  const half = Math.floor(w / 2)
+  const out: number[] = []
+  for (let i = 0; i < values.length; i++) {
+    const from = Math.max(0, i - half)
+    const to = Math.min(values.length - 1, i + half)
+    let sum = 0
+    for (let j = from; j <= to; j++) {
+      sum += values[j] ?? 0
+    }
+    out.push(sum / (to - from + 1))
+  }
+  return out
+}
+
+/** Catmull-Rom → cubiques SVG, pour une courbe continue sans angles. */
+function catmullRomPath(pts: Array<{ x: number; y: number }>): string {
+  const first = pts[0]
+  const second = pts[1]
+  if (!first || !second) return ''
+  if (pts.length === 2) return `M ${first.x} ${first.y} L ${second.x} ${second.y}`
+
+  let d = `M ${first.x} ${first.y}`
+  for (let i = 0; i < pts.length - 1; i++) {
+    const p1 = pts[i]
+    const p2 = pts[i + 1]
+    if (!p1 || !p2) continue
+    const p0 = pts[i - 1] ?? p1
+    const p3 = pts[i + 2] ?? p2
+    const c1x = p1.x + (p2.x - p0.x) / 6
+    const c1y = p1.y + (p2.y - p0.y) / 6
+    const c2x = p2.x - (p3.x - p1.x) / 6
+    const c2y = p2.y - (p3.y - p1.y) / 6
+    d += ` C ${c1x} ${c1y}, ${c2x} ${c2y}, ${p2.x} ${p2.y}`
+  }
+  return d
+}
+
 /**
  * Histogramme CA journalier ou mensuel en SVG (même approche que PaniersHeureHistogram).
  */
@@ -113,9 +151,6 @@ export default function CaJourHistogram({
 }: Props) {
   const capId = useId()
   const svgRef = useRef<SVGSVGElement | null>(null)
-  const wrapRef = useRef<HTMLDivElement | null>(null)
-  const dragRef = useRef<DragState | null>(null)
-  const layoutRef = useRef({ padL: PAD_L, chartW: VIEW_W - PAD_L - PAD_R, svgW: VIEW_W, nVis: 0 })
 
   const isMoney = metric === 'ca' || metric === 'benefit'
   const sorted = useMemo(
@@ -127,7 +162,6 @@ export default function CaJourHistogram({
   const [selectedDate, setSelectedDate] = useState<string | null>(null)
   const [hoveredDate, setHoveredDate] = useState<string | null>(null)
   const [zoom, setZoom] = useState<ZoomRange | null>(null)
-  const [brush, setBrush] = useState<{ x0: number; x1: number } | null>(null)
 
   const nAll = sorted.length
   const zoomEnabled = (zoomable ?? grain === 'day') && nAll > MIN_ZOOM_SPAN
@@ -136,7 +170,6 @@ export default function CaJourHistogram({
     setSelectedDate(null)
     setHoveredDate(null)
     setZoom(null)
-    setBrush(null)
   }, [pointsKey])
 
   const visibleStart = zoom ? Math.max(0, Math.min(zoom.start, Math.max(0, nAll - 1))) : 0
@@ -151,13 +184,10 @@ export default function CaJourHistogram({
   const chartW = VIEW_W - PAD_L - PAD_R
   const svgW = VIEW_W
   const chartH = VIEW_H - PAD_T - PAD_B
-  layoutRef.current = { padL: PAD_L, chartW, svgW, nVis: n }
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return
-      setBrush(null)
-      dragRef.current = null
       if (selectedDate) {
         setSelectedDate(null)
         return
@@ -168,50 +198,15 @@ export default function CaJourHistogram({
     return () => window.removeEventListener('keydown', onKey)
   }, [selectedDate])
 
-  useEffect(() => {
-    if (!zoomEnabled) return
-    const el = wrapRef.current
-    if (!el) return
-
-    const onWheel = (e: WheelEvent) => {
-      e.preventDefault()
-      const svg = svgRef.current
-      if (!svg || nAll === 0) return
-      const rect = svg.getBoundingClientRect()
-      if (rect.width <= 0) return
-      const svgX = ((e.clientX - rect.left) / rect.width) * layoutRef.current.svgW
-      const visIdx = indexFromX(svgX, layoutRef.current.nVis, layoutRef.current.padL, layoutRef.current.chartW)
-      const absIdx = visibleStart + visIdx
-      const span = visibleEnd - visibleStart + 1
-      const nextSpan =
-        e.deltaY < 0
-          ? Math.max(MIN_ZOOM_SPAN, Math.floor(span * 0.7))
-          : Math.min(nAll, Math.ceil(span / 0.7))
-      if (nextSpan >= nAll) {
-        setZoom(null)
-        return
-      }
-      const ratio = span <= 1 ? 0.5 : visIdx / Math.max(1, span - 1)
-      let s = Math.round(absIdx - ratio * (nextSpan - 1))
-      let end = s + nextSpan - 1
-      if (s < 0) {
-        end -= s
-        s = 0
-      }
-      if (end > nAll - 1) {
-        s -= end - (nAll - 1)
-        end = nAll - 1
-      }
-      setZoom(clampZoom(Math.max(0, s), end, nAll))
-    }
-
-    el.addEventListener('wheel', onWheel, { passive: false })
-    return () => el.removeEventListener('wheel', onWheel)
-  }, [zoomEnabled, nAll, visibleStart, visibleEnd])
-
   if (!sorted.length) return null
 
-  const max = Math.max(1, ...visible.map((p) => p.total))
+  const windowSize = smoothWindowSize(grain, nAll)
+  const smoothedAll = centeredMovingAverage(
+    sorted.map((p) => p.total),
+    windowSize,
+  )
+  const smoothedVisible = smoothedAll.slice(visibleStart, visibleEnd + 1)
+  const max = Math.max(1, ...visible.map((p) => p.total), ...smoothedVisible)
   const totalVisible = visible.reduce((acc, p) => acc + p.total, 0)
   const totalAll = sorted.reduce((acc, p) => acc + p.total, 0)
   const gap = Math.max(0.5, (chartW / n) * (grain === 'month' ? 0.12 : 0.06))
@@ -237,6 +232,15 @@ export default function CaJourHistogram({
     const y = PAD_T + chartH - h
     return { ...p, x, y, h, i }
   })
+
+  const smoothPts = bars.map((b, i) => {
+    const sm = smoothedVisible[i] ?? 0
+    const rawY = PAD_T + chartH - (sm / max) * chartH
+    const y = Math.min(PAD_T + chartH, Math.max(PAD_T, rawY))
+    return { x: b.x + barW / 2, y }
+  })
+  const smoothPath = n >= 2 ? catmullRomPath(smoothPts) : ''
+  const windowLabel = grain === 'month' ? `${windowSize} mois` : `${windowSize} j`
 
   const yTicks = 4
   const tickVals = Array.from({ length: yTicks + 1 }, (_, i) => Math.round((max * i) / yTicks))
@@ -266,6 +270,10 @@ export default function CaJourHistogram({
 
   const activeDate = selectedDate ?? hoveredDate
   const activePoint = activeDate ? sorted.find((p) => p.date === activeDate) : undefined
+  const activeSmooth =
+    activeDate != null
+      ? smoothedAll[sorted.findIndex((p) => p.date === activeDate)]
+      : undefined
   const zoomed = zoom != null
 
   const svgXFromClient = (clientX: number) => {
@@ -305,91 +313,24 @@ export default function CaJourHistogram({
 
   const span = visibleEnd - visibleStart + 1
 
-  const handlePointerDown = (e: React.PointerEvent<SVGRectElement>) => {
-    if (e.button !== 0) return
+  const handleClick = (e: React.MouseEvent<SVGRectElement>) => {
     const x = svgXFromClient(e.clientX)
-    dragRef.current = {
-      pointerId: e.pointerId,
-      clientX0: e.clientX,
-      clientY0: e.clientY,
-      svgX0: x,
-      svgX1: x,
-      moved: false,
-      aborted: false,
-    }
-  }
-
-  const handlePointerMove = (e: React.PointerEvent<SVGRectElement>) => {
-    const drag = dragRef.current
-    const x = svgXFromClient(e.clientX)
-    if (!drag || drag.pointerId !== e.pointerId) {
-      const i = indexFromX(x, n, PAD_L, chartW)
-      setHoveredDate(visible[i]?.date ?? null)
-      return
-    }
-    if (drag.aborted) return
-    const dx = Math.abs(e.clientX - drag.clientX0)
-    const dy = Math.abs(e.clientY - drag.clientY0)
-    if (!drag.moved) {
-      if (dy > dx && dy > DRAG_PX) {
-        drag.aborted = true
-        setBrush(null)
-        return
-      }
-      if (dx < DRAG_PX) {
-        const i = indexFromX(x, n, PAD_L, chartW)
-        setHoveredDate(visible[i]?.date ?? null)
-        return
-      }
-      if (!zoomEnabled) return
-      drag.moved = true
-      try {
-        e.currentTarget.setPointerCapture(e.pointerId)
-      } catch {
-        /* ignore */
-      }
-    }
-    drag.svgX1 = x
-    setBrush({ x0: drag.svgX0, x1: x })
-  }
-
-  const handlePointerUp = (e: React.PointerEvent<SVGRectElement>) => {
-    const drag = dragRef.current
-    dragRef.current = null
-    setBrush(null)
-    try {
-      if (e.currentTarget.hasPointerCapture(e.pointerId)) {
-        e.currentTarget.releasePointerCapture(e.pointerId)
-      }
-    } catch {
-      /* ignore */
-    }
-    if (!drag || drag.pointerId !== e.pointerId || drag.aborted) return
-    if (drag.moved && zoomEnabled) {
-      const x0 = Math.min(drag.svgX0, drag.svgX1)
-      const x1 = Math.max(drag.svgX0, drag.svgX1)
-      const i0 = indexFromX(x0, n, PAD_L, chartW)
-      const i1 = indexFromX(x1, n, PAD_L, chartW)
-      setZoom(clampZoom(visibleStart + i0, visibleStart + i1, nAll))
-      return
-    }
-    const i = indexFromX(drag.svgX0, n, PAD_L, chartW)
+    const i = indexFromX(x, n, PAD_L, chartW)
     const date = visible[i]?.date
     if (!date) return
     setSelectedDate((prev) => (prev === date ? null : date))
   }
 
-  const handlePointerLeave = () => {
-    if (dragRef.current) return
-    setHoveredDate(null)
+  const handlePointerMove = (e: React.PointerEvent<SVGRectElement>) => {
+    if (e.pointerType === 'touch') return
+    const x = svgXFromClient(e.clientX)
+    const i = indexFromX(x, n, PAD_L, chartW)
+    setHoveredDate(visible[i]?.date ?? null)
   }
 
-  const brushX = brush
-    ? Math.max(PAD_L, Math.min(brush.x0, brush.x1, PAD_L + chartW))
-    : 0
-  const brushW = brush
-    ? Math.min(PAD_L + chartW, Math.max(brush.x0, brush.x1)) - brushX
-    : 0
+  const handlePointerLeave = () => {
+    setHoveredDate(null)
+  }
 
   return (
     <figure className={className}>
@@ -399,44 +340,51 @@ export default function CaJourHistogram({
         </figcaption>
       ) : null}
 
-      {zoomEnabled ? (
+      {(zoomEnabled || smoothPath) ? (
         <div className="mb-2 flex flex-wrap items-center gap-2">
-          <button
-            type="button"
-            onClick={() => applyZoomAround(zoomCenterIdx, Math.min(nAll, Math.ceil(span / 0.7)))}
-            disabled={!zoomed && span >= nAll}
-            className="rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
-          >
-            Zoom −
-          </button>
-          <button
-            type="button"
-            onClick={() => applyZoomAround(zoomCenterIdx, Math.max(MIN_ZOOM_SPAN, Math.floor(span * 0.5)))}
-            disabled={span <= MIN_ZOOM_SPAN}
-            className="rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
-          >
-            Zoom +
-          </button>
-          <button
-            type="button"
-            onClick={() => setZoom(null)}
-            disabled={!zoomed}
-            className="rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
-          >
-            Tout afficher
-          </button>
-          {zoomed && visFrom && visTo ? (
-            <span className="text-xs text-slate-500">
-              {shortDateLabel(visFrom.date)} → {shortDateLabel(visTo.date)}
+          {zoomEnabled ? (
+            <>
+              <button
+                type="button"
+                onClick={() => applyZoomAround(zoomCenterIdx, Math.min(nAll, Math.ceil(span / 0.7)))}
+                disabled={!zoomed && span >= nAll}
+                className="rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                Zoom −
+              </button>
+              <button
+                type="button"
+                onClick={() => applyZoomAround(zoomCenterIdx, Math.max(MIN_ZOOM_SPAN, Math.floor(span * 0.5)))}
+                disabled={span <= MIN_ZOOM_SPAN}
+                className="rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                Zoom +
+              </button>
+              <button
+                type="button"
+                onClick={() => setZoom(null)}
+                disabled={!zoomed}
+                className="rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                Tout afficher
+              </button>
+              {zoomed && visFrom && visTo ? (
+                <span className="text-xs text-slate-500">
+                  {shortDateLabel(visFrom.date)} → {shortDateLabel(visTo.date)}
+                </span>
+              ) : null}
+            </>
+          ) : null}
+          {smoothPath ? (
+            <span className="inline-flex items-center gap-1.5 text-xs text-slate-500">
+              <span className="h-[2px] w-5 rounded-full bg-amber-600" aria-hidden />
+              Tendance (moy. {windowLabel})
             </span>
           ) : null}
         </div>
       ) : null}
 
-      <div
-        ref={wrapRef}
-        className="overflow-hidden rounded-xl border border-slate-200 bg-gradient-to-b from-slate-50 to-white shadow-sm ring-1 ring-slate-100"
-      >
+      <div className="overflow-hidden rounded-xl border border-slate-200 bg-gradient-to-b from-slate-50 to-white shadow-sm ring-1 ring-slate-100">
         <svg
           ref={svgRef}
           role="img"
@@ -496,7 +444,7 @@ export default function CaJourHistogram({
                   height={Math.max(h, v > 0 ? 1.5 : 0)}
                   rx={grain === 'month' ? 3 : 2}
                   fill={isSelected ? '#047857' : isHovered ? '#059669' : 'currentColor'}
-                  fillOpacity={v > 0 ? (isSelected || isHovered ? 1 : 0.88) : 0.12}
+                  fillOpacity={v > 0 ? (isSelected || isHovered ? 1 : 0.62) : 0.12}
                   className="text-emerald-600"
                 />
                 {isSelected && barW >= 22 ? (
@@ -525,16 +473,14 @@ export default function CaJourHistogram({
             )
           })}
 
-          {brush && brushW > 0 ? (
-            <rect
-              x={brushX}
-              y={PAD_T}
-              width={brushW}
-              height={chartH}
-              fill="#059669"
-              fillOpacity={0.16}
-              stroke="#047857"
-              strokeWidth={1}
+          {smoothPath ? (
+            <path
+              d={smoothPath}
+              fill="none"
+              stroke="#d97706"
+              strokeWidth={2.25}
+              strokeLinecap="round"
+              strokeLinejoin="round"
               pointerEvents="none"
             />
           ) : null}
@@ -545,12 +491,10 @@ export default function CaJourHistogram({
             width={chartW}
             height={chartH}
             fill="transparent"
-            className={zoomEnabled ? 'cursor-crosshair' : 'cursor-pointer'}
-            style={{ touchAction: 'pan-y' }}
-            onPointerDown={handlePointerDown}
+            className="cursor-pointer"
+            style={{ touchAction: 'manipulation' }}
+            onClick={handleClick}
             onPointerMove={handlePointerMove}
-            onPointerUp={handlePointerUp}
-            onPointerCancel={handlePointerUp}
             onPointerLeave={handlePointerLeave}
           />
 
@@ -594,6 +538,12 @@ export default function CaJourHistogram({
               {formatValue(activePoint.total)}
               {valueSuffix}
             </div>
+            {activeSmooth != null && Number.isFinite(activeSmooth) ? (
+              <div className="text-[11px] font-medium text-amber-800">
+                Tendance : {formatValue(activeSmooth)}
+                {valueSuffix}
+              </div>
+            ) : null}
             {selectedDate ? (
               <button
                 type="button"
@@ -608,7 +558,7 @@ export default function CaJourHistogram({
       ) : (
         <p className="mt-2 text-xs text-slate-500">
           Cliquez une barre pour afficher la valeur
-          {zoomEnabled ? ' · glissez horizontalement ou utilisez la molette pour zoomer' : ''}.
+          {zoomEnabled ? ' · utilisez Zoom + / − pour agrandir une période' : ''}.
         </p>
       )}
     </figure>

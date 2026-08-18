@@ -33,7 +33,7 @@ Les achats passent par le **même parcours que les produits** :
 **Saisie magasin** → **Validation lot** → **Achat** → **Comptes vendeur**
 
 - Fournisseur seed **« Emballages et Consommables »** (`ref_supplier.code = emballages_consommables`, `commande_active = true`).
-- Chaque article `ref_emballage` possède un **produit miroir** (`ref_emballage.product_id` → `product`) créé/mis à jour automatiquement (sync API).
+- Chaque article `ref_emballage` possède un **produit miroir** (`ref_emballage.product_id` → `product`) créé/mis à jour automatiquement (sync API). Ces miroirs n’apparaissent pas dans la liste `/produits` ; codes paddés (`000001`…) distincts des codes catalogue (`330`, `331`…).
 - Commande **à l’unité** (`allow_unit_in_commande = true`), sans colis obligatoire.
 - **Vendeurs** : Paramètres → Vendeurs, rattachés au fournisseur seed (consolidation / achat / comptes comme Marché).
 

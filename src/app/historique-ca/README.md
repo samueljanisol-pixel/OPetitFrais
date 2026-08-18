@@ -33,8 +33,8 @@ Deux histogrammes SVG (`CaJourHistogram`) sous les indicateurs, recalculés selo
 
 | Graphique | Description |
 |-----------|-------------|
-| CA par mois | Une barre par mois calendaire de la plage affichée (mois sans vente = 0). **Clic** sur une barre : montant du mois. |
-| CA par jour | Une barre par jour (jours sans vente = 0). **Clic** : montant du jour. **Zoom** : glisser horizontalement une plage, boutons Zoom +/−, molette ; « Tout afficher » réinitialise. Échap annule la sélection puis le zoom. |
+| CA par mois | Une barre par mois calendaire de la plage affichée (mois sans vente = 0). **Clic** sur une barre : montant du mois. Courbe ambre : moyenne mobile 3 mois. |
+| CA par jour | Une barre par jour (jours sans vente = 0). **Clic** : montant du jour. **Zoom** : boutons Zoom +/− et « Tout afficher » (pas de glisser, pour rester utilisable au doigt). Échap annule la sélection puis le zoom. Courbe ambre : moyenne mobile (7 j, ou 14 j sur une longue période), lissée en spline. |
 
 Les totaux des graphiques correspondent au **Total global** de l’en-tête (même source `ca_day`), ou au total de la plage zoomée.
 

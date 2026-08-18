@@ -14,6 +14,7 @@ File d’attente après achat fournisseur (menu accueil + badge) :
 
 ## Liste (`ProduitsListClient`)
 
+- **Hors liste** : les produits miroir **Emballages et consommables** (catégorie / fournisseur `emballages_consommables`) n’apparaissent pas ; ils se gèrent dans `/emballages`. Filtres Catégorie et Fournisseur sans ces référentiels.
 - **Colonnes configurables** : bouton **Colonnes** → choix des champs affichés, option **Éditable** par colonne (lecture seule dans la liste si décochée), réordonnancement, préférence en `localStorage` (`produits.list.columns`). Colonnes par défaut (bouton **Colonnes par défaut**) : Code, Actif, Nom logistique (lecture seule par défaut), Prix, UdV, Fournisseur, Catégorie, Fiche ; les autres colonnes éditables du registre restent modifiables inline par défaut. Groupe **Boutique** : UdV boutique, **unités cmd. boutique** (cases par unité vitrine), **poids pièce (kg)**, **favori boutique**.
 - **Édition inline** : colonnes éditables — texte/nombre (commit au blur ou Entrée), switches, listes et **unités cmd. boutique** (commit immédiat). Ligne en orange si brouillon non enregistré, bouton ↺ pour annuler.
 - **Modification groupée** : sélection par cases à cocher → **Modifier la sélection…** (FormDialog : un champ, une valeur pour tous) ou menu **Actions groupées** (Activer / Désactiver).
@@ -32,6 +33,7 @@ File d’attente après achat fournisseur (menu accueil + badge) :
 
 ## Fiche produit (`ProductFormClient`)
 
+- **Nouveau produit** : le code catalogue est le max numérique des produits **hors** emballages/consommables, + 1, **sans padding** (ex. après `332` → `333`). Helper `src/lib/products/catalog-scope.ts` ; trigger `product_set_code` (migration `20260818120000_catalog_product_codes.sql`) si le code n’est pas fourni. Catégorie et fournisseur `emballages_consommables` absents du formulaire (création via `/emballages`).
 - **Fournisseurs** : cases à cocher (comme pour les conditionnements) ; table `product_supplier`. Le premier coché selon l’ordre référentiel devient `product.supplier_id` (fournisseur principal). Import en masse « Marché » depuis l’Excel unités : `npx tsx scripts/apply-marche-supplier-from-excel.ts [fichier.xlsx]`.
 - **Noms** : `name` / `name_ar` = **nom logistique** (interne, commandes fournisseur) ; `sales_name` / `sales_name_ar` = **nom de vente** affiché client (cuisine, boutique `opetitfrais.ma`, locale UI). Migration `20260702140000_product_sales_name.sql`.
 - **Visible vitrine** : si coché (et produit actif), le produit apparaît sur la boutique publique [`/shop`](../shop/README.md) (`opetitfrais.ma`). Champ `product.visible_vitrine`.
@@ -53,7 +55,7 @@ File d’attente après achat fournisseur (menu accueil + badge) :
 
 ### Produits miroir emballages (sync auto)
 
-Les articles du référentiel `/emballages` génèrent automatiquement un **produit commandable** (`ref_emballage.product_id` → `product`) : catégorie **Emballages et consommables**, commande à l’unité, non visible vitrine. Ces produits ne se créent pas manuellement sur la fiche produit — ils sont synchronisés à chaque création/modification d’article emballage (`src/lib/emballages/sync-product-mirror.ts`). Distinct des liens BOM `product.emballage_id` / `product.etiquette_id` sur les produits alimentaires.
+Les articles du référentiel `/emballages` génèrent automatiquement un **produit commandable** (`ref_emballage.product_id` → `product`) : catégorie **Emballages et consommables**, commande à l’unité, non visible vitrine. Ils n’apparaissent pas dans la liste `/produits`. Ces produits ne se créent pas manuellement sur la fiche produit — ils sont synchronisés à chaque création/modification d’article emballage (`src/lib/emballages/sync-product-mirror.ts`). Distinct des liens BOM `product.emballage_id` / `product.etiquette_id` sur les produits alimentaires.
 
 Les vendeurs se créent dans **Paramètres → Vendeurs**. Les liaisons par conditionnement restent dans **Paramètres du conditionnement** (`product_packaging_vendeur`).
 

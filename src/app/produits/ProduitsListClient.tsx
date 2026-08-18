@@ -44,6 +44,7 @@ import {
   commitProductShopOrderUnits,
   isDraftDirty,
 } from '@/lib/products/product-field-commit'
+import { isCatalogCategory, isCatalogSupplier } from '@/lib/products/catalog-scope'
 import ProductListCell from '@/app/produits/ProductListCell'
 import ProductListColumnPicker from '@/app/produits/ProductListColumnPicker'
 import ProductListBulkEditDialog from '@/app/produits/ProductListBulkEditDialog'
@@ -116,26 +117,24 @@ export default function ProduitsListClient() {
       setLoading(false)
       return
     }
-    setRows(
-      ((data as Record<string, unknown>[]) ?? []).map(raw => {
-        const emballageRef = raw.emballage_ref ?? raw.ref_emballage
-        const etiquetteRef = raw.etiquette_ref
-        const shopUnitsRaw = raw.product_shop_order_unit
-        const {
-          emballage_ref: _e,
-          etiquette_ref: _t,
-          ref_emballage: _r,
-          product_shop_order_unit: _psou,
-          ...rest
-        } = raw
-        return {
-          ...(rest as ProductListRow),
-          shop_order_unit_ids: extractProductShopOrderUnitIds(shopUnitsRaw),
-          ref_emballage: (Array.isArray(emballageRef) ? emballageRef[0] : emballageRef) as ProductListRow['ref_emballage'],
-          ref_etiquette: (Array.isArray(etiquetteRef) ? etiquetteRef[0] : etiquetteRef) as ProductListRow['ref_etiquette'],
-        }
-      }),
-    )
+    const mapped = ((data as Record<string, unknown>[]) ?? []).map(raw => {
+      const emballageRef = raw.emballage_ref ?? raw.ref_emballage
+      const etiquetteRef = raw.etiquette_ref
+      const shopUnitsRaw = raw.product_shop_order_unit
+      const {
+        emballage_ref: _e,
+        etiquette_ref: _t,
+        ref_emballage: _r,
+        product_shop_order_unit: _psou,
+        ...rest
+      } = raw
+      return {
+        ...(rest as ProductListRow),
+        shop_order_unit_ids: extractProductShopOrderUnitIds(shopUnitsRaw),
+        ref_emballage: (Array.isArray(emballageRef) ? emballageRef[0] : emballageRef) as ProductListRow['ref_emballage'],
+        ref_etiquette: (Array.isArray(etiquetteRef) ? etiquetteRef[0] : etiquetteRef) as ProductListRow['ref_etiquette'],
+      }
+    })
     setSelectedIds(new Set())
 
     const [
@@ -165,10 +164,21 @@ export default function ProduitsListClient() {
     const embJson = (await embRes.json().catch(() => ({}))) as { emballages?: ProductListRefs['emballages'] }
     const etqJson = (await etqRes.json().catch(() => ({}))) as { emballages?: ProductListRefs['etiquettes'] }
 
+    const categoriesAll = (catsRes.data as RefRow[]) ?? []
+    const suppliersAll = (supsRes.data as RefRow[]) ?? []
+    const catalogCategories = categoriesAll.filter(isCatalogCategory)
+    const catalogSuppliers = suppliersAll.filter(isCatalogSupplier)
+    const excludedCatIds = new Set(categoriesAll.filter(c => !isCatalogCategory(c)).map(c => c.id))
+    const excludedSupIds = new Set(suppliersAll.filter(s => !isCatalogSupplier(s)).map(s => s.id))
+    const subcatsAll = (subcatsRes.data as RefSubcategoryRow[]) ?? []
+
+    setRows(
+      mapped.filter(r => !excludedCatIds.has(r.category_id) && !excludedSupIds.has(r.supplier_id)),
+    )
     setRefs({
-      categories: (catsRes.data as RefRow[]) ?? [],
-      subcategories: (subcatsRes.data as RefSubcategoryRow[]) ?? [],
-      suppliers: (supsRes.data as RefRow[]) ?? [],
+      categories: catalogCategories,
+      subcategories: subcatsAll.filter(sc => !excludedCatIds.has(sc.category_id)),
+      suppliers: catalogSuppliers,
       vendeurs: (vendeursRes.data as RefVendeurRow[]) ?? [],
       salesUnits: (unitsRes.data as RefRow[]) ?? [],
       orderUnits: (orderUnitsRes.data as RefRow[]) ?? [],
