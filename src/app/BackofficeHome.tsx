@@ -27,6 +27,7 @@ export default function BackofficeHome() {
   const tCommon = useTranslations('common')
   const {
     loading,
+    session,
     can,
     canReadVentes,
     canReadShop,
@@ -108,6 +109,27 @@ export default function BackofficeHome() {
           }}
         >
           <Stack spacing={1.25}>
+            {!session ? (
+              <p className="px-2 py-3 text-center text-sm text-slate-600">{t('sessionMissing')}</p>
+            ) : null}
+            {session &&
+            !can('produits.read') &&
+            !canActualisationProduit &&
+            !canReadVentes &&
+            !canReadShop &&
+            !canReadClients &&
+            !canReadCommandesClient &&
+            !canPrepareCommandesClient &&
+            !canDeliverCommandesClient &&
+            !canCommandesFournisseur &&
+            !canCommandesFournisseurComptes &&
+            !canReadCharges &&
+            !canReadSalaries &&
+            !canReadEmballages &&
+            !canCuisineSaisie &&
+            !canCuisineHistorique ? (
+              <p className="px-2 py-3 text-center text-sm text-slate-600">{t('noMenuAccess')}</p>
+            ) : null}
             {can('produits.read') ? (
               <Button
                 component={AppLink}

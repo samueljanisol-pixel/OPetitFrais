@@ -48,7 +48,9 @@
       "logout": "Déconnexion",
       "settings": "Paramètres",
       "settingsAria": "Paramètres",
-      "homeAria": "O' Petit Frais — accueil"
+      "homeAria": "O' Petit Frais — accueil",
+      "noMenuAccess": "Aucun accès au menu pour ce compte. Déconnectez-vous puis reconnectez-vous, ou vérifiez le rôle dans Administration.",
+      "sessionMissing": "Session indisponible. Déconnectez-vous puis reconnectez-vous."
     },
     "clients": {
       "list": {

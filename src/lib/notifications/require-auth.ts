@@ -1,4 +1,5 @@
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { loadUserAccessByUserId } from "@/lib/auth/load-user-access";
 
 export async function requireAuthenticatedUser(): Promise<
   | { ok: true; userId: string; permissions: string[]; isFullAccess: boolean }
@@ -11,24 +12,15 @@ export async function requireAuthenticatedUser(): Promise<
     return { ok: false, status: 401, error: "Non connecté" };
   }
 
-  const { data: prof } = await supabase
-    .from("profiles")
-    .select("roles(is_full_access)")
-    .eq("user_id", user.id)
-    .maybeSingle();
-
-  const role = prof?.roles as { is_full_access: boolean } | null | undefined;
-  const isFullAccess = role?.is_full_access ?? false;
-
-  const { data: keysRaw, error } = await supabase.rpc("get_my_permission_keys");
-  if (error) {
+  const access = await loadUserAccessByUserId(user.id);
+  if (!access) {
     return { ok: false, status: 500, error: "Impossible de vérifier les droits" };
   }
 
   return {
     ok: true,
     userId: user.id,
-    permissions: (keysRaw as string[]) ?? [],
-    isFullAccess,
+    permissions: access.permissions,
+    isFullAccess: access.isFullAccess,
   };
 }

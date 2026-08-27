@@ -1,5 +1,5 @@
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import { normalizeProfileRole } from "@/lib/auth/normalize-profile-role";
+import { loadUserAccessByUserId } from "@/lib/auth/load-user-access";
 
 async function resolveGate(
   keys: Set<string>,
@@ -16,6 +16,17 @@ async function resolveGate(
   return { ok: true, userId };
 }
 
+async function gateForUser(
+  userId: string,
+  need: string | string[],
+): Promise<{ ok: true; userId: string } | { ok: false; status: number; error: string }> {
+  const access = await loadUserAccessByUserId(userId);
+  if (!access) {
+    return { ok: false, status: 500, error: "Impossible de vérifier les droits" };
+  }
+  return resolveGate(new Set(access.permissions), access.isFullAccess, userId, need);
+}
+
 export async function requireApiPermission(key: string): Promise<
   | { ok: true; userId: string }
   | { ok: false; status: number; error: string }
@@ -26,24 +37,7 @@ export async function requireApiPermission(key: string): Promise<
   if (!user) {
     return { ok: false, status: 401, error: "Non connecté" };
   }
-
-  const { data: prof } = await supabase
-    .from("profiles")
-    .select("roles(is_full_access)")
-    .eq("user_id", user.id)
-    .maybeSingle();
-
-  const role = normalizeProfileRole(
-    prof?.roles as { is_full_access: boolean } | { is_full_access: boolean }[] | null | undefined,
-  );
-  const isFull = role?.is_full_access === true;
-
-  const { data: keysRaw, error } = await supabase.rpc("get_my_permission_keys");
-  if (error) {
-    return { ok: false, status: 500, error: "Impossible de vérifier les droits" };
-  }
-  const keys = new Set((keysRaw as string[]) ?? []);
-  return resolveGate(keys, isFull, user.id, key);
+  return gateForUser(user.id, key);
 }
 
 /** Au moins une des permissions (ou accès total). */
@@ -56,22 +50,5 @@ export async function requireAnyApiPermission(
   if (!user) {
     return { ok: false, status: 401, error: "Non connecté" };
   }
-
-  const { data: prof } = await supabase
-    .from("profiles")
-    .select("roles(is_full_access)")
-    .eq("user_id", user.id)
-    .maybeSingle();
-
-  const role = normalizeProfileRole(
-    prof?.roles as { is_full_access: boolean } | { is_full_access: boolean }[] | null | undefined,
-  );
-  const isFull = role?.is_full_access === true;
-
-  const { data: keysRaw, error } = await supabase.rpc("get_my_permission_keys");
-  if (error) {
-    return { ok: false, status: 500, error: "Impossible de vérifier les droits" };
-  }
-  const keys = new Set((keysRaw as string[]) ?? []);
-  return resolveGate(keys, isFull, user.id, anyOf);
+  return gateForUser(user.id, anyOf);
 }

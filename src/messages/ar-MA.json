@@ -48,7 +48,9 @@
       "logout": "خرج",
       "settings": "الإعدادات",
       "settingsAria": "الإعدادات",
-      "homeAria": "O' Petit Frais — الرئيسية"
+      "homeAria": "O' Petit Frais — الرئيسية",
+      "noMenuAccess": "ما كاينش وصول للقائمة بهاد الحساب. خرج ودخل من جديد، ولا تحقق من الدور فالإدارة.",
+      "sessionMissing": "الجلسة ما متوفراش. خرج ودخل من جديد."
     },
     "clients": {
       "list": {

@@ -15,3 +15,7 @@ Clés de traduction : `backoffice.login.*`, erreurs auth `backoffice.auth.errors
 Le bouton « Se connecter » n’est grisé que pendant la requête (`loading`). Les identifiants sont lus via `FormData` à la soumission (et non uniquement via l’état React), car sur mobile Safari/Chrome l’autofill remplit les champs sans toujours déclencher `onChange`.
 
 Voir [`src/i18n/README.md`](../../i18n/README.md) pour le socle i18n global.
+
+## Session après connexion
+
+Après un login réussi, la session (rôle, `isFullAccess`, permissions) est écrite dans `sessionStorage` puis rechargée via `/api/auth/session`. Un refresh token Supabase invalide peut laisser un menu d’accueil vide : se déconnecter, effacer les données du site pour `localhost` si besoin, puis se reconnecter. Voir aussi [`src/app/README.md`](../README.md).

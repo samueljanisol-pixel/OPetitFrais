@@ -1,10 +1,18 @@
 import { NextResponse } from "next/server";
+import { createClient } from "@supabase/supabase-js";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type { SessionPayload } from "@/lib/auth/session-types";
 import { buildSessionDisplayLabel } from "@/lib/auth/display-label";
-import { normalizeProfileRole } from "@/lib/auth/normalize-profile-role";
+import { loadUserAccessByUserId } from "@/lib/auth/load-user-access";
 import { loadMagasinsForUser } from "@/lib/magasins/load-magasins-for-user";
 import { normalizeLocale } from "@/i18n/config";
+
+function serviceClientOrNull() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !key) return null;
+  return createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } });
+}
 
 export async function GET() {
   try {
@@ -15,22 +23,10 @@ export async function GET() {
       return NextResponse.json({ session: null as SessionPayload | null });
     }
 
-    const { data: keysRaw, error: rk } = await supabase.rpc("get_my_permission_keys");
-    const permissions = rk || !Array.isArray(keysRaw) ? [] : (keysRaw as string[]);
-
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("login, prenom, nom, role_id, ui_locale, roles(name, slug, is_full_access)")
-      .eq("user_id", user.id)
-      .maybeSingle();
-
-    const role = normalizeProfileRole(
-      profile?.roles as
-        | { name: string; slug: string; is_full_access: boolean }
-        | { name: string; slug: string; is_full_access: boolean }[]
-        | null
-        | undefined,
-    );
+    const access = await loadUserAccessByUserId(user.id);
+    if (!access) {
+      return NextResponse.json({ session: null as SessionPayload | null });
+    }
 
     const meta = (user.user_metadata ?? {}) as Record<string, unknown>;
     const metaStr = (k: string) => {
@@ -38,24 +34,27 @@ export async function GET() {
       if (v == null) return "";
       return String(v).trim();
     };
-    const prenom = (profile?.prenom ?? "").trim() || metaStr("prenom");
-    const nom = (profile?.nom ?? "").trim() || metaStr("nom");
-    let login: string | null = profile?.login ?? null;
+    const prenom = access.prenom || metaStr("prenom");
+    const nom = access.nom || metaStr("nom");
+    let login: string | null = access.login;
     if (login == null || login === "") {
       const ml = metaStr("login");
       login = ml || null;
     }
 
-    const { magasins, restricted: magasinsRestricted } = await loadMagasinsForUser(
-      supabase,
-      user.id,
-      role
-        ? {
-            slug: role.slug ?? null,
-            is_full_access: role.is_full_access === true,
-          }
-        : null,
-    );
+    let magasinsLoad = await loadMagasinsForUser(supabase, user.id, {
+      slug: access.role?.slug ?? null,
+      is_full_access: access.isFullAccess,
+    });
+    if (magasinsLoad.magasins.length === 0 && access.isFullAccess) {
+      const service = serviceClientOrNull();
+      if (service) {
+        magasinsLoad = await loadMagasinsForUser(service, user.id, {
+          slug: access.role?.slug ?? null,
+          is_full_access: true,
+        });
+      }
+    }
 
     const displayLabel = buildSessionDisplayLabel(
       {
@@ -64,7 +63,7 @@ export async function GET() {
         login,
         prenom,
         nom,
-        roleName: role?.name ?? null,
+        roleName: access.role?.name ?? null,
       },
       meta,
     );
@@ -75,15 +74,15 @@ export async function GET() {
       login,
       prenom,
       nom,
-      roleId: profile?.role_id ?? null,
-      roleName: role?.name ?? null,
-      roleSlug: role?.slug ?? null,
-      isFullAccess: role?.is_full_access ?? false,
-      permissions,
-      magasins,
-      magasinsRestricted,
+      roleId: access.role_id,
+      roleName: access.role?.name ?? null,
+      roleSlug: access.role?.slug ?? null,
+      isFullAccess: access.isFullAccess,
+      permissions: access.permissions,
+      magasins: magasinsLoad.magasins,
+      magasinsRestricted: magasinsLoad.restricted,
       displayLabel,
-      uiLocale: normalizeLocale(profile?.ui_locale),
+      uiLocale: normalizeLocale(access.ui_locale),
     };
 
     return NextResponse.json({ session: payload });

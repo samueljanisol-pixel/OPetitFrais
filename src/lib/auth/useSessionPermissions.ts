@@ -8,10 +8,10 @@ export function useSessionPermissions() {
   const { session } = useSessionContext();
 
   const loading = session === undefined;
-  const isFullAccess = session?.isFullAccess ?? false;
   const roleSlug = session?.roleSlug ?? null;
   /** Onglet Administration (Paramètres) : réservé au rôle système « administrateur ». */
   const isAdministrator = roleSlug === "administrateur";
+  const isFullAccess = (session?.isFullAccess ?? false) || isAdministrator;
   const permissionList = session?.permissions;
   const can = useCallback(
     (key: string) => {

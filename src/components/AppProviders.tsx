@@ -39,19 +39,12 @@ export default function AppProviders({ children }: { children: React.ReactNode }
     </NextIntlClientProvider>
   );
 
-  if (rtl) {
-    return (
-      <AppRouterCacheProvider options={{ enableCssLayer: true }}>
-        <SessionProvider>
-          <CacheProvider value={rtlCache}>{content}</CacheProvider>
-        </SessionProvider>
-      </AppRouterCacheProvider>
-    );
-  }
-
   return (
     <AppRouterCacheProvider options={{ enableCssLayer: true }}>
-      <SessionProvider>{content}</SessionProvider>
+      {/* SessionProvider hors branche RTL : éviter un remount (perte / course sur la session) au basculement de langue. */}
+      <SessionProvider>
+        {rtl ? <CacheProvider value={rtlCache}>{content}</CacheProvider> : content}
+      </SessionProvider>
     </AppRouterCacheProvider>
   );
 }

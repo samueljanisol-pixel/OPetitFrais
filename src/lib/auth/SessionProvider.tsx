@@ -41,6 +41,10 @@ export function SessionProvider({ children }: { children: ReactNode }) {
 
     try {
       const res = await fetch("/api/auth/session", { credentials: "include" });
+      if (!res.ok) {
+        // Erreur réseau / serveur : conserver le snapshot plutôt que vider le menu.
+        return;
+      }
       const j = (await res.json()) as { session: SessionPayload | null };
       setSession(j.session);
       writeSessionSnapshot(j.session);
@@ -48,8 +52,10 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         document.cookie = `locale=${j.session.uiLocale}; path=/; max-age=${60 * 60 * 24 * 365}; samesite=lax`;
       }
     } catch {
-      setSession(null);
-      writeSessionSnapshot(null);
+      // Ne pas effacer une session affichable sur simple erreur réseau.
+      if (!readSessionSnapshot()) {
+        setSession(null);
+      }
     }
   }, []);
 
