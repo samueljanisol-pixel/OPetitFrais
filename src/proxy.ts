@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 import { canAccessPath } from "@/lib/auth/route-permissions";
-import { loadUserAccessByUserId } from "@/lib/auth/load-user-access";
+import { normalizeProfileRole } from "@/lib/auth/normalize-profile-role";
 import { backofficeUrl, isBackofficeOnlyPath, isShopHost, isShopLocalPreviewPath, isShopOnlyPath, shopLocalPreviewUrl, shopPublicUrl } from "@/lib/shop/hosts";
 
 const PUBLIC_PATHS = ["/login", "/api", "/_next", "/favicon.ico", "/manifest.webmanifest", "/sw.js", "/icons", "/icon.png"];
@@ -70,9 +70,19 @@ export async function proxy(req: NextRequest) {
     return NextResponse.redirect(loginUrl);
   }
 
-  const access = await loadUserAccessByUserId(data.user.id);
-  const keys = new Set<string>(access?.permissions ?? []);
-  const isFullAccess = access?.isFullAccess === true;
+  const { data: keysRaw, error: permErr } = await supabase.rpc("get_my_permission_keys");
+  const keys = new Set<string>(permErr || !Array.isArray(keysRaw) ? [] : (keysRaw as string[]));
+
+  const { data: prof } = await supabase
+    .from("profiles")
+    .select("roles(is_full_access)")
+    .eq("user_id", data.user.id)
+    .maybeSingle();
+
+  const role = normalizeProfileRole(
+    prof?.roles as { is_full_access?: boolean } | { is_full_access?: boolean }[] | null | undefined,
+  );
+  const isFullAccess = role?.is_full_access === true;
 
   if (!canAccessPath(pathname, keys, isFullAccess)) {
     const deny = req.nextUrl.clone();
