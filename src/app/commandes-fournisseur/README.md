@@ -292,7 +292,7 @@ Le fournisseur Marché parent **n’a pas** de compte : seuls ses vendeurs appar
 
 ### Génération des achats comptables
 
-À la **clôture d’un vendeur** (`POST …/vendeurs/[vendeurKey]` action `cloturer`), un **`fournisseur_compte_achat`** est upserté pour ce vendeur (ou Station) — **uniquement les lignes avec qté > 0** (`computeLotCompteBreakdown`). À la **clôture globale du lot** (`PATCH` → `status: terminee`), tous les vendeurs concernés doivent déjà être clôturés ; un sync idempotent recalcule éventuellement les montants restants.
+À la **clôture d’un vendeur** (`POST …/vendeurs/[vendeurKey]` action `cloturer`), un **`fournisseur_compte_achat`** est upserté pour ce vendeur (ou Station) — **uniquement les lignes avec qté > 0** (`computeLotCompteBreakdown`). **`date_cloture`** reprend la **date de livraison du lot** (`commande_fournisseur_lot.date_livraison`, midi), pas l’horodatage d’enregistrement. À la **clôture globale du lot** (`PATCH` → `status: terminee`), tous les vendeurs concernés doivent déjà être clôturés ; un sync idempotent recalcule éventuellement les montants restants.
 
 | Type | Achats générés |
 |---|---|
@@ -320,7 +320,7 @@ Interdite si un achat comptable du lot est déjà payé (`409` API + bouton « M
 
 ### Backfill / recalcul
 
-`POST /api/commandes-fournisseur/comptes/backfill` — recalcule tous les lots `terminee` (produits seuls).
+`POST /api/commandes-fournisseur/comptes/backfill` — recalcule tous les lots `terminee` (produits seuls) ; `date_cloture` = date de livraison du lot.
 
-Migrations : `20260728120000_fournisseur_comptes.sql`, `20260728140000_comptes_par_vendeur.sql`.
+Migrations : `20260728120000_fournisseur_comptes.sql`, `20260728140000_comptes_par_vendeur.sql`, `20260901140000_compte_achat_date_livraison.sql`.
 

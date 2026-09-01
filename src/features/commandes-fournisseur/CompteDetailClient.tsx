@@ -75,7 +75,7 @@ export default function CompteDetailClient({ accountType, accountId }: Props) {
   const router = useRouter();
   const t = useTranslations("backoffice.commandes.comptes.detail");
   const tCommon = useTranslations("common");
-  const { formatDateTime } = useAppFormat();
+  const { formatDate } = useAppFormat();
   const BackChevron = useBackChevronIcon();
   const { loading: permLoading, can } = useSessionPermissions();
 
@@ -327,7 +327,7 @@ export default function CompteDetailClient({ accountType, accountId }: Props) {
                   sx={{ py: 1.25 }}
                 >
                   <ListItemText
-                    primary={formatDateTime(a.date_cloture)}
+                    primary={formatDate(a.date_cloture)}
                     secondary={
                       <>
                         {formatDh(a.montant_total)} DH

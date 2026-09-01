@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { requireApiPermission } from "@/lib/auth/require-permission-api";
 import { syncCompteAchatsForLot } from "@/lib/commandes-fournisseur/compte-lot-breakdown";
+import { compteAchatDateIsoFromLivraison } from "@/lib/commandes-fournisseur/lot-commande-date";
 
 /** Recalcule les achats comptables pour tous les lots terminés (produits seuls, sans frais). */
 export async function POST() {
@@ -14,7 +15,7 @@ export async function POST() {
 
   const { data: lots, error } = await supabase
     .from("commande_fournisseur_lot")
-    .select("id, supplier_id, marque_terminee_at")
+    .select("id, supplier_id, date_livraison, marque_terminee_at")
     .eq("status", "terminee");
 
   if (error) {
@@ -27,8 +28,12 @@ export async function POST() {
   for (const lot of lots ?? []) {
     const lotId = String((lot as { id: string }).id);
     const supplierId = String((lot as { supplier_id: string }).supplier_id);
-    const dateCloture =
+    const fallback =
       (lot as { marque_terminee_at?: string | null }).marque_terminee_at ?? new Date().toISOString();
+    const dateCloture = compteAchatDateIsoFromLivraison(
+      (lot as { date_livraison?: string | null }).date_livraison,
+      fallback,
+    );
 
     const sync = await syncCompteAchatsForLot(supabase, { lotId, supplierId, dateCloture });
     if ("error" in sync) {

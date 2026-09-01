@@ -10,6 +10,7 @@ import {
 } from "@/lib/commandes-fournisseur/achat-vendeur-key";
 import { ensureLotAchatEnCours, isLotAchatEditable } from "@/lib/commandes-fournisseur/lot-status-achat";
 import { enqueueProductActualisationAfterPurchase } from "@/lib/products/actualisation";
+import { compteAchatDateIsoFromLivraison } from "@/lib/commandes-fournisseur/lot-commande-date";
 
 export type VendeurClotureLineIssue = {
   lotLigneId: string;
@@ -39,7 +40,7 @@ export async function cloturerVendeurAchat(
 
   const { data: lot, error: lotErr } = await supabase
     .from("commande_fournisseur_lot")
-    .select("id, status")
+    .select("id, status, date_livraison")
     .eq("id", lotId)
     .maybeSingle();
   if (lotErr) return { error: lotErr.message, status: 500 };
@@ -168,7 +169,11 @@ export async function cloturerVendeurAchat(
     if (pe) return { error: pe.message, status: 500 };
   }
 
-  const dateCloture = new Date().toISOString();
+  const nowIso = new Date().toISOString();
+  const dateCloture = compteAchatDateIsoFromLivraison(
+    (lot as { date_livraison?: string | null }).date_livraison,
+    nowIso,
+  );
   const sync = await syncCompteAchatForVendeur(supabase, {
     lotId,
     supplierId,
@@ -186,8 +191,8 @@ export async function cloturerVendeurAchat(
       vendeur_key: vendeurKey,
       vendeur_id: vendeurId,
       status: "cloture",
-      marque_cloture_at: dateCloture,
-      updated_at: dateCloture,
+      marque_cloture_at: nowIso,
+      updated_at: nowIso,
     },
     { onConflict: "lot_id,vendeur_key" },
   );

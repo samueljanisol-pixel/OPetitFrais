@@ -74,7 +74,7 @@ export default function CompteAchatDetailClient() {
   const router = useRouter();
   const t = useTranslations("backoffice.commandes.comptes.achatDetail");
   const tCommon = useTranslations("common");
-  const { formatDateTime } = useAppFormat();
+  const { formatDate } = useAppFormat();
   const BackChevron = useBackChevronIcon();
   const { loading: permLoading, can } = useSessionPermissions();
 
@@ -250,7 +250,7 @@ export default function CompteAchatDetailClient() {
             {achat.label}
           </Typography>
           <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-            {achat.supplier_label} · {formatDateTime(achat.date_cloture)}
+            {achat.supplier_label} · {formatDate(achat.date_cloture)}
           </Typography>
 
           <Paper

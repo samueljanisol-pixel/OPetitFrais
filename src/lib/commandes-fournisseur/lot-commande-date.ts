@@ -85,6 +85,21 @@ function isoDateToDayMs(isoDate: string): number {
   return Date.UTC(y, m - 1, d);
 }
 
+const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+/** Midi local d’une date calendaire (YYYY-MM-DD), pour stockage timestamptz et affichage date-only. */
+export function compteAchatDateIsoFromLivraison(
+  dateLivraison: string | null | undefined,
+  fallbackIso: string,
+): string {
+  if (typeof dateLivraison !== "string" || dateLivraison.length < 10) {
+    return fallbackIso;
+  }
+  const day = dateLivraison.slice(0, 10);
+  if (!ISO_DATE_RE.test(day)) return fallbackIso;
+  return `${day}T12:00:00`;
+}
+
 /** Date de livraison : lot puis commandes incluses (une seule date attendue en consolidation). */
 export function lotLivraisonDateInfo(
   lot: {

@@ -1035,7 +1035,7 @@
           "method": "Mode de paiement",
           "amount": "Montant",
           "achatsTitle": "Achats réglés",
-          "achatDate": "Date clôture",
+          "achatDate": "Date de livraison",
           "achatAmount": "Montant",
           "comment": "Commentaire"
         },

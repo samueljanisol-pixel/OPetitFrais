@@ -5,6 +5,7 @@ import {
   stationExportLocale,
   vendorExportLocale,
 } from "@/lib/commandes-fournisseur/vendor-recap-capture-i18n";
+import { compteAchatDateIsoFromLivraison } from "@/lib/commandes-fournisseur/lot-commande-date";
 
 export type PaiementRecapAchatLine = {
   id: string;
@@ -110,17 +111,28 @@ export async function loadPaiementRecap(
   if (achatIds.length > 0) {
     const { data: achatRows, error: ae } = await supabase
       .from("fournisseur_compte_achat")
-      .select("id, date_cloture, montant_total")
+      .select("id, date_cloture, montant_total, commande_fournisseur_lot(date_livraison)")
       .in("id", achatIds)
       .order("date_cloture", { ascending: true });
 
     if (ae) return { error: ae.message, status: 500 };
 
-    achats = (achatRows ?? []).map((a) => ({
-      id: String((a as { id: string }).id),
-      date_cloture: String((a as { date_cloture: string }).date_cloture),
-      montant_total: roundMoney(Number((a as { montant_total: number }).montant_total)),
-    }));
+    achats = (achatRows ?? []).map((a) => {
+      const lotRel = one(
+        (a as { commande_fournisseur_lot?: unknown }).commande_fournisseur_lot,
+      ) as { date_livraison?: string | null } | null;
+      const dateLivraison =
+        typeof lotRel?.date_livraison === "string" ? lotRel.date_livraison : null;
+      return {
+        id: String((a as { id: string }).id),
+        date_cloture: compteAchatDateIsoFromLivraison(
+          dateLivraison,
+          String((a as { date_cloture: string }).date_cloture),
+        ),
+        montant_total: roundMoney(Number((a as { montant_total: number }).montant_total)),
+      };
+    });
+    achats.sort((a, b) => a.date_cloture.localeCompare(b.date_cloture));
   }
 
   const pm = one((paiement as { ref_payment_method?: unknown }).ref_payment_method);

@@ -44,10 +44,10 @@ function recapFilename(recap: PaiementRecapData): string {
 
 function PaiementRecapCaptureContent({
   recap,
-  formatDateTime,
+  formatDate,
 }: {
   recap: PaiementRecapData;
-  formatDateTime: (iso: string) => string;
+  formatDate: (iso: string) => string;
 }) {
   const labels = useMemo(
     () => paiementRecapCaptureLabels(recap.export_locale),
@@ -133,7 +133,7 @@ function PaiementRecapCaptureContent({
         <TableBody>
           {recap.achats.map((a) => (
             <TableRow key={a.id}>
-              <TableCell>{formatDateTime(a.date_cloture)}</TableCell>
+              <TableCell>{formatDate(a.date_cloture)}</TableCell>
               <TableCell align="right">{formatDh(a.montant_total)} DH</TableCell>
             </TableRow>
           ))}
@@ -165,7 +165,7 @@ function PaiementRecapCaptureContent({
 }
 
 const PaiementRecapExporter = forwardRef<PaiementRecapExportHandle>(function PaiementRecapExporter(_, ref) {
-  const { formatDateTime } = useAppFormat();
+  const { formatDate } = useAppFormat();
   const captureRef = useRef<HTMLDivElement>(null);
   const readyRef = useRef<(() => void) | null>(null);
   const [recap, setRecap] = useState<PaiementRecapData | null>(null);
@@ -260,7 +260,7 @@ const PaiementRecapExporter = forwardRef<PaiementRecapExportHandle>(function Pai
       }}
     >
       <Box ref={captureRef}>
-        {recap ? <PaiementRecapCaptureContent recap={recap} formatDateTime={formatDateTime} /> : null}
+        {recap ? <PaiementRecapCaptureContent recap={recap} formatDate={formatDate} /> : null}
       </Box>
     </Box>
   );

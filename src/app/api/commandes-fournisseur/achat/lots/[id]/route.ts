@@ -33,6 +33,7 @@ import {
   LOT_STATUS_ACHAT_EN_COURS,
 } from "@/lib/commandes-fournisseur/lot-status-achat";
 import { enqueueProductActualisationDesactivationForLot } from "@/lib/products/actualisation";
+import { compteAchatDateIsoFromLivraison } from "@/lib/commandes-fournisseur/lot-commande-date";
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -346,7 +347,7 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
 
   const { data: lotCur, error: leLot } = await supabase
     .from("commande_fournisseur_lot")
-    .select("id, supplier_id, status")
+    .select("id, supplier_id, status, date_livraison")
     .eq("id", id)
     .maybeSingle();
 
@@ -468,6 +469,7 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
       supabase,
       lotId: id,
       supplierId,
+      dateLivraison: (lotCur as { date_livraison?: string | null }).date_livraison,
     });
     if ("error" in out) {
       if (out.code === "VENDEURS_OUVERTS") {
@@ -785,6 +787,7 @@ async function cloturerLotAchat(opts: {
   supabase: Awaited<ReturnType<typeof createSupabaseServerClient>>;
   lotId: string;
   supplierId: string;
+  dateLivraison?: string | null;
 }): Promise<
   | { ok: true }
   | {
@@ -796,7 +799,7 @@ async function cloturerLotAchat(opts: {
       missingQtyLines?: Array<{ lotLigneId: string; productName: string | null }>;
     }
 > {
-  const { supabase, lotId, supplierId } = opts;
+  const { supabase, lotId, supplierId, dateLivraison } = opts;
 
   const { count: vendeurCount, error: vendeursCountErr } = await supabase
     .from("ref_supplier_vendeur")
@@ -898,12 +901,14 @@ async function cloturerLotAchat(opts: {
     }
   }
 
-  const dateCloture = new Date().toISOString();
+  const nowIso = new Date().toISOString();
+  const dateCloture = compteAchatDateIsoFromLivraison(dateLivraison, nowIso);
+
   const { error: ue } = await supabase
     .from("commande_fournisseur_lot")
     .update({
       status: "terminee",
-      marque_terminee_at: dateCloture,
+      marque_terminee_at: nowIso,
     })
     .eq("id", lotId)
     .in("status", ["prete", "achat_en_cours"]);

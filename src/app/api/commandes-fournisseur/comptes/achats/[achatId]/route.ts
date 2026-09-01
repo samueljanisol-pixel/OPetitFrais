@@ -5,6 +5,7 @@ import { computeLotCompteBreakdown } from "@/lib/commandes-fournisseur/compte-lo
 import { SUPPLIER_SOLE_VENDEUR_KEY } from "@/lib/commandes-fournisseur/achat-vendeur-key";
 import { achatVendeurPhotoPublicUrl } from "@/lib/commandes-fournisseur/achat-vendeur-photos";
 import { isLotVendeurMediaEditable } from "@/lib/commandes-fournisseur/lot-status-achat";
+import { compteAchatDateIsoFromLivraison } from "@/lib/commandes-fournisseur/lot-commande-date";
 
 type Ctx = { params: Promise<{ achatId: string }> };
 
@@ -30,7 +31,7 @@ export async function GET(_req: NextRequest, ctx: Ctx) {
   const { data: achat, error } = await supabase
     .from("fournisseur_compte_achat")
     .select(
-      "id, lot_id, supplier_id, vendeur_id, kind, montant_total, date_cloture, ref_supplier(id, code, label), ref_supplier_vendeur(id, label)",
+      "id, lot_id, supplier_id, vendeur_id, kind, montant_total, date_cloture, commande_fournisseur_lot(date_livraison), ref_supplier(id, code, label), ref_supplier_vendeur(id, label)",
     )
     .eq("id", achatId)
     .maybeSingle();
@@ -122,6 +123,12 @@ export async function GET(_req: NextRequest, ctx: Ctx) {
   const account_type = kind === "station" ? "station" : "vendeur";
   const account_id = kind === "station" ? supplierId : (vendeurId ?? supplierId);
 
+  const lotRel = one((achat as { commande_fournisseur_lot?: unknown }).commande_fournisseur_lot) as {
+    date_livraison?: string | null;
+  } | null;
+  const dateLivraison =
+    typeof lotRel?.date_livraison === "string" ? lotRel.date_livraison : null;
+
   return NextResponse.json({
     achat: {
       id: achatId,
@@ -137,7 +144,10 @@ export async function GET(_req: NextRequest, ctx: Ctx) {
       account_type,
       account_id,
       montant_total: Number((achat as { montant_total: number }).montant_total),
-      date_cloture: (achat as { date_cloture: string }).date_cloture,
+      date_cloture: compteAchatDateIsoFromLivraison(
+        dateLivraison,
+        (achat as { date_cloture: string }).date_cloture,
+      ),
       paye: paidLink != null,
       paiement_id: paidLink ? String((paidLink as { paiement_id: string }).paiement_id) : null,
       commentaire,

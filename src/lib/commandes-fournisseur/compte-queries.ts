@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { loadPhotoCountsForPaiements } from "@/lib/commandes-fournisseur/paiement-photos";
+import { compteAchatDateIsoFromLivraison } from "@/lib/commandes-fournisseur/lot-commande-date";
 
 export type CompteAccountType = "vendeur" | "station";
 
@@ -67,6 +68,12 @@ async function loadPaidMap(
   return paidMap;
 }
 
+function dateLivraisonFromLotRel(raw: unknown): string | null {
+  const o = one(raw as { date_livraison?: string | null } | null);
+  const dl = o?.date_livraison;
+  return typeof dl === "string" && dl.length > 0 ? dl : null;
+}
+
 function mapAchatRows(
   achats: Array<Record<string, unknown>>,
   paidMap: Map<string, string>,
@@ -74,6 +81,7 @@ function mapAchatRows(
   return achats.map((a) => {
     const id = String(a.id);
     const paiementId = paidMap.get(id) ?? null;
+    const dateClotureStored = String(a.date_cloture);
     return {
       id,
       lot_id: String(a.lot_id),
@@ -81,7 +89,10 @@ function mapAchatRows(
       vendeur_id: (a.vendeur_id as string | null | undefined) ?? null,
       kind: a.kind as CompteAchatRow["kind"],
       montant_total: roundMoney(Number(a.montant_total)),
-      date_cloture: String(a.date_cloture),
+      date_cloture: compteAchatDateIsoFromLivraison(
+        dateLivraisonFromLotRel(a.commande_fournisseur_lot),
+        dateClotureStored,
+      ),
       paye: paiementId != null,
       paiement_id: paiementId,
     };
@@ -95,7 +106,9 @@ export async function loadAchatsForAccount(
 ): Promise<{ error: string } | { achats: CompteAchatRow[] }> {
   let query = supabase
     .from("fournisseur_compte_achat")
-    .select("id, lot_id, supplier_id, vendeur_id, kind, montant_total, date_cloture")
+    .select(
+      "id, lot_id, supplier_id, vendeur_id, kind, montant_total, date_cloture, commande_fournisseur_lot(date_livraison)",
+    )
     .neq("kind", "frais_generaux")
     .order("date_cloture", { ascending: false });
 
@@ -115,7 +128,10 @@ export async function loadAchatsForAccount(
   }
   const paidMap = paidResult;
 
-  return { achats: mapAchatRows((achats ?? []) as Array<Record<string, unknown>>, paidMap) };
+  const mapped = mapAchatRows((achats ?? []) as Array<Record<string, unknown>>, paidMap);
+  mapped.sort((a, b) => b.date_cloture.localeCompare(a.date_cloture));
+
+  return { achats: mapped };
 }
 
 export function summarizeAchats(achats: CompteAchatRow[]): { total: number; paye: number; reste: number } {

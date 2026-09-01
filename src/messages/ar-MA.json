@@ -1034,7 +1034,7 @@
           "method": "طريقة الدفع",
           "amount": "المبلغ",
           "achatsTitle": "المشتريات المدفوعة",
-          "achatDate": "تاريخ الإقفال",
+          "achatDate": "تاريخ التسليم",
           "achatAmount": "المبلغ",
           "comment": "تعليق"
         },
