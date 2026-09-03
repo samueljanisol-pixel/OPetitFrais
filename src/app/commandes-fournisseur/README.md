@@ -161,11 +161,11 @@ Sur `/commandes-fournisseur/validation`, le bouton **Constituer un lot** appliqu
 - **Même fournisseur** : refus côté client (message d’erreur) et côté serveur (`createValidationLot` — « Toutes les commandes doivent être du même fournisseur »). Dès qu’une commande est cochée, les autres fournisseurs sont **grisés** (cases désactivées) avec un rappel « Sélection limitée au fournisseur … ».
 - **Un seul magasin** : dialogue de confirmation avant création (le lot ne regroupera qu’un magasin).
 
-La liste des lots sur la même page est scindée en **Lots en cours** (`brouillon`, `prevalidation`, `prete`, `achat_en_cours`) et **Lots terminés** (`terminee`).
+La liste des lots sur la même page est scindée en **Lots en saisie** (`brouillon`), **Lots en cours** (`prevalidation`, `prete`, `achat_en_cours`) et **Lots terminés** (`terminee`). La section **Lots en cours** propose des filtres par **fournisseur** et par **statut**. La section **Lots terminés** propose les mêmes filtres, affiche **10 lots** à la fois, avec un bouton **Afficher 10 de plus** pour la pagination côté client.
 
 À la création, chaque ligne de commande est agrégée par **(produit, conditionnement)** via la fonction SQL `upsert_commande_fournisseur_lot_ligne` (migrations `20260626120000` + correctif `20260626130000_lot_ligne_upsert_rpc_on_conflict.sql`). **Exécuter le correctif dans Supabase SQL Editor** si la constitution de lot échoue encore sur l’index unique.
 
-Ajout manuel au lot (brouillon / achat) : refus uniquement si le **même conditionnement** est déjà présent.
+Ajout manuel au lot (brouillon / validation) : refus si le **même conditionnement** est déjà présent. En **achat**, un dialogue propose d'**ajouter quand même** pour affecter le produit à **un autre vendeur** (unicité par vendeur, migration `20260903180000`).
 
 ### Conditionnements et fournisseur de la commande
 
@@ -207,14 +207,14 @@ Les quantités stockées en base sont en **`numeric(14,2)`** (au plus **2 décim
 
 ## Achat (lots prêts → clôture)
 
-- **Liste** : `/commandes-fournisseur/achat` — appelle `GET /api/commandes-fournisseur/achat/lots` (filtre préparés ou tous).
-- **Détail lot** : `/commandes-fournisseur/achat/lots/[id]` — tableau « sans vendeur » **uniquement s’il y a des lignes** (sélection + attribution groupe), sinon masqué (boutons Ajouter / Nouveau vendeur conservés en édition) ; puis **un tableau par vendeur** ; totaux par vendeur (DH), frais généraux (tableau lecture + dialogue isolé `AchatFraisDialog` ; **PATCH à la validation** / suppression, liste serveur remplacée sans fusion locale pour éviter les doublons). **Sauvegarde automatique** (debounce) des **lignes produit** (`lignesOnly`) : PU + montant lus aussi depuis les saisies locales **avant blur** ; **flush à la sortie** (`pagehide` / onglet caché / démontage) ; **préservation des brouillons dirty** lors d’un reload (ex. ajout produit). **Clôture par vendeur** (voir ci-dessous) puis clôture **lot** globale (`status: "terminee"`) quand tous les vendeurs concernés sont déjà clôturés — à la clôture lot, produits fournisseur actifs+vitrine non commandés → file **Actualisation produit** (désactivation) ; si `409` + `VENDEURS_OUVERTS`, message listant les vendeurs encore ouverts ; Lot **terminé** : boutons **Modifier** (`PATCH` `{ status: "prete" }`, montants conservés) et **Imprimer le rapport PDF** (`GET …/achat/lots/[id]/pdf`, A4). Le PDF est aussi disponible tant que le lot est prêt. Pas d’affichage des commentaires magasin (MXX) en achat. Noms produit : français (+ arabe si UI arabe).
+- **Liste** : `/commandes-fournisseur/achat` — appelle `GET /api/commandes-fournisseur/achat/lots` (filtre **À traiter** = prêts + achat en cours, ou **Terminés**). Filtre **fournisseur**, nom fournisseur en **gras coloré** (palette partagée `supplier-color.ts`), dates **Créée :** / **Livraison :** ; pour les lots terminés, date de clôture en suffixe.
+- **Détail lot** : `/commandes-fournisseur/achat/lots/[id]` — tableau « sans vendeur » **uniquement s’il y a des lignes** (sélection + attribution groupe ; vendeurs **clôturés et payés** exclus de la liste ; vendeur **clôturé non payé** : affectation autorisée avec **réouverture automatique** ; **suppression ligne** uniquement dans le tableau « sans vendeur » (colonne dédiée, dialogue de confirmation, `PATCH` `removeLotLigneId`), sinon masqué (boutons Ajouter / Nouveau vendeur conservés en édition) ; puis **un tableau par vendeur** ; totaux par vendeur (DH), frais généraux (tableau lecture + dialogue isolé `AchatFraisDialog` ; **PATCH à la validation** / suppression, liste serveur remplacée sans fusion locale pour éviter les doublons). **Sauvegarde automatique** (debounce) des **lignes produit** (`lignesOnly`) : PU + montant lus aussi depuis les saisies locales **avant blur** ; **flush à la sortie** (`pagehide` / onglet caché / démontage) ; **préservation des brouillons dirty** lors d’un reload (ex. ajout produit); **erreurs** affichées en **dialogue modal** (clôture, sauvegarde, etc.). **Clôture par vendeur** (voir ci-dessous) puis clôture **lot** globale (`status: "terminee"`) quand tous les vendeurs concernés sont déjà clôturés — dialogue **Clôturer quand même (qté → 0)** si quantités manquantes (vendeur ou lot entier). À la clôture lot, produits fournisseur actifs+vitrine non commandés → file **Actualisation produit** (désactivation) ; si `409` + `VENDEURS_OUVERTS`, message listant les vendeurs encore ouverts ; Lot **terminé** : boutons **Modifier** (`PATCH` `{ status: "prete" }`, montants conservés) et **Imprimer le rapport PDF** (`GET …/achat/lots/[id]/pdf`, A4). Le PDF est aussi disponible tant que le lot est prêt. Pas d’affichage des commentaires magasin (MXX) en achat. Noms produit : français (+ arabe si UI arabe).
 - **Clôture partielle par vendeur** (migration `20260728190000_lot_vendeur_achat.sql`) :
   - Tables `commande_fournisseur_lot_vendeur_achat` (status `ouvert`|`cloture`, commentaire) et `commande_fournisseur_lot_vendeur_photo` ; bucket Storage `achat-vendeur-photos`.
   - API : `POST …/vendeurs/[vendeurKey]` `{ action: "cloturer"|"rouvrir" }` ; `PATCH` `{ commentaire }` ; `GET/POST/DELETE …/photos`.
-  - Clôture vendeur : validations quantité / PU ; qté **0** = pas acheté (sans confirmation) ; maj `product.cost_purchase` (lignes > 0) ; file **Actualisation produit** — **prix** si prix actuel ≠ proposé, sinon **à activer** si inactif (`/produits/actualisation`) ; upsert `fournisseur_compte_achat` **sans les lignes à qté 0** — **le lot reste éditable** (frais et autres vendeurs). Zone UI verte + lignes verrouillées ; « Rouvrir » si l’achat n’est pas payé.
+  - Clôture vendeur : validations quantité / PU ; qté **0** = pas acheté (sans confirmation) ; si quantité **non saisie**, dialogue avec option **Clôturer quand même (qté → 0)** ; maj `product.cost_purchase` (lignes > 0) ; file **Actualisation produit** — **prix** si prix actuel ≠ proposé, sinon **à activer** si inactif (`/produits/actualisation`) ; upsert `fournisseur_compte_achat` **sans les lignes à qté 0** — **le lot reste éditable** (frais et autres vendeurs). Zone UI verte + lignes verrouillées ; « Rouvrir » si l’achat n’est pas payé.
   - Commentaire / photos : icônes en en-tête de bloc (`AchatVendeurCommentDialog`, `AchatVendeurPhotosDialog` — caméra + galerie). Icône photos en **vert** seulement s’il existe au moins une photo **hors** image commande WhatsApp. À la clôture sans photo métier : dialogue « Retour » / « Clôturer quand même ».
-  - `GET` lot renvoie `vendeursAchat` : `{ status, commentaire, photos[], comptePaye }` par `vendeur_key` (uuid ou `__supplier_sole__`).
+  - `GET` lot renvoie `vendeursAchat` : `{ status, commentaire, photos[], comptePaye, comptePayeLe }` par `vendeur_key` (uuid ou `__supplier_sole__`). En UI, sous le total vendeur : **Payé le …** si `comptePaye`.
 - **API PDF** : `GET /api/commandes-fournisseur/achat/lots/[id]/pdf` — permission `commandes_fournisseur.achat` ; données via `achat-lot-report-data.ts`, rendu pdfkit `achat-lot-report-pdf.ts` (sections vendeurs, frais, totaux).
 - **Réouverture** : RLS `cflot update achat reopen` (`20260727130000_achat_lot_reopen.sql`) — `terminee` → `prete` avec permission achat.
 - **Fournisseur sans marchands** (ex. **Station**, aucun `ref_supplier_vendeur`) : le fournisseur est le **vendeur unique** — saisie qté/prix directement sur les lignes même sans `vendeur_id` ; pas d’écran d’attribution ; clôture vendeur via clé `__supplier_sole__` ; la clôture lot **n’exige pas** de vendeur sur chaque ligne.
@@ -225,7 +225,7 @@ Les quantités stockées en base sont en **`numeric(14,2)`** (au plus **2 décim
   - `PATCH /api/commandes-fournisseur/achat/suppliers/[supplierId]/vendeurs/[vendeurId]` : modification complète réservée à **`commandes_fournisseur.vendeurs_renommer`**.
   - **Devise achat** (`dirham` | `rial`) : en Rial, saisie PU/total en Rial avec « Soit XX DH » (1 DH = 20 Rial) ; persistance `prix_achat_unitaire` / `montant_ligne_achat` **toujours en DH** ; total vendeur affiché en Rial + équivalent DH.
 
-Sur **détail lot achat**, « Nouveau vendeur » et le crayon ouvrent un **FormDialog** (libellé, téléphone, langue, devise) comme en Paramètres.
+Sur **détail lot achat**, « Nouveau vendeur » ouvre un **FormDialog** (libellé, téléphone, langue, devise) comme en Paramètres. La modification d’un vendeur existant se fait dans **Paramètres → Vendeurs**.
 
 ## Script Excel — vendeur par produit
 
@@ -316,7 +316,7 @@ API : `GET/PATCH …/comptes/achats/[achatId]`, `POST/DELETE …/photos`. RLS : 
 
 ### Réouverture lot
 
-Interdite si un achat comptable du lot est déjà payé (`409` API + bouton « Modifier » désactivé).
+Autorisée même si un ou plusieurs vendeurs ont un achat comptable **déjà payé** : le lot repasse en `achat_en_cours` ; seuls les comptes **impayés** sont supprimés (les payés restent en comptabilité). Les vendeurs clôturés et payés restent verrouillés en UI.
 
 ### Backfill / recalcul
 

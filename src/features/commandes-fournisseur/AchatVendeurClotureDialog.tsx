@@ -15,6 +15,7 @@ import {
 export type VendeurClotureIssue = {
   lotLigneId: string;
   productName: string | null;
+  vendeurLabel?: string | null;
 };
 
 type Props = {
@@ -27,12 +28,15 @@ type Props = {
   busy: boolean;
   onClose: () => void;
   onConfirmNoPhotos: () => void;
+  onConfirmForceMissingQty: () => void;
   labels: {
     title: string;
     missingQty: string;
+    forceMissingQtyHint: string;
     missingPu: string;
     noPhotos: string;
     confirmNoPhotos: string;
+    confirmForceMissingQty: string;
     cancel: string;
     close: string;
   };
@@ -48,17 +52,18 @@ export default function AchatVendeurClotureDialog({
   busy,
   onClose,
   onConfirmNoPhotos,
+  onConfirmForceMissingQty,
   labels,
 }: Props) {
   const hasMissingQty = missingQtyLines.length > 0;
   const hasMissingPu = missingPuLines.length > 0 && !hasMissingQty;
-  const hasBlocking = hasMissingQty || hasMissingPu;
-  const showNoPhotos = noPhotos && !hasBlocking;
+  const hasBlockingPu = hasMissingPu;
+  const showNoPhotos = noPhotos && !hasMissingQty && !hasMissingPu;
 
   return (
     <Dialog open={open} onClose={() => (!busy ? onClose() : undefined)} fullWidth maxWidth="sm">
       <DialogTitle>
-        {labels.title} — {vendorLabel}
+        {vendorLabel.trim() ? `${labels.title} — ${vendorLabel}` : labels.title}
       </DialogTitle>
       <DialogContent>
         {hasMissingQty ? (
@@ -69,10 +74,20 @@ export default function AchatVendeurClotureDialog({
             <List dense disablePadding>
               {missingQtyLines.map((l) => (
                 <ListItem key={l.lotLigneId} disableGutters>
-                  <ListItemText primary={l.productName?.trim() || l.lotLigneId} />
+                  <ListItemText
+                    primary={l.productName?.trim() || l.lotLigneId}
+                    secondary={
+                      typeof l.vendeurLabel === "string" && l.vendeurLabel.trim().length > 0
+                        ? l.vendeurLabel.trim()
+                        : undefined
+                    }
+                  />
                 </ListItem>
               ))}
             </List>
+            <Typography variant="body2" color="text.secondary" sx={{ mt: 1.5 }}>
+              {labels.forceMissingQtyHint}
+            </Typography>
           </>
         ) : null}
         {hasMissingPu ? (
@@ -83,7 +98,14 @@ export default function AchatVendeurClotureDialog({
             <List dense disablePadding>
               {missingPuLines.map((l) => (
                 <ListItem key={l.lotLigneId} disableGutters>
-                  <ListItemText primary={l.productName?.trim() || l.lotLigneId} />
+                  <ListItemText
+                    primary={l.productName?.trim() || l.lotLigneId}
+                    secondary={
+                      typeof l.vendeurLabel === "string" && l.vendeurLabel.trim().length > 0
+                        ? l.vendeurLabel.trim()
+                        : undefined
+                    }
+                  />
                 </ListItem>
               ))}
             </List>
@@ -95,8 +117,19 @@ export default function AchatVendeurClotureDialog({
       </DialogContent>
       <DialogActions>
         <Button onClick={onClose} disabled={busy} sx={{ textTransform: "none" }}>
-          {hasBlocking ? labels.close : labels.cancel}
+          {hasMissingQty || hasBlockingPu ? labels.cancel : labels.close}
         </Button>
+        {hasMissingQty ? (
+          <Button
+            variant="contained"
+            color="warning"
+            disabled={busy}
+            onClick={onConfirmForceMissingQty}
+            sx={{ textTransform: "none" }}
+          >
+            {labels.confirmForceMissingQty}
+          </Button>
+        ) : null}
         {showNoPhotos ? (
           <Button
             variant="contained"

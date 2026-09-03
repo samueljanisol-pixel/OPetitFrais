@@ -1,0 +1,19 @@
+Lots total: 74
+Candidats: 1
+
+=== LOT ===
+id: 50884f41-f772-41f6-a53a-199dab6e71cb
+fournisseur: Marché
+status: terminee
+created_at: 2026-08-06T20:13:08.354852+00:00
+marque_terminee_at: 2026-08-09T12:37:57.807+00:00
+date_livraison: 2026-08-07
+commandes liées: 1
+  - 2d4bc4de-c321-48dc-8024-f9d46f41d5f8 | integree | 2026-08-06T15:28:44.913215+00:00 | lot_id=50884f41-f772-41f6-a53a-199dab6e71cb
+achats comptables: 5
+ACHATS PAYÉS: 5
+  PAYÉ achat c1a06a4d-eb0b-42be-998e-167feb8b50a6 | kind=vendeur | montant=2035
+  PAYÉ achat f36e616f-4428-4f99-8284-a7e6f14c271e | kind=vendeur | montant=308
+  PAYÉ achat 0fc93500-b75d-422b-888a-4f01662092e3 | kind=vendeur | montant=225
+  PAYÉ achat bdf6ecef-b3c8-4f55-b0ef-5edb2f2c3f4b | kind=vendeur | montant=50
+  PAYÉ achat a436a0b0-ab7e-4b47-9cfe-37eb823752a0 | kind=vendeur | montant=325

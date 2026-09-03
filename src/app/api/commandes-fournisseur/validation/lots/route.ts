@@ -13,7 +13,9 @@ export async function GET() {
   const supabase = await createSupabaseServerClient();
   const { data: lots, error } = await supabase
     .from("commande_fournisseur_lot")
-    .select("id, status, created_at, date_livraison, marque_prete_at, ref_supplier(id, code, label)")
+    .select(
+      "id, supplier_id, status, created_at, date_livraison, marque_prete_at, ref_supplier(id, code, label)",
+    )
     .in("status", ["brouillon", "prevalidation", "prete", "achat_en_cours", "terminee"])
     .order("created_at", { ascending: false })
     .limit(50);

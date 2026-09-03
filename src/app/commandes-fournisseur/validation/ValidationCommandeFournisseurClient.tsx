@@ -27,6 +27,7 @@ import { useSessionPermissions } from "@/lib/auth/useSessionPermissions";
 import { useStatusLabels } from "@/lib/statusLabels/useStatusLabels";
 import { useAppFormat } from "@/lib/i18n/useAppFormat";
 import { useBackChevronIcon } from "@/lib/i18n/useBackChevronIcon";
+import { supplierColor } from "@/lib/commandes-fournisseur/supplier-color";
 
 type PendingCmd = {
   id: string;
@@ -41,22 +42,18 @@ type PendingCmd = {
   magasins: { id: string; code: string; nom: string } | { id: string; code: string; nom: string }[] | null;
 };
 
-function formatCmdDateTime(
-  c: PendingCmd,
-  formatDateTime: (value: Date | string | number) => string,
-  formatDate: (value: Date | string | number) => string,
+function oneMag(
+  m: { code?: string; nom?: string } | { code?: string; nom?: string }[] | null | undefined,
   emDash: string,
 ): string {
-  const iso = c.validated_at ?? c.created_at;
-  const base = iso ? formatDateTime(iso) : emDash;
-  if (typeof c.date_livraison === "string" && c.date_livraison.length > 0) {
-    return `${base} · ${formatDate(`${c.date_livraison}T12:00:00`)}`;
-  }
-  return base;
+  if (!m) return emDash;
+  const x = Array.isArray(m) ? m[0] : m;
+  return (x as { code?: string; nom?: string })?.nom ?? (x as { code?: string })?.code ?? emDash;
 }
 
 type LotRow = {
   id: string;
+  supplier_id: string;
   status: string;
   created_at: string;
   date_livraison?: string | null;
@@ -73,14 +70,8 @@ function oneLabel(
   return (x as { label?: string })?.label ?? emDash;
 }
 
-function oneMag(
-  m: { code?: string; nom?: string } | { code?: string; nom?: string }[] | null | undefined,
-  emDash: string,
-): string {
-  if (!m) return emDash;
-  const x = Array.isArray(m) ? m[0] : m;
-  return (x as { code?: string; nom?: string })?.nom ?? (x as { code?: string })?.code ?? emDash;
-}
+const IN_PROGRESS_LOT_STATUSES = ["prevalidation", "prete", "achat_en_cours"] as const;
+const FINISHED_LOTS_PAGE_SIZE = 10;
 
 export default function ValidationCommandeFournisseurClient() {
   const router = useRouter();
@@ -99,6 +90,11 @@ export default function ValidationCommandeFournisseurClient() {
   const [loadingData, setLoadingData] = useState(true);
   const [saving, setSaving] = useState(false);
   const [filterSupplier, setFilterSupplier] = useState<string>("");
+  const [filterLotSupplier, setFilterLotSupplier] = useState<string>("");
+  const [filterLotStatus, setFilterLotStatus] = useState<string>("");
+  const [filterFinishedLotSupplier, setFilterFinishedLotSupplier] = useState<string>("");
+  const [filterFinishedLotStatus, setFilterFinishedLotStatus] = useState<string>("");
+  const [finishedLotsVisibleCount, setFinishedLotsVisibleCount] = useState(FINISHED_LOTS_PAGE_SIZE);
   const [selected, setSelected] = useState<Set<string>>(() => new Set());
   const [singleStoreConfirmOpen, setSingleStoreConfirmOpen] = useState(false);
   const emDash = tCommon("emDash");
@@ -143,6 +139,16 @@ export default function ValidationCommandeFournisseurClient() {
       void load();
     }
   }, [loading, can, load]);
+
+  useEffect(() => {
+    setFinishedLotsVisibleCount(FINISHED_LOTS_PAGE_SIZE);
+  }, [filterFinishedLotSupplier, filterFinishedLotStatus]);
+
+  useEffect(() => {
+    if (filterLotStatus === "brouillon") {
+      setFilterLotStatus("");
+    }
+  }, [filterLotStatus]);
 
   const suppliers = useMemo(() => {
     const m = new Map<string, string>();
@@ -195,15 +201,69 @@ export default function ValidationCommandeFournisseurClient() {
     return suppliers.find(([id]) => id === lockedSupplierId)?.[1] ?? emDash;
   }, [lockedSupplierId, suppliers, emDash]);
 
-  const activeLots = useMemo(
-    () => lots.filter((l) => l.status !== "terminee"),
+  const draftLots = useMemo(
+    () => lots.filter((l) => l.status === "brouillon"),
     [lots],
   );
+
+  const inProgressLots = useMemo(
+    () => lots.filter((l) => l.status !== "terminee" && l.status !== "brouillon"),
+    [lots],
+  );
+
+  const lotSuppliers = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const l of inProgressLots) {
+      m.set(l.supplier_id, oneLabel(l.ref_supplier, emDash));
+    }
+    return [...m.entries()].sort((a, b) => a[1].localeCompare(b[1]));
+  }, [inProgressLots, emDash]);
+
+  const lotStatuses = useMemo(() => {
+    const present = new Set(inProgressLots.map((l) => l.status));
+    return IN_PROGRESS_LOT_STATUSES.filter((s) => present.has(s));
+  }, [inProgressLots]);
+
+  const filteredInProgressLots = useMemo(() => {
+    return inProgressLots.filter((l) => {
+      if (filterLotSupplier && l.supplier_id !== filterLotSupplier) return false;
+      if (filterLotStatus && l.status !== filterLotStatus) return false;
+      return true;
+    });
+  }, [inProgressLots, filterLotSupplier, filterLotStatus]);
 
   const finishedLots = useMemo(
     () => lots.filter((l) => l.status === "terminee"),
     [lots],
   );
+
+  const finishedLotSuppliers = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const l of finishedLots) {
+      m.set(l.supplier_id, oneLabel(l.ref_supplier, emDash));
+    }
+    return [...m.entries()].sort((a, b) => a[1].localeCompare(b[1]));
+  }, [finishedLots, emDash]);
+
+  const finishedLotStatuses = useMemo(() => {
+    const present = new Set(finishedLots.map((l) => l.status));
+    return (["terminee"] as const).filter((s) => present.has(s));
+  }, [finishedLots]);
+
+  const filteredFinishedLots = useMemo(() => {
+    return finishedLots.filter((l) => {
+      if (filterFinishedLotSupplier && l.supplier_id !== filterFinishedLotSupplier) return false;
+      if (filterFinishedLotStatus && l.status !== filterFinishedLotStatus) return false;
+      return true;
+    });
+  }, [finishedLots, filterFinishedLotSupplier, filterFinishedLotStatus]);
+
+  const visibleFinishedLots = useMemo(
+    () => filteredFinishedLots.slice(0, finishedLotsVisibleCount),
+    [filteredFinishedLots, finishedLotsVisibleCount],
+  );
+
+  const hasMoreFinishedLots = visibleFinishedLots.length < filteredFinishedLots.length;
 
   const toggle = (id: string, supplierId: string, deliveryDate: string | null | undefined) => {
     if (lockedSupplierId && supplierId !== lockedSupplierId) {
@@ -290,7 +350,12 @@ export default function ValidationCommandeFournisseurClient() {
             <ListItemText
               primary={
                 <span className="flex items-center justify-between gap-2">
-                  <span className="min-w-0 truncate">{oneLabel(l.ref_supplier, emDash)}</span>
+                  <span
+                    className="min-w-0 truncate font-bold"
+                    style={{ color: supplierColor(l.supplier_id) }}
+                  >
+                    {oneLabel(l.ref_supplier, emDash)}
+                  </span>
                   <CommandeFournisseurStatusChip
                     domain="commande_fournisseur_lot"
                     status={l.status}
@@ -299,12 +364,16 @@ export default function ValidationCommandeFournisseurClient() {
                 </span>
               }
               secondary={
-                typeof l.date_livraison === "string" && l.date_livraison.length > 0
-                  ? t("lotRowWithDelivery", {
-                      dateTime: formatDateTime(l.created_at),
-                      deliveryDate: formatDate(`${l.date_livraison}T12:00:00`),
-                    })
-                  : formatDateTime(l.created_at)
+                <>
+                  {t("pendingRowCreated", { dateTime: formatDateTime(l.created_at) })}
+                  {" — "}
+                  {t("pendingRowDelivery", {
+                    date:
+                      typeof l.date_livraison === "string" && l.date_livraison.length > 0
+                        ? formatDate(`${l.date_livraison}T12:00:00`)
+                        : emDash,
+                  })}
+                </>
               }
               slotProps={{
                 primary: { component: "div" },
@@ -423,13 +492,26 @@ export default function ValidationCommandeFournisseurClient() {
                       />
                     }
                     label={
-                      <span className="text-sm">
-                        {t("pendingRow", {
-                          supplier: oneLabel(c.ref_supplier, emDash),
-                          store: oneMag(c.magasins, emDash),
-                          dateTime: formatCmdDateTime(c, formatDateTime, formatDate, emDash),
-                          productCount: tStatus("productCount", { count: c.lineCount }),
-                        })}
+                      <span className="flex flex-col gap-0.5 text-sm">
+                        <span
+                          className="font-bold"
+                          style={{ color: supplierColor(c.supplier_id) }}
+                        >
+                          {oneLabel(c.ref_supplier, emDash)} — {oneMag(c.magasins, emDash)}
+                        </span>
+                        <span className="text-slate-600">
+                          {t("pendingRowCreated", {
+                            dateTime: formatDateTime(c.validated_at ?? c.created_at),
+                          })}
+                          {" — "}
+                          {t("pendingRowDelivery", {
+                            date:
+                              typeof c.date_livraison === "string" && c.date_livraison.length > 0
+                                ? formatDate(`${c.date_livraison}T12:00:00`)
+                                : emDash,
+                          })}
+                        </span>
+                        <span>{tStatus("productCount", { count: c.lineCount })}</span>
                       </span>
                     }
                   />
@@ -443,18 +525,77 @@ export default function ValidationCommandeFournisseurClient() {
 
       <section className="!mb-6">
         <Typography variant="subtitle1" className="!mb-2" sx={{ fontWeight: 600 }}>
+          {t("lotsDraftSection")}
+        </Typography>
+        {loadingData ? (
+          <Typography color="text.secondary" variant="body2">
+            {tc("loading")}
+          </Typography>
+        ) : draftLots.length === 0 ? (
+          <Typography color="text.secondary" variant="body2">
+            {t("lotsDraftEmpty")}
+          </Typography>
+        ) : (
+          renderLotList(draftLots)
+        )}
+      </section>
+
+      <section className="!mb-6">
+        <Typography variant="subtitle1" className="!mb-2" sx={{ fontWeight: 600 }}>
           {t("lotsSection")}
         </Typography>
         {loadingData ? (
           <Typography color="text.secondary" variant="body2">
             {tc("loading")}
           </Typography>
-        ) : activeLots.length === 0 ? (
+        ) : inProgressLots.length === 0 ? (
           <Typography color="text.secondary" variant="body2">
             {t("lotsEmpty")}
           </Typography>
         ) : (
-          renderLotList(activeLots)
+          <>
+            <div className="!mb-3 flex flex-wrap items-end gap-3">
+              <FormControl size="small" sx={{ minWidth: 200 }}>
+                <InputLabel id="fls">{tc("supplier")}</InputLabel>
+                <Select
+                  labelId="fls"
+                  label={tc("supplier")}
+                  value={filterLotSupplier}
+                  onChange={(e) => setFilterLotSupplier(e.target.value as string)}
+                >
+                  <MenuItem value="">{tc("allSuppliers")}</MenuItem>
+                  {lotSuppliers.map(([id, label]) => (
+                    <MenuItem key={id} value={id}>
+                      {label}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+              <FormControl size="small" sx={{ minWidth: 200 }}>
+                <InputLabel id="flst">{tc("status")}</InputLabel>
+                <Select
+                  labelId="flst"
+                  label={tc("status")}
+                  value={filterLotStatus}
+                  onChange={(e) => setFilterLotStatus(e.target.value as string)}
+                >
+                  <MenuItem value="">{tc("allStatuses")}</MenuItem>
+                  {lotStatuses.map((status) => (
+                    <MenuItem key={status} value={status}>
+                      {labelFor("commande_fournisseur_lot", status)}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            </div>
+            {filteredInProgressLots.length === 0 ? (
+              <Typography color="text.secondary" variant="body2">
+                {t("lotsFilteredEmpty")}
+              </Typography>
+            ) : (
+              renderLotList(filteredInProgressLots)
+            )}
+          </>
         )}
       </section>
 
@@ -471,7 +612,66 @@ export default function ValidationCommandeFournisseurClient() {
             {t("lotsFinishedEmpty")}
           </Typography>
         ) : (
-          renderLotList(finishedLots)
+          <>
+            <div className="!mb-3 flex flex-wrap items-end gap-3">
+              <FormControl size="small" sx={{ minWidth: 200 }}>
+                <InputLabel id="ffls">{tc("supplier")}</InputLabel>
+                <Select
+                  labelId="ffls"
+                  label={tc("supplier")}
+                  value={filterFinishedLotSupplier}
+                  onChange={(e) => setFilterFinishedLotSupplier(e.target.value as string)}
+                >
+                  <MenuItem value="">{tc("allSuppliers")}</MenuItem>
+                  {finishedLotSuppliers.map(([id, label]) => (
+                    <MenuItem key={id} value={id}>
+                      {label}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+              <FormControl size="small" sx={{ minWidth: 200 }}>
+                <InputLabel id="fflst">{tc("status")}</InputLabel>
+                <Select
+                  labelId="fflst"
+                  label={tc("status")}
+                  value={filterFinishedLotStatus}
+                  onChange={(e) => setFilterFinishedLotStatus(e.target.value as string)}
+                >
+                  <MenuItem value="">{tc("allStatuses")}</MenuItem>
+                  {finishedLotStatuses.map((status) => (
+                    <MenuItem key={status} value={status}>
+                      {labelFor("commande_fournisseur_lot", status)}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            </div>
+            {filteredFinishedLots.length === 0 ? (
+              <Typography color="text.secondary" variant="body2">
+                {t("lotsFilteredEmpty")}
+              </Typography>
+            ) : (
+              <>
+                {renderLotList(visibleFinishedLots)}
+                {hasMoreFinishedLots ? (
+                  <div className="!mt-2">
+                    <Button
+                      type="button"
+                      variant="outlined"
+                      size="small"
+                      onClick={() =>
+                        setFinishedLotsVisibleCount((n) => n + FINISHED_LOTS_PAGE_SIZE)
+                      }
+                      sx={{ textTransform: "none" }}
+                    >
+                      {t("lotsFinishedShowMore")}
+                    </Button>
+                  </div>
+                ) : null}
+              </>
+            )}
+          </>
         )}
       </section>
 

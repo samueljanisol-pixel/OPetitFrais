@@ -1,4 +1,4 @@
-/** Valeur coalesce(product_packaging_id) de l’index unique lot_ligne. */
+/** Valeur coalesce(product_packaging_id) de l'index unique lot_ligne. */
 export const LOT_LIGNE_NULL_PACKAGING_COALESCE = "00000000-0000-0000-0000-000000000000";
 
 /** Identifiant UUID (produit, conditionnement…) : trim + minuscules pour clés stables. */
@@ -10,15 +10,31 @@ export function normalizeEntityId(raw: string | null | undefined): string | null
   return trimmed.length > 0 ? trimmed.toLowerCase() : null;
 }
 
-/** Clé métier produit + conditionnement (null = à l’unité). */
+/** Clé métier produit + conditionnement (null = à l'unité). */
 export function commandeLigneKey(productId: string, productPackagingId: string | null): string {
   const pid = normalizeEntityId(productId) ?? productId.trim();
   const pkg = normalizeProductPackagingId(productPackagingId);
   return `${pid}::${pkg ?? ""}`;
 }
 
-/** Clé alignée sur l’index Postgres `commande_fournisseur_lot_ligne_lot_product_pack_uniq`. */
+/** Clé alignée sur l'index Postgres `commande_fournisseur_lot_ligne_lot_product_pack_vendeur_uniq`. */
 export function lotLignePostgresUniqueKey(
+  productId: string,
+  productPackagingId: string | null | undefined,
+  vendeurId?: string | null | undefined,
+): string {
+  const pid = normalizeEntityId(productId);
+  if (!pid) {
+    return "";
+  }
+  const pkg = normalizeProductPackagingId(productPackagingId);
+  const coalescedPack = pkg ?? LOT_LIGNE_NULL_PACKAGING_COALESCE;
+  const coalescedVendeur = normalizeEntityId(vendeurId ?? null) ?? LOT_LIGNE_NULL_PACKAGING_COALESCE;
+  return `${pid}::${coalescedPack}::${coalescedVendeur}`;
+}
+
+/** Clé produit + conditionnement (sans vendeur) — détection de doublon cross-vendeur. */
+export function lotLigneProductPackKey(
   productId: string,
   productPackagingId: string | null | undefined,
 ): string {
@@ -27,8 +43,8 @@ export function lotLignePostgresUniqueKey(
     return "";
   }
   const pkg = normalizeProductPackagingId(productPackagingId);
-  const coalesced = pkg ?? LOT_LIGNE_NULL_PACKAGING_COALESCE;
-  return `${pid}::${coalesced}`;
+  const coalescedPack = pkg ?? LOT_LIGNE_NULL_PACKAGING_COALESCE;
+  return `${pid}::${coalescedPack}`;
 }
 
 /** Alias lot / commande (même granularité). */
@@ -52,7 +68,7 @@ export type LotLigneInsertRow = {
   vendeur_id?: string | null;
 };
 
-/** Fusionne les lignes lot identiques (produit + conditionnement) avant insert SQL. */
+/** Fusionne les lignes lot identiques (produit + conditionnement + vendeur) avant insert SQL. */
 export function dedupeLotLigneInserts<T extends LotLigneInsertRow>(rows: T[]): T[] {
   const map = new Map<string, T>();
   for (const row of rows) {
@@ -61,7 +77,7 @@ export function dedupeLotLigneInserts<T extends LotLigneInsertRow>(rows: T[]): T
       continue;
     }
     const pkg = normalizeProductPackagingId(row.product_packaging_id);
-    const key = lotLignePostgresUniqueKey(pid, pkg);
+    const key = lotLignePostgresUniqueKey(pid, pkg, row.vendeur_id ?? null);
     const prev = map.get(key);
     if (prev) {
       prev.qte_achat = (Number(prev.qte_achat) || 0) + (Number(row.qte_achat) || 0);

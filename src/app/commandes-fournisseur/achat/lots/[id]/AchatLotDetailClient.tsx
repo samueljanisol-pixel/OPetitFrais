@@ -49,6 +49,9 @@ import AchatVendeurFormDialog, {
 import AchatVendeurClotureDialog, {
   type VendeurClotureIssue,
 } from "@/features/commandes-fournisseur/AchatVendeurClotureDialog";
+import AchatDuplicateProductDialog, {
+  type DuplicateLotLineInfo,
+} from "@/features/commandes-fournisseur/AchatDuplicateProductDialog";
 import AchatVendeurCommentDialog from "@/features/commandes-fournisseur/AchatVendeurCommentDialog";
 import AchatVendeurPhotosDialog, {
   type AchatVendeurPhotoItem,
@@ -648,6 +651,7 @@ type VendeurAchatMeta = {
   marque_cloture_at: string | null;
   photos: AchatVendeurPhotoItem[];
   comptePaye: boolean;
+  comptePayeLe: string | null;
 };
 
 type ApiPayload = {
@@ -655,7 +659,6 @@ type ApiPayload = {
   lignes: LotLineApi[];
   frais: FraisApi[];
   vendeurs: VendeurApi[];
-  compteAchatPaye: boolean;
   vendeursAchat: Record<string, VendeurAchatMeta>;
 };
 
@@ -672,6 +675,7 @@ function normalizeVendeurAchatMeta(
       marque_cloture_at?: unknown;
       photos?: unknown;
       comptePaye?: unknown;
+      comptePayeLe?: unknown;
     };
     const photosRaw = Array.isArray(v.photos) ? v.photos : [];
     const photos: AchatVendeurPhotoItem[] = photosRaw.flatMap((ph) => {
@@ -698,6 +702,7 @@ function normalizeVendeurAchatMeta(
       marque_cloture_at: typeof v.marque_cloture_at === "string" ? v.marque_cloture_at : null,
       photos,
       comptePaye: v.comptePaye === true,
+      comptePayeLe: typeof v.comptePayeLe === "string" && v.comptePayeLe.length > 0 ? v.comptePayeLe : null,
     };
   }
   return out;
@@ -710,7 +715,19 @@ function defaultVendeurMeta(): VendeurAchatMeta {
     marque_cloture_at: null,
     photos: [],
     comptePaye: false,
+    comptePayeLe: null,
   };
+}
+
+function vendeurMetaForId(
+  vendeursAchat: Record<string, VendeurAchatMeta>,
+  vendeurId: string,
+): VendeurAchatMeta {
+  return vendeursAchat[vendeurId] ?? defaultVendeurMeta();
+}
+
+function vendeurAssignBlocked(meta: VendeurAchatMeta): boolean {
+  return meta.status === "cloture" && meta.comptePaye;
 }
 
 async function fetchLotPayload(lotId: string): Promise<
@@ -722,7 +739,6 @@ async function fetchLotPayload(lotId: string): Promise<
     lignes?: LotLineApi[];
     frais?: FraisApi[];
     vendeurs?: VendeurApi[];
-    compteAchatPaye?: boolean;
     vendeursAchat?: Record<string, unknown>;
     error?: string;
   };
@@ -742,7 +758,6 @@ async function fetchLotPayload(lotId: string): Promise<
       lignes: json.lignes,
       frais: json.frais ?? [],
       vendeurs: json.vendeurs ?? [],
-      compteAchatPaye: json.compteAchatPaye === true,
       vendeursAchat: normalizeVendeurAchatMeta(json.vendeursAchat),
     },
   };
@@ -762,7 +777,6 @@ export default function AchatLotDetailClient({ lotId }: { lotId: string }) {
   const {
     loading: permLoading,
     can,
-    canCommandesFournisseurVendeursRenommer,
   } = useSessionPermissions();
 
   const theme = useTheme();
@@ -779,7 +793,6 @@ export default function AchatLotDetailClient({ lotId }: { lotId: string }) {
   const fraisBaselineSnap = useRef<string>("");
   const fraisDeletesPending = useRef<string[]>([]);
   const [vendeurs, setVendeurs] = useState<VendeurApi[]>([]);
-  const [compteAchatPaye, setCompteAchatPaye] = useState(false);
   const [vendeursAchat, setVendeursAchat] = useState<Record<string, VendeurAchatMeta>>({});
 
   const [vendorMetaBusy, setVendorMetaBusy] = useState(false);
@@ -792,6 +805,18 @@ export default function AchatLotDetailClient({ lotId }: { lotId: string }) {
     missingPuLines: VendeurClotureIssue[];
     noPhotos: boolean;
   } | null>(null);
+  const [clotureLotDlg, setClotureLotDlg] = useState<{
+    missingQtyLines: VendeurClotureIssue[];
+    missingPuLines: VendeurClotureIssue[];
+  } | null>(null);
+  const [duplicateProductDlg, setDuplicateProductDlg] = useState<{
+    productId: string;
+    productPackagingId: string | null;
+    productName: string;
+    existingLines: DuplicateLotLineInfo[];
+  } | null>(null);
+  const [deleteLigneDlg, setDeleteLigneDlg] = useState<{ id: string; label: string } | null>(null);
+  const [deleteLigneBusy, setDeleteLigneBusy] = useState(false);
   /** Après « Clôturer quand même » sans photo métier — évite de redemander dans la même session. */
   const confirmedNoPhotosRef = useRef<Set<string>>(new Set());
 
@@ -938,7 +963,6 @@ export default function AchatLotDetailClient({ lotId }: { lotId: string }) {
     fraisDeletesPending.current = [];
     fraisBaselineSnap.current = serialiserEtatFrais(fl, []);
     setVendeurs(payload.vendeurs);
-    setCompteAchatPaye(payload.compteAchatPaye);
     setVendeursAchat(payload.vendeursAchat);
     setDraftByLine(mergedDrafts);
     setSelectedSansVendeur(new Set());
@@ -958,7 +982,11 @@ export default function AchatLotDetailClient({ lotId }: { lotId: string }) {
   }, [applyPayload, lotId, tErrors]);
 
   const postAchatLotProduct = useCallback(
-    async (productId: string, productPackagingId: string | null) => {
+    async (
+      productId: string,
+      productPackagingId: string | null,
+      opts?: { allowDuplicateVendor?: boolean; productName?: string },
+    ) => {
       if (!editable) return;
       setErr(null);
       setProductPickerBusy(true);
@@ -968,14 +996,37 @@ export default function AchatLotDetailClient({ lotId }: { lotId: string }) {
           {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ productId, productPackagingId }),
+            body: JSON.stringify({
+              productId,
+              productPackagingId,
+              ...(opts?.allowDuplicateVendor ? { allowDuplicateVendor: true } : {}),
+            }),
           },
         );
-        const j = (await res.json()) as { error?: string };
+        const j = (await res.json()) as {
+          error?: string;
+          code?: string;
+          existingLines?: DuplicateLotLineInfo[];
+        };
         if (!res.ok) {
+          if (
+            res.status === 409 &&
+            j.code === "ALREADY_IN_LOT" &&
+            Array.isArray(j.existingLines) &&
+            j.existingLines.length > 0
+          ) {
+            setDuplicateProductDlg({
+              productId,
+              productPackagingId,
+              productName: opts?.productName ?? j.existingLines[0]?.productName ?? productId,
+              existingLines: j.existingLines,
+            });
+            return;
+          }
           setErr(typeof j.error === "string" ? j.error : tErrors("generic"));
           return;
         }
+        setDuplicateProductDlg(null);
         await reloadFromServer();
       } catch {
         setErr(tErrors("networkUnavailableDot"));
@@ -983,7 +1034,7 @@ export default function AchatLotDetailClient({ lotId }: { lotId: string }) {
         setProductPickerBusy(false);
       }
     },
-    [editable, lotId, reloadFromServer],
+    [editable, lotId, reloadFromServer, tErrors],
   );
 
   const handleProductChosenFromPicker = useCallback(
@@ -995,7 +1046,7 @@ export default function AchatLotDetailClient({ lotId }: { lotId: string }) {
         setCondDialogOpen(true);
         return;
       }
-      void postAchatLotProduct(picked.id, null);
+      void postAchatLotProduct(picked.id, null, { productName: picked.name });
     },
     [editable, postAchatLotProduct],
   );
@@ -1008,7 +1059,7 @@ export default function AchatLotDetailClient({ lotId }: { lotId: string }) {
     const packagingId = packRoute === "unit" ? null : packRoute;
     setCondDialogOpen(false);
     setPendingProduct(null);
-    void postAchatLotProduct(p.id, packagingId);
+    void postAchatLotProduct(p.id, packagingId, { productName: p.name });
   }, [pendingProduct, packRoute, postAchatLotProduct]);
 
   const handleCondLotDialogClose = useCallback(() => {
@@ -1415,9 +1466,16 @@ export default function AchatLotDetailClient({ lotId }: { lotId: string }) {
     });
   }
 
-  function attribuerVendeurSelection() {
+  async function attribuerVendeurSelection() {
     if (!bulkVendeurId) return;
     const vid = bulkVendeurId;
+    const meta = vendeurMetaForId(vendeursAchat, vid);
+    if (vendeurAssignBlocked(meta)) {
+      setErr(t("vendorAssignBlockedPaid"));
+      return;
+    }
+    const needsReopen = meta.status === "cloture" && !meta.comptePaye;
+
     setDraftByLine((prev) => {
       const next = { ...prev };
       for (const lid of selectedSansVendeur) {
@@ -1429,6 +1487,13 @@ export default function AchatLotDetailClient({ lotId }: { lotId: string }) {
       return next;
     });
     setSelectedSansVendeur(new Set());
+
+    const ok = await persistAll({ silent: true, lignesOnly: true });
+    if (!ok) return;
+    if (needsReopen) {
+      setInfo(t("vendorReopenedSuccess"));
+      await reloadFromServer();
+    }
   }
 
   const totauxAchat = useMemo(() => {
@@ -1517,6 +1582,41 @@ export default function AchatLotDetailClient({ lotId }: { lotId: string }) {
     }
   }
 
+  function openDeleteLigneDialog(lineId: string, label: string) {
+    if (!editable) return;
+    setDeleteLigneDlg({ id: lineId, label });
+  }
+
+  function closeDeleteLigneDialog() {
+    if (deleteLigneBusy) return;
+    setDeleteLigneDlg(null);
+  }
+
+  async function executeDeleteLigne() {
+    if (!deleteLigneDlg || !editable) return;
+    setDeleteLigneBusy(true);
+    setErr(null);
+    try {
+      const res = await fetch(`/api/commandes-fournisseur/achat/lots/${encodeURIComponent(lotId)}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ removeLotLigneId: deleteLigneDlg.id }),
+      });
+      const json = (await res.json()) as { error?: string };
+      if (!res.ok) {
+        setErr(typeof json.error === "string" ? json.error : tErrors("saveRegistrationFailed"));
+        return;
+      }
+      setDeleteLigneDlg(null);
+      setInfo(t("deleteLineSuccess"));
+      await reloadFromServer();
+    } catch {
+      setErr(tErrors("networkSaveFailed"));
+    } finally {
+      setDeleteLigneBusy(false);
+    }
+  }
+
   function supprimerLigneFraisGlobaux(sid: string) {
     setFraisLines((prev) => {
       const hit = prev.find((r) => r.sid === sid);
@@ -1531,7 +1631,7 @@ export default function AchatLotDetailClient({ lotId }: { lotId: string }) {
     void persistAll({ silent: true });
   }
 
-  async function cloturer(): Promise<boolean> {
+  async function cloturer(opts?: { forceMissingQty?: boolean }): Promise<boolean> {
     setClosing(true);
     setErr(null);
     try {
@@ -1541,6 +1641,9 @@ export default function AchatLotDetailClient({ lotId }: { lotId: string }) {
       const patches = computeDirtyPatches(lignes, draftByLine, baselineRef.current);
 
       const body: Record<string, unknown> = { status: "terminee" as const };
+      if (opts?.forceMissingQty) {
+        body.forceMissingQty = true;
+      }
       if (patches.length > 0) {
         body.ligneUpdates = patches;
       }
@@ -1555,12 +1658,23 @@ export default function AchatLotDetailClient({ lotId }: { lotId: string }) {
         ok?: boolean;
         error?: string;
         code?: string;
+        missingQtyLines?: VendeurClotureIssue[];
+        missingPuLines?: VendeurClotureIssue[];
       };
 
       if (res.ok) {
+        setClotureLotDlg(null);
         setInfo(t("lotClosedSuccess"));
         await reloadFromServer();
         return true;
+      }
+
+      const missingQty = Array.isArray(json.missingQtyLines) ? json.missingQtyLines : [];
+      const missingPu = Array.isArray(json.missingPuLines) ? json.missingPuLines : [];
+      if (missingQty.length > 0 || missingPu.length > 0) {
+        setErr(null);
+        setClotureLotDlg({ missingQtyLines: missingQty, missingPuLines: missingPu });
+        return false;
       }
 
       if (res.status === 409 && json.code === "VENDEURS_OUVERTS") {
@@ -1617,7 +1731,10 @@ export default function AchatLotDetailClient({ lotId }: { lotId: string }) {
     void cloturerVendeur(vendeurKey);
   }
 
-  async function cloturerVendeur(vendeurKey: string): Promise<boolean> {
+  async function cloturerVendeur(
+    vendeurKey: string,
+    opts?: { forceMissingQty?: boolean },
+  ): Promise<boolean> {
     setVendorMetaBusy(true);
     setErr(null);
     try {
@@ -1631,6 +1748,7 @@ export default function AchatLotDetailClient({ lotId }: { lotId: string }) {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             action: "cloturer",
+            ...(opts?.forceMissingQty ? { forceMissingQty: true } : {}),
           }),
         },
       );
@@ -1652,6 +1770,7 @@ export default function AchatLotDetailClient({ lotId }: { lotId: string }) {
       const missingQty = Array.isArray(json.missingQtyLines) ? json.missingQtyLines : [];
       const missingPu = Array.isArray(json.missingPuLines) ? json.missingPuLines : [];
       if (missingQty.length > 0 || missingPu.length > 0) {
+        setErr(null);
         setClotureVendeurDlg({
           key: vendeurKey,
           label: vendorLabelForKey(vendeurKey),
@@ -1944,11 +2063,6 @@ export default function AchatLotDetailClient({ lotId }: { lotId: string }) {
         </div>
       ) : null}
 
-      {err ? (
-        <Alert severity="error" className="!mb-3">
-          {err}
-        </Alert>
-      ) : null}
       {info ? (
         <Alert severity="success" className="!mb-3" onClose={() => setInfo(null)}>
           {info}
@@ -1996,24 +2110,17 @@ export default function AchatLotDetailClient({ lotId }: { lotId: string }) {
 
           <Box className="!mb-3 flex flex-wrap items-center justify-end gap-2">
             {lot.status === "terminee" ? (
-              <Tooltip
-                title={compteAchatPaye ? t("reopenBlockedPaid") : ""}
-                disableHoverListener={!compteAchatPaye}
+              <Button
+                variant="outlined"
+                size="small"
+                color="primary"
+                startIcon={<EditOutlinedIcon fontSize="small" />}
+                disabled={reopening || closing || pdfBusy}
+                onClick={() => setConfirmReopenOpen(true)}
+                sx={{ textTransform: "none" }}
               >
-                <span>
-                  <Button
-                    variant="outlined"
-                    size="small"
-                    color="primary"
-                    startIcon={<EditOutlinedIcon fontSize="small" />}
-                    disabled={reopening || closing || pdfBusy || compteAchatPaye}
-                    onClick={() => setConfirmReopenOpen(true)}
-                    sx={{ textTransform: "none" }}
-                  >
-                    {reopening ? t("reopening") : t("edit")}
-                  </Button>
-                </span>
-              </Tooltip>
+                {reopening ? t("reopening") : t("edit")}
+              </Button>
             ) : null}
             <Button
               variant="contained"
@@ -2101,6 +2208,12 @@ export default function AchatLotDetailClient({ lotId }: { lotId: string }) {
                       <TableCell align="center" sx={{ py: { xs: 0.75, sm: 1 }, whiteSpace: "nowrap", width: "18%" }}>
                         {t("columnUdc")}
                       </TableCell>
+                      {editable ? (
+                        <TableCell
+                          align="center"
+                          sx={{ py: { xs: 0.75, sm: 1 }, whiteSpace: "nowrap", width: "10%" }}
+                        />
+                      ) : null}
                     </TableRow>
                   </TableHead>
                   <TableBody>
@@ -2122,13 +2235,14 @@ export default function AchatLotDetailClient({ lotId }: { lotId: string }) {
                             pp ? parseCategoryFromRef(pp.ref_category) : { label: "", sort_order: null },
                           );
                         const showCat = i === 0 || catKey !== prevCat;
+                        const sansVendeurColCount = editable ? 5 : 4;
 
                         return (
                           <Fragment key={lid}>
                             {showCat ? (
                               <TableRow>
                                 <TableCell
-                                  colSpan={4}
+                                  colSpan={sansVendeurColCount}
                                   sx={{
                                     py: 0.85,
                                     px: 1.25,
@@ -2151,7 +2265,11 @@ export default function AchatLotDetailClient({ lotId }: { lotId: string }) {
                             <TableRow>
                               <TableCell
                                 padding="checkbox"
-                                sx={{ py: { xs: 0.5, sm: 1 }, px: { xs: 0.5, sm: 1 } }}
+                                sx={{
+                                  py: { xs: 0.5, sm: 1 },
+                                  px: { xs: 0.5, sm: 1 },
+                                  verticalAlign: "middle",
+                                }}
                               >
                                 <Checkbox
                                   size="small"
@@ -2160,17 +2278,42 @@ export default function AchatLotDetailClient({ lotId }: { lotId: string }) {
                                   onChange={() => toggleSelectSans(lid)}
                                 />
                               </TableCell>
-                              <TableCell sx={{ py: { xs: 0.5, sm: 1 }, minWidth: 0, overflow: "hidden" }}>
+                              <TableCell
+                                sx={{
+                                  py: { xs: 0.5, sm: 1 },
+                                  minWidth: 0,
+                                  overflow: "hidden",
+                                  verticalAlign: "middle",
+                                }}
+                              >
                                 <ProductNameCell p={pr} />
                               </TableCell>
-                              <TableCell align="center" sx={{ py: { xs: 0.5, sm: 1 }, verticalAlign: "top" }}>
+                              <TableCell
+                                align="center"
+                                sx={{ py: { xs: 0.5, sm: 1 }, verticalAlign: "middle", whiteSpace: "nowrap" }}
+                              >
                                 <Typography variant="body2" component="div" sx={{ fontWeight: 500 }}>
                                   {formatQty(besoinN)}
                                 </Typography>
                               </TableCell>
-                              <TableCell align="center" sx={{ py: { xs: 0.5, sm: 1 }, verticalAlign: "top" }}>
+                              <TableCell align="center" sx={{ py: { xs: 0.5, sm: 1 }, verticalAlign: "middle" }}>
                                 <CelluleUdV display={display} qtePourSoit={besoinN} />
                               </TableCell>
+                              {editable ? (
+                                <TableCell align="center" sx={{ py: { xs: 0.5, sm: 1 }, verticalAlign: "middle" }}>
+                                  <IconButton
+                                    type="button"
+                                    size="small"
+                                    color="error"
+                                    disabled={saving || closing || deleteLigneBusy}
+                                    aria-label={tCommonOrder("removeLineAria")}
+                                    onClick={() => openDeleteLigneDialog(lid, productName(pr))}
+                                    sx={{ display: "block", mx: "auto" }}
+                                  >
+                                    <DeleteOutlineOutlinedIcon fontSize="small" />
+                                  </IconButton>
+                                </TableCell>
+                              ) : null}
                             </TableRow>
                           </Fragment>
                         );
@@ -2195,7 +2338,16 @@ export default function AchatLotDetailClient({ lotId }: { lotId: string }) {
                       size="small"
                       displayEmpty
                       value={bulkVendeurId}
-                      onChange={(e) => setBulkVendeurId(String(e.target.value))}
+                      onChange={(e) => {
+                        const nextId = String(e.target.value);
+                        if (
+                          nextId.length > 0 &&
+                          vendeurAssignBlocked(vendeurMetaForId(vendeursAchat, nextId))
+                        ) {
+                          return;
+                        }
+                        setBulkVendeurId(nextId);
+                      }}
                       sx={{
                         width: "100%",
                         minWidth: { xs: "100%", sm: 220 },
@@ -2205,19 +2357,27 @@ export default function AchatLotDetailClient({ lotId }: { lotId: string }) {
                       <MenuItem value="">
                         <em>{t("chooseVendor")}</em>
                       </MenuItem>
-                      {vendeurs.map((v) => (
-                        <MenuItem key={v.id} value={v.id}>
-                          {v.label}
-                        </MenuItem>
-                      ))}
+                      {vendeurs.map((v) => {
+                        const blocked = vendeurAssignBlocked(vendeurMetaForId(vendeursAchat, v.id));
+                        return (
+                          <MenuItem key={v.id} value={v.id} disabled={blocked}>
+                            {v.label}
+                            {blocked ? ` (${t("vendorOptionClosedPaid")})` : ""}
+                          </MenuItem>
+                        );
+                      })}
                     </Select>
                     <Button
                       variant="contained"
                       size="small"
                       disabled={
-                        bulkVendeurId.length === 0 || selectedSansVendeur.size === 0 || saving || closing
+                        bulkVendeurId.length === 0 ||
+                        vendeurAssignBlocked(vendeurMetaForId(vendeursAchat, bulkVendeurId)) ||
+                        selectedSansVendeur.size === 0 ||
+                        saving ||
+                        closing
                       }
-                      onClick={() => attribuerVendeurSelection()}
+                      onClick={() => void attribuerVendeurSelection()}
                       sx={{ textTransform: "none" }}
                     >
                       {t("assignVendorToSelection", { count: selectedSansVendeur.size })}
@@ -2328,18 +2488,6 @@ export default function AchatLotDetailClient({ lotId }: { lotId: string }) {
                       >
                         {vLabel}
                       </Typography>
-                      {editable &&
-                      !isSoleSupplierVendor &&
-                      canCommandesFournisseurVendeursRenommer &&
-                      !vendeurDlgBusy ? (
-                        <IconButton
-                          aria-label={t("editVendorAria", { label: vLabel })}
-                          size="small"
-                          onClick={() => setVendeurDlg({ mode: "edit", id: vid })}
-                        >
-                          <EditOutlinedIcon fontSize="small" />
-                        </IconButton>
-                      ) : null}
                     </Box>
                     <Box
                       sx={{
@@ -2405,7 +2553,7 @@ export default function AchatLotDetailClient({ lotId }: { lotId: string }) {
                     color="success.dark"
                     sx={{ display: "block", textAlign: "center", mb: 1, fontWeight: 600 }}
                   >
-                    {t("vendorClosedBadge")}
+                    {t(vMeta.comptePaye ? "vendorClosedPaidBadge" : "vendorClosedBadge")}
                   </Typography>
                 ) : null}
                 <div className="mb-0 min-w-0 w-full">
@@ -2673,21 +2821,44 @@ export default function AchatLotDetailClient({ lotId }: { lotId: string }) {
                       <Typography variant="caption" color="text.secondary" sx={{ display: "block" }}>
                         {formatSoitDh(vendorTotalDh)}
                       </Typography>
+                      {vMeta.comptePaye && vMeta.comptePayeLe ? (
+                        <Typography
+                          variant="caption"
+                          color="text.secondary"
+                          sx={{ display: "block", mt: 0.25 }}
+                        >
+                          {t("vendorPaidOn", {
+                            date: formatDate(`${vMeta.comptePayeLe}T12:00:00`),
+                          })}
+                        </Typography>
+                      ) : null}
                     </Box>
                   ) : (
-                    <Typography
-                      variant="h6"
-                      component="p"
-                      sx={{
-                        m: 0,
-                        fontWeight: 800,
-                        fontSize: { xs: "1.1rem", sm: "1.25rem" },
-                        fontVariantNumeric: "tabular-nums",
-                        textAlign: "right",
-                      }}
-                    >
-                      {t("vendorTotal", { amount: formatDh(vendorTotalDh) })}
-                    </Typography>
+                    <Box sx={{ textAlign: "right" }}>
+                      <Typography
+                        variant="h6"
+                        component="p"
+                        sx={{
+                          m: 0,
+                          fontWeight: 800,
+                          fontSize: { xs: "1.1rem", sm: "1.25rem" },
+                          fontVariantNumeric: "tabular-nums",
+                        }}
+                      >
+                        {t("vendorTotal", { amount: formatDh(vendorTotalDh) })}
+                      </Typography>
+                      {vMeta.comptePaye && vMeta.comptePayeLe ? (
+                        <Typography
+                          variant="caption"
+                          color="text.secondary"
+                          sx={{ display: "block", mt: 0.25 }}
+                        >
+                          {t("vendorPaidOn", {
+                            date: formatDate(`${vMeta.comptePayeLe}T12:00:00`),
+                          })}
+                        </Typography>
+                      ) : null}
+                    </Box>
                   )}
                   {editable && rows.length > 0 ? (
                     <Box sx={{ display: "flex", justifyContent: "flex-end", gap: 1 }}>
@@ -2966,6 +3137,67 @@ export default function AchatLotDetailClient({ lotId }: { lotId: string }) {
               </Button>
             </DialogActions>
           </FormDialog>
+          <AchatDuplicateProductDialog
+            open={duplicateProductDlg != null}
+            productName={duplicateProductDlg?.productName ?? ""}
+            existingLines={duplicateProductDlg?.existingLines ?? []}
+            sansVendeurLabel={t("duplicateProductDialog.sansVendeur")}
+            busy={productPickerBusy}
+            onClose={() => {
+              if (!productPickerBusy) setDuplicateProductDlg(null);
+            }}
+            onConfirm={() => {
+              if (!duplicateProductDlg) return;
+              void postAchatLotProduct(
+                duplicateProductDlg.productId,
+                duplicateProductDlg.productPackagingId,
+                {
+                  allowDuplicateVendor: true,
+                  productName: duplicateProductDlg.productName,
+                },
+              );
+            }}
+            labels={{
+              title: t("duplicateProductDialog.title"),
+              intro: t("duplicateProductDialog.intro"),
+              confirm: t("duplicateProductDialog.confirm"),
+              cancel: tCommon("cancel"),
+            }}
+            formatAssignedTo={(vendeur) =>
+              t("duplicateProductDialog.assignedTo", { vendeur })
+            }
+          />
+          <Dialog open={deleteLigneDlg != null} onClose={closeDeleteLigneDialog} fullWidth maxWidth="sm">
+            <DialogTitle sx={{ pb: 0.5 }}>{t("deleteLineDialog.title")}</DialogTitle>
+            <DialogContent>
+              {deleteLigneDlg ? (
+                <Typography variant="body2" color="text.secondary">
+                  {t("deleteLineDialog.body", { productLabel: deleteLigneDlg.label })}
+                </Typography>
+              ) : null}
+            </DialogContent>
+            <DialogActions className="!px-3 !pb-2">
+              <Button
+                type="button"
+                color="inherit"
+                onClick={closeDeleteLigneDialog}
+                sx={{ textTransform: "none" }}
+                disabled={deleteLigneBusy}
+              >
+                {tCommon("cancel")}
+              </Button>
+              <Button
+                type="button"
+                variant="contained"
+                color="error"
+                disabled={deleteLigneBusy}
+                onClick={() => void executeDeleteLigne()}
+                sx={{ textTransform: "none" }}
+              >
+                {deleteLigneBusy ? tCommonOrder("loadingEllipsis") : tCommon("delete")}
+              </Button>
+            </DialogActions>
+          </Dialog>
         </>
       ) : null}
 
@@ -3043,15 +3275,49 @@ export default function AchatLotDetailClient({ lotId }: { lotId: string }) {
           setClotureVendeurDlg(null);
           void cloturerVendeur(key);
         }}
+        onConfirmForceMissingQty={() => {
+          if (!clotureVendeurDlg) return;
+          const key = clotureVendeurDlg.key;
+          void cloturerVendeur(key, { forceMissingQty: true });
+        }}
         labels={{
           title: t("vendorCloseDialog.title"),
           missingQty: t("vendorCloseDialog.missingQty"),
+          forceMissingQtyHint: t("vendorCloseDialog.forceMissingQtyHint"),
           missingPu: t("vendorCloseDialog.missingPu"),
           noPhotos: t("vendorCloseDialog.noPhotos"),
           confirmNoPhotos: t("vendorCloseDialog.confirmNoPhotos"),
+          confirmForceMissingQty: t("vendorCloseDialog.confirmForceMissingQty"),
           cancel: clotureVendeurDlg?.noPhotos
             ? t("vendorCloseDialog.back")
             : tCommon("cancel"),
+          close: tCommon("close"),
+        }}
+      />
+
+      <AchatVendeurClotureDialog
+        open={clotureLotDlg != null}
+        vendorLabel=""
+        missingQtyLines={clotureLotDlg?.missingQtyLines ?? []}
+        missingPuLines={clotureLotDlg?.missingPuLines ?? []}
+        noPhotos={false}
+        busy={closing}
+        onClose={() => {
+          if (!closing) setClotureLotDlg(null);
+        }}
+        onConfirmNoPhotos={() => {}}
+        onConfirmForceMissingQty={() => {
+          void cloturer({ forceMissingQty: true });
+        }}
+        labels={{
+          title: t("lotCloseDialog.title"),
+          missingQty: t("vendorCloseDialog.missingQty"),
+          forceMissingQtyHint: t("vendorCloseDialog.forceMissingQtyHint"),
+          missingPu: t("vendorCloseDialog.missingPu"),
+          noPhotos: t("vendorCloseDialog.noPhotos"),
+          confirmNoPhotos: t("vendorCloseDialog.confirmNoPhotos"),
+          confirmForceMissingQty: t("vendorCloseDialog.confirmForceMissingQty"),
+          cancel: tCommon("cancel"),
           close: tCommon("close"),
         }}
       />
@@ -3101,6 +3367,28 @@ export default function AchatLotDetailClient({ lotId }: { lotId: string }) {
           deleteAria: t("vendorPhotosDialog.deleteAria"),
         }}
       />
+
+      <Dialog open={err != null} onClose={() => setErr(null)} fullWidth maxWidth="sm">
+        <DialogTitle sx={{ pb: 0.5 }}>{tCommon("error")}</DialogTitle>
+        <DialogContent>
+          {err ? (
+            <Typography variant="body2" color="text.secondary">
+              {err}
+            </Typography>
+          ) : null}
+        </DialogContent>
+        <DialogActions className="!px-3 !pb-2">
+          <Button
+            type="button"
+            variant="contained"
+            color="error"
+            onClick={() => setErr(null)}
+            sx={{ textTransform: "none" }}
+          >
+            {tCommon("close")}
+          </Button>
+        </DialogActions>
+      </Dialog>
     </main>
   );
 }

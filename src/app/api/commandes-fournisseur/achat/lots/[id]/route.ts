@@ -19,11 +19,16 @@ import {
 } from "@/lib/commandes-fournisseur/ligne-saisie-comments";
 import { buildLotProductDisplayInfo } from "@/lib/commandes-fournisseur/product-display";
 import {
-  deleteAllAchatsForLot,
+  deleteUnpaidAchatsForLot,
   lotHasPaidAchats,
   syncCompteAchatsForLot,
 } from "@/lib/commandes-fournisseur/compte-lot-breakdown";
-import { listOpenVendeurKeysForLot } from "@/lib/commandes-fournisseur/achat-vendeur-cloture";
+import {
+  listOpenVendeurKeysForLot,
+  applyForceMissingQtyOnLines,
+  ensureVendeurOpenForAssignment,
+  vendeurAchatIsPaid,
+} from "@/lib/commandes-fournisseur/achat-vendeur-cloture";
 import { SUPPLIER_SOLE_VENDEUR_KEY } from "@/lib/commandes-fournisseur/achat-vendeur-key";
 import { achatVendeurPhotoPublicUrl } from "@/lib/commandes-fournisseur/achat-vendeur-photos";
 import { setProductLastVendeur } from "@/lib/commandes-fournisseur/product-vendeur";
@@ -50,6 +55,8 @@ type LignePatch = {
 
 type PatchBody = {
   ligneUpdates?: LignePatch[];
+  /** Suppression définitive d'une ligne produit du lot. */
+  removeLotLigneId?: string;
   /** `terminee` = clôturer (depuis prete/achat_en_cours) ; `prete` = rouvrir (depuis terminee → achat_en_cours). */
   status?: "terminee" | "prete";
   /** Frais lot : lignes générales (vendeur_id null dans la table). **/
@@ -59,6 +66,8 @@ type PatchBody = {
     label: string;
     montant: number;
   }>;
+  /** Si true à la clôture lot, les lignes sans quantité sont enregistrées à 0. */
+  forceMissingQty?: boolean;
 };
 
 type LotLigneProd = {
@@ -199,21 +208,73 @@ export async function GET(_req: NextRequest, ctx: Ctx) {
   const compteAchatPaye = "paid" in paidCheck ? paidCheck.paid : false;
 
   const compteIds = ((comptesRes.data ?? []) as Array<{ id: string }>).map((c) => c.id);
+  const comptePayeByKey = new Map<string, boolean>();
+  const comptePayeLeByKey = new Map<string, string>();
   const paidAchatIds = new Set<string>();
   if (compteIds.length > 0) {
-    const { data: paiements, error: payErr } = await supabase
+    const { data: paiementLinks, error: payErr } = await supabase
       .from("fournisseur_paiement_achat")
-      .select("achat_id")
+      .select("achat_id, paiement_id")
       .in("achat_id", compteIds);
     if (payErr) {
       return NextResponse.json({ error: payErr.message }, { status: 500 });
     }
-    for (const p of paiements ?? []) {
-      paidAchatIds.add(String((p as { achat_id: string }).achat_id));
+
+    const paiementIds = [
+      ...new Set(
+        (paiementLinks ?? []).map((p) => String((p as { paiement_id: string }).paiement_id)),
+      ),
+    ];
+    const dateByPaiementId = new Map<string, string>();
+    if (paiementIds.length > 0) {
+      const { data: paiements, error: paiementsErr } = await supabase
+        .from("fournisseur_paiement")
+        .select("id, date_paiement")
+        .in("id", paiementIds);
+      if (paiementsErr) {
+        return NextResponse.json({ error: paiementsErr.message }, { status: 500 });
+      }
+      for (const p of paiements ?? []) {
+        const pid = String((p as { id: string }).id);
+        const dp = (p as { date_paiement?: string }).date_paiement;
+        if (typeof dp === "string" && dp.length > 0) {
+          dateByPaiementId.set(pid, dp);
+        }
+      }
+    }
+
+    const dateByAchatId = new Map<string, string>();
+    for (const link of paiementLinks ?? []) {
+      const achatId = String((link as { achat_id: string }).achat_id);
+      const paiementId = String((link as { paiement_id: string }).paiement_id);
+      paidAchatIds.add(achatId);
+      const dp = dateByPaiementId.get(paiementId);
+      if (dp) {
+        dateByAchatId.set(achatId, dp);
+      }
+    }
+
+    for (const c of (comptesRes.data ?? []) as Array<{
+      id: string;
+      kind: string;
+      vendeur_id: string | null;
+    }>) {
+      const key =
+        c.kind === "station"
+          ? SUPPLIER_SOLE_VENDEUR_KEY
+          : c.vendeur_id != null
+            ? String(c.vendeur_id)
+            : null;
+      if (!key) continue;
+      const achatId = String(c.id);
+      comptePayeByKey.set(key, paidAchatIds.has(achatId));
+      const payDate = dateByAchatId.get(achatId);
+      if (payDate) {
+        comptePayeLeByKey.set(key, payDate);
+      }
     }
   }
 
-  const comptePayeByKey = new Map<string, boolean>();
   for (const c of (comptesRes.data ?? []) as Array<{
     id: string;
     kind: string;
@@ -225,7 +286,7 @@ export async function GET(_req: NextRequest, ctx: Ctx) {
         : c.vendeur_id != null
           ? String(c.vendeur_id)
           : null;
-    if (!key) continue;
+    if (!key || comptePayeByKey.has(key)) continue;
     comptePayeByKey.set(key, paidAchatIds.has(String(c.id)));
   }
 
@@ -266,6 +327,7 @@ export async function GET(_req: NextRequest, ctx: Ctx) {
       marque_cloture_at: string | null;
       photos: Array<{ id: string; storage_path: string; url: string | null; created_at: string }>;
       comptePaye: boolean;
+      comptePayeLe: string | null;
     }
   > = {};
 
@@ -277,6 +339,7 @@ export async function GET(_req: NextRequest, ctx: Ctx) {
       marque_cloture_at: st.marque_cloture_at,
       photos: photosByKey.get(key) ?? [],
       comptePaye: comptePayeByKey.get(key) ?? false,
+      comptePayeLe: comptePayeLeByKey.get(key) ?? null,
     };
   }
 
@@ -288,6 +351,7 @@ export async function GET(_req: NextRequest, ctx: Ctx) {
       marque_cloture_at: null,
       photos,
       comptePaye: comptePayeByKey.get(key) ?? false,
+      comptePayeLe: comptePayeLeByKey.get(key) ?? null,
     };
   }
 
@@ -299,6 +363,7 @@ export async function GET(_req: NextRequest, ctx: Ctx) {
       marque_cloture_at: null,
       photos: [],
       comptePaye: paye,
+      comptePayeLe: comptePayeLeByKey.get(key) ?? null,
     };
   }
 
@@ -364,6 +429,8 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
   const hasClose = body.status === "terminee";
   const hasLines = Boolean(body.ligneUpdates && body.ligneUpdates.length > 0);
   const hasFrais = hasFraisDeletes || hasFraisUpserts;
+  const hasRemoveLine =
+    typeof body.removeLotLigneId === "string" && body.removeLotLigneId.length > 0;
 
   if (hasReopen) {
     if (lotStatus !== "terminee") {
@@ -372,23 +439,13 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
         { status: 409 },
       );
     }
-    if (hasClose || hasLines || hasFrais) {
+    if (hasClose || hasLines || hasFrais || hasRemoveLine) {
       return NextResponse.json(
         { error: "La réouverture ne peut pas être combinée à d'autres modifications" },
         { status: 400 },
       );
     }
-    const paidCheck = await lotHasPaidAchats(supabase, id);
-    if ("error" in paidCheck) {
-      return NextResponse.json({ error: paidCheck.error }, { status: 500 });
-    }
-    if (paidCheck.paid) {
-      return NextResponse.json(
-        { error: "Impossible : un achat comptable de ce lot est déjà payé" },
-        { status: 409 },
-      );
-    }
-    const delAchats = await deleteAllAchatsForLot(supabase, id);
+    const delAchats = await deleteUnpaidAchatsForLot(supabase, id);
     if ("error" in delAchats) {
       return NextResponse.json({ error: delAchats.error }, { status: 500 });
     }
@@ -421,6 +478,61 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
       );
     }
     return NextResponse.json({ error: "Modifications impossibles pour ce statut" }, { status: 409 });
+  }
+
+  if (hasRemoveLine) {
+    if (hasClose || hasLines || hasFrais) {
+      return NextResponse.json(
+        { error: "removeLotLigneId ne peut pas être combiné à d'autres modifications" },
+        { status: 400 },
+      );
+    }
+    const lotLigneId = body.removeLotLigneId!;
+    const { data: lotRow, error: leRow } = await supabase
+      .from("commande_fournisseur_lot_ligne")
+      .select("id, lot_id, vendeur_id")
+      .eq("id", lotLigneId)
+      .maybeSingle();
+    if (leRow) {
+      return NextResponse.json({ error: leRow.message }, { status: 500 });
+    }
+    if (!lotRow || (lotRow as { lot_id: string }).lot_id !== id) {
+      return NextResponse.json({ error: "Ligne introuvable" }, { status: 404 });
+    }
+    const vendeurIdLine = (lotRow as { vendeur_id?: string | null }).vendeur_id;
+    if (vendeurIdLine != null && String(vendeurIdLine).length > 0) {
+      const vendeurKey = String(vendeurIdLine);
+      const { data: vendeurState, error: vsErr } = await supabase
+        .from("commande_fournisseur_lot_vendeur_achat")
+        .select("status")
+        .eq("lot_id", id)
+        .eq("vendeur_key", vendeurKey)
+        .maybeSingle();
+      if (vsErr) {
+        return NextResponse.json({ error: vsErr.message }, { status: 500 });
+      }
+      if ((vendeurState as { status?: string } | null)?.status === "cloture") {
+        const paid = await vendeurAchatIsPaid(supabase, { lotId: id, vendeurKey });
+        if ("error" in paid) {
+          return NextResponse.json({ error: paid.error }, { status: 500 });
+        }
+        if (paid.paid) {
+          return NextResponse.json(
+            { error: "Impossible : l'achat de ce vendeur est déjà payé" },
+            { status: 403 },
+          );
+        }
+        return NextResponse.json(
+          { error: "Impossible : le vendeur est clôturé — rouvrez-le ou retirez le produit du vendeur" },
+          { status: 409 },
+        );
+      }
+    }
+    const { error: de } = await supabase.from("commande_fournisseur_lot_ligne").delete().eq("id", lotLigneId);
+    if (de) {
+      return NextResponse.json({ error: de.message }, { status: 500 });
+    }
+    return NextResponse.json({ ok: true });
   }
 
   if (!hasClose && !hasLines && !hasFrais) {
@@ -470,6 +582,7 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
       lotId: id,
       supplierId,
       dateLivraison: (lotCur as { date_livraison?: string | null }).date_livraison,
+      forceMissingQty: body.forceMissingQty === true,
     });
     if ("error" in out) {
       if (out.code === "VENDEURS_OUVERTS") {
@@ -483,7 +596,14 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
           { status: 409 },
         );
       }
-      return NextResponse.json({ error: out.error }, { status: out.status ?? 400 });
+      return NextResponse.json(
+        {
+          error: out.error,
+          ...(out.missingQtyLines ? { missingQtyLines: out.missingQtyLines } : {}),
+          ...(out.missingPuLines ? { missingPuLines: out.missingPuLines } : {}),
+        },
+        { status: out.status ?? 400 },
+      );
     }
     return NextResponse.json({
       ok: true,
@@ -626,6 +746,9 @@ async function applyLineUpdates(
 
     let vendeurId: string | null | undefined =
       u.vendeur_id !== undefined ? u.vendeur_id : undefined;
+    const patchMarque = u.marque_achete;
+    const ligneVendeur = (ligne as { vendeur_id?: string | null }).vendeur_id;
+
     if (vendeurId !== undefined && vendeurId !== null && vendeurId.length > 0) {
       const ok = await vendorBelongsSupplier(supabase, vendeurId, supplierId);
       if (!ok) {
@@ -633,8 +756,27 @@ async function applyLineUpdates(
       }
     }
 
-    const patchMarque = u.marque_achete;
-    const ligneVendeur = (ligne as { vendeur_id?: string | null }).vendeur_id;
+    if (
+      u.vendeur_id !== undefined &&
+      u.vendeur_id != null &&
+      String(u.vendeur_id).length > 0 &&
+      String(u.vendeur_id) !== (ligneVendeur == null ? "" : String(ligneVendeur))
+    ) {
+      const assignCheck = await ensureVendeurOpenForAssignment(supabase, {
+        lotId,
+        vendeurKey: String(u.vendeur_id),
+      });
+      if ("error" in assignCheck) {
+        return {
+          error: {
+            response: NextResponse.json(
+              { error: assignCheck.error },
+              { status: assignCheck.status },
+            ),
+          },
+        };
+      }
+    }
     const nextVendeur = u.vendeur_id !== undefined ? u.vendeur_id : ligneVendeur;
 
     if (patchMarque === true && (nextVendeur == null || String(nextVendeur).length === 0)) {
@@ -788,6 +930,7 @@ async function cloturerLotAchat(opts: {
   lotId: string;
   supplierId: string;
   dateLivraison?: string | null;
+  forceMissingQty?: boolean;
 }): Promise<
   | { ok: true }
   | {
@@ -796,10 +939,11 @@ async function cloturerLotAchat(opts: {
       code?: string;
       openVendeurKeys?: string[];
       openVendeurLabels?: string[];
-      missingQtyLines?: Array<{ lotLigneId: string; productName: string | null }>;
+      missingQtyLines?: Array<{ lotLigneId: string; productName: string | null; vendeurLabel?: string | null }>;
+      missingPuLines?: Array<{ lotLigneId: string; productName: string | null; vendeurLabel?: string | null }>;
     }
 > {
-  const { supabase, lotId, supplierId, dateLivraison } = opts;
+  const { supabase, lotId, supplierId, dateLivraison, forceMissingQty } = opts;
 
   const { count: vendeurCount, error: vendeursCountErr } = await supabase
     .from("ref_supplier_vendeur")
@@ -813,6 +957,39 @@ async function cloturerLotAchat(opts: {
   /** Fournisseur sans marchands (ex. Station) : le fournisseur est le vendeur unique. */
   const requireVendeurOnLines = (vendeurCount ?? 0) > 0;
 
+  const { data: vendeursRows, error: vendeursErr } = await supabase
+    .from("ref_supplier_vendeur")
+    .select("id, label")
+    .eq("supplier_id", supplierId);
+  if (vendeursErr) {
+    return { error: vendeursErr.message, status: 500 };
+  }
+  const vendeurLabelById = new Map<string, string>();
+  for (const v of vendeursRows ?? []) {
+    const id = String((v as { id: string }).id);
+    const lb = (v as { label?: string | null }).label;
+    if (typeof lb === "string" && lb.trim().length > 0) {
+      vendeurLabelById.set(id, lb.trim());
+    }
+  }
+
+  const { data: supplierRow, error: supplierErr } = await supabase
+    .from("ref_supplier")
+    .select("label, code")
+    .eq("id", supplierId)
+    .maybeSingle();
+  if (supplierErr) {
+    return { error: supplierErr.message, status: 500 };
+  }
+  const soleVendorLabel = (() => {
+    if (!supplierRow) return null;
+    const lb = (supplierRow as { label?: string | null }).label;
+    const code = (supplierRow as { code?: string | null }).code;
+    const trimmed = typeof lb === "string" ? lb.trim() : "";
+    if (trimmed.length > 0) return trimmed;
+    return typeof code === "string" && code.trim().length > 0 ? code.trim() : null;
+  })();
+
   const { data: lignes, error } = await supabase
     .from("commande_fournisseur_lot_ligne")
     .select(
@@ -825,8 +1002,26 @@ async function cloturerLotAchat(opts: {
   }
 
   const listeSansVendeur: string[] = [];
-  const listeQteManquante: Array<{ lotLigneId: string; productName: string | null }> = [];
-  const listePuVide: Array<{ lotLigneId: string; productName: string | null }> = [];
+  const listeQteManquante: Array<{
+    lotLigneId: string;
+    productName: string | null;
+    vendeurLabel: string | null;
+  }> = [];
+  const listePuVide: Array<{
+    lotLigneId: string;
+    productName: string | null;
+    vendeurLabel: string | null;
+  }> = [];
+
+  const vendeurLabelForLine = (vendeur: string | null | undefined): string | null => {
+    if (vendeur != null && String(vendeur).length > 0) {
+      return vendeurLabelById.get(String(vendeur)) ?? null;
+    }
+    if (!requireVendeurOnLines) {
+      return soleVendorLabel;
+    }
+    return "Sans vendeur";
+  };
 
   for (const L of lignes) {
     const lid = String((L as { id: string }).id);
@@ -838,24 +1033,25 @@ async function cloturerLotAchat(opts: {
     const pu = (L as { prix_achat_unitaire?: number | null }).prix_achat_unitaire;
     const puMissing = pu === null || pu === undefined || Number.isNaN(Number(pu));
     const name = extractNestedProductName(L);
+    const lineVendeurLabel = vendeurLabelForLine(vendeur);
 
     if (rawQte == null) {
-      listeQteManquante.push({ lotLigneId: lid, productName: name });
+      listeQteManquante.push({ lotLigneId: lid, productName: name, vendeurLabel: lineVendeurLabel });
       continue;
     }
     const qaa = Number(rawQte);
     if (!Number.isFinite(qaa) || qaa < 0) {
-      listeQteManquante.push({ lotLigneId: lid, productName: name });
+      listeQteManquante.push({ lotLigneId: lid, productName: name, vendeurLabel: lineVendeurLabel });
       continue;
     }
     if (qaa === 0) {
       if (puMissing) {
-        listeQteManquante.push({ lotLigneId: lid, productName: name });
+        listeQteManquante.push({ lotLigneId: lid, productName: name, vendeurLabel: lineVendeurLabel });
       }
       continue;
     }
     if (puMissing) {
-      listePuVide.push({ lotLigneId: lid, productName: name });
+      listePuVide.push({ lotLigneId: lid, productName: name, vendeurLabel: lineVendeurLabel });
     }
   }
 
@@ -864,15 +1060,28 @@ async function cloturerLotAchat(opts: {
   }
 
   if (listeQteManquante.length > 0) {
-    return {
-      error: "Quantité manquante sur une ou plusieurs lignes",
-      status: 400,
-      missingQtyLines: listeQteManquante,
-    };
+    if (!forceMissingQty) {
+      return {
+        error: "Quantité manquante sur une ou plusieurs lignes",
+        status: 400,
+        missingQtyLines: listeQteManquante,
+      };
+    }
+
+    const forced = await applyForceMissingQtyOnLines(
+      supabase,
+      listeQteManquante,
+      lignes as Array<Record<string, unknown>>,
+    );
+    if ("error" in forced) return forced;
   }
 
   if (listePuVide.length > 0) {
-    return { error: "Prix unitaire manquant sur une ou plusieurs lignes", status: 400 };
+    return {
+      error: "Prix unitaire manquant sur une ou plusieurs lignes",
+      status: 400,
+      missingPuLines: listePuVide,
+    };
   }
 
   const openCheck = await listOpenVendeurKeysForLot(supabase, { lotId, supplierId });

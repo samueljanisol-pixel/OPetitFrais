@@ -119,6 +119,10 @@ export async function POST(req: NextRequest, ctx: Ctx) {
     typeof body === "object" && body !== null && typeof (body as { action?: unknown }).action === "string"
       ? (body as { action: string }).action
       : "cloturer";
+  const forceMissingQty =
+    typeof body === "object" &&
+    body !== null &&
+    (body as { forceMissingQty?: unknown }).forceMissingQty === true;
 
   const supabase = await createSupabaseServerClient();
   const { data: lot, error: lotErr } = await supabase
@@ -148,6 +152,7 @@ export async function POST(req: NextRequest, ctx: Ctx) {
     lotId,
     supplierId,
     vendeurKey,
+    forceMissingQty,
   });
 
   if ("error" in out) {

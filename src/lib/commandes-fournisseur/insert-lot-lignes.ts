@@ -14,7 +14,8 @@ function lotLigneConstraintMessage(msg: string): string | null {
       "Appliquez les migrations supabase (dont 20260625120000 et 20260626120000), puis réessayez."
     );
   }
-  if (msg.includes("commande_fournisseur_lot_ligne_lot_product_pack_uniq")) {
+  if (msg.includes("commande_fournisseur_lot_ligne_lot_product_pack_uniq")
+    || msg.includes("commande_fournisseur_lot_ligne_lot_product_pack_vendeur_uniq")) {
     return (
       "Impossible de créer le lot : doublon produit + conditionnement. " +
       "Exécutez supabase/migrations/20260626130000_lot_ligne_upsert_rpc_on_conflict.sql dans Supabase SQL Editor, puis réessayez."
@@ -46,7 +47,7 @@ export async function insertLotLignesMerged(
       continue;
     }
     const packagingId = normalizeProductPackagingId(row.product_packaging_id);
-    const pgKey = lotLignePostgresUniqueKey(productId, packagingId);
+    const pgKey = lotLignePostgresUniqueKey(productId, packagingId, row.vendeur_id ?? null);
 
     const cachedId = keyToLotLigneId.get(pgKey);
     if (cachedId) {

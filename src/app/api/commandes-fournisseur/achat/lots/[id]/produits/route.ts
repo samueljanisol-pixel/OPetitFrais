@@ -1,10 +1,11 @@
 import { NextResponse } from "next/server";
 import { createSupabaseServerClient, createSupabaseServiceRoleClient } from "@/lib/supabase/server";
 import { requireApiPermission } from "@/lib/auth/require-permission-api";
-import { findExistingLotLigneId } from "@/lib/commandes-fournisseur/lot-ligne-duplicate-query";
+import { findExistingLotLignesForPackaging } from "@/lib/commandes-fournisseur/lot-ligne-duplicate-query";
 import { insertLotLignesMerged } from "@/lib/commandes-fournisseur/insert-lot-lignes";
 import { normalizeEntityId, normalizeProductPackagingId } from "@/lib/commandes-fournisseur/commande-ligne-key";
 import { vendeurIdForProduct } from "@/lib/commandes-fournisseur/product-vendeur";
+import { ensureVendeurOpenForAssignment } from "@/lib/commandes-fournisseur/achat-vendeur-cloture";
 import { productBelongsToSupplier } from "@/lib/products/product-supplier";
 import {
   ensureLotAchatEnCours,
@@ -23,9 +24,17 @@ export async function POST(req: Request, ctx: Ctx) {
     return NextResponse.json({ error: gate.error }, { status: gate.status });
   }
 
-  let body: { productId?: string; productPackagingId?: string | null };
+  let body: {
+    productId?: string;
+    productPackagingId?: string | null;
+    allowDuplicateVendor?: boolean;
+  };
   try {
-    body = (await req.json()) as { productId?: string; productPackagingId?: string | null };
+    body = (await req.json()) as {
+      productId?: string;
+      productPackagingId?: string | null;
+      allowDuplicateVendor?: boolean;
+    };
   } catch {
     return NextResponse.json({ error: "JSON invalide" }, { status: 400 });
   }
@@ -42,6 +51,8 @@ export async function POST(req: Request, ctx: Ctx) {
   if (body.productPackagingId !== undefined && body.productPackagingId !== null) {
     packagingId = normalizeProductPackagingId(String(body.productPackagingId).trim());
   }
+
+  const allowDuplicateVendor = body.allowDuplicateVendor === true;
 
   const supabase = await createSupabaseServerClient();
 
@@ -111,23 +122,35 @@ export async function POST(req: Request, ctx: Ctx) {
     }
   }
 
-  let dup: { id: string } | null;
+  let existingLines;
   try {
-    dup = await findExistingLotLigneId(supabase, lotId, productIdNorm, packagingId);
+    existingLines = await findExistingLotLignesForPackaging(
+      supabase,
+      lotId,
+      productIdNorm,
+      packagingId,
+    );
   } catch (e) {
     return NextResponse.json(
       { error: e instanceof Error ? e.message : "Erreur" },
       { status: 500 },
     );
   }
-  if (dup) {
+
+  if (existingLines.length > 0 && !allowDuplicateVendor) {
     return NextResponse.json(
-      { error: "Ce conditionnement est déjà dans le lot" },
+      {
+        error: "Ce conditionnement est déjà dans le lot",
+        code: "ALREADY_IN_LOT",
+        existingLines: existingLines.map((line) => ({
+          lotLigneId: line.lotLigneId,
+          productName: line.productName,
+          vendeurLabel: line.vendeurLabel,
+        })),
+      },
       { status: 409 },
     );
   }
-
-  const vendeurId = await vendeurIdForProduct(supabase, productIdNorm, lotSupplierId);
 
   let writeSupabase;
   try {
@@ -139,22 +162,60 @@ export async function POST(req: Request, ctx: Ctx) {
     );
   }
 
-  const insRes = await insertLotLignesMerged(writeSupabase, lotId, [
-    {
-      lot_id: lotId,
-      product_id: productIdNorm,
-      product_packaging_id: packagingId,
-      qte_achat: null,
-      ...(vendeurId ? { vendeur_id: vendeurId } : {}),
-    },
-  ]);
-  if ("error" in insRes) {
-    if (insRes.error.includes("déjà") || insRes.error.includes("doublon")) {
-      return NextResponse.json({ error: "Ce conditionnement est déjà dans le lot." }, { status: 409 });
+  let lotLigneId: string | undefined;
+
+  if (allowDuplicateVendor) {
+    const { data: inserted, error: insertErr } = await writeSupabase
+      .from("commande_fournisseur_lot_ligne")
+      .insert({
+        lot_id: lotId,
+        product_id: productIdNorm,
+        product_packaging_id: packagingId,
+        qte_achat: null,
+        vendeur_id: null,
+        qte_besoin_fige: 0,
+      })
+      .select("id")
+      .maybeSingle();
+    if (insertErr) {
+      if (insertErr.message.includes("commande_fournisseur_lot_ligne_lot_product_pack_vendeur_uniq")) {
+        return NextResponse.json(
+          { error: "Ce conditionnement est déjà présent pour ce vendeur." },
+          { status: 409 },
+        );
+      }
+      return NextResponse.json({ error: insertErr.message }, { status: 500 });
     }
-    return NextResponse.json({ error: insRes.error }, { status: 500 });
+    lotLigneId = inserted ? String((inserted as { id: string }).id) : undefined;
+  } else {
+    const vendeurId = await vendeurIdForProduct(supabase, productIdNorm, lotSupplierId);
+    if (vendeurId) {
+      const assignCheck = await ensureVendeurOpenForAssignment(writeSupabase, {
+        lotId,
+        vendeurKey: vendeurId,
+      });
+      if ("error" in assignCheck) {
+        return NextResponse.json({ error: assignCheck.error }, { status: assignCheck.status });
+      }
+    }
+    const insRes = await insertLotLignesMerged(writeSupabase, lotId, [
+      {
+        lot_id: lotId,
+        product_id: productIdNorm,
+        product_packaging_id: packagingId,
+        qte_achat: null,
+        ...(vendeurId ? { vendeur_id: vendeurId } : {}),
+      },
+    ]);
+    if ("error" in insRes) {
+      if (insRes.error.includes("déjà") || insRes.error.includes("doublon")) {
+        return NextResponse.json({ error: "Ce conditionnement est déjà dans le lot." }, { status: 409 });
+      }
+      return NextResponse.json({ error: insRes.error }, { status: 500 });
+    }
+    lotLigneId = [...insRes.keyToLotLigneId.values()][0];
   }
-  const lotLigneId = [...insRes.keyToLotLigneId.values()][0];
+
   if (!lotLigneId) {
     return NextResponse.json({ error: "Insertion ligne lot impossible" }, { status: 500 });
   }

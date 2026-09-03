@@ -1,15 +1,19 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
 import {
   Alert,
   Button,
   CircularProgress,
+  FormControl,
+  InputLabel,
   List,
   ListItem,
   ListItemButton,
   ListItemText,
+  MenuItem,
+  Select,
   ToggleButton,
   ToggleButtonGroup,
   Typography,
@@ -21,6 +25,7 @@ import { useSessionPermissions } from "@/lib/auth/useSessionPermissions";
 import { useStatusLabels } from "@/lib/statusLabels/useStatusLabels";
 import { useAppFormat } from "@/lib/i18n/useAppFormat";
 import { useBackChevronIcon } from "@/lib/i18n/useBackChevronIcon";
+import { supplierColor } from "@/lib/commandes-fournisseur/supplier-color";
 
 type SupplierRefOne = { id?: string; code?: string; label?: string } | null | undefined;
 
@@ -31,6 +36,7 @@ type LotRow = {
   marque_prete_at: string | null;
   marque_terminee_at: string | null;
   created_at: string;
+  date_livraison?: string | null;
   ref_supplier: SupplierRefOne | SupplierRefOne[];
 };
 
@@ -47,14 +53,16 @@ function supplierLabel(raw: LotRow["ref_supplier"]): string {
 export default function AchatLotsListClient() {
   const router = useRouter();
   const t = useTranslations("backoffice.commandes.achat.list");
+  const tValidation = useTranslations("backoffice.commandes.validation.index");
   const tc = useTranslations("backoffice.commandes.common");
   const te = useTranslations("backoffice.commandes.errors");
   const tCommon = useTranslations("common");
   const { labelFor } = useStatusLabels();
-  const { formatDateTime } = useAppFormat();
+  const { formatDateTime, formatDate } = useAppFormat();
   const BackChevron = useBackChevronIcon();
   const { loading: permLoading, can } = useSessionPermissions();
-  const [statusMode, setStatusMode] = useState<"prete" | "all">("prete");
+  const [statusMode, setStatusMode] = useState<"prete" | "terminee">("prete");
+  const [filterSupplier, setFilterSupplier] = useState<string>("");
   const [lots, setLots] = useState<LotRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
@@ -70,7 +78,7 @@ export default function AchatLotsListClient() {
     setErr(null);
     setLoading(true);
     try {
-      const q = statusMode === "all" ? "?status=all" : "?status=prete";
+      const q = statusMode === "terminee" ? "?status=terminee" : "?status=prete";
       const res = await fetch(`/api/commandes-fournisseur/achat/lots${q}`, { method: "GET" });
       const json = (await res.json().catch(() => ({}))) as { lots?: LotRow[]; error?: string };
       if (!res.ok) {
@@ -93,7 +101,21 @@ export default function AchatLotsListClient() {
     }
   }, [permLoading, can, load]);
 
-  const handleToggle = (_ev: unknown, next: "prete" | "all" | null) => {
+  const suppliers = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const l of lots) {
+      const lab = supplierLabel(l.ref_supplier) || emDash;
+      m.set(l.supplier_id, lab);
+    }
+    return [...m.entries()].sort((a, b) => a[1].localeCompare(b[1]));
+  }, [lots, emDash]);
+
+  const filteredLots = useMemo(() => {
+    if (!filterSupplier) return lots;
+    return lots.filter((l) => l.supplier_id === filterSupplier);
+  }, [lots, filterSupplier]);
+
+  const handleToggle = (_ev: unknown, next: "prete" | "terminee" | null) => {
     if (!next) return;
     setStatusMode(next);
   };
@@ -146,7 +168,7 @@ export default function AchatLotsListClient() {
           }}
         >
           <ToggleButton value="prete">{t("filterPending")}</ToggleButton>
-          <ToggleButton value="all">{t("filterAll")}</ToggleButton>
+          <ToggleButton value="terminee">{t("filterAll")}</ToggleButton>
         </ToggleButtonGroup>
         <Button size="small" variant="outlined" onClick={() => void load()} sx={{ textTransform: "none" }}>
           {tc("refresh")}
@@ -168,50 +190,88 @@ export default function AchatLotsListClient() {
           {t("emptyLots")}
         </Typography>
       ) : (
-        <List dense disablePadding>
-          {lots.map((l) => {
-            const secondaryParts = [
-              t("lotDatesLine", {
-                readyDate: l.marque_prete_at ? formatDateTime(l.marque_prete_at) : emDash,
-              }),
-            ];
-            if (l.status === "terminee") {
-              secondaryParts.push(
-                t("lotClosedLine", {
-                  closedDate: l.marque_terminee_at ? formatDateTime(l.marque_terminee_at) : emDash,
-                }),
-              );
-            }
-            return (
-              <ListItem key={l.id} disablePadding className="!mb-1">
-                <ListItemButton
-                  component={AppLink}
-                  href={`/commandes-fournisseur/achat/lots/${l.id}`}
-                  sx={{ borderRadius: 2, border: "1px solid", borderColor: "divider" }}
-                >
-                  <ListItemText
-                    primary={
-                      <span className="flex items-center justify-between gap-2">
-                        <span className="min-w-0 truncate">
-                          {supplierLabel(l.ref_supplier) || emDash}
+        <>
+          <div className="!mb-3">
+            <FormControl size="small" sx={{ minWidth: 200 }}>
+              <InputLabel id="achat-fs">{tc("supplier")}</InputLabel>
+              <Select
+                labelId="achat-fs"
+                label={tc("supplier")}
+                value={filterSupplier}
+                onChange={(e) => setFilterSupplier(e.target.value as string)}
+              >
+                <MenuItem value="">{tc("allSuppliers")}</MenuItem>
+                {suppliers.map(([id, label]) => (
+                  <MenuItem key={id} value={id}>
+                    {label}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+          </div>
+          {filteredLots.length === 0 ? (
+            <Typography variant="body2" color="text.secondary">
+              {t("filteredEmpty")}
+            </Typography>
+          ) : (
+            <List dense disablePadding>
+              {filteredLots.map((l) => (
+                <ListItem key={l.id} disablePadding className="!mb-1">
+                  <ListItemButton
+                    component={AppLink}
+                    href={`/commandes-fournisseur/achat/lots/${l.id}`}
+                    sx={{ borderRadius: 2, border: "1px solid", borderColor: "divider" }}
+                  >
+                    <ListItemText
+                      primary={
+                        <span className="flex items-center justify-between gap-2">
+                          <span
+                            className="min-w-0 truncate font-bold"
+                            style={{ color: supplierColor(l.supplier_id) }}
+                          >
+                            {supplierLabel(l.ref_supplier) || emDash}
+                          </span>
+                          <CommandeFournisseurStatusChip
+                            domain="commande_fournisseur_lot"
+                            status={String(l.status)}
+                            label={labelFor("commande_fournisseur_lot", String(l.status))}
+                          />
                         </span>
-                        <CommandeFournisseurStatusChip
-                          domain="commande_fournisseur_lot"
-                          status={String(l.status)}
-                          label={labelFor("commande_fournisseur_lot", String(l.status))}
-                        />
-                      </span>
-                    }
-                    secondary={secondaryParts.join(" — ")}
-                    slotProps={{
-                      primary: { component: "div" },
-                    }}
-                  />
-                </ListItemButton>
-              </ListItem>
-            );
-          })}
-        </List>
+                      }
+                      secondary={
+                        <>
+                          {tValidation("pendingRowCreated", {
+                            dateTime: formatDateTime(l.created_at),
+                          })}
+                          {" — "}
+                          {tValidation("pendingRowDelivery", {
+                            date:
+                              typeof l.date_livraison === "string" && l.date_livraison.length > 0
+                                ? formatDate(`${l.date_livraison}T12:00:00`)
+                                : emDash,
+                          })}
+                          {l.status === "terminee" ? (
+                            <>
+                              {" — "}
+                              {t("lotClosedLine", {
+                                closedDate: l.marque_terminee_at
+                                  ? formatDateTime(l.marque_terminee_at)
+                                  : emDash,
+                              })}
+                            </>
+                          ) : null}
+                        </>
+                      }
+                      slotProps={{
+                        primary: { component: "div" },
+                      }}
+                    />
+                  </ListItemButton>
+                </ListItem>
+              ))}
+            </List>
+          )}
+        </>
       )}
     </main>
   );

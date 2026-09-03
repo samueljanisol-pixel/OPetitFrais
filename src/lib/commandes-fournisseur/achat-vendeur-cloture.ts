@@ -15,7 +15,36 @@ import { compteAchatDateIsoFromLivraison } from "@/lib/commandes-fournisseur/lot
 export type VendeurClotureLineIssue = {
   lotLigneId: string;
   productName: string | null;
+  vendeurLabel?: string | null;
 };
+
+export async function applyForceMissingQtyOnLines(
+  supabase: SupabaseClient,
+  listeQteManquante: VendeurClotureLineIssue[],
+  lignes: Array<Record<string, unknown>>,
+): Promise<{ error: string; status: number } | { ok: true }> {
+  for (const issue of listeQteManquante) {
+    const { error: ue } = await supabase
+      .from("commande_fournisseur_lot_ligne")
+      .update({
+        qte_achat: 0,
+        prix_achat_unitaire: 0,
+        montant_ligne_achat: 0,
+      })
+      .eq("id", issue.lotLigneId);
+    if (ue) return { error: ue.message, status: 500 };
+  }
+
+  for (const L of lignes) {
+    const lid = String((L as { id: string }).id);
+    if (!listeQteManquante.some((issue) => issue.lotLigneId === lid)) continue;
+    (L as { qte_achat?: number | null }).qte_achat = 0;
+    (L as { prix_achat_unitaire?: number | null }).prix_achat_unitaire = 0;
+    (L as { montant_ligne_achat?: number | null }).montant_ligne_achat = 0;
+  }
+
+  return { ok: true };
+}
 
 export async function cloturerVendeurAchat(
   supabase: SupabaseClient,
@@ -23,6 +52,8 @@ export async function cloturerVendeurAchat(
     lotId: string;
     supplierId: string;
     vendeurKey: string;
+    /** Si true, les lignes sans quantité sont enregistrées à 0 (non acheté) avant clôture. */
+    forceMissingQty?: boolean;
   },
 ): Promise<
   | { ok: true }
@@ -82,6 +113,29 @@ export async function cloturerVendeurAchat(
     return { error: "Aucune ligne pour ce vendeur", status: 400 };
   }
 
+  let issueVendeurLabel: string | null = null;
+  if (sole) {
+    const { data: supplierRow } = await supabase
+      .from("ref_supplier")
+      .select("label, code")
+      .eq("id", supplierId)
+      .maybeSingle();
+    if (supplierRow) {
+      const lb = (supplierRow as { label?: string | null }).label;
+      const code = (supplierRow as { code?: string | null }).code;
+      const trimmed = typeof lb === "string" ? lb.trim() : "";
+      issueVendeurLabel = trimmed.length > 0 ? trimmed : typeof code === "string" ? code.trim() : null;
+    }
+  } else if (vendeurId) {
+    const { data: vendeurRow } = await supabase
+      .from("ref_supplier_vendeur")
+      .select("label")
+      .eq("id", vendeurId)
+      .maybeSingle();
+    const lb = vendeurRow ? (vendeurRow as { label?: string | null }).label : null;
+    issueVendeurLabel = typeof lb === "string" && lb.trim().length > 0 ? lb.trim() : null;
+  }
+
   const listeQteManquante: VendeurClotureLineIssue[] = [];
   const listePuVide: VendeurClotureLineIssue[] = [];
 
@@ -91,35 +145,41 @@ export async function cloturerVendeurAchat(
     const rawQte = (L as { qte_achat?: number | null }).qte_achat;
     const pu = (L as { prix_achat_unitaire?: number | null }).prix_achat_unitaire;
     const puMissing = pu === null || pu === undefined || Number.isNaN(Number(pu));
+    const lineIssue = { vendeurLabel: issueVendeurLabel };
 
     if (rawQte == null) {
-      listeQteManquante.push({ lotLigneId: lid, productName: name });
+      listeQteManquante.push({ lotLigneId: lid, productName: name, ...lineIssue });
       continue;
     }
     const qaa = Number(rawQte);
     if (!Number.isFinite(qaa) || qaa < 0) {
-      listeQteManquante.push({ lotLigneId: lid, productName: name });
+      listeQteManquante.push({ lotLigneId: lid, productName: name, ...lineIssue });
       continue;
     }
     if (qaa === 0) {
       if (puMissing) {
         // Legacy / pas encore saisi (0 en base sans PU) ≠ « pas acheté »
-        listeQteManquante.push({ lotLigneId: lid, productName: name });
+        listeQteManquante.push({ lotLigneId: lid, productName: name, ...lineIssue });
       }
       // Qté 0 explicite = pas acheté, déjà confirmé par la saisie — hors compte
       continue;
     }
     if (puMissing) {
-      listePuVide.push({ lotLigneId: lid, productName: name });
+      listePuVide.push({ lotLigneId: lid, productName: name, ...lineIssue });
     }
   }
 
   if (listeQteManquante.length > 0) {
-    return {
-      error: "Quantité manquante sur une ou plusieurs lignes",
-      status: 400,
-      missingQtyLines: listeQteManquante,
-    };
+    if (!opts.forceMissingQty) {
+      return {
+        error: "Quantité manquante sur une ou plusieurs lignes",
+        status: 400,
+        missingQtyLines: listeQteManquante,
+      };
+    }
+
+    const forced = await applyForceMissingQtyOnLines(supabase, listeQteManquante, lignes as Array<Record<string, unknown>>);
+    if ("error" in forced) return forced;
   }
 
   if (listePuVide.length > 0) {
@@ -242,6 +302,39 @@ export async function rouvrirVendeurAchat(
   if (ue) return { error: ue.message, status: 500 };
 
   return { ok: true };
+}
+
+/**
+ * Avant d'affecter une ligne à un vendeur : bloque si clôturé et payé ;
+ * rouvre automatiquement si clôturé mais non payé.
+ */
+export async function ensureVendeurOpenForAssignment(
+  supabase: SupabaseClient,
+  opts: { lotId: string; vendeurKey: string },
+): Promise<{ ok: true } | { error: string; status: number }> {
+  const { lotId, vendeurKey } = opts;
+
+  const { data: state, error: se } = await supabase
+    .from("commande_fournisseur_lot_vendeur_achat")
+    .select("status")
+    .eq("lot_id", lotId)
+    .eq("vendeur_key", vendeurKey)
+    .maybeSingle();
+  if (se) return { error: se.message, status: 500 };
+
+  const status = state ? (state as { status?: string }).status : undefined;
+  if (status !== "cloture") {
+    return { ok: true };
+  }
+
+  const reopen = await rouvrirVendeurAchat(supabase, { lotId, vendeurKey });
+  if ("ok" in reopen && reopen.ok) {
+    return { ok: true };
+  }
+  if ("error" in reopen) {
+    return { error: reopen.error, status: reopen.status };
+  }
+  return { error: "Réouverture vendeur impossible", status: 500 };
 }
 
 /** Liste des vendeur_key encore ouverts (ayant des lignes) sur le lot. */

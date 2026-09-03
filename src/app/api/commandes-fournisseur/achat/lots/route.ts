@@ -27,7 +27,9 @@ export async function GET(req: Request) {
   const supabase = await createSupabaseServerClient();
   const query = supabase
     .from("commande_fournisseur_lot")
-    .select("id, supplier_id, status, marque_prete_at, marque_terminee_at, created_at, ref_supplier(id, code, label)")
+    .select(
+      "id, supplier_id, status, marque_prete_at, marque_terminee_at, created_at, date_livraison, ref_supplier(id, code, label)",
+    )
     .in("status", [...statuses])
     .order("marque_prete_at", { ascending: false })
     .order("created_at", { ascending: false });
