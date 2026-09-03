@@ -19,7 +19,12 @@ export type CaisseRuntimeConfig = {
   magasinCode: string;
   caisseCode: string;
   posteId: string;
+  ftpHost: string;
+  ftpUser: string;
+  ftpPassword: string;
 };
+
+export type CaisseFtpConfig = Pick<CaisseRuntimeConfig, "ftpHost" | "ftpUser" | "ftpPassword">;
 
 export type CaisseHardwareConfig = Pick<
   CaisseRuntimeConfig,
@@ -123,6 +128,9 @@ function readPartialFromRaw(raw: Record<string, unknown> | null): Partial<Caisse
     magasinCode: typeof raw.magasinCode === "string" ? raw.magasinCode : undefined,
     caisseCode: typeof raw.caisseCode === "string" ? raw.caisseCode : undefined,
     posteId: typeof raw.posteId === "string" ? raw.posteId : undefined,
+    ftpHost: typeof raw.ftpHost === "string" ? raw.ftpHost : undefined,
+    ftpUser: typeof raw.ftpUser === "string" ? raw.ftpUser : undefined,
+    ftpPassword: typeof raw.ftpPassword === "string" ? raw.ftpPassword : undefined,
   };
 }
 
@@ -133,19 +141,30 @@ export function getIdentityConfigStatus(): CaisseIdentityStatus {
   return evaluateIdentityFromRaw(raw, configPath, existingPath != null);
 }
 
-function devTokenFallback(): string {
-  if (app.isPackaged) return "";
+function readDevEnv(): Record<string, string> {
+  if (app.isPackaged) return {};
   for (const path of envLocalPaths()) {
     if (!existsSync(path)) continue;
     try {
-      const env = parseEnvFile(readFileSync(path, "utf8"));
-      const token = env.CAISSE_TICKET_TOKEN?.trim();
-      if (token) return token;
+      return parseEnvFile(readFileSync(path, "utf8"));
     } catch {
       /* ignore */
     }
   }
-  return "";
+  return {};
+}
+
+function devTokenFallback(): string {
+  return readDevEnv().CAISSE_TICKET_TOKEN?.trim() ?? "";
+}
+
+function devFtpFallback(): CaisseFtpConfig {
+  const env = readDevEnv();
+  return {
+    ftpHost: env.FTP_HOST?.trim() ?? "",
+    ftpUser: env.FTP_USER?.trim() ?? "",
+    ftpPassword: env.FTP_PASSWORD ?? "",
+  };
 }
 
 export function loadRuntimeConfig(): CaisseRuntimeConfig {
@@ -157,6 +176,11 @@ export function loadRuntimeConfig(): CaisseRuntimeConfig {
   if (!caisseToken) {
     caisseToken = devTokenFallback();
   }
+
+  const ftpFallback = devFtpFallback();
+  const ftpHost = partial.ftpHost?.trim() || ftpFallback.ftpHost;
+  const ftpUser = partial.ftpUser?.trim() || ftpFallback.ftpUser;
+  const ftpPassword = partial.ftpPassword || ftpFallback.ftpPassword;
 
   const magasinFormatted = formatMagasinCode(partial.magasinCode?.trim() ?? "");
   const caisseFormatted = formatCaisseCode(partial.caisseCode?.trim() ?? "");
@@ -170,6 +194,9 @@ export function loadRuntimeConfig(): CaisseRuntimeConfig {
     magasinCode: magasinFormatted ?? "00",
     caisseCode: caisseFormatted ?? "01",
     posteId: partial.posteId?.trim() ?? "",
+    ftpHost,
+    ftpUser,
+    ftpPassword,
   };
 
   return config;
@@ -220,6 +247,17 @@ export function saveHardwareConfig(partial: CaisseHardwareConfig): CaisseRuntime
   if (partial.ticketPrinter !== undefined) {
     current.ticketPrinter = partial.ticketPrinter.trim();
   }
+
+  return writeConfigFile(path, current);
+}
+
+export function saveFtpConfig(partial: CaisseFtpConfig): CaisseRuntimeConfig {
+  const path = getWritableConfigPath();
+  const current = readOrCreateConfigRecord(path);
+
+  current.ftpHost = partial.ftpHost.trim();
+  current.ftpUser = partial.ftpUser.trim();
+  current.ftpPassword = partial.ftpPassword;
 
   return writeConfigFile(path, current);
 }

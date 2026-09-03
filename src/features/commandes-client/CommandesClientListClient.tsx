@@ -13,7 +13,6 @@ import {
   List,
   ListItem,
   ListItemButton,
-  ListItemText,
   Paper,
   Tab,
   Tabs,
@@ -29,6 +28,7 @@ import {
 import type { CommandeClientListItem } from "@/lib/commandes-client/queries";
 import type { WorkflowStatus } from "@/lib/commandes-client/workflow";
 import { useSessionPermissions } from "@/lib/auth/useSessionPermissions";
+import { useAppFormat } from "@/lib/i18n/useAppFormat";
 import { useBackChevronIcon } from "@/lib/i18n/useBackChevronIcon";
 
 export default function CommandesClientListClient() {
@@ -37,6 +37,7 @@ export default function CommandesClientListClient() {
   const t = useTranslations("backoffice.commandesClient.list");
   const tCommon = useTranslations("common");
   const BackChevron = useBackChevronIcon();
+  const { formatDateTime } = useAppFormat();
   const { loading: permLoading, can, linkedMagasins } = useSessionPermissions();
 
   const filterKey = searchParams.get("filter") ?? "all";
@@ -197,24 +198,24 @@ export default function CommandesClientListClient() {
         <List component={Paper}>
           {commandes.map((c) => (
             <ListItem key={c.id} disablePadding divider>
-              <ListItemButton component={AppLink} href={`/commandes-client/${c.id}`}>
-                <ListItemText
-                  primary={
-                    <Box sx={{ display: "flex", alignItems: "center", gap: 1, flexWrap: "wrap" }}>
-                      <Typography sx={{ fontWeight: 600 }}>#{c.cart_number}</Typography>
-                      <Chip size="small" label={workflowStatusLabel(c.workflow_status)} />
-                      {c.payment_status === "paid" ? (
-                        <Chip size="small" color="success" label={t("paid")} />
-                      ) : null}
-                    </Box>
-                  }
-                  secondary={
-                    <>
-                      {c.client_nom ?? t("noClient")} · {formatDh(displayCommandeTotal(c))} DH
-                      {c.magasin_nom ? ` · ${c.magasin_nom}` : ""}
-                    </>
-                  }
-                />
+              <ListItemButton component={AppLink} href={`/commandes-client/${c.id}`} sx={{ py: 1.5 }}>
+                <Box sx={{ width: "100%" }}>
+                  <Box sx={{ display: "flex", alignItems: "center", gap: 1, flexWrap: "wrap", mb: 0.5 }}>
+                    <Typography sx={{ fontWeight: 600 }}>#{c.cart_number}</Typography>
+                    <Chip size="small" label={workflowStatusLabel(c.workflow_status)} />
+                    {c.payment_status === "paid" ? (
+                      <Chip size="small" color="success" label={t("paid")} />
+                    ) : null}
+                  </Box>
+                  <Typography variant="body2" color="text.secondary" sx={{ display: "block" }}>
+                    {c.submitted_at ? formatDateTime(c.submitted_at) : "—"} ·{" "}
+                    {c.client_nom ?? t("noClient")}
+                    {c.magasin_nom ? ` · ${c.magasin_nom}` : ""}
+                  </Typography>
+                  <Typography variant="body2" sx={{ display: "block", fontWeight: 700, mt: 0.25 }}>
+                    {formatDh(displayCommandeTotal(c))} DH
+                  </Typography>
+                </Box>
               </ListItemButton>
             </ListItem>
           ))}

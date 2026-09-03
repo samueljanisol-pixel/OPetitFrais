@@ -13,6 +13,7 @@ import {
   DialogContent,
   DialogTitle,
   FormControl,
+  FormControlLabel,
   IconButton,
   InputAdornment,
   InputLabel,
@@ -43,6 +44,8 @@ type ProfileRow = {
   role_id: string;
   roles: RoleRow | null;
   magasins: MagasinOpt[];
+  is_caissier: boolean;
+  has_caisse_pin: boolean;
 };
 
 export default function AdminUsersClient() {
@@ -64,6 +67,9 @@ export default function AdminUsersClient() {
   const [phone, setPhone] = useState("");
   const [roleId, setRoleId] = useState("");
   const [createMagasinIds, setCreateMagasinIds] = useState<string[]>([]);
+  const [createIsCaissier, setCreateIsCaissier] = useState(false);
+  const [createCaissePin, setCreateCaissePin] = useState("");
+  const [showCreateCaissePin, setShowCreateCaissePin] = useState(false);
 
   const [editOpen, setEditOpen] = useState(false);
   const [editUserId, setEditUserId] = useState<string | null>(null);
@@ -76,6 +82,10 @@ export default function AdminUsersClient() {
   const [showEditPassword, setShowEditPassword] = useState(false);
   const [editSaving, setEditSaving] = useState(false);
   const [editMagasinIds, setEditMagasinIds] = useState<string[]>([]);
+  const [editIsCaissier, setEditIsCaissier] = useState(false);
+  const [editHasCaissePin, setEditHasCaissePin] = useState(false);
+  const [editCaissePin, setEditCaissePin] = useState("");
+  const [showEditCaissePin, setShowEditCaissePin] = useState(false);
 
   const loadMagasins = async () => {
     if (!canAdminMagasins) return;
@@ -113,6 +123,8 @@ export default function AdminUsersClient() {
         (pJson.profiles ?? []).map((p) => ({
           ...p,
           magasins: p.magasins ?? [],
+          is_caissier: p.is_caissier === true,
+          has_caisse_pin: p.has_caisse_pin === true,
         })),
       );
       setRoleId((prev) => prev || rJson.roles?.[0]?.id || "");
@@ -141,6 +153,9 @@ export default function AdminUsersClient() {
     setPhone("");
     setRoleId(roles[0]?.id ?? "");
     setCreateMagasinIds([]);
+    setCreateIsCaissier(false);
+    setCreateCaissePin("");
+    setShowCreateCaissePin(false);
     setCreateError(null);
     setShowCreatePassword(false);
   };
@@ -165,12 +180,27 @@ export default function AdminUsersClient() {
     setEditPassword("");
     setShowEditPassword(false);
     setEditMagasinIds((p.magasins ?? []).map((m) => m.id));
+    setEditIsCaissier(p.is_caissier === true);
+    setEditHasCaissePin(p.has_caisse_pin === true);
+    setEditCaissePin("");
+    setShowEditCaissePin(false);
     setEditOpen(true);
     setError(null);
   };
 
   const saveEdit = async () => {
     if (!editUserId) return;
+    if (editIsCaissier) {
+      const pinDigits = editCaissePin.replace(/\D/g, "");
+      if ((!editHasCaissePin && pinDigits.length < 4) || (pinDigits.length > 0 && pinDigits.length < 4)) {
+        setError("Code caisse : 4 à 8 chiffres");
+        return;
+      }
+      if (canAdminMagasins && editMagasinIds.length === 0) {
+        setError("Un caissier doit être rattaché à au moins un magasin");
+        return;
+      }
+    }
     setEditSaving(true);
     setError(null);
     const payload: Record<string, unknown> = {
@@ -184,6 +214,10 @@ export default function AdminUsersClient() {
     }
     if (canAdminMagasins) {
       payload.magasin_ids = editMagasinIds;
+    }
+    payload.is_caissier = editIsCaissier;
+    if (editCaissePin.trim().length > 0) {
+      payload.caisse_pin = editCaissePin.trim();
     }
     const res = await fetch(`/api/admin/profiles/${editUserId}`, {
       method: "PATCH",
@@ -203,6 +237,16 @@ export default function AdminUsersClient() {
   };
 
   const createUser = async () => {
+    if (createIsCaissier) {
+      if (createCaissePin.replace(/\D/g, "").length < 4) {
+        setCreateError("Code caisse : 4 à 8 chiffres");
+        return;
+      }
+      if (canAdminMagasins && createMagasinIds.length === 0) {
+        setCreateError("Un caissier doit être rattaché à au moins un magasin");
+        return;
+      }
+    }
     setCreateBusy(true);
     setCreateError(null);
     const createPayload: Record<string, unknown> = {
@@ -216,6 +260,10 @@ export default function AdminUsersClient() {
     };
     if (canAdminMagasins) {
       createPayload.magasin_ids = createMagasinIds;
+    }
+    createPayload.is_caissier = createIsCaissier;
+    if (createCaissePin.trim().length > 0) {
+      createPayload.caisse_pin = createCaissePin.trim();
     }
     const res = await fetch("/api/admin/profiles", {
       method: "POST",
@@ -398,8 +446,50 @@ export default function AdminUsersClient() {
                 </Select>
                 <Typography variant="caption" color="text.secondary" className="!mt-1 !block">
                   Optionnel. Limite le périmètre magasin (CA, commandes…). Vide = pas de rattachement explicite.
+                  Obligatoire si l&apos;utilisateur est caissier.
                 </Typography>
               </FormControl>
+            ) : null}
+            <FormControlLabel
+              control={
+                <Checkbox
+                  checked={createIsCaissier}
+                  onChange={(e) => setCreateIsCaissier(e.target.checked)}
+                  disabled={createBusy}
+                />
+              }
+              label="Caissier (caisse Electron)"
+            />
+            {createIsCaissier ? (
+              <TextField
+                label="Code caisse"
+                type={showCreateCaissePin ? "text" : "password"}
+                value={createCaissePin}
+                onChange={(e) => setCreateCaissePin(e.target.value.replace(/\D/g, "").slice(0, 8))}
+                size="small"
+                fullWidth
+                disabled={createBusy}
+                inputMode="numeric"
+                helperText="4 à 8 chiffres — distinct du mot de passe back-office"
+                slotProps={{
+                  input: {
+                    endAdornment: (
+                      <InputAdornment position="end">
+                        <IconButton
+                          aria-label={showCreateCaissePin ? "Masquer le code caisse" : "Afficher le code caisse"}
+                          onClick={() => setShowCreateCaissePin((v) => !v)}
+                          onMouseDown={(e) => e.preventDefault()}
+                          edge="end"
+                          size="small"
+                          disabled={createBusy}
+                        >
+                          {showCreateCaissePin ? <VisibilityOff fontSize="small" /> : <Visibility fontSize="small" />}
+                        </IconButton>
+                      </InputAdornment>
+                    ),
+                  },
+                }}
+              />
             ) : null}
             {createError ? (
               <Typography color="error" variant="body2">
@@ -432,6 +522,7 @@ export default function AdminUsersClient() {
               <TableCell>Téléphone</TableCell>
               <TableCell>E-mail / login</TableCell>
               <TableCell>Rôle</TableCell>
+              <TableCell>Caisse</TableCell>
               <TableCell align="right">Actions</TableCell>
             </TableRow>
           </TableHead>
@@ -467,6 +558,7 @@ export default function AdminUsersClient() {
                     ))}
                   </Select>
                 </TableCell>
+                <TableCell>{p.is_caissier ? "Oui" : "—"}</TableCell>
                 <TableCell align="right">
                   <Button size="small" onClick={() => openEdit(p)} sx={{ textTransform: "none" }}>
                     Modifier
@@ -558,9 +650,54 @@ export default function AdminUsersClient() {
                 </Select>
                 <Typography variant="caption" color="text.secondary" className="!mt-1 !block">
                   Vide = pas de rattachement explicite (administrateur : tous les magasins ; autres rôles : aucun magasin
-                  lié).
+                  lié). Obligatoire si l&apos;utilisateur est caissier.
                 </Typography>
               </FormControl>
+            ) : null}
+            <FormControlLabel
+              control={
+                <Checkbox
+                  checked={editIsCaissier}
+                  onChange={(e) => setEditIsCaissier(e.target.checked)}
+                  disabled={editSaving}
+                />
+              }
+              label="Caissier (caisse Electron)"
+            />
+            {editIsCaissier ? (
+              <TextField
+                label="Code caisse"
+                type={showEditCaissePin ? "text" : "password"}
+                value={editCaissePin}
+                onChange={(e) => setEditCaissePin(e.target.value.replace(/\D/g, "").slice(0, 8))}
+                size="small"
+                fullWidth
+                disabled={editSaving}
+                inputMode="numeric"
+                helperText={
+                  editHasCaissePin
+                    ? "Laisser vide pour conserver le code actuel — 4 à 8 chiffres si modifié"
+                    : "4 à 8 chiffres — distinct du mot de passe back-office"
+                }
+                slotProps={{
+                  input: {
+                    endAdornment: (
+                      <InputAdornment position="end">
+                        <IconButton
+                          aria-label={showEditCaissePin ? "Masquer le code caisse" : "Afficher le code caisse"}
+                          onClick={() => setShowEditCaissePin((v) => !v)}
+                          onMouseDown={(e) => e.preventDefault()}
+                          edge="end"
+                          size="small"
+                          disabled={editSaving}
+                        >
+                          {showEditCaissePin ? <VisibilityOff fontSize="small" /> : <Visibility fontSize="small" />}
+                        </IconButton>
+                      </InputAdornment>
+                    ),
+                  },
+                }}
+              />
             ) : null}
           </div>
         </DialogContent>

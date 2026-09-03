@@ -11,8 +11,10 @@ import {
 import SyncIcon from "@mui/icons-material/Sync";
 import SettingsOutlinedIcon from "@mui/icons-material/SettingsOutlined";
 import PowerSettingsNewIcon from "@mui/icons-material/PowerSettingsNew";
+import LockOutlinedIcon from "@mui/icons-material/LockOutlined";
 import ReceiptLongOutlinedIcon from "@mui/icons-material/ReceiptLongOutlined";
 import ScaleOutlinedIcon from "@mui/icons-material/ScaleOutlined";
+import PointOfSaleOutlinedIcon from "@mui/icons-material/PointOfSaleOutlined";
 import { formatCashierClock } from "../lib/status-bar";
 
 type Props = {
@@ -28,6 +30,8 @@ type Props = {
   onOpenCommandesBoutique?: () => void;
   commandesBoutiqueDisabled?: boolean;
   onOpenSettings: () => void;
+  onLock: () => void;
+  onCloture: () => void;
   onQuitApp: () => void;
 };
 
@@ -44,6 +48,8 @@ export default function MenuDialog({
   onOpenCommandesBoutique,
   commandesBoutiqueDisabled = false,
   onOpenSettings,
+  onLock,
+  onCloture,
   onQuitApp,
 }: Props) {
   return (
@@ -140,7 +146,32 @@ export default function MenuDialog({
         </Button>
         <Button
           variant="outlined"
+          color="warning"
+          size="large"
+          startIcon={<LockOutlinedIcon />}
+          onClick={() => {
+            onClose();
+            onLock();
+          }}
+          sx={{ justifyContent: "flex-start", py: 1.25, fontWeight: 700 }}
+        >
+          Verrouiller
+        </Button>
+        <Button
+          variant="outlined"
           color="error"
+          size="large"
+          startIcon={<PointOfSaleOutlinedIcon />}
+          onClick={() => {
+            onClose();
+            onCloture();
+          }}
+          sx={{ justifyContent: "flex-start", py: 1.25, fontWeight: 700 }}
+        >
+          Clôturer
+        </Button>
+        <Button
+          variant="outlined"
           size="large"
           startIcon={<PowerSettingsNewIcon />}
           onClick={() => {
@@ -149,7 +180,7 @@ export default function MenuDialog({
           }}
           sx={{ justifyContent: "flex-start", py: 1.25, fontWeight: 700 }}
         >
-          Fermer caisse
+          Quitter
         </Button>
       </DialogContent>
       <DialogActions sx={{ px: 2, pb: 1.5 }}>

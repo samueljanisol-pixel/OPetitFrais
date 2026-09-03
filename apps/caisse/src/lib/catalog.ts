@@ -54,10 +54,14 @@ export async function getCaisseConfig(): Promise<CaisseRuntimeConfig> {
     ),
     caisseToken: import.meta.env.VITE_OPF_CAISSE_TOKEN ?? "",
     scalePort: "",
+    saurusScaleIp: "",
     ticketPrinter: "",
     magasinCode: "00",
     caisseCode: "01",
     posteId: "",
+    ftpHost: "",
+    ftpUser: "",
+    ftpPassword: "",
   };
   return cachedConfig;
 }

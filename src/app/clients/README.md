@@ -15,14 +15,14 @@ Un **panier boutique en ligne** (`shop_cart`) n'est **pas** une vente. C'est une
 ## Flux
 
 1. **Boutique** — le visiteur soumet son panier (export WhatsApp ou copie) → `status = submitted`, `client_id = null`
-2. **Backoffice** — rattachement manuel du panier à un client (`/clients` ou fiche client)
+2. **Backoffice** — rattachement manuel du panier à un client (`/commandes-client/[id]` ou fiche client)
 3. **Backoffice** — sélection des paniers impayés → paiement (modes hors crédit, comme fournisseurs)
 
 ## Pages
 
 | Route | Rôle |
 |-------|------|
-| `/clients` | Liste clients + paniers non rattachés |
+| `/clients` | Liste clients |
 | `/clients/[id]` | Compte client : paniers, paiements (montant **caisse** si encaissé, sinon estimation commande) |
 | `/clients/[id]/paniers/[cartId]` | Détail panier client : **panier caisse encaissé** (ticket POS + lignes) si lié ; sinon panier boutique. Magasin et caisse POS affichés si encaissé. Bouton « Voir la commande d'origine » si encaissé. |
 
@@ -35,7 +35,7 @@ Un **panier boutique en ligne** (`shop_cart`) n'est **pas** une vente. C'est une
 | `/api/clients/paiements` | POST | write |
 | `/api/clients/paniers/[cartId]` | GET | read |
 | `/api/clients/paniers/[cartId]/link` | PATCH | write |
-| `/api/clients/paniers-boutique` | GET | read |
+| `/api/clients/paniers-boutique` | GET | read (utilisé par le dialogue de rattachement sur fiche client) |
 
 ## Schéma (migration `20260803230000_client_gestion.sql`)
 

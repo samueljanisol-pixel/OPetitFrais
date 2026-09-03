@@ -228,9 +228,20 @@ Type session : `SessionPayload` dans `src/lib/auth/session-types.ts`
 
 ### Créer un caissier pour un magasin
 
+Le rôle RBAC **Caissier** (back-office : saisie CF, commandes boutique) est **indépendant** de l'accès caisse Electron.
+
+**Back-office :**
+
 1. Créer l'utilisateur avec le rôle **Caissier**
 2. Rattacher le(s) magasin(s) via le multi-select (nécessite `admin.magasins`)
 3. L'utilisateur aura accès à la saisie commandes fournisseur pour ses magasins uniquement
+
+**Caisse Electron (POS) :**
+
+1. Cocher **Caissier (caisse Electron)** sur le profil (n'importe quel rôle)
+2. Rattacher au moins un magasin
+3. Saisir un **code caisse** (4 à 8 chiffres), distinct du mot de passe back-office
+4. La liste est synchronisée hors ligne sur les postes (`GET /api/caisse/caissiers`)
 
 ### Créer un acheteur
 

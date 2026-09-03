@@ -6,7 +6,7 @@ Workflow opérationnel des commandes soumises depuis la boutique en ligne (`shop
 
 | Route | Permission | Rôle |
 |-------|------------|------|
-| `/commandes-client` | `commandes_client.read` | Liste + filtres par statut |
+| `/commandes-client` | `commandes_client.read` | Liste + filtres par statut (date/heure de soumission, client, montant, magasin) |
 | `/commandes-client/[id]` | `commandes_client.read` | Détail, **rattachement client**, **édition lignes** (avant validation), validation, annulation |
 | `/commandes-client/preparation` | `commandes_client.prepare` | Liste commandes à préparer (progression par ligne) |
 | `/commandes-client/preparation/[id]` | `commandes_client.prepare` | Vue commande puis préparation active (vert/rouge), commentaire, fin → `a_passer_caisse` |

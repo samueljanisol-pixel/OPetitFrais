@@ -14,6 +14,8 @@ import {
   TextField,
 } from "@mui/material";
 import FormDialog from "./FormDialog";
+import AdminPinDialog from "./AdminPinDialog";
+import AdminSettingsDialog from "./AdminSettingsDialog";
 import {
   getCaisseRuntimeConfig,
   isCaisseAgentReachable,
@@ -39,6 +41,8 @@ export default function SettingsDialog({ open, onClose, onSaved }: Props) {
   const [scalePort, setScalePort] = useState(AUTO_SCALE_VALUE);
   const [saurusScaleIp, setSaurusScaleIp] = useState("");
   const [ticketPrinter, setTicketPrinter] = useState(NO_PRINTER_VALUE);
+  const [adminPinOpen, setAdminPinOpen] = useState(false);
+  const [adminOpen, setAdminOpen] = useState(false);
   const [ports, setPorts] = useState<Array<{ path: string; manufacturer: string | null }>>([]);
   const [printers, setPrinters] = useState<string[]>([]);
   const [agentOnline, setAgentOnline] = useState<boolean | null>(null);
@@ -96,8 +100,16 @@ export default function SettingsDialog({ open, onClose, onSaved }: Props) {
     };
   }, [open]);
 
+  useEffect(() => {
+    if (open) return;
+    setAdminPinOpen(false);
+    setAdminOpen(false);
+  }, [open]);
+
   const handleClose = () => {
     if (saving) return;
+    setAdminPinOpen(false);
+    setAdminOpen(false);
     onClose();
   };
 
@@ -120,9 +132,12 @@ export default function SettingsDialog({ open, onClose, onSaved }: Props) {
   };
 
   return (
+    <>
     <FormDialog open={open} onClose={handleClose} maxWidth="sm" fullWidth>
       <DialogTitle sx={{ fontWeight: 800 }}>Paramètres</DialogTitle>
-      <DialogContent sx={{ display: "flex", flexDirection: "column", gap: 2, pt: 0.5 }}>
+      <DialogContent
+        sx={{ display: "flex", flexDirection: "column", gap: 2, pt: "24px !important" }}
+      >
         {error ? <Alert severity="error">{error}</Alert> : null}
 
         {!loading && agentOnline === false ? (
@@ -188,6 +203,15 @@ export default function SettingsDialog({ open, onClose, onSaved }: Props) {
                 ))}
               </Select>
             </FormControl>
+
+            <Button
+              variant="outlined"
+              fullWidth
+              disabled={saving}
+              onClick={() => setAdminPinOpen(true)}
+            >
+              Accès paramètres admin
+            </Button>
           </>
         )}
       </DialogContent>
@@ -200,5 +224,16 @@ export default function SettingsDialog({ open, onClose, onSaved }: Props) {
         </Button>
       </DialogActions>
     </FormDialog>
+
+      <AdminPinDialog
+        open={adminPinOpen}
+        onClose={() => setAdminPinOpen(false)}
+        onUnlocked={() => {
+          setAdminPinOpen(false);
+          setAdminOpen(true);
+        }}
+      />
+      <AdminSettingsDialog open={adminOpen} onClose={() => setAdminOpen(false)} onSaved={onSaved} />
+    </>
   );
 }

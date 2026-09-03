@@ -114,6 +114,16 @@ export function formatTicketReference(
   return `M${m}C${c}T${ticketNumber}`;
 }
 
+export function formatClotureReference(
+  magasinCode: string,
+  caisseCode: string,
+  clotureNumber: number,
+): string {
+  const m = magasinCode.replace(/\D/g, "").padStart(2, "0").slice(-2);
+  const c = caisseCode.replace(/\D/g, "").padStart(2, "0").slice(-2);
+  return `M${m}C${c}CL${clotureNumber}`;
+}
+
 export function groupCartLinesByCategory(lines: CartLine[]): Array<{ category: string; lines: CartLine[] }> {
   const groups: Array<{ category: string; lines: CartLine[] }> = [];
   for (const line of lines) {

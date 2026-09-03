@@ -1,5 +1,30 @@
 import { contextBridge, ipcRenderer } from "electron";
 import type { CatalogProduct } from "@opf/caisse-core";
+import type {
+  CaisseCaissiersPayload,
+  CaisseClotureRecord,
+  CaisseSessionPublic,
+  CloseSessionInput,
+  OpenSessionInput,
+  SessionActionResult,
+  UnlockSessionInput,
+} from "../../shared/caisse-session";
+
+export type {
+  CaisseCaissierPublic,
+  CaisseCaissiersPayload,
+  CaisseClotureRecord,
+  CaisseSessionPublic,
+  CaisseSessionStatus,
+  CloseSessionInput,
+  OpenSessionInput,
+  SessionActionResult,
+  UnlockSessionInput,
+} from "../../shared/caisse-session";
+
+export type CloseSessionResult =
+  | { ok: true; session: CaisseSessionPublic; cloture: CaisseClotureRecord }
+  | { ok: false; error: string };
 
 export type InitialCatalogPayload = {
   products: CatalogProduct[];
@@ -53,7 +78,12 @@ export type CaisseRuntimeConfig = {
   magasinCode: string;
   caisseCode: string;
   posteId: string;
+  ftpHost: string;
+  ftpUser: string;
+  ftpPassword: string;
 };
+
+export type CaisseFtpConfig = Pick<CaisseRuntimeConfig, "ftpHost" | "ftpUser" | "ftpPassword">;
 
 export type CaisseHardwareConfig = Pick<
   CaisseRuntimeConfig,
@@ -93,6 +123,35 @@ export type PingSaurusScaleResult = {
   ok: boolean;
 };
 
+export type AppendSalePayload = {
+  magasinCode: string;
+  caisseCode: string;
+  soldAt: string;
+  ticketNumber: number;
+  ticketRef: string;
+  total: number;
+  clientId: string | null;
+  clientName: string | null;
+  isDelivery: boolean;
+  lines: Array<{
+    productId: string;
+    productCode: string;
+    productName: string;
+    qty: number;
+    unitPrice: number;
+    lineTotal: number;
+    salesUnit: "kg" | "unit";
+  }>;
+  payments: Array<{ mode: string; label: string; amount: number }>;
+  clotureRef?: string | null;
+  caissierId?: string | null;
+  caissierName?: string | null;
+};
+
+export type AppendSaleResult =
+  | { ok: true; dayFile: string; monthFile: string }
+  | { ok: false; error: string };
+
 export type SendSaurusCatalogResult =
   | {
       ok: true;
@@ -125,6 +184,10 @@ contextBridge.exposeInMainWorld("caisseApi", {
     ipcRenderer.invoke("caisse:refreshClientsCache"),
   saveHardwareConfig: (partial: CaisseHardwareConfig): Promise<CaisseRuntimeConfig> =>
     ipcRenderer.invoke("caisse:saveHardwareConfig", partial),
+  saveFtpConfig: (partial: CaisseFtpConfig): Promise<CaisseRuntimeConfig> =>
+    ipcRenderer.invoke("caisse:saveFtpConfig", partial),
+  appendSale: (payload: AppendSalePayload): Promise<AppendSaleResult> =>
+    ipcRenderer.invoke("caisse:appendSale", payload),
   sendSaurusCatalog: (): Promise<SendSaurusCatalogResult> =>
     ipcRenderer.invoke("caisse:sendSaurusCatalog"),
   pingSaurusScale: (): Promise<PingSaurusScaleResult> =>
@@ -161,4 +224,15 @@ contextBridge.exposeInMainWorld("caisseApi", {
     ipcRenderer.on("cart:update", listener);
     return () => ipcRenderer.removeListener("cart:update", listener);
   },
+  getSession: (): Promise<CaisseSessionPublic> => ipcRenderer.invoke("caisse:getSession"),
+  getCaissiers: (): Promise<CaisseCaissiersPayload> => ipcRenderer.invoke("caisse:getCaissiers"),
+  refreshCaissiersCache: (): Promise<CaisseCaissiersPayload> =>
+    ipcRenderer.invoke("caisse:refreshCaissiersCache"),
+  openSession: (input: OpenSessionInput): Promise<SessionActionResult> =>
+    ipcRenderer.invoke("caisse:openSession", input),
+  lockSession: (): Promise<SessionActionResult> => ipcRenderer.invoke("caisse:lockSession"),
+  unlockSession: (input: UnlockSessionInput): Promise<SessionActionResult> =>
+    ipcRenderer.invoke("caisse:unlockSession", input),
+  closeSession: (input: CloseSessionInput): Promise<CloseSessionResult> =>
+    ipcRenderer.invoke("caisse:closeSession", input),
 });

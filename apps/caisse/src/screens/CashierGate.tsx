@@ -1,7 +1,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { Box, CircularProgress, Typography } from "@mui/material";
 import SystemUpdateAltOutlinedIcon from "@mui/icons-material/SystemUpdateAltOutlined";
-import CashierScreen from "./CashierScreen";
+import CaisseSessionGate from "./CaisseSessionGate";
 import SetupDialog from "../components/SetupDialog";
 import QuitConfirmDialog from "../components/QuitConfirmDialog";
 import UpdateInstallConfirmDialog from "../components/UpdateInstallConfirmDialog";
@@ -169,7 +169,7 @@ export default function CashierGate() {
       </Box>
     );
   } else {
-    content = <CashierScreen onRequestQuit={requestQuitConfirm} />;
+    content = <CaisseSessionGate onRequestQuit={requestQuitConfirm} />;
   }
 
   return (

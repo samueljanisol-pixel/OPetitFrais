@@ -9,6 +9,10 @@
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
+    },
+    "./caisse-pin": {
+      "types": "./dist/caisse-pin.d.ts",
+      "import": "./dist/caisse-pin.js"
     }
   },
   "scripts": {

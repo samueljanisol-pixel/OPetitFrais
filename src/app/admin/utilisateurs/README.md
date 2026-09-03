@@ -33,6 +33,8 @@ profiles ──► roles
 | `phone` | Téléphone WhatsApp (format international sans `+`, ex. `212612345678`) — chauffeur commandes, etc. |
 | `role_id` | Rôle RBAC |
 | `ui_locale` | Locale interface (`fr` ou `ar-MA`) |
+| `is_caissier` | Si vrai, l'utilisateur apparaît sur les caisses Electron des magasins rattachés |
+| `caisse_pin_hash` | Hash scrypt du code numérique (4–8 chiffres). Jamais renvoyé par l'API admin |
 
 ---
 
@@ -48,7 +50,9 @@ Permission : `admin.utilisateurs`
 | `role_id` | oui | UUID du rôle |
 | `email` ou `login` | au moins un | Si pas d'email → `{uuid}@internal.opf` |
 | `prenom`, `nom` | non | Défaut vide |
-| `magasin_ids` | non | Requiert aussi `admin.magasins` |
+| `magasin_ids` | non | Requiert aussi `admin.magasins`. **Obligatoire** si `is_caissier` |
+| `is_caissier` | non | Active l'accès ouverture de caisse Electron |
+| `caisse_pin` | si caissier | 4 à 8 chiffres ; hashé en `caisse_pin_hash` |
 
 Flux :
 
@@ -66,6 +70,7 @@ Retourne la liste des profils avec :
 - email Auth (via `listUsers`)
 - rôle (id, name, slug)
 - magasins liés (`profile_magasins` → `magasins`)
+- `is_caissier`, `has_caisse_pin` (jamais le hash ni le PIN)
 
 ### Mise à jour — `PATCH /api/admin/profiles/[userId]`
 
@@ -78,7 +83,9 @@ Champs modifiables :
 | `login` | Nullable ; sync Auth |
 | `role_id` | Interdit en self-service (trigger SQL) |
 | `password` | Min. 6 caractères si fourni |
-| `magasin_ids` | Remplace tous les liens ; requiert `admin.magasins` |
+| `magasin_ids` | Remplace tous les liens ; requiert `admin.magasins`. Interdit vide si caissier |
+| `is_caissier` | Active / désactive l'accès caisse Electron (indépendant du rôle RBAC) |
+| `caisse_pin` | 4 à 8 chiffres ; laisser vide à l'édition conserve le hash existant |
 
 Le changement de rôle **ne supprime pas** les rattachements magasins existants.
 
@@ -93,6 +100,7 @@ Non implémentée — pas de route DELETE ni bouton dans l'UI.
 Tout profil peut recevoir un ou plusieurs magasins via `profile_magasins` :
 
 - **Création / édition** : multi-select « Magasins » (permission `admin.magasins` requise pour enregistrer)
+- **Caissier POS** : case à cocher + code numérique distinct du mot de passe back-office. Un caissier doit avoir au moins un magasin. La liste est synchronisée hors ligne sur les postes (`GET /api/caisse/caissiers`).
 - **API** : `magasin_ids` sur `POST` et `PATCH`
 - **Session** : si des liens existent, `session.magasins` = ces magasins et `session.magasinsRestricted = true` (filtre CA, analyse stats, commandes fournisseur)
 - **Sans lien** : administrateur ou rôle `is_full_access` → tous les magasins ; sinon aucun magasin en session

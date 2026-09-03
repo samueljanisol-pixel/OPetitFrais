@@ -2,16 +2,26 @@
 
 import type {
   CartBroadcast,
+  AppendSalePayload,
+  AppendSaleResult,
+  CaisseCaissiersPayload,
+  CaisseFtpConfig,
   CaisseHardwareConfig,
   CaisseIdentityConfig,
   CaisseIdentityStatus,
   CaisseRuntimeConfig,
+  CaisseSessionPublic,
   CaisseUpdateState,
   CaisseWindowMode,
+  CloseSessionInput,
+  CloseSessionResult,
   InitialCatalogPayload,
   InitialClientsPayload,
+  OpenSessionInput,
   PingSaurusScaleResult,
   SendSaurusCatalogResult,
+  SessionActionResult,
+  UnlockSessionInput,
 } from "../electron/preload/index";
 
 interface ImportMetaEnv {
@@ -40,6 +50,8 @@ declare global {
       getInitialClients: () => Promise<InitialClientsPayload | null>;
       refreshClientsCache: () => Promise<InitialClientsPayload>;
       saveHardwareConfig: (partial: CaisseHardwareConfig) => Promise<CaisseRuntimeConfig>;
+      saveFtpConfig: (partial: CaisseFtpConfig) => Promise<CaisseRuntimeConfig>;
+      appendSale: (payload: AppendSalePayload) => Promise<AppendSaleResult>;
       sendSaurusCatalog: () => Promise<SendSaurusCatalogResult>;
       pingSaurusScale: () => Promise<PingSaurusScaleResult>;
       listPrinters: () => Promise<string[]>;
@@ -52,6 +64,13 @@ declare global {
       onUpdateState: (handler: (state: CaisseUpdateState) => void) => () => void;
       broadcastCart: (payload: CartBroadcast) => void;
       onCartUpdate: (handler: (payload: CartBroadcast) => void) => () => void;
+      getSession: () => Promise<CaisseSessionPublic>;
+      getCaissiers: () => Promise<CaisseCaissiersPayload>;
+      refreshCaissiersCache: () => Promise<CaisseCaissiersPayload>;
+      openSession: (input: OpenSessionInput) => Promise<SessionActionResult>;
+      lockSession: () => Promise<SessionActionResult>;
+      unlockSession: (input: UnlockSessionInput) => Promise<SessionActionResult>;
+      closeSession: (input: CloseSessionInput) => Promise<CloseSessionResult>;
     };
   }
 }

@@ -9,14 +9,17 @@ type Props = {
 export default function QuitConfirmDialog({ open, onClose, onConfirm }: Props) {
   return (
     <Dialog open={open} onClose={onClose} maxWidth="xs" fullWidth>
-      <DialogTitle>Fermer la caisse ?</DialogTitle>
+      <DialogTitle>Quitter le logiciel ?</DialogTitle>
       <DialogContent>
-        <Typography variant="body2">Le logiciel va se fermer. Confirmer la fermeture ?</Typography>
+        <Typography variant="body2">
+          Le logiciel va se fermer. La session reste ouverte : au prochain lancement, la caisse sera
+          verrouillée.
+        </Typography>
       </DialogContent>
       <DialogActions sx={{ px: 2, pb: 1.5 }}>
         <Button onClick={onClose}>Annuler</Button>
         <Button variant="contained" color="error" onClick={onConfirm}>
-          Fermer caisse
+          Quitter
         </Button>
       </DialogActions>
     </Dialog>

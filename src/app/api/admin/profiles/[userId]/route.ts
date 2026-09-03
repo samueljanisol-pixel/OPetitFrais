@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/server";
 import { requireApiPermission } from "@/lib/auth/require-permission-api";
+import { parseIsCaissier, parseOptionalCaissePin, resolveCaissePinHash } from "@/lib/caisse/admin-caissier";
 
 export async function PATCH(req: Request, ctx: { params: Promise<{ userId: string }> }) {
   const gate = await requireApiPermission("admin.utilisateurs");
@@ -17,6 +18,8 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ userId: strin
     login?: string | null;
     password?: string;
     magasin_ids?: string[];
+    is_caissier?: boolean;
+    caisse_pin?: string;
   };
   try {
     body = await req.json();
@@ -94,8 +97,80 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ userId: strin
     }
   }
 
+  const isCaissierPatch = parseIsCaissier(body.is_caissier);
+  const caissePin = parseOptionalCaissePin(body.caisse_pin);
+  if (isCaissierPatch !== undefined || caissePin.length > 0) {
+    const { data: current, error: curE } = await service
+      .from("profiles")
+      .select("is_caissier, caisse_pin_hash")
+      .eq("user_id", userId)
+      .single();
+    if (curE || !current) {
+      return NextResponse.json({ error: curE?.message ?? "Profil introuvable" }, { status: 400 });
+    }
+
+    const nextIsCaissier = isCaissierPatch ?? current.is_caissier === true;
+    const existingHash =
+      typeof current.caisse_pin_hash === "string" && current.caisse_pin_hash.trim().length > 0
+        ? current.caisse_pin_hash
+        : null;
+    const pinResolved = await resolveCaissePinHash({
+      isCaissier: nextIsCaissier,
+      pin: caissePin,
+      existingHash,
+      requirePinIfNew: true,
+    });
+    if (!pinResolved.ok) {
+      return NextResponse.json({ error: pinResolved.error }, { status: 400 });
+    }
+
+    let magasinCount = 0;
+    if (body.magasin_ids !== undefined) {
+      magasinCount = body.magasin_ids.length;
+    } else {
+      const { count, error: cntE } = await service
+        .from("profile_magasins")
+        .select("magasin_id", { count: "exact", head: true })
+        .eq("user_id", userId);
+      if (cntE) {
+        return NextResponse.json({ error: cntE.message }, { status: 400 });
+      }
+      magasinCount = count ?? 0;
+    }
+    if (nextIsCaissier && magasinCount === 0) {
+      return NextResponse.json(
+        { error: "Un caissier doit être rattaché à au moins un magasin" },
+        { status: 400 },
+      );
+    }
+
+    const { error: pinE } = await service
+      .from("profiles")
+      .update({
+        is_caissier: nextIsCaissier,
+        caisse_pin_hash: pinResolved.hash,
+      })
+      .eq("user_id", userId);
+    if (pinE) {
+      return NextResponse.json({ error: pinE.message }, { status: 400 });
+    }
+  }
+
   if (body.magasin_ids !== undefined) {
     const ids = body.magasin_ids;
+    if (ids.length === 0) {
+      const { data: afterMag } = await service
+        .from("profiles")
+        .select("is_caissier")
+        .eq("user_id", userId)
+        .single();
+      if (afterMag?.is_caissier === true) {
+        return NextResponse.json(
+          { error: "Un caissier doit être rattaché à au moins un magasin" },
+          { status: 400 },
+        );
+      }
+    }
     if (ids.length > 0) {
       const { data: magOk } = await service.from("magasins").select("id").in("id", ids);
       if (!magOk || magOk.length !== ids.length) {
@@ -116,10 +191,26 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ userId: strin
     }
   }
 
-  const { data: profile, error: pe } = await service.from("profiles").select().eq("user_id", userId).single();
+  const { data: profile, error: pe } = await service
+    .from("profiles")
+    .select("user_id, login, prenom, nom, phone, role_id, is_caissier, caisse_pin_hash")
+    .eq("user_id", userId)
+    .single();
   if (pe) {
     return NextResponse.json({ error: pe.message }, { status: 400 });
   }
 
-  return NextResponse.json({ profile });
+  const hash = typeof profile.caisse_pin_hash === "string" ? profile.caisse_pin_hash.trim() : "";
+  return NextResponse.json({
+    profile: {
+      user_id: profile.user_id,
+      login: profile.login,
+      prenom: profile.prenom,
+      nom: profile.nom,
+      phone: profile.phone,
+      role_id: profile.role_id,
+      is_caissier: profile.is_caissier === true,
+      has_caisse_pin: hash.length > 0,
+    },
+  });
 }

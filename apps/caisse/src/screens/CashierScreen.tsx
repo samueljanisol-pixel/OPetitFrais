@@ -26,6 +26,7 @@ import ChevronRightIcon from "@mui/icons-material/ChevronRight";
 import {
   addProductToCart,
   buildPriceLabelEscPos,
+  buildClotureTicketEscPos,
   buildSaleTicketEscPos,
   bytesToBase64,
   escPosOpenCashDrawer,
@@ -78,6 +79,7 @@ import {
   loadCachedCart,
   saveCachedCart,
 } from "../lib/cart-cache";
+import { appendSaleLocal } from "../lib/append-sale";
 import PaymentDialog from "../components/PaymentDialog";
 import VignetteProductName from "../components/VignetteProductName";
 import LastPaymentSummaryCard, {
@@ -87,6 +89,9 @@ import ClientSelectDialog from "../components/ClientSelectDialog";
 import ProductQtyDialog from "../components/ProductQtyDialog";
 import HoldCartDialog from "../components/HoldCartDialog";
 import MenuDialog from "../components/MenuDialog";
+import ClotureDialog from "../components/ClotureDialog";
+import type { CaisseClotureRecord, CaisseSessionPublic } from "../../electron/preload/index";
+import { emptyClosedSession } from "../../shared/caisse-session";
 import CommandesBoutiqueDialog, {
   type PasserCaissePick,
 } from "../components/CommandesBoutiqueDialog";
@@ -151,7 +156,17 @@ type CartAddEntry = {
   qtyAdded: number;
 };
 
-export default function CashierScreen({ onRequestQuit }: { onRequestQuit: () => void }) {
+export default function CashierScreen({
+  onRequestQuit,
+  session,
+  onLock,
+  onSessionClosed,
+}: {
+  onRequestQuit: () => void;
+  session: CaisseSessionPublic;
+  onLock: () => void;
+  onSessionClosed: (session: CaisseSessionPublic) => void;
+}) {
   const [magasin, setMagasin] = useState(DEFAULT_MAGASIN);
   const [caisseCode, setCaisseCode] = useState(DEFAULT_CAISSE);
   const [ticketPrinter, setTicketPrinter] = useState("");
@@ -177,6 +192,7 @@ export default function CashierScreen({ onRequestQuit }: { onRequestQuit: () => 
   const [clearCartConfirmOpen, setClearCartConfirmOpen] = useState(false);
   const [holdDialogOpen, setHoldDialogOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [clotureOpen, setClotureOpen] = useState(false);
   const [commandesBoutiqueOpen, setCommandesBoutiqueOpen] = useState(false);
   const [linkedShopCartId, setLinkedShopCartId] = useState<string | null>(null);
   const [linkedShopCartNumber, setLinkedShopCartNumber] = useState<number | null>(null);
@@ -724,14 +740,11 @@ export default function CashierScreen({ onRequestQuit }: { onRequestQuit: () => 
       }
     }
 
-    let ticketNumber = 0;
-    let ticketRef = "";
+    const ticketNumber = nextTicketNumber(magasin, caisseCode);
+    const ticketRef = formatTicketReference(magasin, caisseCode, ticketNumber);
 
     if (opts.printTicket || linkedId || encaissement) {
       try {
-        ticketNumber = nextTicketNumber(magasin, caisseCode);
-        ticketRef = formatTicketReference(magasin, caisseCode, ticketNumber);
-
         if (opts.printTicket) {
           const buf = buildSaleTicketEscPos({
             magasinCode: magasin,
@@ -819,6 +832,42 @@ export default function CashierScreen({ onRequestQuit }: { onRequestQuit: () => 
       } catch (e) {
         setError(e instanceof Error ? e.message : "Ticket impossible à générer");
       }
+    }
+
+    try {
+      const saved = await appendSaleLocal({
+        magasinCode: magasin,
+        caisseCode,
+        soldAt: paidAt.toISOString(),
+        ticketNumber,
+        ticketRef,
+        total: saleTotal,
+        clientId: cart.clientId,
+        clientName: cart.clientName,
+        isDelivery: opts.isDelivery,
+        lines: ticketLines.map((line) => ({
+          productId: line.productId,
+          productCode: line.productCode,
+          productName: line.productName,
+          qty: line.qty,
+          unitPrice: line.unitPrice,
+          lineTotal: line.lineTotal,
+          salesUnit: line.salesUnit,
+        })),
+        payments: opts.payments.map((p) => ({
+          mode: p.mode,
+          label: p.label,
+          amount: p.amount,
+        })),
+        clotureRef: session.clotureRef,
+        caissierId: session.caissierId,
+        caissierName: session.caissierName,
+      });
+      if (!saved.ok) {
+        setError(saved.error);
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Sauvegarde vente locale impossible");
     }
 
     setPaymentOpen(false);
@@ -1752,19 +1801,44 @@ export default function CashierScreen({ onRequestQuit }: { onRequestQuit: () => 
                 </Typography>
               </Box>
             </Box>
-            <Button
-              size="small"
-              variant="outlined"
-              onClick={() => {
-                setLastTicketAvailable(hasLastTicketEscPos());
-                setLastTicketPaidAt(loadLastTicketPaidAt());
-                setMenuOpen(true);
+            <Box
+              sx={{
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "stretch",
+                flexShrink: 0,
+                minWidth: 72,
+                mt: 0.25,
+                gap: 0.35,
               }}
-              sx={{ ...compactActionBtnSx, minWidth: 56, flexShrink: 0, mt: 0.25 }}
-              startIcon={<MenuIcon sx={{ fontSize: 18 }} />}
             >
-              Menu
-            </Button>
+              <Typography
+                sx={{
+                  fontSize: 11,
+                  fontWeight: 800,
+                  lineHeight: 1.15,
+                  textAlign: "center",
+                  maxWidth: 88,
+                }}
+                noWrap
+                title={session.caissierName ?? undefined}
+              >
+                {session.caissierName ?? "—"}
+              </Typography>
+              <Button
+                size="small"
+                variant="outlined"
+                onClick={() => {
+                  setLastTicketAvailable(hasLastTicketEscPos());
+                  setLastTicketPaidAt(loadLastTicketPaidAt());
+                  setMenuOpen(true);
+                }}
+                sx={{ ...compactActionBtnSx, minWidth: 56 }}
+                startIcon={<MenuIcon sx={{ fontSize: 18 }} />}
+              >
+                Menu
+              </Button>
+            </Box>
           </Box>
 
           <Box sx={{ px: 1, pt: 0.75, pb: 0.5, display: "flex", gap: 0.5 }}>
@@ -2174,9 +2248,50 @@ export default function CashierScreen({ onRequestQuit }: { onRequestQuit: () => 
           setCommandesBoutiqueOpen(true);
         }}
         onOpenSettings={() => setSettingsOpen(true)}
+        onLock={() => {
+          setMenuOpen(false);
+          onLock();
+        }}
+        onCloture={() => {
+          setMenuOpen(false);
+          setClotureOpen(true);
+        }}
         onQuitApp={() => {
           setMenuOpen(false);
           onRequestQuit();
+        }}
+      />
+
+      <ClotureDialog
+        open={clotureOpen}
+        session={session}
+        onClose={() => setClotureOpen(false)}
+        onClosed={(cloture: CaisseClotureRecord) => {
+          setClotureOpen(false);
+          void (async () => {
+            try {
+              const buf = buildClotureTicketEscPos({
+                magasinCode: magasin,
+                caisseCode,
+                clotureNumber: cloture.clotureNumber,
+                caissierName: cloture.caissierName,
+                openedAt: new Date(cloture.openedAt),
+                closedAt: new Date(cloture.closedAt),
+                bills50: cloture.bills50,
+                bills20: cloture.bills20,
+                coins10: cloture.coins10,
+                drawerTotal: cloture.drawerTotal,
+                cardTicketCount: cloture.cardTicketCount,
+              });
+              const printResult = await printEscPosBase64(bytesToBase64(buf), { ticketPrinter });
+              if (!printResult.ok) {
+                setError(printResult.error);
+              }
+            } catch (e) {
+              setError(e instanceof Error ? e.message : "Impression clôture impossible");
+            }
+            onSessionClosed(emptyClosedSession());
+          })();
         }}
       />
 

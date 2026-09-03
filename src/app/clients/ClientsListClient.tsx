@@ -12,12 +12,10 @@ import {
   ListItem,
   ListItemButton,
   ListItemText,
-  Paper,
   Typography,
 } from "@mui/material";
 import AppLink from "@/components/AppLink";
 import ClientFormDialog from "@/features/clients/ClientFormDialog";
-import ClientPanierLinkDialog from "@/features/clients/ClientPanierLinkDialog";
 import { useSessionPermissions } from "@/lib/auth/useSessionPermissions";
 import { useBackChevronIcon } from "@/lib/i18n/useBackChevronIcon";
 
@@ -29,14 +27,6 @@ type ClientSummary = {
   total: number;
   paye: number;
   reste: number;
-};
-
-type UnlinkedPanier = {
-  id: string;
-  cart_number: number;
-  label: string;
-  montant_total: number;
-  submitted_at: string | null;
 };
 
 function formatDh(n: number): string {
@@ -51,14 +41,12 @@ export default function ClientsListClient() {
   const t = useTranslations("backoffice.clients.list");
   const tCommon = useTranslations("common");
   const BackChevron = useBackChevronIcon();
-  const { loading: permLoading, can, canReadCommandesClient } = useSessionPermissions();
+  const { loading: permLoading, can } = useSessionPermissions();
 
   const [clients, setClients] = useState<ClientSummary[]>([]);
-  const [unlinked, setUnlinked] = useState<UnlinkedPanier[]>([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
-  const [linkPanier, setLinkPanier] = useState<UnlinkedPanier | null>(null);
 
   useEffect(() => {
     if (!permLoading && !can("clients.read")) {
@@ -70,16 +58,9 @@ export default function ClientsListClient() {
     setErr(null);
     setLoading(true);
     try {
-      const [clientsRes, unlinkedRes] = await Promise.all([
-        fetch("/api/clients"),
-        fetch("/api/clients/paniers-boutique"),
-      ]);
+      const clientsRes = await fetch("/api/clients");
       const clientsJson = (await clientsRes.json()) as {
         clients?: ClientSummary[];
-        error?: string;
-      };
-      const unlinkedJson = (await unlinkedRes.json()) as {
-        paniers?: UnlinkedPanier[];
         error?: string;
       };
       if (!clientsRes.ok) {
@@ -88,15 +69,9 @@ export default function ClientsListClient() {
       } else {
         setClients(clientsJson.clients ?? []);
       }
-      if (unlinkedRes.ok) {
-        setUnlinked(unlinkedJson.paniers ?? []);
-      } else {
-        setUnlinked([]);
-      }
     } catch {
       setErr(tCommon("networkError"));
       setClients([]);
-      setUnlinked([]);
     } finally {
       setLoading(false);
     }
@@ -154,90 +129,40 @@ export default function ClientsListClient() {
           <CircularProgress size={32} />
         </Box>
       ) : (
-        <>
-          {unlinked.length > 0 ? (
-            <Paper variant="outlined" sx={{ p: 2, mb: 3 }}>
-              <Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 1 }}>
-                {t("unlinkedTitle")}
-              </Typography>
-              <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                {t("unlinkedHint")}
-              </Typography>
-              <List disablePadding>
-                {unlinked.map((p) => (
-                  <ListItem key={p.id} disablePadding sx={{ mb: 1 }}>
-                    <Paper variant="outlined" sx={{ width: "100%", p: 1.5 }}>
-                      <Box sx={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 1 }}>
-                        <Box sx={{ flex: 1, minWidth: 0 }}>
-                          <Typography sx={{ fontWeight: 600 }}>{p.label}</Typography>
-                          <Typography variant="body2" color="text.secondary">
-                            {formatDh(p.montant_total)} DH
-                          </Typography>
-                        </Box>
-                        {canReadCommandesClient ? (
-                          <Button
-                            size="small"
-                            variant="text"
-                            component={AppLink}
-                            href={`/commandes-client/${encodeURIComponent(p.id)}`}
-                            sx={{ textTransform: "none" }}
-                          >
-                            Commandes client
-                          </Button>
-                        ) : null}
-                        {can("clients.write") ? (
-                          <Button
-                            size="small"
-                            variant="outlined"
-                            onClick={() => setLinkPanier(p)}
-                            sx={{ textTransform: "none" }}
-                          >
-                            {t("linkToClient")}
-                          </Button>
-                        ) : null}
-                      </Box>
-                    </Paper>
-                  </ListItem>
-                ))}
-              </List>
-            </Paper>
+        <List disablePadding>
+          {clients.map((c) => (
+            <ListItem key={c.id} disablePadding sx={{ mb: 1 }}>
+              <ListItemButton
+                component={AppLink}
+                href={`/clients/${encodeURIComponent(c.id)}`}
+                sx={{
+                  borderRadius: 2,
+                  border: "1px solid",
+                  borderColor: c.reste > 0 ? "warning.light" : "divider",
+                  bgcolor: c.reste > 0 ? "warning.50" : "background.paper",
+                  py: 1.25,
+                }}
+              >
+                <ListItemText
+                  primary={c.name}
+                  secondary={
+                    <>
+                      {c.phone ? `${c.phone} · ` : ""}
+                      {t("reste")} : {formatDh(c.reste)} DH
+                      {c.total > 0 ? ` / ${formatDh(c.total)} DH` : ""}
+                    </>
+                  }
+                  slotProps={{ primary: { sx: { fontWeight: 600 } } }}
+                />
+              </ListItemButton>
+            </ListItem>
+          ))}
+          {clients.length === 0 ? (
+            <Typography color="text.secondary" sx={{ py: 2 }}>
+              {t("empty")}
+            </Typography>
           ) : null}
-
-          <List disablePadding>
-            {clients.map((c) => (
-              <ListItem key={c.id} disablePadding sx={{ mb: 1 }}>
-                <ListItemButton
-                  component={AppLink}
-                  href={`/clients/${encodeURIComponent(c.id)}`}
-                  sx={{
-                    borderRadius: 2,
-                    border: "1px solid",
-                    borderColor: c.reste > 0 ? "warning.light" : "divider",
-                    bgcolor: c.reste > 0 ? "warning.50" : "background.paper",
-                    py: 1.25,
-                  }}
-                >
-                  <ListItemText
-                    primary={c.name}
-                    secondary={
-                      <>
-                        {c.phone ? `${c.phone} · ` : ""}
-                        {t("reste")} : {formatDh(c.reste)} DH
-                        {c.total > 0 ? ` / ${formatDh(c.total)} DH` : ""}
-                      </>
-                    }
-                    slotProps={{ primary: { sx: { fontWeight: 600 } } }}
-                  />
-                </ListItemButton>
-              </ListItem>
-            ))}
-            {clients.length === 0 ? (
-              <Typography color="text.secondary" sx={{ py: 2 }}>
-                {t("empty")}
-              </Typography>
-            ) : null}
-          </List>
-        </>
+        </List>
       )}
 
       <ClientFormDialog
@@ -246,17 +171,6 @@ export default function ClientsListClient() {
         onClose={() => setCreateOpen(false)}
         onSaved={() => {
           setCreateOpen(false);
-          void load();
-        }}
-      />
-
-      <ClientPanierLinkDialog
-        open={linkPanier != null}
-        panierId={linkPanier?.id ?? null}
-        panierLabel={linkPanier?.label ?? null}
-        onClose={() => setLinkPanier(null)}
-        onSaved={() => {
-          setLinkPanier(null);
           void load();
         }}
       />

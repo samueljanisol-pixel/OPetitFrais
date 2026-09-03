@@ -51,6 +51,16 @@ export function formatCaisseCode(raw: string): string | null {
   return String(n).padStart(2, "0");
 }
 
+/** Dossier FTP / local WinDev : magasin `01` → `M01`. */
+export function ventesDirMagasin(magasinCode: string): string {
+  return `M${formatMagasinCode(magasinCode) ?? "00"}`;
+}
+
+/** Dossier FTP / local WinDev : caisse `02` → `C02`. */
+export function ventesDirCaisse(caisseCode: string): string {
+  return `C${formatCaisseCode(caisseCode) ?? "01"}`;
+}
+
 export function isTestMagasin(magasinCode: string): boolean {
   return parseMagasinNumeric(magasinCode) === 0;
 }

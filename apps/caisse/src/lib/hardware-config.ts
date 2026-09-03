@@ -1,4 +1,9 @@
-import type { CaisseHardwareConfig, CaisseIdentityConfig, CaisseRuntimeConfig } from "../../electron/preload/index";
+import type {
+  CaisseFtpConfig,
+  CaisseHardwareConfig,
+  CaisseIdentityConfig,
+  CaisseRuntimeConfig,
+} from "../../electron/preload/index";
 import {
   applyHardwareConfigOnAgent,
   fetchAgentHardwareConfig,
@@ -35,6 +40,9 @@ export async function getCaisseRuntimeConfig(): Promise<CaisseRuntimeConfig> {
     magasinCode: "00",
     caisseCode: "01",
     posteId: "",
+    ftpHost: "",
+    ftpUser: "",
+    ftpPassword: "",
   };
   return cachedConfig;
 }
@@ -99,6 +107,23 @@ export async function saveCaisseHardwareConfig(
   }
 
   return cachedConfig;
+}
+
+export async function saveCaisseFtpConfig(partial: CaisseFtpConfig): Promise<CaisseRuntimeConfig> {
+  if (window.caisseApi?.saveFtpConfig) {
+    cachedConfig = await window.caisseApi.saveFtpConfig(partial);
+    return cachedConfig;
+  }
+  if (cachedConfig) {
+    cachedConfig = {
+      ...cachedConfig,
+      ftpHost: partial.ftpHost.trim(),
+      ftpUser: partial.ftpUser.trim(),
+      ftpPassword: partial.ftpPassword,
+    };
+    return cachedConfig;
+  }
+  throw new Error("Enregistrement FTP indisponible");
 }
 
 export type { SerialPortOption };

@@ -4,10 +4,14 @@ import { join } from "path";
 import {
   getIdentityConfigStatus,
   loadRuntimeConfig,
+  saveFtpConfig,
   saveHardwareConfig,
   saveIdentityConfig,
+  type CaisseFtpConfig,
   type CaisseIdentityConfig,
 } from "./load-config";
+import { appendSaleToLocalJson, type AppendSalePayload } from "./append-sale";
+import { startVentesFtpSync, stopVentesFtpSync } from "./sync-ventes-ftp";
 import {
   clearCachedCatalog,
   getCachedCatalog,
@@ -22,6 +26,19 @@ import {
   getCachedClients,
   prefetchClients,
 } from "./fetch-clients";
+import {
+  clearCachedCaissiers,
+  getCachedCaissiers,
+  prefetchCaissiers,
+} from "./fetch-caissiers";
+import {
+  closeCaisseSession,
+  getCaisseSession,
+  lockCaisseSession,
+  openCaisseSession,
+  unlockCaisseSession,
+} from "./caisse-session";
+import type { CloseSessionInput, OpenSessionInput, UnlockSessionInput } from "../../shared/caisse-session";
 import { listWindowsSerialPorts } from "./list-serial-ports-win";
 import { sendSaurusCatalogFromCache } from "./send-saurus-catalog";
 import { pingConfiguredSaurusScale } from "./ping-saurus-scale";
@@ -222,8 +239,10 @@ app.whenReady().then(async () => {
   identityReady = identityStatus.complete;
 
   if (identityReady) {
-    await Promise.all([prefetchCatalog(), prefetchClients()]);
+    await Promise.all([prefetchCatalog(), prefetchClients(), prefetchCaissiers()]);
   }
+
+  startVentesFtpSync();
 
   ipcMain.handle("caisse:getConfig", () => loadRuntimeConfig());
 
@@ -237,7 +256,8 @@ app.whenReady().then(async () => {
     identityReady = true;
     clearCachedCatalog();
     clearCachedClients();
-    await Promise.all([prefetchCatalog(), prefetchClients()]);
+    clearCachedCaissiers();
+    await Promise.all([prefetchCatalog(), prefetchClients(), prefetchCaissiers()]);
     createCustomerWindow();
     applyWindowMode("caisse");
     void triggerCaisseUpdateCheck();
@@ -282,6 +302,47 @@ app.whenReady().then(async () => {
       });
     },
   );
+
+  ipcMain.handle("caisse:saveFtpConfig", (_event, partial: CaisseFtpConfig) => {
+    const ftpHost = typeof partial?.ftpHost === "string" ? partial.ftpHost : "";
+    const ftpUser = typeof partial?.ftpUser === "string" ? partial.ftpUser : "";
+    const ftpPassword = typeof partial?.ftpPassword === "string" ? partial.ftpPassword : "";
+    return saveFtpConfig({ ftpHost, ftpUser, ftpPassword });
+  });
+
+  ipcMain.handle("caisse:appendSale", (_event, payload: AppendSalePayload) => {
+    return appendSaleToLocalJson(payload);
+  });
+
+  ipcMain.handle("caisse:getSession", () => getCaisseSession());
+
+  ipcMain.handle("caisse:getCaissiers", () => getCachedCaissiers());
+
+  ipcMain.handle("caisse:refreshCaissiersCache", async () => {
+    clearCachedCaissiers();
+    return prefetchCaissiers(true);
+  });
+
+  ipcMain.handle("caisse:openSession", (_event, input: OpenSessionInput) => {
+    const userId = typeof input?.userId === "string" ? input.userId : "";
+    const pin = typeof input?.pin === "string" ? input.pin : "";
+    return openCaisseSession(userId, pin);
+  });
+
+  ipcMain.handle("caisse:lockSession", () => lockCaisseSession());
+
+  ipcMain.handle("caisse:unlockSession", (_event, input: UnlockSessionInput) => {
+    const pin = typeof input?.pin === "string" ? input.pin : "";
+    return unlockCaisseSession(pin);
+  });
+
+  ipcMain.handle("caisse:closeSession", (_event, input: CloseSessionInput) => {
+    return closeCaisseSession({
+      bills50: typeof input?.bills50 === "number" ? input.bills50 : -1,
+      bills20: typeof input?.bills20 === "number" ? input.bills20 : -1,
+      coins10: typeof input?.coins10 === "number" ? input.coins10 : -1,
+    });
+  });
 
   ipcMain.handle("caisse:sendSaurusCatalog", () => sendSaurusCatalogFromCache());
 
@@ -354,5 +415,6 @@ app.on("window-all-closed", () => {
 });
 
 app.on("before-quit", () => {
+  stopVentesFtpSync();
   void stopEmbeddedCaisseAgent();
 });

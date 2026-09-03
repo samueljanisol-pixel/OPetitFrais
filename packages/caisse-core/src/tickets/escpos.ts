@@ -44,6 +44,7 @@ import {
   formatTicketHeaderRow,
   formatTicketLabelValue,
   formatTicketProductRows,
+  formatClotureReference,
   formatTicketReference,
   formatTicketSeparatorLine,
   formatTicketTotalDh,
@@ -242,6 +243,66 @@ export function buildPriceLabelEscPos(input: PriceLabelInput): Uint8Array {
   );
 
   chunks.push(escPosPrintPageModeData());
+  chunks.push(escPosFeedLines(4), escPosCut());
+
+  return concatBytes(chunks);
+}
+
+export type ClotureTicketInput = {
+  magasinCode: string;
+  caisseCode: string;
+  magasinName?: string | null;
+  clotureNumber: number;
+  caissierName: string;
+  openedAt: Date;
+  closedAt: Date;
+  bills50: number;
+  bills20: number;
+  coins10: number;
+  drawerTotal: number;
+  cardTicketCount: number;
+  skipLogo?: boolean;
+};
+
+export function buildClotureTicketEscPos(input: ClotureTicketInput): Uint8Array {
+  const chunks: Uint8Array[] = [escPosInit()];
+
+  if (!input.skipLogo) {
+    chunks.push(escPosOpfLogo());
+  }
+  chunks.push(escPosBlankLine());
+
+  const storeTitle = input.magasinName?.trim() || DEFAULT_STORE_TITLE;
+  chunks.push(escPosLine(padCenter(storeTitle)));
+  chunks.push(escPosLine(padCenter(`Magasin ${input.magasinCode}  Caisse ${input.caisseCode}`)));
+  chunks.push(escPosBlankLine());
+  chunks.push(escPosLineCenter("CLOTURE DE CAISSE"));
+  chunks.push(escPosBlankLine());
+
+  chunks.push(
+    escPosLine(formatTicketLabelValue("Caissier", sanitizeTicketAscii(input.caissierName.trim()), 16)),
+  );
+  chunks.push(escPosLine(formatTicketLabelValue("Ouverture", formatTicketDateTime(input.openedAt), 16)));
+  chunks.push(escPosLine(formatTicketLabelValue("Fermeture", formatTicketDateTime(input.closedAt), 16)));
+  chunks.push(escPosBlankLine());
+  chunks.push(escPosLine(formatTicketLabelValue("Billets 50", String(input.bills50), 16)));
+  chunks.push(escPosLine(formatTicketLabelValue("Billets 20", String(input.bills20), 16)));
+  chunks.push(escPosLine(formatTicketLabelValue("Pieces 10", String(input.coins10), 16)));
+  chunks.push(escPosLine(formatTicketLabelValue("Total caisse", formatTicketTotalDh(input.drawerTotal), 16)));
+  chunks.push(escPosBlankLine());
+  chunks.push(escPosLine(formatTicketLabelValue("Tickets CB", String(input.cardTicketCount), 16)));
+
+  const magasinLabel = sanitizeTicketAscii(input.magasinName?.trim() || input.magasinCode);
+  chunks.push(escPosBlankLine());
+  chunks.push(escPosLine(formatTicketLabelValue("Magasin", magasinLabel, 16)));
+  chunks.push(escPosLine(formatTicketLabelValue("Caisse", input.caisseCode, 16)));
+  chunks.push(escPosLine(formatTicketLabelValue("No Cloture", String(input.clotureNumber), 16)));
+
+  const clotureRef = formatClotureReference(input.magasinCode, input.caisseCode, input.clotureNumber);
+  chunks.push(escPosBlankLine());
+  chunks.push(escPosResetPrintModes());
+  chunks.push(escPosLineCenter(formatTicketDateTime(input.closedAt)));
+  chunks.push(escPosCode128BarcodeFullWidth(clotureRef));
   chunks.push(escPosFeedLines(4), escPosCut());
 
   return concatBytes(chunks);

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { randomUUID } from "crypto";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/server";
 import { requireApiPermission } from "@/lib/auth/require-permission-api";
+import { parseIsCaissier, parseOptionalCaissePin, resolveCaissePinHash } from "@/lib/caisse/admin-caissier";
 
 function mapProfileRow(p: {
   user_id: string;
@@ -10,6 +11,8 @@ function mapProfileRow(p: {
   nom: string;
   phone?: string | null;
   role_id: string;
+  is_caissier?: boolean | null;
+  caisse_pin_hash?: string | null;
   roles: unknown;
   profile_magasins?: unknown[] | null;
 }) {
@@ -20,6 +23,7 @@ function mapProfileRow(p: {
   const magasins = links
     .map((l) => l.magasins)
     .filter((m): m is { id: string; code: string; nom: string } => Boolean(m?.id));
+  const pinHash = typeof p.caisse_pin_hash === "string" ? p.caisse_pin_hash.trim() : "";
   return {
     user_id: p.user_id,
     login: p.login,
@@ -29,6 +33,8 @@ function mapProfileRow(p: {
     role_id: p.role_id,
     roles: p.roles,
     magasins,
+    is_caissier: p.is_caissier === true,
+    has_caisse_pin: pinHash.length > 0,
   };
 }
 
@@ -48,7 +54,7 @@ export async function GET() {
   const { data: profiles, error } = await service
     .from("profiles")
     .select(
-      "user_id, login, prenom, nom, phone, role_id, roles(id, name, slug), profile_magasins(magasin_id, magasins(id, code, nom))",
+      "user_id, login, prenom, nom, phone, role_id, is_caissier, caisse_pin_hash, roles(id, name, slug), profile_magasins(magasin_id, magasins(id, code, nom))",
     )
     .order("nom", { ascending: true });
 
@@ -86,6 +92,8 @@ export async function POST(req: Request) {
     phone?: string | null;
     role_id?: string;
     magasin_ids?: string[];
+    is_caissier?: boolean;
+    caisse_pin?: string;
   };
   try {
     body = await req.json();
@@ -167,7 +175,40 @@ export async function POST(req: Request) {
     }
   }
 
+  const isCaissier = parseIsCaissier(body.is_caissier) === true;
+  const caissePin = parseOptionalCaissePin(body.caisse_pin);
+  const pinResolved = await resolveCaissePinHash({
+    isCaissier,
+    pin: caissePin,
+    existingHash: null,
+    requirePinIfNew: true,
+  });
+  if (!pinResolved.ok) {
+    await service.auth.admin.deleteUser(created.user.id);
+    return NextResponse.json({ error: pinResolved.error }, { status: 400 });
+  }
+
   const magasinIds = Array.isArray(body.magasin_ids) ? body.magasin_ids : undefined;
+  if (isCaissier && (!magasinIds || magasinIds.length === 0)) {
+    await service.auth.admin.deleteUser(created.user.id);
+    return NextResponse.json(
+      { error: "Un caissier doit être rattaché à au moins un magasin" },
+      { status: 400 },
+    );
+  }
+
+  const { error: caissierE } = await service
+    .from("profiles")
+    .update({
+      is_caissier: isCaissier,
+      caisse_pin_hash: pinResolved.hash,
+    })
+    .eq("user_id", created.user.id);
+  if (caissierE) {
+    await service.auth.admin.deleteUser(created.user.id);
+    return NextResponse.json({ error: caissierE.message }, { status: 400 });
+  }
+
   if (magasinIds !== undefined) {
     const mg = await requireApiPermission("admin.magasins");
     if (!mg.ok) {
@@ -202,6 +243,8 @@ export async function POST(req: Request) {
       nom,
       phone,
       role_id,
+      is_caissier: isCaissier,
+      has_caisse_pin: pinResolved.hash != null,
     },
   });
 }

@@ -2,7 +2,7 @@
 
 Application caisse Windows **1024×768** + écran client **plein écran sur le 2ᵉ moniteur** (si présent), inspirée WinDev.
 
-Fenêtres **sans barre de titre ni menu** (mode kiosque Electron). Fermeture : **Menu → Fermer caisse**, **Alt+F4** ou clic droit sur l’icône barre des tâches — **confirmation demandée** dans tous les cas.
+Fenêtres **sans barre de titre ni menu** (mode kiosque Electron). Fermeture : **Menu → Quitter**, **Alt+F4** ou clic droit sur l’icône barre des tâches — **confirmation demandée** dans tous les cas. Quitter ne clôture pas la session.
 
 **Écran client** : ouvert uniquement s'il existe un second écran (autre que le principal). Sinon, seule la fenêtre caissier s'affiche.
 
@@ -179,7 +179,9 @@ La version servie par l’API (`GET /api/caisse/release`) est lue depuis **`apps
 | `src/components/ClientSelectDialog.tsx` | Sélection / liste clients |
 | `src/components/MenuDialog.tsx` | Menu caisse (actualiser prix, réimprimer ticket, paramètres) |
 | `src/lib/last-ticket.ts` | Dernier ticket ESC/POS (localStorage) pour réimpression |
-| `src/components/SettingsDialog.tsx` | Paramètres balance COM, IP SAURUS, imprimante ticket |
+| `src/components/SettingsDialog.tsx` | Paramètres balance COM, IP SAURUS, imprimante ticket + accès admin |
+| `src/components/AdminPinDialog.tsx` | Code à chiffres (clavier tactile) pour **Paramètres Admin** |
+| `src/components/AdminSettingsDialog.tsx` | Paramètres admin (FTP ventes) |
 | `electron/main/saurus-scale/` | Protocole UDP LB1 (catalogue PLU) |
 | `src/lib/hardware-config.ts` | Lecture / enregistrement config matérielle |
 | `src/components/VignetteProductName.tsx` | Nom produit vignette — taille auto sans ellipsis |
@@ -213,9 +215,10 @@ Package partagé [`@opf/caisse-core`](../../packages/caisse-core) :
 - [x] Paniers en attente (mise en attente, rappel, persistance locale)
 - [x] Annulation des ajouts (pile LIFO, bouton rond à droite du clavier)
 - [x] **Commandes boutique** — Menu → liste commandes `a_passer_caisse`, verrou poste, client seul au panier, double impression ticket, lien POS
+- [x] **Sauvegarde ventes JSON** (format WinDev jour/mois) + envoi FTP `/ventes_caisses/MXX/CXX` toutes les 10 min
 - [ ] Sync Supabase / catalogue réel (Phase 2)
 - [ ] Parseur scan code-barres (plus tard)
-- [ ] Auth caissier
+- [x] Ouverture / verrouillage / clôture de caisse (login caissier hors ligne, ticket `MXXCXXCLXX`)
 
 ## Config poste (futur)
 
@@ -227,7 +230,23 @@ Au démarrage, le catalogue est **préchargé** côté Electron (réseau puis ca
 
 **Hors ligne** : si le serveur backoffice est inaccessible, la caisse charge le **dernier catalogue en cache**. Indication **Mode hors ligne** en bas à droite (barre de statut), pas en bandeau haut. Les ventes, tickets, balance locale et envoi SAURUS restent possibles. Indisponibles : commandes boutique, création/modification clients.
 
-Le **catalogue** est persisté dans `%AppData%/OPetitFrais/catalog-cache.json` ; les **photos produits** dans `catalog-photos/` (protocole `caisse-photo://`, disponibles hors ligne) ; la **liste clients** dans `clients-cache.json`.
+Le **catalogue** est persisté dans `%AppData%/OPetitFrais Caisse/catalog-cache.json` ; les **photos produits** dans `catalog-photos/` (protocole `caisse-photo://`, disponibles hors ligne) ; la **liste clients** dans `clients-cache.json` ; les **caissiers** dans `caissiers-cache.json` (login hors ligne).
+
+## Ouverture, verrouillage et clôture
+
+Au lancement (après setup et MAJ), si aucune session n’est ouverte : écran **Caisse fermée** (logo, magasin/caisse, date/heure, liste des caissiers, pavé numérique).
+
+| Action | Effet |
+|--------|--------|
+| **Ouvrir Caisse** | Vérifie le code du caissier choisi, attribue `MXXCXXCLXX`, ouvre l’écran de vente |
+| **Verrouiller** | Retour à l’écran, titre **Caisse verrouillée** — même caissier uniquement |
+| Relance logiciel (session ouverte) | **Caisse verrouillée** |
+| **Clôturer** | Saisie billets 50 / 20 et pièces 10, tickets CB, impression ticket, retour **Caisse fermée** |
+| **Quitter** | Ferme l’app sans clôturer |
+
+Les caissiers sont gérés dans **Admin → Utilisateurs** (case Caissier + code 4–8 chiffres + magasins). Sync : `GET /api/caisse/caissiers`. Chaque vente JSON porte `clotureRef`, `caissierId`, `caissierName`. Les clôtures sont archivées dans `ventes/MXX/CXX/clotures.json` (FTP avec les ventes).
+
+Le nom du caissier en cours s’affiche au-dessus du bouton **Menu**.
 
 **Actualisation** : en fond toutes les **5 minutes** (et Menu → Actualiser les prix). Changer de catégorie / page ne relance pas le catalogue (évite les ralentissements si internet faible).
 
@@ -246,11 +265,14 @@ Fichier **`apps/caisse/caisse.config.json`** (copier depuis `caisse.config.examp
   "backofficeUrl": "http://localhost:3000",
   "scalePort": "COM9",
   "magasinCode": "00",
-  "caisseCode": "01"
+  "caisseCode": "01",
+  "ftpHost": "",
+  "ftpUser": "",
+  "ftpPassword": ""
 }
 ```
 
-Le **token** est lu automatiquement depuis `.env.local` à la racine (`CAISSE_TICKET_TOKEN`). Pas besoin de rebuild pour changer la config.
+Le **token** est lu automatiquement depuis `.env.local` à la racine (`CAISSE_TICKET_TOKEN`). En dev, le FTP peut aussi venir de `FTP_HOST` / `FTP_USER` / `FTP_PASSWORD`. Pas besoin de rebuild pour changer la config.
 
 Au démarrage, la caisse appelle `GET /api/caisse/catalog`. Bouton **↻** pour actualiser.
 
@@ -324,6 +346,41 @@ Modal **Paiement** : fenêtre large (`md`), hauteur ~**viewport − 48 px**. Ban
 - Chaque ligne peut être retirée individuellement (×). Total paiement et monnaie à rendre en bas.
 - Après validation du paiement, un encart **Dernier ticket** rappelle **date/heure**, total panier, encaissé, mode(s) de paiement et monnaie rendue ; il disparaît dès qu’un produit est ajouté au panier.
 
+## Sauvegarde ventes JSON (local + FTP)
+
+À **chaque vente validée** (POS, livraison, commande boutique, encaissement différé), la caisse met à jour deux fichiers locaux au format WinDev :
+
+```
+%APPDATA%\OPetitFrais Caisse\ventes\MXX\CXX\ventes_YYYY-MM-DD.json
+%APPDATA%\OPetitFrais Caisse\ventes\MXX\CXX\ventes_YYYY-MM.json
+```
+
+Exemple : magasin `01`, caisse `02` → `...\ventes\M01\C02\`. Les dossiers `ventes`, `MXX` et `CXX` sont **créés automatiquement** s’ils n’existent pas.
+
+**Jour** : `total_jour`, `nb_paniers`, `panier_moyen`, `panier_heure` (24 cases), `ventes` (clé = code produit, `{ article, qte, total }`), `tickets` (journal local : ticket, lignes, paiements, client, `clotureRef` / `caissierId` / `caissierName`).
+
+Les clôtures sont archivées dans le même dossier : `clotures.json` (fonds laissés, tickets CB, horaires, sans total de ventes).
+
+**Mois** : `total_mois`, `nb_paniers`, `panier_moyen`, `ventes`.
+
+Un échec d’écriture locale affiche une erreur mais **n’annule pas** l’encaissement. Hors Electron (dev navigateur) : pas d’écriture disque.
+
+### Envoi FTP
+
+Toutes les **10 minutes**, s’il y a des fichiers locaux **modifiés** depuis le dernier envoi réussi, Electron envoie ces JSON vers :
+
+```
+/ventes_caisses/MXX/CXX/ventes_YYYY-MM-DD.json
+/ventes_caisses/MXX/CXX/ventes_YYYY-MM.json
+/ventes_caisses/MXX/CXX/clotures.json
+```
+
+`ventes_caisses`, `MXX` et `CXX` sont créés sur le FTP s’ils manquent (`ensureDir`). Sans modification, aucune session FTP n’est ouverte.
+
+Identifiants dans **Menu → Paramètres → Accès paramètres admin** (code `1145`, clavier numérique tactile), ou `caisse.config.json` : `ftpHost`, `ftpUser`, `ftpPassword`. En dev non packagé, fallback `.env.local` : `FTP_HOST` / `FTP_USER` / `FTP_PASSWORD`. Si le FTP n’est pas configuré : sauvegarde locale seulement.
+
+Le tableau de bord CA continue de lire `/ventes` (WinDev). `/ventes_caisses` est le dépôt des caisses Electron.
+
 ## Ticket de caisse (ESC/POS 80 mm)
 
 Modèle aligné sur le ticket WinDev (`ticket2.pdf`) — **Font B 64 colonnes**, code page **CP1252** :
@@ -335,6 +392,8 @@ Modèle aligné sur le ticket WinDev (`ticket2.pdf`) — **Font B 64 colonnes**,
 En-tête ticket : **logo O'petit frais** (raster ESC/POS). Regénérer le logo : `npm run generate:logo -w @opf/caisse-core`.
 
 Montants avec **virgule** décimale (`12,50`). Génération : `buildSaleTicketEscPos` dans `@opf/caisse-core`.
+
+**Ticket de clôture** (`buildClotureTicketEscPos`) : caissier, ouverture/fermeture, référence `MXXCXXCLXX`, billets 50 / 20, pièces 10, total laissé, nombre de tickets CB — **pas de total ventes**.
 
 ## Étiquette prix (mode Imprimer prix)
 
@@ -366,8 +425,10 @@ Bouton **Menu** (colonne droite) :
 - **Actualiser les prix** — recharge le catalogue depuis Supabase (`/api/caisse/catalog`).
 - **Envoyer prix balance SAURUS** — envoi UDP du catalogue PLU vers la balance réseau (LB1, port 5001).
 - **Imprimer dernier ticket** — réimprime le dernier ticket de vente (activé après un paiement avec impression) ; date/heure du ticket affichée en petit sous le bouton.
-- **Paramètres** — port **COM** balance, **IP balance SAURUS**, **imprimante ticket** (`caisse.config.json`).
-- **Fermer caisse** — quitte l’application Electron (confirmation demandée).
+- **Paramètres** — port **COM** balance, **IP balance SAURUS**, **imprimante ticket** (`caisse.config.json`). **Accès paramètres admin** (code `1145`) : identifiants FTP ventes.
+- **Verrouiller** — revient à l’écran « Caisse verrouillée » ; seul le caissier en cours peut déverrouiller.
+- **Clôturer** — saisie fonds (billets 50 / 20, pièces 10) + impression ticket de clôture ; pas de total ventes.
+- **Quitter** — quitte l’application Electron (confirmation demandée). La session reste ouverte (relance = caisse verrouillée).
 
 Colonne droite (panier) : logo **O'petit frais** sur fond blanc + bouton **Menu** en haut à droite ; **Client**, **Attente**, **Supprimer panier** (icône) ; clavier avec colonne **Retour** + **Paiement**.
 

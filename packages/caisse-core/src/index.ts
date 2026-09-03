@@ -16,4 +16,24 @@ export {
 } from "./tickets/escpos-commands.js";
 export type { EscPosTextStyle } from "./tickets/escpos-commands.js";
 export { escPosCode128BarcodeFullWidth } from "./tickets/code128.js";
-export { formatTicketReference } from "./tickets/sale-ticket-format.js";
+export { formatClotureReference, formatTicketReference } from "./tickets/sale-ticket-format.js";
+export {
+  emptyDayFile,
+  emptyMonthFile,
+  localDateKeys,
+  mergeSaleIntoDayFile,
+  mergeSaleIntoMonthFile,
+  parseDayFile,
+  parseMonthFile,
+  soldAtHour,
+  ventesProductKey,
+} from "./ventes-json.js";
+export type {
+  VentesDayFile,
+  VentesJsonLine,
+  VentesMonthFile,
+  VentesSaleInput,
+  VentesTicket,
+  VentesTicketLine,
+  VentesTicketPayment,
+} from "./ventes-json.js";

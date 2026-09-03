@@ -14,6 +14,7 @@ import {
 import { useCallback, useEffect, useState } from "react";
 import { useTranslations } from "next-intl";
 import ClientFormDialog from "@/features/clients/ClientFormDialog";
+import { useAppFormat } from "@/lib/i18n/useAppFormat";
 
 type ClientOption = {
   id: string;
@@ -41,6 +42,14 @@ type Props = {
   onSaved: () => void;
 };
 
+function formatPanierOptionLabel(
+  panier: UnlinkedPanier,
+  formatDateTime: (value: Date | string | number) => string,
+): string {
+  const datePart = panier.submitted_at ? formatDateTime(panier.submitted_at) : "—";
+  return `${datePart} · ${panier.label} — ${panier.montant_total.toFixed(2)} DH`;
+}
+
 export default function ClientPanierLinkDialog({
   open,
   panierId = null,
@@ -52,6 +61,7 @@ export default function ClientPanierLinkDialog({
 }: Props) {
   const t = useTranslations("backoffice.clients.linkDialog");
   const tCommon = useTranslations("common");
+  const { formatDateTime } = useAppFormat();
   const [clients, setClients] = useState<ClientOption[]>([]);
   const [paniers, setPaniers] = useState<UnlinkedPanier[]>([]);
   const [selectedClient, setSelectedClient] = useState<ClientOption | null>(null);
@@ -164,7 +174,7 @@ export default function ClientPanierLinkDialog({
           {!panierId ? (
             <Autocomplete
               options={paniers}
-              getOptionLabel={(o) => `${o.label} — ${o.montant_total.toFixed(2)} DH`}
+              getOptionLabel={(o) => formatPanierOptionLabel(o, formatDateTime)}
               value={selectedPanier}
               onChange={(_e, v) => setSelectedPanier(v)}
               renderInput={(params) => (
