@@ -186,3 +186,23 @@ export function formatMagasinCaisseLabel(magasinCode: string, caisseCode: string
   const caisse = caisseCode.trim().replace(/^C/i, "") || "—";
   return `Magasin : ${magasin} - Caisse : ${caisse}`;
 }
+
+export function useSupabaseQueueCount(): number {
+  const [count, setCount] = useState(0);
+
+  useEffect(() => {
+    let cancelled = false;
+    void window.caisseApi?.getSupabaseQueueCount?.().then((n) => {
+      if (!cancelled && typeof n === "number" && Number.isFinite(n)) setCount(n);
+    });
+    const stop = window.caisseApi?.onSupabaseQueueCount?.((n) => {
+      if (typeof n === "number" && Number.isFinite(n)) setCount(n);
+    });
+    return () => {
+      cancelled = true;
+      stop?.();
+    };
+  }, []);
+
+  return count;
+}

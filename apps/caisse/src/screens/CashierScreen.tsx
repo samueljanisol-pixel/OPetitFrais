@@ -193,6 +193,8 @@ export default function CashierScreen({
   const [holdDialogOpen, setHoldDialogOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [clotureOpen, setClotureOpen] = useState(false);
+  const [abandonOpen, setAbandonOpen] = useState(false);
+  const [abandonBusy, setAbandonBusy] = useState(false);
   const [commandesBoutiqueOpen, setCommandesBoutiqueOpen] = useState(false);
   const [linkedShopCartId, setLinkedShopCartId] = useState<string | null>(null);
   const [linkedShopCartNumber, setLinkedShopCartNumber] = useState<number | null>(null);
@@ -1302,9 +1304,9 @@ export default function CashierScreen({
                       <Typography
                         sx={{
                           fontFamily: '"DSEG7 Classic Mini", monospace',
-                          fontSize: 26,
+                          fontSize: 24,
                           lineHeight: 1,
-                          letterSpacing: "0.08em",
+                          letterSpacing: "0.02em",
                           width: "100%",
                           textAlign: "left",
                           fontVariantNumeric: "tabular-nums",
@@ -2254,13 +2256,79 @@ export default function CashierScreen({
         }}
         onCloture={() => {
           setMenuOpen(false);
-          setClotureOpen(true);
+          void (async () => {
+            const latest = window.caisseApi?.getSession ? await window.caisseApi.getSession() : session;
+            if (latest.saleCount <= 0) {
+              setAbandonOpen(true);
+              return;
+            }
+            setClotureOpen(true);
+          })();
         }}
         onQuitApp={() => {
           setMenuOpen(false);
           onRequestQuit();
         }}
       />
+
+      <Dialog
+        open={abandonOpen}
+        onClose={() => {
+          if (!abandonBusy) setAbandonOpen(false);
+        }}
+        maxWidth="xs"
+        fullWidth
+      >
+        <DialogTitle sx={{ fontWeight: 800 }}>Fermer sans clôture</DialogTitle>
+        <DialogContent>
+          <Typography>
+            Aucune vente n’a été enregistrée. Fermer la caisse sans clôture ?
+          </Typography>
+        </DialogContent>
+        <DialogActions sx={{ px: 2, pb: 1.5 }}>
+          <Button disabled={abandonBusy} onClick={() => setAbandonOpen(false)}>
+            Annuler
+          </Button>
+          <Button
+            variant="contained"
+            color="error"
+            disabled={abandonBusy}
+            onClick={() => {
+              void (async () => {
+                if (abandonBusy) return;
+                setAbandonBusy(true);
+                try {
+                  if (window.caisseApi?.getSession) {
+                    const latest = await window.caisseApi.getSession();
+                    if (latest.saleCount > 0) {
+                      setAbandonOpen(false);
+                      setClotureOpen(true);
+                      return;
+                    }
+                  }
+                  if (!window.caisseApi?.abandonEmptySession) {
+                    setError("Redémarrez la caisse pour fermer sans clôture");
+                    setAbandonOpen(false);
+                    return;
+                  }
+                  const result = await window.caisseApi.abandonEmptySession();
+                  if (!result.ok) {
+                    setError(result.error);
+                    setAbandonOpen(false);
+                    return;
+                  }
+                  setAbandonOpen(false);
+                  onSessionClosed(result.session);
+                } finally {
+                  setAbandonBusy(false);
+                }
+              })();
+            }}
+          >
+            {abandonBusy ? "Fermeture…" : "Fermer sans clôture"}
+          </Button>
+        </DialogActions>
+      </Dialog>
 
       <ClotureDialog
         open={clotureOpen}
@@ -2281,6 +2349,7 @@ export default function CashierScreen({
                 bills20: cloture.bills20,
                 coins10: cloture.coins10,
                 drawerTotal: cloture.drawerTotal,
+                saleCount: cloture.saleCount,
                 cardTicketCount: cloture.cardTicketCount,
               });
               const printResult = await printEscPosBase64(bytesToBase64(buf), { ticketPrinter });

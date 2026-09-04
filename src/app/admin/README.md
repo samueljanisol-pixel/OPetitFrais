@@ -90,7 +90,8 @@ Migration fondatrice : `supabase/migrations/20260423120000_profiles_roles_permis
 |-----|--------|-------------|----------------------|
 | `produits.read` | produits | Voir le catalogue | `/produits`, `/produits/[id]` |
 | `produits.write` | produits | Créer / modifier produits | `/produits/nouveau`, édition fiche |
-| `ventes.read` | ventes | Voir CA et historique | `/ca`, `/historique-ca`, `/analyse-stats` |
+| `ventes.read` | ventes | Voir CA, historique et clôtures | `/ca`, `/historique-ca`, `/analyse-stats`, `/clotures` |
+| `ventes.write` | ventes | Vérifier les clôtures de caisse | `/clotures/[ref]` |
 | `parametres.read` | parametres | Voir Paramètres | `/parametres` |
 | `parametres.write` | parametres | Modifier Paramètres | édition référentiels |
 | `admin.utilisateurs` | admin | Gérer les utilisateurs | `/admin/utilisateurs`, onglet Comptes |

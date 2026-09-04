@@ -32,8 +32,17 @@ export type {
   VentesDayFile,
   VentesJsonLine,
   VentesMonthFile,
+  VentesPanierHeure,
   VentesSaleInput,
   VentesTicket,
   VentesTicketLine,
   VentesTicketPayment,
 } from "./ventes-json.js";
+export {
+  cashSaleTotal,
+  computeClotureSnapshot,
+  emptyClotureSnapshot,
+  paymentModeLabel,
+  PAYMENT_MODE_LABELS,
+} from "./cloture-snapshot.js";
+export type { CloturePaymentBreakdown, ClotureSnapshot } from "./cloture-snapshot.js";

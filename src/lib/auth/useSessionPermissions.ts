@@ -42,6 +42,7 @@ export function useSessionPermissions() {
     magasinsRestricted: session?.magasinsRestricted ?? false,
     canWriteProducts: can("produits.write"),
     canReadVentes: can("ventes.read"),
+    canWriteVentes: can("ventes.write"),
     canReadParametres: can("parametres.read"),
     canWriteParametres: can("parametres.write"),
     canReadCharges: can("charges.read"),

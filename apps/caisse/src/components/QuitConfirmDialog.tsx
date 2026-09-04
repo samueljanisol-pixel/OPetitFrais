@@ -12,8 +12,8 @@ export default function QuitConfirmDialog({ open, onClose, onConfirm }: Props) {
       <DialogTitle>Quitter le logiciel ?</DialogTitle>
       <DialogContent>
         <Typography variant="body2">
-          Le logiciel va se fermer. La session reste ouverte : au prochain lancement, la caisse sera
-          verrouillée.
+          Le logiciel va se fermer. Si une session est ouverte, elle reste ouverte : au prochain
+          lancement, la caisse sera verrouillée.
         </Typography>
       </DialogContent>
       <DialogActions sx={{ px: 2, pb: 1.5 }}>

@@ -33,6 +33,7 @@
       "products": "Produits",
       "productActualisation": "Actualisation produit",
       "stats": "Statistique",
+      "clotures": "Clôtures",
       "supplierOrders": "Commandes fournisseur",
       "supplierAccounts": "Comptes fournisseurs",
       "charges": "Gestion Charges",
@@ -597,6 +598,10 @@
         "prete": "Prête",
         "achat_en_cours": "Achat en cours",
         "terminee": "Terminée"
+      },
+      "caisse_cloture": {
+        "a_verifier": "À vérifier",
+        "verifiee": "Vérifiée"
       },
       "listSections": {
         "inProgress": "En cours",

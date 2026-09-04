@@ -277,6 +277,17 @@ Paramètres communs : `magasinCode`, `caisseCode`, `token`.
 
 Backoffice workflow : [`../../commandes-client/README.md`](../../commandes-client/README.md).
 
+## Export ventes / clôtures (Electron)
+
+| Route | Méthode | Rôle |
+|-------|---------|------|
+| `/api/caisse/ventes` | POST | Lot de tickets (`{ tickets: [...] }`), upsert `ticket_ref` |
+| `/api/caisse/clotures` | POST | Une clôture + snapshot totaux, upsert `cloture_ref` |
+
+Auth : même token `CAISSE_TICKET_TOKEN`. Page backoffice : [`../../clotures/README.md`](../../clotures/README.md).
+
+En Electron **non packagé**, l’export utilise `http://localhost:3000` (override `CAISSE_SYNC_URL` dans `.env.local`). L’URL prod du `caisse.config.json` sert au catalogue / caissiers, pas à ces POST tant que les routes ne sont pas déployées.
+
 ---
 
 ## Config

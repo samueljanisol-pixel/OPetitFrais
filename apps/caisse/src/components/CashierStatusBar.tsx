@@ -3,6 +3,7 @@ import {
   useApiServerStatus,
   useInternetStatus,
   useSaurusScaleStatus,
+  useSupabaseQueueCount,
 } from "../lib/status-bar";
 import CaisseVersionBadge from "./CaisseVersionBadge";
 
@@ -56,6 +57,7 @@ export default function CashierStatusBar({
   const internetOk = useInternetStatus();
   const apiOk = useApiServerStatus(backofficeUrl);
   const saurus = useSaurusScaleStatus();
+  const pendingSend = useSupabaseQueueCount();
 
   const saurusOk = saurus.connected;
 
@@ -102,6 +104,16 @@ export default function CashierStatusBar({
               : "IP balance SAURUS non configurée (Paramètres)"
           }
         />
+        {pendingSend > 0 ? (
+          <Tooltip title="Ventes ou clôtures en attente d’envoi vers le serveur">
+            <Typography
+              variant="caption"
+              sx={{ fontSize: 10, lineHeight: 1.2, fontWeight: 800, color: "#b26a00" }}
+            >
+              {pendingSend} en attente d’envoi
+            </Typography>
+          </Tooltip>
+        ) : null}
       </Box>
 
       <Box

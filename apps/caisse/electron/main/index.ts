@@ -13,6 +13,11 @@ import {
 import { appendSaleToLocalJson, type AppendSalePayload } from "./append-sale";
 import { startVentesFtpSync, stopVentesFtpSync } from "./sync-ventes-ftp";
 import {
+  getSupabaseQueueCount,
+  startVentesSupabaseSync,
+  stopVentesSupabaseSync,
+} from "./sync-ventes-supabase";
+import {
   clearCachedCatalog,
   getCachedCatalog,
   prefetchCatalog,
@@ -32,6 +37,7 @@ import {
   prefetchCaissiers,
 } from "./fetch-caissiers";
 import {
+  abandonEmptyCaisseSession,
   closeCaisseSession,
   getCaisseSession,
   lockCaisseSession,
@@ -344,6 +350,10 @@ app.whenReady().then(async () => {
     });
   });
 
+  ipcMain.handle("caisse:abandonEmptySession", () => abandonEmptyCaisseSession());
+
+  ipcMain.handle("caisse:getSupabaseQueueCount", () => getSupabaseQueueCount());
+
   ipcMain.handle("caisse:sendSaurusCatalog", () => sendSaurusCatalogFromCache());
 
   ipcMain.handle("caisse:pingSaurusScale", () => pingConfiguredSaurusScale());
@@ -388,6 +398,7 @@ app.whenReady().then(async () => {
   });
 
   createCashierWindow(identityReady ? "caisse" : "setup");
+  startVentesSupabaseSync(cashierWindow);
   initCaisseUpdate(() => cashierWindow);
   if (identityReady) {
     startCaisseUpdateChecks();
@@ -403,6 +414,7 @@ app.whenReady().then(async () => {
       const status = getIdentityConfigStatus();
       identityReady = status.complete;
       createCashierWindow(status.complete ? "caisse" : "setup");
+      startVentesSupabaseSync(cashierWindow);
       createCustomerWindow();
     }
   });
@@ -416,5 +428,6 @@ app.on("window-all-closed", () => {
 
 app.on("before-quit", () => {
   stopVentesFtpSync();
+  stopVentesSupabaseSync();
   void stopEmbeddedCaisseAgent();
 });

@@ -234,14 +234,14 @@ Le **catalogue** est persisté dans `%AppData%/OPetitFrais Caisse/catalog-cache.
 
 ## Ouverture, verrouillage et clôture
 
-Au lancement (après setup et MAJ), si aucune session n’est ouverte : écran **Caisse fermée** (logo, magasin/caisse, date/heure, liste des caissiers, pavé numérique).
+Au lancement (après setup et MAJ), si aucune session n’est ouverte : écran **Caisse fermée** (logo, magasin/caisse, date/heure, liste des caissiers, pavé numérique compact). En haut : **Paramètres** (balance, imprimante) et bouton extinction (quitter le logiciel).
 
 | Action | Effet |
 |--------|--------|
 | **Ouvrir Caisse** | Vérifie le code du caissier choisi, attribue `MXXCXXCLXX`, ouvre l’écran de vente |
 | **Verrouiller** | Retour à l’écran, titre **Caisse verrouillée** — même caissier uniquement |
 | Relance logiciel (session ouverte) | **Caisse verrouillée** |
-| **Clôturer** | Saisie billets 50 / 20 et pièces 10, tickets CB, impression ticket, retour **Caisse fermée** |
+| **Clôturer** | S’il n’y a **aucune vente** : confirmation **Fermer sans clôture** (pas d’enregistrement, le n° `CLxx` est réutilisé). Sinon : saisie billets 50 / 20 et pièces 10 (photos), impression ticket, retour **Caisse fermée** |
 | **Quitter** | Ferme l’app sans clôturer |
 
 Les caissiers sont gérés dans **Admin → Utilisateurs** (case Caissier + code 4–8 chiffres + magasins). Sync : `GET /api/caisse/caissiers`. Chaque vente JSON porte `clotureRef`, `caissierId`, `caissierName`. Les clôtures sont archivées dans `ventes/MXX/CXX/clotures.json` (FTP avec les ventes).
@@ -357,9 +357,11 @@ Modal **Paiement** : fenêtre large (`md`), hauteur ~**viewport − 48 px**. Ban
 
 Exemple : magasin `01`, caisse `02` → `...\ventes\M01\C02\`. Les dossiers `ventes`, `MXX` et `CXX` sont **créés automatiquement** s’ils n’existent pas.
 
-**Jour** : `total_jour`, `nb_paniers`, `panier_moyen`, `panier_heure` (24 cases), `ventes` (clé = code produit, `{ article, qte, total }`), `tickets` (journal local : ticket, lignes, paiements, client, `clotureRef` / `caissierId` / `caissierName`).
+**Jour** : `total_jour`, `nb_paniers`, `panier_moyen`, `panier_heure` (format WinDev : `[{ Heure, NbrPanier }, …]`, une entrée par heure avec vente), `ventes` (clé = code produit, `{ article, qte, total }`), `tickets` (journal local : ticket, lignes, paiements, client, `clotureRef` / `caissierId` / `caissierName`).
 
-Les clôtures sont archivées dans le même dossier : `clotures.json` (fonds laissés, tickets CB, horaires, sans total de ventes).
+Les clôtures sont archivées dans le même dossier : `clotures.json` (fonds laissés, nombre de ventes, tickets CB, horaires, sans total de ventes).
+
+Chaque vente et chaque clôture sont aussi **enfilées** pour Supabase (`ventes-supabase-queue.json`). Envoi `POST /api/caisse/ventes` et `POST /api/caisse/clotures` (token caisse). **En Electron non packagé** (`npm run dev:caisse`), l’export vise `http://localhost:3000` (pas l’URL prod du `caisse.config.json`), sauf si `CAISSE_SYNC_URL` est défini dans `.env.local`. Au démarrage, les `clotures.json` / tickets locaux déjà présents sont réenfilés. Hors ligne : la file reste locale, indicateur **N en attente d’envoi**, retry toutes les 2 min. La page backoffice `/clotures` affiche le statut **À vérifier**.
 
 **Mois** : `total_mois`, `nb_paniers`, `panier_moyen`, `ventes`.
 
@@ -393,7 +395,7 @@ En-tête ticket : **logo O'petit frais** (raster ESC/POS). Regénérer le logo :
 
 Montants avec **virgule** décimale (`12,50`). Génération : `buildSaleTicketEscPos` dans `@opf/caisse-core`.
 
-**Ticket de clôture** (`buildClotureTicketEscPos`) : caissier, ouverture/fermeture, référence `MXXCXXCLXX`, billets 50 / 20, pièces 10, total laissé, nombre de tickets CB — **pas de total ventes**.
+**Ticket de clôture** (`buildClotureTicketEscPos`) : caissier, ouverture/fermeture, référence `MXXCXXCLXX`, billets 50 / 20, pièces 10, total laissé, nombre de ventes, nombre de tickets CB — **pas de total ventes**.
 
 ## Étiquette prix (mode Imprimer prix)
 
@@ -427,7 +429,7 @@ Bouton **Menu** (colonne droite) :
 - **Imprimer dernier ticket** — réimprime le dernier ticket de vente (activé après un paiement avec impression) ; date/heure du ticket affichée en petit sous le bouton.
 - **Paramètres** — port **COM** balance, **IP balance SAURUS**, **imprimante ticket** (`caisse.config.json`). **Accès paramètres admin** (code `1145`) : identifiants FTP ventes.
 - **Verrouiller** — revient à l’écran « Caisse verrouillée » ; seul le caissier en cours peut déverrouiller.
-- **Clôturer** — saisie fonds (billets 50 / 20, pièces 10) + impression ticket de clôture ; pas de total ventes.
+- **Clôturer** — s’il n’y a aucune vente : confirmation pour **fermer sans clôture**. Sinon : saisie fonds (photos billets 50 / 20 et pièce 10), tickets CB + impression ticket de clôture ; pas de total ventes.
 - **Quitter** — quitte l’application Electron (confirmation demandée). La session reste ouverte (relance = caisse verrouillée).
 
 Colonne droite (panier) : logo **O'petit frais** sur fond blanc + bouton **Menu** en haut à droite ; **Client**, **Attente**, **Supprimer panier** (icône) ; clavier avec colonne **Retour** + **Paiement**.

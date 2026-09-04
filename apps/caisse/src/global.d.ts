@@ -71,6 +71,9 @@ declare global {
       lockSession: () => Promise<SessionActionResult>;
       unlockSession: (input: UnlockSessionInput) => Promise<SessionActionResult>;
       closeSession: (input: CloseSessionInput) => Promise<CloseSessionResult>;
+      abandonEmptySession: () => Promise<SessionActionResult>;
+      getSupabaseQueueCount: () => Promise<number>;
+      onSupabaseQueueCount: (handler: (count: number) => void) => () => void;
     };
   }
 }

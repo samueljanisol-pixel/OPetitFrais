@@ -10,7 +10,8 @@ import {
   parseMonthFile,
   type VentesSaleInput,
 } from "@opf/caisse-core";
-import { getOpenSessionForSale, recordCardTicketOnOpenSession } from "./caisse-session";
+import { getOpenSessionForSale, recordSaleOnOpenSession } from "./caisse-session";
+import { enqueueTicketForSupabase, flushVentesSupabaseQueue } from "./sync-ventes-supabase";
 import { ventesLocalDir } from "./ventes-paths";
 
 export type AppendSalePayload = VentesSaleInput & {
@@ -133,7 +134,9 @@ function appendSaleSync(payload: AppendSalePayload): AppendSaleResult {
   writeJsonAtomic(monthPath, nextMonth);
 
   const hasCard = sale.payments.some((p) => p.mode === "card" && p.amount > 0.001);
-  recordCardTicketOnOpenSession(hasCard);
+  recordSaleOnOpenSession(hasCard);
+  enqueueTicketForSupabase(magasinCode, caisseCode, sale);
+  void flushVentesSupabaseQueue();
 
   return { ok: true, dayFile: dayPath, monthFile: monthPath };
 }

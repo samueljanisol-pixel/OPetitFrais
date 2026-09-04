@@ -16,6 +16,7 @@ const DEV_OPEN_SESSION: CaisseSessionPublic = {
   caissierId: "dev",
   caissierName: "Dev",
   openedAt: new Date().toISOString(),
+  saleCount: 0,
   cardTicketCount: 0,
 };
 
@@ -75,6 +76,7 @@ export default function CaisseSessionGate({ onRequestQuit }: Props) {
         magasinCode={magasinCode}
         caisseCode={caisseCode}
         onSessionChange={setSession}
+        onRequestQuit={onRequestQuit}
       />
     );
   }

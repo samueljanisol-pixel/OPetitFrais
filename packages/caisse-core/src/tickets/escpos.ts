@@ -260,6 +260,7 @@ export type ClotureTicketInput = {
   bills20: number;
   coins10: number;
   drawerTotal: number;
+  saleCount: number;
   cardTicketCount: number;
   skipLogo?: boolean;
 };
@@ -290,6 +291,7 @@ export function buildClotureTicketEscPos(input: ClotureTicketInput): Uint8Array 
   chunks.push(escPosLine(formatTicketLabelValue("Pieces 10", String(input.coins10), 16)));
   chunks.push(escPosLine(formatTicketLabelValue("Total caisse", formatTicketTotalDh(input.drawerTotal), 16)));
   chunks.push(escPosBlankLine());
+  chunks.push(escPosLine(formatTicketLabelValue("Nb ventes", String(input.saleCount), 16)));
   chunks.push(escPosLine(formatTicketLabelValue("Tickets CB", String(input.cardTicketCount), 16)));
 
   const magasinLabel = sanitizeTicketAscii(input.magasinName?.trim() || input.magasinCode);

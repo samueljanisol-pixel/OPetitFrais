@@ -1,11 +1,18 @@
 import { useEffect, useState } from "react";
 import { Box, Button, Dialog, DialogContent, DialogTitle, Typography } from "@mui/material";
 import type { CaisseClotureRecord, CaisseSessionPublic } from "../../electron/preload/index";
+import { cashDenomination } from "../lib/payment-monnaie";
 import RoundNumpad from "./RoundNumpad";
 
 const COUNT_KEYS = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "C", "0", "←"] as const;
 
 type FieldKey = "bills50" | "bills20" | "coins10";
+
+const FIELDS: Array<{ key: FieldKey; label: string; amount: number }> = [
+  { key: "bills50", label: "Billets de 50", amount: 50 },
+  { key: "bills20", label: "Billets de 20", amount: 20 },
+  { key: "coins10", label: "Pièces de 10", amount: 10 },
+];
 
 type Props = {
   open: boolean;
@@ -21,6 +28,7 @@ function parseCount(raw: string): number {
 }
 
 export default function ClotureDialog({ open, session, onClose, onClosed }: Props) {
+  const [saleCount, setSaleCount] = useState(session.saleCount);
   const [cardCount, setCardCount] = useState(session.cardTicketCount);
   const [active, setActive] = useState<FieldKey>("bills50");
   const [values, setValues] = useState<Record<FieldKey, string>>({
@@ -38,14 +46,17 @@ export default function ClotureDialog({ open, session, onClose, onClosed }: Prop
     setError(null);
     setBusy(false);
     void window.caisseApi?.getSession().then((s) => {
+      setSaleCount(s.saleCount);
       setCardCount(s.cardTicketCount);
     });
   }, [open]);
 
-  const bills50 = parseCount(values.bills50);
-  const bills20 = parseCount(values.bills20);
-  const coins10 = parseCount(values.coins10);
-  const drawerTotal = bills50 * 50 + bills20 * 20 + coins10 * 10;
+  const counts: Record<FieldKey, number> = {
+    bills50: parseCount(values.bills50),
+    bills20: parseCount(values.bills20),
+    coins10: parseCount(values.coins10),
+  };
+  const drawerTotal = counts.bills50 * 50 + counts.bills20 * 20 + counts.coins10 * 10;
 
   const handleKey = (key: string) => {
     setError(null);
@@ -62,7 +73,11 @@ export default function ClotureDialog({ open, session, onClose, onClosed }: Prop
     if (busy || !window.caisseApi?.closeSession) return;
     setBusy(true);
     setError(null);
-    const result = await window.caisseApi.closeSession({ bills50, bills20, coins10 });
+    const result = await window.caisseApi.closeSession({
+      bills50: counts.bills50,
+      bills20: counts.bills20,
+      coins10: counts.coins10,
+    });
     setBusy(false);
     if (!result.ok) {
       setError(result.error);
@@ -71,38 +86,93 @@ export default function ClotureDialog({ open, session, onClose, onClosed }: Prop
     onClosed(result.cloture);
   };
 
-  const fieldBtn = (key: FieldKey, label: string, count: number) => (
-    <Button
-      key={key}
-      fullWidth
-      variant={active === key ? "contained" : "outlined"}
-      onClick={() => setActive(key)}
-      sx={{ justifyContent: "space-between", py: 1.35, fontWeight: 700 }}
-    >
-      <span>{label}</span>
-      <span>{count}</span>
-    </Button>
-  );
-
   return (
-    <Dialog open={open} onClose={() => undefined} disableEscapeKeyDown maxWidth="sm" fullWidth>
-      <DialogTitle sx={{ fontWeight: 800 }}>Clôturer la caisse</DialogTitle>
+    <Dialog open={open} onClose={() => undefined} disableEscapeKeyDown maxWidth="md" fullWidth>
+      <DialogTitle sx={{ fontWeight: 800, pb: 1 }}>Clôturer la caisse</DialogTitle>
       <DialogContent sx={{ display: "flex", flexDirection: "column", gap: 1.25, pb: 2 }}>
-        <Typography variant="body2">
-          Caissier : <strong>{session.caissierName ?? "—"}</strong>
-        </Typography>
-        <Typography variant="body2">
-          Tickets carte bancaire : <strong>{cardCount}</strong>
-        </Typography>
-        {fieldBtn("bills50", "Billets de 50", bills50)}
-        {fieldBtn("bills20", "Billets de 20", bills20)}
-        {fieldBtn("coins10", "Pièces de 10", coins10)}
-        <Typography sx={{ fontWeight: 800 }}>
-          Total laissé en caisse : {drawerTotal} DH
-        </Typography>
-        <Box sx={{ display: "flex", justifyContent: "center" }}>
-          <RoundNumpad keys={COUNT_KEYS} onKey={handleKey} keySize={52} disabled={busy} />
+        <Box sx={{ display: "flex", flexWrap: "wrap", gap: 2 }}>
+          <Typography variant="body2">
+            Caissier : <strong>{session.caissierName ?? "—"}</strong>
+          </Typography>
+          <Typography variant="body2">
+            Ventes : <strong>{saleCount}</strong>
+          </Typography>
+          <Typography variant="body2">
+            Tickets CB : <strong>{cardCount}</strong>
+          </Typography>
         </Box>
+
+        <Box
+          sx={{
+            display: "flex",
+            gap: 2,
+            alignItems: "stretch",
+            flexWrap: { xs: "wrap", sm: "nowrap" },
+          }}
+        >
+          <Box sx={{ flex: 1, minWidth: 260, display: "flex", flexDirection: "column", gap: 1 }}>
+            {FIELDS.map(({ key, label, amount }) => {
+              const denom = cashDenomination(amount);
+              const selected = active === key;
+              const count = counts[key];
+              return (
+                <Button
+                  key={key}
+                  fullWidth
+                  variant="outlined"
+                  onClick={() => setActive(key)}
+                  sx={{
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    py: 0.75,
+                    px: 1.25,
+                    gap: 1.25,
+                    fontWeight: 700,
+                    borderWidth: 2,
+                    borderColor: selected ? "primary.main" : "divider",
+                    bgcolor: selected ? "action.selected" : "#fff",
+                    color: "text.primary",
+                    "&:hover": {
+                      borderWidth: 2,
+                      borderColor: "primary.main",
+                      bgcolor: selected ? "action.selected" : "#fafafa",
+                    },
+                  }}
+                >
+                  <Box sx={{ display: "flex", alignItems: "center", gap: 1.25, minWidth: 0 }}>
+                    {denom ? (
+                      <Box
+                        component="img"
+                        src={denom.image}
+                        alt={label}
+                        sx={{
+                          height: 48,
+                          width: denom.kind === "coin" ? 48 : 88,
+                          objectFit: "contain",
+                          flexShrink: 0,
+                          borderRadius: 0.5,
+                          bgcolor: "#fff",
+                        }}
+                      />
+                    ) : null}
+                    <span>{label}</span>
+                  </Box>
+                  <Typography component="span" sx={{ fontSize: 22, fontWeight: 800, minWidth: 36, textAlign: "right" }}>
+                    {count}
+                  </Typography>
+                </Button>
+              );
+            })}
+            <Typography sx={{ fontWeight: 800, pt: 0.25 }}>
+              Total laissé en caisse : {drawerTotal} DH
+            </Typography>
+          </Box>
+
+          <Box sx={{ display: "flex", justifyContent: "center", alignItems: "flex-start" }}>
+            <RoundNumpad keys={COUNT_KEYS} onKey={handleKey} keySize={48} disabled={busy} />
+          </Box>
+        </Box>
+
         {error ? (
           <Typography color="error" variant="body2">
             {error}

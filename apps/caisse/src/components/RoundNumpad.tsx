@@ -1,4 +1,4 @@
-import { Box, Button, Grid } from "@mui/material";
+import { Box, Button } from "@mui/material";
 import type { ReactNode } from "react";
 
 const DEFAULT_KEYS = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "C", "0", "."];
@@ -110,13 +110,20 @@ export default function RoundNumpad({
 
   if (!trailingAction) {
     return (
-      <Grid container spacing={0.5}>
+      <Box
+        sx={{
+          display: "grid",
+          gridTemplateColumns: `repeat(3, ${keySize}px)`,
+          gap: 0.5,
+          justifyContent: "center",
+        }}
+      >
         {keys.map((k) => (
-          <Grid key={k} size={{ xs: 4 }} sx={{ display: "flex", justifyContent: "center" }}>
+          <Box key={k} sx={{ display: "flex", justifyContent: "center" }}>
             <NumpadKeyButton label={k} keySize={keySize} disabled={disabled} onKey={onKey} />
-          </Grid>
+          </Box>
         ))}
-      </Grid>
+      </Box>
     );
   }
 

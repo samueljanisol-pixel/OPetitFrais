@@ -13,6 +13,10 @@ export const FALLBACK_STATUS_LABELS: Record<string, Record<string, string>> = {
     achat_en_cours: "Achat en cours",
     terminee: "Terminée",
   },
+  caisse_cloture: {
+    a_verifier: "À vérifier",
+    verifiee: "Vérifiée",
+  },
 };
 
 export function fallbackStatusLabel(domain: string, code: string): string {

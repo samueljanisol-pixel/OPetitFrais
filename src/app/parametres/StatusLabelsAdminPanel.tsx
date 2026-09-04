@@ -7,6 +7,7 @@ import type { RefStatusLabelRow } from "@/lib/statusLabels/types";
 const DOMAIN_LABELS: Record<string, string> = {
   commande_fournisseur: "Commandes fournisseur",
   commande_fournisseur_lot: "Lots de validation",
+  caisse_cloture: "Clôtures de caisse",
 };
 
 export default function StatusLabelsAdminPanel() {

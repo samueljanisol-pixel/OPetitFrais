@@ -33,6 +33,7 @@
       "products": "المنتجات",
       "productActualisation": "تحديث المنتج",
       "stats": "الإحصائيات",
+      "clotures": "الإغلاقات",
       "supplierOrders": "طلبيات المزود",
       "supplierAccounts": "حسابات المزودين",
       "charges": "إدارة التكاليف",
@@ -597,6 +598,10 @@
         "prete": "جاهزة",
         "achat_en_cours": "الشرا جاري",
         "terminee": "كملات"
+      },
+      "caisse_cloture": {
+        "a_verifier": "خاص التحقق",
+        "verifiee": "تم التحقق"
       },
       "listSections": {
         "inProgress": "فالخدمة",

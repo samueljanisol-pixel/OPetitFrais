@@ -235,4 +235,14 @@ contextBridge.exposeInMainWorld("caisseApi", {
     ipcRenderer.invoke("caisse:unlockSession", input),
   closeSession: (input: CloseSessionInput): Promise<CloseSessionResult> =>
     ipcRenderer.invoke("caisse:closeSession", input),
+  abandonEmptySession: (): Promise<SessionActionResult> =>
+    ipcRenderer.invoke("caisse:abandonEmptySession"),
+  getSupabaseQueueCount: (): Promise<number> => ipcRenderer.invoke("caisse:getSupabaseQueueCount"),
+  onSupabaseQueueCount: (handler: (count: number) => void) => {
+    const listener = (_: Electron.IpcRendererEvent, count: number) => {
+      handler(count);
+    };
+    ipcRenderer.on("caisse:supabase-queue-count", listener);
+    return () => ipcRenderer.removeListener("caisse:supabase-queue-count", listener);
+  },
 });

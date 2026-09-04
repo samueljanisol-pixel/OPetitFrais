@@ -7,6 +7,7 @@ export type CaisseSessionPublic = {
   caissierId: string | null;
   caissierName: string | null;
   openedAt: string | null;
+  saleCount: number;
   cardTicketCount: number;
 };
 
@@ -38,6 +39,7 @@ export type CaisseClotureRecord = {
   bills20: number;
   coins10: number;
   drawerTotal: number;
+  saleCount: number;
   cardTicketCount: number;
 };
 
@@ -72,6 +74,7 @@ export function emptyClosedSession(): CaisseSessionPublic {
     caissierId: null,
     caissierName: null,
     openedAt: null,
+    saleCount: 0,
     cardTicketCount: 0,
   };
 }

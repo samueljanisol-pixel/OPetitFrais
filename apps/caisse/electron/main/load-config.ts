@@ -167,6 +167,16 @@ function devFtpFallback(): CaisseFtpConfig {
   };
 }
 
+/** URL d’export ventes/clôtures. En Electron non packagé, localhost (le Next local a les routes). */
+export function getSyncBackofficeUrl(): string {
+  if (!app.isPackaged) {
+    const override = readDevEnv().CAISSE_SYNC_URL?.trim();
+    if (override) return override.replace(/\/$/, "");
+    return "http://localhost:3000";
+  }
+  return loadRuntimeConfig().backofficeUrl.trim().replace(/\/$/, "");
+}
+
 export function loadRuntimeConfig(): CaisseRuntimeConfig {
   const existingPath = findExistingConfigPath();
   const raw = existingPath ? readJsonFile(existingPath) : null;

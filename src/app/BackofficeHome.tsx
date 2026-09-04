@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { Badge, Button, Fab, Paper, Stack, Tooltip } from '@mui/material'
 import AssessmentOutlinedIcon from '@mui/icons-material/AssessmentOutlined'
+import PointOfSaleOutlinedIcon from '@mui/icons-material/PointOfSaleOutlined'
 import BadgeOutlinedIcon from '@mui/icons-material/BadgeOutlined'
 import Inventory2OutlinedIcon from '@mui/icons-material/Inventory2Outlined'
 import PriceChangeOutlinedIcon from '@mui/icons-material/PriceChangeOutlined'
@@ -49,6 +50,7 @@ export default function BackofficeHome() {
     can('commandes_fournisseur.achat')
   const canActualisationProduit = can('produits.write') || can('commandes_fournisseur.achat')
   const [actualisationCount, setActualisationCount] = useState(0)
+  const [cloturesAVerifier, setCloturesAVerifier] = useState(0)
 
   useEffect(() => {
     if (!canActualisationProduit) {
@@ -76,6 +78,33 @@ export default function BackofficeHome() {
       window.clearInterval(timer)
     }
   }, [canActualisationProduit])
+
+  useEffect(() => {
+    if (!canReadVentes) {
+      setCloturesAVerifier(0)
+      return
+    }
+    let cancelled = false
+    const loadCount = async () => {
+      try {
+        const res = await fetch('/api/clotures/count', { credentials: 'include' })
+        const json = (await res.json().catch(() => ({}))) as { a_verifier?: number }
+        if (!cancelled && res.ok && typeof json.a_verifier === 'number') {
+          setCloturesAVerifier(json.a_verifier)
+        }
+      } catch {
+        // ignore réseau
+      }
+    }
+    void loadCount()
+    const timer = window.setInterval(() => {
+      void loadCount()
+    }, 60_000)
+    return () => {
+      cancelled = true
+      window.clearInterval(timer)
+    }
+  }, [canReadVentes])
 
   const logout = async () => {
     await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' })
@@ -208,6 +237,40 @@ export default function BackofficeHome() {
               >
                 {t('stats')}
               </Button>
+            ) : null}
+            {canReadVentes ? (
+              <Badge
+                badgeContent={cloturesAVerifier > 0 ? cloturesAVerifier : null}
+                color="warning"
+                overlap="rectangular"
+                max={99}
+                sx={{
+                  width: '100%',
+                  '& .MuiBadge-badge': { right: 14, top: 14 },
+                }}
+              >
+                <Button
+                  component={AppLink}
+                  href="/clotures"
+                  variant="contained"
+                  color="success"
+                  size="large"
+                  fullWidth
+                  startIcon={<PointOfSaleOutlinedIcon sx={{ fontSize: 28 }} />}
+                  sx={{
+                    borderRadius: 2,
+                    textTransform: 'none',
+                    fontWeight: 600,
+                    py: 1.25,
+                    px: 2,
+                    justifyContent: 'flex-start',
+                    gap: 1.25,
+                    '& .MuiButton-startIcon': { mr: 0.5, ml: 0 },
+                  }}
+                >
+                  {t('clotures')}
+                </Button>
+              </Badge>
             ) : null}
             {canReadShop ? (
               <Button

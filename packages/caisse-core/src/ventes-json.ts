@@ -37,11 +37,17 @@ export type VentesTicket = {
   caissierName?: string | null;
 };
 
+/** Format WinDev : une entrée par heure avec au moins un panier. */
+export type VentesPanierHeure = {
+  Heure: number;
+  NbrPanier: number;
+};
+
 export type VentesDayFile = {
   total_jour: number;
   nb_paniers: number;
   panier_moyen: number;
-  panier_heure: number[];
+  panier_heure: VentesPanierHeure[];
   ventes: Record<string, VentesJsonLine>;
   tickets: VentesTicket[];
 };
@@ -113,12 +119,42 @@ export function soldAtHour(iso: string): number {
   return hour;
 }
 
+function bucketsToPanierHeure(buckets: number[]): VentesPanierHeure[] {
+  const out: VentesPanierHeure[] = [];
+  for (let h = 0; h < HOUR_SLOTS; h++) {
+    const n = buckets[h] ?? 0;
+    if (n > 0) out.push({ Heure: h, NbrPanier: n });
+  }
+  return out;
+}
+
+function panierHeureToBuckets(raw: unknown): number[] {
+  const out = emptyHourBuckets();
+  if (!Array.isArray(raw) || raw.length === 0) return out;
+
+  const first = raw[0];
+  if (typeof first === "number" || typeof first === "string") {
+    return normalizeHourBuckets(raw);
+  }
+
+  for (const item of raw) {
+    if (!item || typeof item !== "object" || Array.isArray(item)) continue;
+    const row = item as Record<string, unknown>;
+    const heure = asFiniteNumber(row.Heure ?? row.heure ?? row.hour);
+    const nb = asFiniteNumber(row.NbrPanier ?? row.nbrPanier ?? row.nb ?? row.qte);
+    if (heure == null || heure < 0 || heure >= HOUR_SLOTS) continue;
+    if (nb == null || nb < 0) continue;
+    out[heure] += Math.round(nb);
+  }
+  return out;
+}
+
 export function emptyDayFile(): VentesDayFile {
   return {
     total_jour: 0,
     nb_paniers: 0,
     panier_moyen: 0,
-    panier_heure: emptyHourBuckets(),
+    panier_heure: [],
     ventes: {},
     tickets: [],
   };
@@ -222,7 +258,7 @@ export function parseDayFile(raw: unknown): VentesDayFile {
     total_jour: asFiniteNumber(row.total_jour) ?? 0,
     nb_paniers: asFiniteNumber(row.nb_paniers) ?? 0,
     panier_moyen: asFiniteNumber(row.panier_moyen) ?? 0,
-    panier_heure: normalizeHourBuckets(row.panier_heure),
+    panier_heure: bucketsToPanierHeure(panierHeureToBuckets(row.panier_heure)),
     ventes: parseVentesMap(row.ventes),
     tickets: ticketsRaw.flatMap((ticket) => {
       const parsed = parseTicket(ticket);
@@ -276,8 +312,9 @@ export function mergeSaleIntoDayFile(existing: VentesDayFile, sale: VentesSaleIn
   }
 
   const hour = soldAtHour(sale.soldAt);
-  const panier_heure = [...existing.panier_heure];
-  panier_heure[hour] = (panier_heure[hour] ?? 0) + 1;
+  const hourBuckets = panierHeureToBuckets(existing.panier_heure);
+  hourBuckets[hour] = (hourBuckets[hour] ?? 0) + 1;
+  const panier_heure = bucketsToPanierHeure(hourBuckets);
 
   const total_jour = roundMoney(existing.total_jour + sale.total);
   const nb_paniers = existing.nb_paniers + 1;

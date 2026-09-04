@@ -61,6 +61,7 @@ Suppression (`DELETE /api/admin/roles/[id]`) refusée si :
 | `produits.read` | ✓* | ✓ | ✓ | ✓ |
 | `produits.write` | ✓* | ✓ | ✓ | |
 | `ventes.read` | ✓* | ✓ | | |
+| `ventes.write` | ✓* | (si `ventes.read`) | | |
 | `parametres.read` | ✓* | ✓ | ✓ | |
 | `parametres.write` | ✓* | ✓ | ✓ | |
 | `admin.utilisateurs` | ✓* | | | |

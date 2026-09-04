@@ -1,10 +1,11 @@
 import { existsSync, mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from "fs";
 import { dirname, join } from "path";
 import { app } from "electron";
-import { formatClotureReference } from "@opf/caisse-core";
+import { formatClotureReference, localDateKeys, parseDayFile } from "@opf/caisse-core";
 import { verifyCaissePin } from "@opf/caisse-core/caisse-pin";
 import { loadRuntimeConfig } from "./load-config";
 import { findCachedCaissier } from "./fetch-caissiers";
+import { enqueueClotureForSupabase, flushVentesSupabaseQueue } from "./sync-ventes-supabase";
 import { ventesLocalDir } from "./ventes-paths";
 import {
   emptyClosedSession,
@@ -24,6 +25,7 @@ type PersistedOpenSession = {
   caissierId: string;
   caissierName: string;
   openedAt: string;
+  saleCount: number;
   cardTicketCount: number;
 };
 
@@ -84,6 +86,10 @@ function parseOpenSession(raw: unknown): PersistedOpenSession | null {
     typeof row.cardTicketCount === "number" && Number.isFinite(row.cardTicketCount)
       ? Math.max(0, Math.round(row.cardTicketCount))
       : 0;
+  const saleCount =
+    typeof row.saleCount === "number" && Number.isFinite(row.saleCount)
+      ? Math.max(0, Math.round(row.saleCount))
+      : countSalesForCloture(magasinCode, caisseCode, clotureRef, openedAt);
   return {
     status,
     magasinCode,
@@ -93,8 +99,29 @@ function parseOpenSession(raw: unknown): PersistedOpenSession | null {
     caissierId,
     caissierName,
     openedAt,
+    saleCount,
     cardTicketCount,
   };
+}
+
+function countSalesForCloture(
+  magasinCode: string,
+  caisseCode: string,
+  clotureRef: string,
+  openedAt: string,
+): number {
+  if (!magasinCode || !caisseCode || !clotureRef) return 0;
+  const dir = ventesLocalDir(magasinCode, caisseCode);
+  const days = new Set<string>();
+  if (openedAt) days.add(localDateKeys(openedAt).day);
+  days.add(localDateKeys(new Date().toISOString()).day);
+  let count = 0;
+  for (const day of days) {
+    const parsed = parseDayFile(readJsonUnknown(join(dir, `ventes_${day}.json`)));
+    if (!parsed) continue;
+    count += parsed.tickets.filter((ticket) => ticket.clotureRef === clotureRef).length;
+  }
+  return count;
 }
 
 function readState(): PersistedState {
@@ -128,6 +155,7 @@ function toPublic(state: PersistedState): CaisseSessionPublic {
     caissierId: s.caissierId,
     caissierName: s.caissierName,
     openedAt: s.openedAt,
+    saleCount: s.saleCount,
     cardTicketCount: s.cardTicketCount,
   };
 }
@@ -148,6 +176,23 @@ function nextClotureNumber(magasinCode: string, caisseCode: string): number {
   return next;
 }
 
+function revertLastClotureNumber(magasinCode: string, caisseCode: string, allocated: number): void {
+  const raw = readJsonUnknown(counterPath());
+  const map: CounterMap =
+    raw && typeof raw === "object" && !Array.isArray(raw) ? { ...(raw as CounterMap) } : {};
+  const key = counterKey(magasinCode, caisseCode);
+  if (map[key] !== allocated) return;
+  map[key] = Math.max(0, allocated - 1);
+  writeJsonAtomic(counterPath(), map);
+}
+
+function sessionHasSales(session: PersistedOpenSession): boolean {
+  if (session.saleCount > 0) return true;
+  return (
+    countSalesForCloture(session.magasinCode, session.caisseCode, session.clotureRef, session.openedAt) > 0
+  );
+}
+
 export function getCaisseSession(): CaisseSessionPublic {
   const state = readState();
   if (!bootLocked && state.session.status === "open") {
@@ -160,10 +205,18 @@ export function getCaisseSession(): CaisseSessionPublic {
   return toPublic(state);
 }
 
+function persistClosedEmptySession(session: PersistedOpenSession): void {
+  revertLastClotureNumber(session.magasinCode, session.caisseCode, session.clotureNumber);
+  persist({ session: { status: "closed" } });
+}
+
 export async function openCaisseSession(userId: string, pin: string): Promise<SessionActionResult> {
   const state = readState();
   if (state.session.status !== "closed") {
-    return { ok: false, error: "La caisse est déjà ouverte" };
+    if (sessionHasSales(state.session)) {
+      return { ok: false, error: "La caisse est déjà ouverte" };
+    }
+    persistClosedEmptySession(state.session);
   }
 
   const caissier = findCachedCaissier(userId);
@@ -194,6 +247,7 @@ export async function openCaisseSession(userId: string, pin: string): Promise<Se
       caissierId: caissier.userId,
       caissierName: formatCaissierDisplayName(caissier.prenom, caissier.nom),
       openedAt: new Date().toISOString(),
+      saleCount: 0,
       cardTicketCount: 0,
     },
   };
@@ -267,6 +321,9 @@ export function closeCaisseSession(input: CloseSessionInput): CloseSessionResult
   }
 
   const s = state.session;
+  if (!sessionHasSales(s)) {
+    return { ok: false, error: "Aucune vente — fermer la caisse sans clôture" };
+  }
   const record: CaisseClotureRecord = {
     clotureRef: s.clotureRef,
     clotureNumber: s.clotureNumber,
@@ -278,11 +335,27 @@ export function closeCaisseSession(input: CloseSessionInput): CloseSessionResult
     bills20,
     coins10,
     drawerTotal: bills50 * 50 + bills20 * 20 + coins10 * 10,
+    saleCount: s.saleCount,
     cardTicketCount: s.cardTicketCount,
   };
   appendClotureRecord(s.magasinCode, s.caisseCode, record);
   persist({ session: { status: "closed" } });
+  enqueueClotureForSupabase(s.magasinCode, s.caisseCode, record);
+  void flushVentesSupabaseQueue();
   return { ok: true, session: emptyClosedSession(), cloture: record };
+}
+
+export function abandonEmptyCaisseSession(): SessionActionResult {
+  const state = readState();
+  if (state.session.status === "closed") {
+    return { ok: false, error: "La caisse est déjà fermée" };
+  }
+  const s = state.session;
+  if (sessionHasSales(s)) {
+    return { ok: false, error: "Des ventes existent — une clôture est obligatoire" };
+  }
+  persistClosedEmptySession(s);
+  return { ok: true, session: emptyClosedSession() };
 }
 
 export function getOpenSessionForSale(): PersistedOpenSession | null {
@@ -291,14 +364,14 @@ export function getOpenSessionForSale(): PersistedOpenSession | null {
   return state.session;
 }
 
-export function recordCardTicketOnOpenSession(hasCardPayment: boolean): void {
-  if (!hasCardPayment) return;
+export function recordSaleOnOpenSession(hasCardPayment: boolean): void {
   const state = readState();
   if (state.session.status === "closed") return;
   persist({
     session: {
       ...state.session,
-      cardTicketCount: state.session.cardTicketCount + 1,
+      saleCount: state.session.saleCount + 1,
+      cardTicketCount: hasCardPayment ? state.session.cardTicketCount + 1 : state.session.cardTicketCount,
     },
   });
 }
