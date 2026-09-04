@@ -15,6 +15,7 @@ import {
 } from "@/lib/commandes-fournisseur/ligne-saisie-comments";
 import { packagingIdByProductFromCommandeLignes } from "@/lib/commandes-fournisseur/packaging-from-saisie";
 import { clampQtyToApiRange } from "@/lib/commandes-fournisseur/qty-parse";
+import { backfillMissingLotMagasinQtyFromCommandes } from "@/lib/commandes-fournisseur/create-validation-lot";
 import { syncCommandeLignesFromLotMagasinQty } from "@/lib/commandes-fournisseur/sync-lot-magasin-lignes";
 import { isUserAdministrator } from "@/lib/auth/require-administrator-api";
 import { lotHasAchatProgress, canReopenConsolidationBrouillon } from "@/lib/commandes-fournisseur/lot-achat-progress";
@@ -214,6 +215,8 @@ export async function GET(_req: Request, ctx: Ctx) {
   }
 
   const supplierId = (lot as { supplier_id: string }).supplier_id;
+  const lotStatus = (lot as { status: string }).status;
+  await backfillMissingLotMagasinQtyFromCommandes(supabase, id, lotStatus);
 
   const [lotLignesRes, vendeursRes] = await Promise.all([
     supabase
@@ -270,7 +273,6 @@ export async function GET(_req: Request, ctx: Ctx) {
     );
   });
 
-  const lotStatus = (lot as { status: string }).status;
   await syncCommandeLignesFromLotMagasinQty(supabase, id, lotStatus);
 
   const targetsByProduct = await saisieLigneTargetsByProductForLot(supabase, id);
